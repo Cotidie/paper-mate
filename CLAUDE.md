@@ -27,6 +27,14 @@ Canonical planning artifacts live under `.bmad/planning-artifacts/` — PRD, arc
 - Deploy: single **Docker Compose** container; FastAPI serves both API and built Vite `dist/` (same-origin, no CORS). Volume-mounts host `~/.paper-mate` → `/data`. No auth (localhost, single user).
 - Source tree: `client/` (`render/`, `anchor/`, `annotations/`, `store/`, `api/`) and `server/app/` (`routes/`, `storage/`, `agents/` reserved, `models.py`). See architecture spine for the layered downward-dependency rule.
 
+## Code navigation (CodeGraph)
+
+This repo is indexed by **CodeGraph** (`.codegraph/` at root). Reach for it BEFORE grep/find or reading files when locating or understanding code:
+
+- MCP `codegraph_explore` (when available) — verbatim symbol source + call paths in one call. The server has no default project, so pass `projectPath` = repo root.
+- Shell (always works): `codegraph explore "<symbols or question>"`.
+- Index updates live; no restart needed. Re-run `codegraph init` only if it ever drifts.
+
 ## Product shape
 
 Three phases, build in order (full spec: `.bmad/planning-artifacts/` PRD + epics + architecture spine):
