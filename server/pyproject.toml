@@ -1,0 +1,27 @@
+[project]
+name = "paper-mate-server"
+version = "0.1.0"
+description = "Paper Mate backend — thin FastAPI persistence + static SPA serving (AD-1, AD-10)."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.138.1",
+    "uvicorn[standard]==0.49.0",
+    "pydantic==2.13.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4,<9",
+    "httpx>=0.28,<0.29",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

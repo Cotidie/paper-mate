@@ -1,0 +1,31 @@
+/* Token layer (hand-authored): component dimensions + typography derived from
+   DESIGN.md `components`/`typography` sections. Like tokens.css this is the
+   token layer, so px values are allowed HERE ONLY. Components must reference
+   these vars (never inline px). [Source: DESIGN.md#components, #typography] */
+
+:root {
+  /* fonts */
+  --font-sans: "Inter", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* typography: title-sm (top-bar) */
+  --type-title-sm-size: 16px;
+  --type-title-sm-weight: 600;
+  --type-title-sm-leading: 1.4;
+
+  /* top-bar */
+  --top-bar-height: 48px;
+  --top-bar-border: 1px;
+
+  /* tool-rail (collapsed placeholder) */
+  --tool-rail-width: 48px;
+  --tool-rail-border: 1px;
+  --tool-rail-offset: 16px;
+
+  /* shared chrome */
+  --hairline-width: 1px;
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);
+
+  /* focus ring (DESIGN.md input focus; EXPERIENCE.md line 129) */
+  --focus-ring-width: 2px;
+}

@@ -1,0 +1,14 @@
+# Single container: FastAPI/uvicorn serves API + built SPA same-origin (AD-10).
+# Host ~/.paper-mate is volume-mounted to /data (the storage root, AD-8).
+# Host path + port are env-driven. No auth (localhost, single user).
+services:
+  paper-mate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Bind to loopback only — no-auth, single-user, localhost deployment (AD-1/AD-10).
+    ports:
+      - "127.0.0.1:${PAPER_MATE_PORT:-8000}:8000"
+    volumes:
+      - "${PAPER_MATE_DATA:-${HOME}/.paper-mate}:/data"
+    restart: unless-stopped

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Paper Mate — Reader (S1) mock</title>
+<style>
+  :root{
+    --primary:#000;--ink:#171717;--body:#60646c;--muted:#999;
+    --hairline:#f0f0f3;--hairline-strong:#dcdee0;
+    --canvas:#fff;--surface-strong:#f0f0f3;--reader-backdrop:#f5f5f7;
+    --success:#16a34a;--surface-dark:#171717;--on-dark:#fff;
+    --a-yellow:#ffe478;--a-green:#b9efc6;--a-pink:#ffc7de;--a-blue:#bcdcff;--a-purple:#e0c8ff;--a-orange:#ffd6a8;
+    --shadow:0 4px 12px rgba(0,0,0,.04);
+    --font:'Inter',-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font);color:var(--ink);background:var(--reader-backdrop);height:100vh;overflow:hidden}
+  /* top bar */
+  .topbar{height:48px;background:var(--canvas);border-bottom:1px solid var(--hairline);
+    display:flex;align-items:center;gap:12px;padding:0 16px;position:relative;z-index:5}
+  .filename{font-size:16px;font-weight:600}
+  .save{font-size:13px;color:var(--muted)}
+  .save .dot{color:var(--success)}
+  .topbar .right{margin-left:auto;display:flex;gap:8px}
+  .pill-btn{font-size:13px;color:var(--body);border:1px solid var(--hairline);background:var(--canvas);
+    border-radius:9999px;padding:4px 12px;cursor:pointer}
+  /* stage */
+  .stage{position:relative;height:calc(100vh - 48px)}
+  .canvas{position:absolute;inset:0;background:var(--reader-backdrop);overflow:auto;display:flex;
+    flex-direction:column;align-items:center;padding:32px 0;gap:24px}
+  .page{width:620px;min-height:800px;background:var(--canvas);border:1px solid var(--hairline);
+    border-radius:4px;box-shadow:var(--shadow);padding:64px 56px;position:relative}
+  .page h1{font-size:42px;font-weight:600;letter-spacing:-1px;margin:120px 0 0}
+  .page p{font-size:15px;line-height:1.7;color:#222;margin:18px 0}
+  /* annotations on page */
+  .hl{background:var(--a-yellow);opacity:.95;box-shadow:0 0 0 .12em var(--a-yellow)}
+  .ul{border-bottom:2px solid var(--a-blue)}
+  .cmt{background:var(--a-pink);box-shadow:0 0 0 .12em var(--a-pink);position:relative}
+  .cmt .pin{position:absolute;top:-10px;right:-14px;width:18px;height:18px;border-radius:9999px;
+    background:var(--a-pink);border:1px solid #00000014;display:flex;align-items:center;justify-content:center;font-size:10px}
+  .memo{position:absolute;left:430px;top:300px;width:150px;background:var(--canvas);
+    border:1px solid var(--hairline-strong);border-radius:6px;padding:8px;font-size:13px;color:var(--ink);box-shadow:var(--shadow)}
+  /* tool rail (overlay, floating) */
+  .rail{position:absolute;left:16px;top:16px;width:48px;background:var(--canvas);
+    border:1px solid var(--hairline);border-radius:12px;box-shadow:var(--shadow);
+    padding:6px;display:flex;flex-direction:column;gap:2px;z-index:4}
+  .tool{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    color:var(--body);cursor:pointer;font-size:16px}
+  .tool:hover{background:var(--surface-strong)}
+  .tool.armed{background:var(--surface-strong);color:var(--ink)}
+  .rail .sep{height:1px;background:var(--hairline);margin:4px 2px}
+  /* quick-box (highlight mode → color row) */
+  .quickbox{position:absolute;left:300px;top:360px;background:var(--canvas);border:1px solid var(--hairline);
+    border-radius:8px;box-shadow:var(--shadow);padding:6px;display:flex;gap:6px;z-index:6}
+  .sw{width:20px;height:20px;border-radius:9999px;border:1px solid var(--hairline-strong);cursor:pointer}
+  .sw.on{outline:2px solid var(--ink);outline-offset:1px}
+  /* annotation bank (overlay right) */
+  .bank{position:absolute;right:16px;top:16px;bottom:16px;width:320px;background:var(--canvas);
+    border:1px solid var(--hairline);border-radius:12px;box-shadow:var(--shadow);z-index:4;
+    display:flex;flex-direction:column;overflow:hidden}
+  .bank h2{font-size:18px;font-weight:600;margin:0;padding:16px 16px 8px}
+  .bank .list{overflow:auto;padding:4px 8px 8px}
+  .row{display:flex;gap:10px;align-items:flex-start;padding:10px 8px;border-radius:6px;cursor:pointer}
+  .row:hover{background:var(--surface-strong)}
+  .row .dot{width:10px;height:10px;border-radius:9999px;margin-top:4px;flex:0 0 auto}
+  .row .txt{font-size:14px;color:var(--body);line-height:1.4}
+  .row .pg{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  /* zoom control */
+  .zoom{position:absolute;right:352px;bottom:24px;background:var(--canvas);border:1px solid var(--hairline);
+    border-radius:9999px;box-shadow:var(--shadow);padding:4px 12px;display:flex;gap:12px;align-items:center;
+    font-size:13px;color:var(--ink);z-index:4}
+  .zoom span{cursor:pointer;color:var(--body)}
+  .legend{position:absolute;left:16px;bottom:16px;font-size:11px;color:var(--muted);z-index:4}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="filename">09-regularization.pdf</span>
+    <span class="save"><span class="dot">●</span> Saved</span>
+    <div class="right">
+      <button class="pill-btn">⌗ ToC</button>
+      <button class="pill-btn">⌄ Bank</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="canvas">
+      <div class="page">
+        <h1>Chapter 9<br>Regularization</h1>
+        <p>Regularization is any modification we make to a learning algorithm that is intended to <span class="hl">reduce its generalization error</span> but not its training error. There are many forms of regularization available to the deep learning practitioner.</p>
+        <p>In the context of deep learning, most regularization strategies are based on <span class="ul">regularizing estimators</span>. Regularization of an estimator works by trading increased bias for reduced variance.</p>
+        <p>An effective regularizer is one that <span class="cmt">makes a profitable trade<span class="pin">💬</span></span>, reducing variance significantly while not overly increasing the bias.</p>
+        <div class="memo">re-read this before the meeting — ties to dropout?</div>
+      </div>
+    </div>
+
+    <!-- tool rail (floats over canvas) -->
+    <div class="rail">
+      <div class="tool" title="cursor (V)">▤</div>
+      <div class="tool" title="hand (space)">✋</div>
+      <div class="sep"></div>
+      <div class="tool armed" title="highlight (H)">🖊</div>
+      <div class="tool" title="underline (U)">U̲</div>
+      <div class="tool" title="pen (D)">✎</div>
+      <div class="tool" title="memo (T)">T</div>
+      <div class="tool" title="comment (C)">💬</div>
+      <div class="tool" title="box-select (M)">⛶</div>
+      <div class="sep"></div>
+      <div class="tool" title="table of contents">☰</div>
+    </div>
+
+    <!-- contextual quick-box: highlight mode → color row -->
+    <div class="quickbox" title="quick-box (highlight mode): color picker">
+      <div class="sw on" style="background:#ffe478"></div>
+      <div class="sw" style="background:#b9efc6"></div>
+      <div class="sw" style="background:#ffc7de"></div>
+      <div class="sw" style="background:#bcdcff"></div>
+      <div class="sw" style="background:#e0c8ff"></div>
+      <div class="sw" style="background:#ffd6a8"></div>
+    </div>
+
+    <!-- annotation bank (floats over canvas, right) -->
+    <div class="bank">
+      <h2>Annotations</h2>
+      <div class="list">
+        <div class="row"><span class="dot" style="background:#ffe478"></span><div><div class="txt">reduce its generalization error</div><div class="pg">Highlight · p.1</div></div></div>
+        <div class="row"><span class="dot" style="background:#bcdcff"></span><div><div class="txt">regularizing estimators</div><div class="pg">Underline · p.1</div></div></div>
+        <div class="row"><span class="dot" style="background:#ffc7de"></span><div><div class="txt">makes a profitable trade</div><div class="pg">Comment · p.1</div></div></div>
+        <div class="row"><span class="dot" style="background:var(--hairline-strong)"></span><div><div class="txt">re-read this before the meeting…</div><div class="pg">Memo · p.1</div></div></div>
+      </div>
+    </div>
+
+    <div class="zoom"><span>−</span> 184% <span>+</span></div>
+    <div class="legend">rail + bank + quick-box all OVERLAY the canvas — canvas never reflows (NFR-1)</div>
+  </div>
+</body>
+</html>

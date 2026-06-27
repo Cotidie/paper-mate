@@ -1,0 +1,21 @@
+# Node
+node_modules/
+client/dist/
+*.tsbuildinfo
+
+# Generated from DESIGN.md by `npm run gen:tokens` (build/dev regenerate it).
+# The OpenAPI client types (client/src/api/schema.d.ts) ARE committed — the
+# Docker build does not run gen:api.
+client/src/theme/tokens.css
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+server/openapi.json
+
+# Env
+.env
+
+# OS
+.DS_Store

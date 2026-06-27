@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/*.pyc
+client/coverage
+.git
+.bmad
+_bmad
+.bmad/**
+.claude
