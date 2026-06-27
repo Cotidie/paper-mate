@@ -6,8 +6,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Bind to loopback only — no-auth, single-user, localhost deployment (AD-1/AD-10).
     ports:
-      - "${PAPER_MATE_PORT:-8000}:8000"
+      - "127.0.0.1:${PAPER_MATE_PORT:-8000}:8000"
     volumes:
       - "${PAPER_MATE_DATA:-${HOME}/.paper-mate}:/data"
     restart: unless-stopped

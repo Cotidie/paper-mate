@@ -29,7 +29,7 @@ def _static_dir() -> Path:
     return Path(os.environ.get("PAPER_MATE_STATIC_DIR", Path(__file__).parent.parent / "static"))
 
 
-_dist = _static_dir()
+_dist = _static_dir().resolve()
 if (_dist / "index.html").is_file():
     # Hashed build assets.
     if (_dist / "assets").is_dir():
@@ -38,9 +38,12 @@ if (_dist / "index.html").is_file():
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str) -> FileResponse:
         """Serve index.html for all non-API routes (client-side routing)."""
-        if full_path.startswith("api"):
+        # Reject the API surface only (not lookalikes like /apiary).
+        if full_path == "api" or full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Not Found")
-        candidate = _dist / full_path
-        if full_path and candidate.is_file():
-            return FileResponse(candidate)
+        if full_path:
+            candidate = (_dist / full_path).resolve()
+            # Containment: never serve a file outside the built dist (no traversal).
+            if candidate.is_file() and candidate.is_relative_to(_dist):
+                return FileResponse(candidate)
         return FileResponse(_dist / "index.html")

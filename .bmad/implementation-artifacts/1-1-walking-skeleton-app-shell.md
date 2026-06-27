@@ -47,6 +47,16 @@ so that every later feature lands on a running, same-origin foundation with gene
   - [x] `docker-compose.yml`: one container, FastAPI/uvicorn serving API + dist, volume-mount host `~/.paper-mate` → `/data`, host path + port via env. No auth.
   - [x] Verify `docker compose up` boots to the empty S1 shell with the health endpoint reachable same-origin.
 
+### Review Findings
+
+#### Review Follow-ups (AI)
+
+- [x] [AI-Review][High][Review][Patch] Harden SPA fallback path handling so requested files cannot escape the built static directory, and add a regression test for traversal attempts. [server/app/main.py:43] — Fixed: resolve candidate + `is_relative_to(_dist)` containment; added `server/tests/test_static.py` traversal cases.
+- [x] [AI-Review][High][Review][Patch] Bind Docker Compose publishing to localhost by default to match the no-auth, single-user localhost deployment model. [docker-compose.yml:10] — Fixed: publish `127.0.0.1:${PAPER_MATE_PORT}:8000`; verified loopback bind.
+- [x] [AI-Review][Medium][Review][Patch] Fix the backend test client dependency mismatch causing the documented pytest command and `TestClient.get()` to hang; rerun backend tests after updating the dependency set/lock. [server/pyproject.toml:15] — Not reproduced: with committed `uv.lock` (httpx 0.28.1) `pytest` passes 11/11 in <0.3s. The hang was a reviewer-sandbox artifact, not the locked env. No code change; `httpx2` deprecation warning is benign.
+- [x] [AI-Review][Medium][Review][Patch] Make the production Docker image install backend dependencies from the committed lockfile instead of resolving transitive dependencies with `pip install .` at build time. [Dockerfile:17] — Fixed: runtime stage uses `uv sync --frozen --no-dev` from `uv.lock`; rebuilt + booted OK.
+- [x] [AI-Review][Low][Review][Patch] Narrow the SPA fallback API guard to reject only `/api` and `/api/*`, not non-API client routes such as `/apiary`. [server/app/main.py:41] — Fixed: guard is now `full_path == "api" or startswith("api/")`; test covers `/apiary`.
+
 ## Dev Notes
 
 ### Architecture patterns & constraints (binding)
@@ -163,6 +173,7 @@ claude-opus-4-8 (Claude Code, bmad-dev-story workflow).
 - `server/app/agents/__init__.py`
 - `server/tests/test_health.py`
 - `server/tests/test_openapi.py`
+- `server/tests/test_static.py` (added in review follow-up)
 
 **Added — client/**
 - `client/package.json`
@@ -207,3 +218,53 @@ claude-opus-4-8 (Claude Code, bmad-dev-story workflow).
 | Date | Change |
 | --- | --- |
 | 2026-06-28 | Story 1.1 implemented: scaffolded client/ + server/, FastAPI `/api/health` + same-origin static serving, Pydantic→OpenAPI→TS type-gen pipeline, dev proxy/HMR, token-driven empty S1 frame + focus ring, single-command Docker boot. Backend 4 + frontend 12 tests pass; typecheck + prod build clean. Status → review. |
+| 2026-06-28 | Addressed code review findings — 4 resolved (2 High, 1 Med, 1 Low): SPA-fallback path-traversal containment + regression tests, Compose loopback bind, Dockerfile installs from `uv.lock`, API guard narrowed. 1 Med (test hang) not reproduced with committed lock. Backend 11 + frontend 12 tests pass; image rebuilt + booted OK. |
+
+## Senior Developer Review (AI)
+
+### Review Outcome
+
+Changes Requested.
+
+### Review Date
+
+2026-06-28
+
+### Scope Reviewed
+
+- Diff: `04d2a45..HEAD` on `feat/story-1-1-walking-skeleton`.
+- In scope: `client/`, `server/`, `Dockerfile`, `docker-compose.yml`, `.gitignore`, `.env.example`, `CLAUDE.md`.
+- Out of scope: bundled BMad/planning tooling (`.claude/`, `_bmad/`, `.bmad/` except this story file).
+- Generated lockfiles (`client/package-lock.json`, `server/uv.lock`) were skimmed only.
+
+### Review Summary
+
+The walking skeleton is close, and the frontend token shell/build path is in good shape. The blocking issues are in the production/server foundation: static file fallback needs path containment, Compose should not publish an unauthenticated local app on all interfaces, backend verification currently hangs with the pinned test dependency set, and the Docker image does not consume the committed backend lockfile.
+
+### Severity Breakdown
+
+- High: 2
+- Medium: 2
+- Low: 1
+- Dismissed during triage: 2
+
+### Action Items
+
+- [x] [High] Harden SPA fallback path handling so requested files cannot escape the built static directory, and add a regression test for traversal attempts. [server/app/main.py:43]
+- [x] [High] Bind Docker Compose publishing to localhost by default to match the no-auth, single-user localhost deployment model. [docker-compose.yml:10]
+- [x] [Medium] Fix the backend test client dependency mismatch causing the documented pytest command and `TestClient.get()` to hang; rerun backend tests after updating the dependency set/lock. [server/pyproject.toml:15] — Not reproduced with committed lock (httpx 0.28.1); tests pass 11/11. No change.
+- [x] [Medium] Make the production Docker image install backend dependencies from the committed lockfile instead of resolving transitive dependencies with `pip install .` at build time. [Dockerfile:17]
+- [x] [Low] Narrow the SPA fallback API guard to reject only `/api` and `/api/*`, not non-API client routes such as `/apiary`. [server/app/main.py:41]
+
+### Verification Notes
+
+- `cd client && npm test` passed: 3 files, 12 tests.
+- `cd client && npm run typecheck` passed.
+- `cd client && npm run build` passed.
+- `cd server && UV_CACHE_DIR=/tmp/paper-mate-uv-cache PYTHONPATH= uv run python -m app.export_openapi /tmp/paper-mate-openapi.json && diff -u /tmp/paper-mate-openapi.json openapi.json` passed.
+- `cd server && UV_CACHE_DIR=/tmp/paper-mate-uv-cache PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` hung and was interrupted; a direct `TestClient(app).get("/api/health")` reproduced the hang after emitting Starlette's `httpx` deprecation warning recommending `httpx2`.
+
+### Triage Notes
+
+- Dismissed: the top-bar overlay finding was not treated as a defect for Story 1.1 because the story/design also specify a fixed 48px top bar with the PDF canvas filling the remaining viewport.
+- Dismissed: the `HealthStatus` alias in `client/src/api/client.ts` was not treated as a hand-authored API shape because it aliases the generated OpenAPI `components` type rather than redefining the schema.
