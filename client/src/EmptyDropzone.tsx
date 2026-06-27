@@ -6,7 +6,13 @@ import "./EmptyDropzone.css";
  * Keyboard-reachable via the browse button (it triggers a hidden file input).
  * Picks the first PDF and hands it up; the parent owns upload + state.
  */
-export default function EmptyDropzone({ onFile }: { onFile: (file: File) => void }) {
+export default function EmptyDropzone({
+  onFile,
+  disabled = false,
+}: {
+  onFile: (file: File) => void;
+  disabled?: boolean;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
 
@@ -21,19 +27,20 @@ export default function EmptyDropzone({ onFile }: { onFile: (file: File) => void
       data-testid="empty-dropzone"
       onDragOver={(e) => {
         e.preventDefault();
-        setOver(true);
+        if (!disabled) setOver(true);
       }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
-        pick(e.dataTransfer.files);
+        if (!disabled) pick(e.dataTransfer.files);
       }}
     >
       <p className="dropzone__primary">Drop a PDF here</p>
       <button
         type="button"
         className="dropzone__browse"
+        disabled={disabled}
         onClick={() => inputRef.current?.click()}
       >
         or browse…
@@ -44,7 +51,11 @@ export default function EmptyDropzone({ onFile }: { onFile: (file: File) => void
         accept="application/pdf"
         className="dropzone__input"
         data-testid="dropzone-input"
-        onChange={(e) => pick(e.target.files)}
+        onChange={(e) => {
+          pick(e.target.files);
+          // Reset so re-selecting the same file after a failure refires change.
+          e.target.value = "";
+        }}
       />
     </div>
   );

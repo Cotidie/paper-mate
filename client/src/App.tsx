@@ -15,14 +15,21 @@ import { uploadDoc, type Doc } from "./api/client";
 export default function App() {
   const [doc, setDoc] = useState<Doc | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function handleFile(file: File) {
+    // Single-flight: ignore a new pick while an upload is in flight, so an
+    // overlapping request can't clobber the result or fire a stale toast.
+    if (busy) return;
+    setBusy(true);
     setError(null);
     try {
       setDoc(await uploadDoc(file));
     } catch {
       // Any load failure surfaces the same fixed copy; stay in S0 (AC-5).
       setError("Couldn't open this file.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -32,7 +39,7 @@ export default function App() {
     return (
       <div className="app">
         <main className="stage" role="main">
-          <EmptyDropzone onFile={handleFile} />
+          <EmptyDropzone onFile={handleFile} disabled={busy} />
         </main>
         {toast}
       </div>

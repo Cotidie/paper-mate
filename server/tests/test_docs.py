@@ -38,3 +38,22 @@ def test_upload_non_pdf_returns_400_detail_envelope(data_root):
     assert resp.status_code == 400
     assert "detail" in resp.json()
     assert not (data_root / "library").exists()
+
+
+def test_missing_file_field_returns_422_string_detail(data_root):
+    """Validation errors use the single { detail: string } envelope (AR-11)."""
+    resp = client.post("/api/docs")
+    assert resp.status_code == 422
+    assert isinstance(resp.json()["detail"], str)
+
+
+def test_corrupt_existing_meta_returns_500_detail(data_root):
+    """A storage failure beyond a bad PDF still answers with { detail }, not a bare 500."""
+    raw = make_pdf_bytes(pages=1)
+    first = client.post("/api/docs", files={"file": ("x.pdf", raw, "application/pdf")})
+    doc_id = first.json()["doc_id"]
+    (data_root / "library" / doc_id / "meta.json").write_text("{ corrupt")
+
+    resp = client.post("/api/docs", files={"file": ("x.pdf", raw, "application/pdf")})
+    assert resp.status_code == 500
+    assert isinstance(resp.json()["detail"], str)

@@ -24,4 +24,8 @@ async def upload_doc(file: UploadFile = File(...)) -> Doc:
     except storage.InvalidPDFError as exc:
         # Developer-facing detail; the client renders fixed user copy.
         raise HTTPException(status_code=400, detail="Could not read PDF file") from exc
+    except storage.StorageError as exc:
+        # Any other storage failure (corrupt/unknown-version metadata, I/O):
+        # still answer with the single { detail } envelope, never a bare 500.
+        raise HTTPException(status_code=500, detail="Could not store document") from exc
     return Doc(doc_id=doc_id, **meta.model_dump())

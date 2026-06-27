@@ -4,7 +4,7 @@ baseline_commit: 04d2a4592a6febb17d2ba29d8b7d4ef988d3073d
 
 # Story 1.1: Walking-skeleton app shell
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

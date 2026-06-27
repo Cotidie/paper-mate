@@ -4,7 +4,7 @@ baseline_commit: 07dbd824052786615ccf07fadcef50dd82e2c121
 
 # Story 1.2: Open a PDF from disk
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -56,6 +56,17 @@ so that it loads into my library and opens for reading.
   - [x] Contract: `test_openapi.py` (or a new assertion) confirms the OpenAPI schema contains the `Doc` model and the `POST /api/docs` path; the gen step runs clean.
   - [x] Frontend (Vitest): dropzone renders "Drop a PDF here" + "or browse…"; choosing a file calls `uploadDoc` (mock the fetch) → on success the app transitions to S1 with the filename in the top bar; on failure the toast shows the exact "Couldn't open this file." copy and the app stays in S0. Existing `no-raw-values.test.ts` and `focus-ring.test.ts` must still pass (cover the new components); ensure the browse control and dropzone are keyboard-focusable with the 2px `{colors.ink}` ring.
   - [x] Run the full suites + typecheck + prod build green: backend `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`; frontend `cd client && npm test`; `npm run typecheck`; `npm run build`.
+
+### Review Findings
+
+Code review 2026-06-28 (reviewer engine: Codex CLI). Outcome: **Changes Requested** — 0 High, 2 Medium, 3 Low actionable. See "Senior Developer Review (AI)" below for full context.
+
+- [x] [Review][Patch] Storage errors (`UnsupportedSchemaError`, JSON/Pydantic parse) escape the `{ "detail": string }` envelope as 500s; route catches only `InvalidPDFError` [server/app/routes/docs.py:24, server/app/storage/__init__.py:111] — Fixed: `_read_meta` wraps parse/JSON failures in `CorruptMetadataError`; route catches `storage.StorageError` → HTTP 500 `{ detail }`. Test `test_corrupt_existing_meta_returns_500_detail`.
+- [x] [Review][Patch] FastAPI 422 validation errors return `detail: ValidationError[]` (array), violating the AR-11/AC-5 `{ "detail": string }` contract; needs a `RequestValidationError` handler + regen [server/app/routes/docs.py, client/src/api/schema.d.ts:80] — Fixed: `RequestValidationError` handler returns `{ detail: string }`; custom `app.openapi` documents 422 as `ErrorEnvelope`; contract regenerated (`ValidationError` gone from `schema.d.ts`). Tests in `test_docs.py`/`test_openapi.py`.
+- [x] [Review][Patch] Atomic write does not fsync the containing directory after `os.replace`, so the rename may not survive a crash on POSIX FS needing dir fsync (durability primitive Epic 3 reuses) [server/app/storage/__init__.py:76] — Fixed: `_fsync_dir` fsyncs the parent dir after `os.replace` (best-effort, ignores platforms that disallow it).
+- [x] [Review][Patch] Client `handleFile` has no in-flight guard; overlapping uploads can show a stale failure toast or clobber the newer doc [client/src/App.tsx:19] — Fixed: `busy` state single-flights uploads and disables the dropzone while in flight. Test "disables the browse control while an upload is in flight".
+- [x] [Review][Patch] Browse cannot re-select the same file after a failed upload — input value never cleared, so `change` does not refire [client/src/EmptyDropzone.tsx:47] — Fixed: input `value` reset to `""` after each pick. Test "clears the file input value after a pick".
+- [x] [Review][Defer] Upload reads the whole PDF into memory with no size cap (`await file.read()`); a huge file could exhaust memory [server/app/routes/docs.py:21] — deferred: localhost single-user threat model (AD-1/AD-10), no size limit in spec; revisit if multi-user.
 
 ## Dev Notes
 
@@ -156,6 +167,7 @@ claude-opus-4-8 (Claude Code, bmad-dev-story workflow).
 - App-shell doc state is lightweight React `useState`; the Zustand annotation store is intentionally deferred to Epic 2/3. No page rendering (Story 1.3).
 - Deps pinned: `pypdf==6.1.1`, `python-multipart==0.0.32`; `uv.lock` refreshed (both are runtime deps, so `uv sync --frozen --no-dev` in the Docker image keeps them).
 - Tests: backend 20 passed (pytest), frontend 17 passed (vitest), typecheck clean, prod build clean. Live uvicorn smoke: upload / idempotent re-import / bad-file-400 / disk layout all confirmed.
+- **Post-review fixes (2026-06-28):** all 5 code-review patch findings resolved — storage errors now answer via the `{ detail }` envelope (`CorruptMetadataError` + route catches `StorageError`); 422 validation maps to `{ detail: string }` (handler + custom OpenAPI → `ErrorEnvelope`, contract regenerated); `_atomic_write` fsyncs the parent dir; client single-flights uploads (busy guard + dropzone disabled) and resets the file input after each pick. Added tests. Re-ran green: backend 25, frontend 19, typecheck + build clean. 1 finding deferred (upload size cap), 1 dismissed (per-doc lock — AD-6 no concurrency).
 
 ### File List
 
@@ -172,6 +184,7 @@ claude-opus-4-8 (Claude Code, bmad-dev-story workflow).
 - `client/src/Toast.css`
 
 **Modified — server/**
+- `server/app/main.py` (RequestValidationError → string envelope; custom OpenAPI `ErrorEnvelope` for 422)
 - `server/app/models.py` (DocMeta + Doc)
 - `server/app/storage/__init__.py` (import_pdf, hashing, atomic write, idempotency)
 - `server/app/routes/__init__.py` (register docs router)
@@ -188,7 +201,10 @@ claude-opus-4-8 (Claude Code, bmad-dev-story workflow).
 
 **Modified — root**
 - `docker-compose.yml` (PAPER_MATE_DATA=/data container env)
-- `.bmad/implementation-artifacts/sprint-status.yaml` (1-2 → in-progress → review)
+- `.bmad/implementation-artifacts/sprint-status.yaml` (1-2 → in-progress → review → done)
+
+**Added — review**
+- `.bmad/implementation-artifacts/deferred-work.md` (deferred upload size-cap item)
 
 **Generated/uncommitted (gitignored):** `server/openapi.json`, `client/src/theme/tokens.css`, `client/dist/`.
 
@@ -197,3 +213,43 @@ claude-opus-4-8 (Claude Code, bmad-dev-story workflow).
 | Date | Change |
 | --- | --- |
 | 2026-06-28 | Story 1.2 implemented: storage module (SHA-256 `doc_id`, atomic temp+rename, idempotent import, `meta.json`), `POST /api/docs` thin route, `DocMeta`/`Doc` models → regenerated TS contract, S0 dropzone + reusable toast + S0↔S1 transition, pypdf/python-multipart deps, `PAPER_MATE_DATA=/data` container env. Backend 20 + frontend 17 tests pass; typecheck + build clean; live upload smoke verified. Status → review. |
+| 2026-06-28 | Code review (Codex CLI reviewer): 7 raw findings → triaged to 5 patch, 1 defer, 1 dismissed. Outcome: Changes Requested (2 Medium, 3 Low). Findings recorded under Tasks/Subtasks → Review Findings. |
+| 2026-06-28 | Applied all 5 review patches: storage `{ detail }` envelope for non-PDF storage errors, 422 → string envelope (handler + OpenAPI `ErrorEnvelope`, regenerated contract), dir fsync after rename, client upload single-flight guard, file-input reset. Added tests; backend 25 + frontend 19 pass, typecheck + build clean. Status → done. |
+
+## Senior Developer Review (AI)
+
+### Review Outcome
+
+Changes Requested.
+
+### Review Date
+
+2026-06-28
+
+### Reviewer Engine
+
+Codex CLI (`codex exec`, GPT-class model) — run as an independent reviewer (different model than the implementer) across three layers: blind correctness, edge cases, and acceptance-vs-spec. Triage performed in the BMad `code-review` workflow.
+
+### Scope Reviewed
+
+- Diff `07dbd82..HEAD` on `feat/story-1-2-open-pdf` (24 files, +1092/-38).
+- In scope: `server/app/{models,storage,routes}`, `client/src/**` (App, EmptyDropzone, Toast, api client), `docker-compose.yml`, `docs/API.md`, generated `schema.d.ts`, tests.
+
+### Severity Breakdown
+
+- High: 0
+- Medium: 2 (actionable) + 1 dismissed
+- Low: 3 (actionable) + 1 deferred
+
+### Action Items
+
+- [x] [Medium] Storage `UnsupportedSchemaError`/JSON/Pydantic parse failures escape the `{ "detail": string }` envelope as 500s — route catches only `InvalidPDFError`. [server/app/routes/docs.py:24, server/app/storage/__init__.py:111] — Resolved.
+- [x] [Medium] FastAPI 422 validation errors return `detail: ValidationError[]`, violating AR-11/AC-5's `{ "detail": string }` contract — add a `RequestValidationError` handler returning a string detail, then regen OpenAPI/TS. [client/src/api/schema.d.ts:80] — Resolved.
+- [x] [Low] `_atomic_write` does not fsync the parent directory after `os.replace`; rename may not be crash-durable on POSIX FS requiring dir fsync (Epic 3 reuses this primitive — NFR-4). [server/app/storage/__init__.py:76] — Resolved.
+- [x] [Low] Client `handleFile` lacks an in-flight guard; overlapping uploads can show a stale toast or clobber the newer doc. [client/src/App.tsx:19] — Resolved.
+- [x] [Low] Browse cannot re-select the same file after a failed upload (input value not cleared → no `change` event). [client/src/EmptyDropzone.tsx:47] — Resolved.
+
+### Triage Notes
+
+- **Deferred:** upload reads the whole PDF into memory with no size cap (`server/app/routes/docs.py:21`). Real, but the threat model is localhost single-user (AD-1/AD-10) and no limit is specified; revisit if the app ever serves multiple users. Logged in `deferred-work.md`.
+- **Dismissed:** "idempotency is check-then-act without a per-doc lock" — AD-6 mandates single user, one session per doc, **no concurrency**. Concurrent same-`doc_id` imports are out of scope by architecture decision, so the race is not a defect for v1.

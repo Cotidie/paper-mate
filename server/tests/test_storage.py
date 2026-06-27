@@ -80,6 +80,23 @@ def test_empty_bytes_raise(data_root):
         storage.import_pdf(b"", "empty.pdf")
 
 
+def test_reimport_with_corrupt_meta_raises_storage_error(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "x.pdf")
+    (data_root / "library" / doc_id / "meta.json").write_text("{ not json")
+    with pytest.raises(storage.StorageError):
+        storage.import_pdf(raw, "x.pdf")
+
+
+def test_reimport_with_unknown_schema_raises(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "x.pdf")
+    meta = data_root / "library" / doc_id / "meta.json"
+    meta.write_text(meta.read_text().replace('"schema_version": 1', '"schema_version": 99'))
+    with pytest.raises(storage.UnsupportedSchemaError):
+        storage.import_pdf(raw, "x.pdf")
+
+
 def test_atomic_write_leaves_no_temp_files(data_root):
     raw = make_pdf_bytes(pages=1)
     doc_id, _ = storage.import_pdf(raw, "clean.pdf")

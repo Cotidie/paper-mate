@@ -23,3 +23,14 @@ def test_openapi_contains_doc_model_and_upload_path() -> None:
     assert "page_count" in doc["properties"]
     assert "/api/docs" in schema["paths"]
     assert "post" in schema["paths"]["/api/docs"]
+
+
+def test_validation_errors_documented_as_string_envelope() -> None:
+    """AR-11: the 422 contract is the single { detail: string } envelope."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    assert "HTTPValidationError" not in schemas
+    assert schemas["ErrorEnvelope"]["properties"]["detail"]["type"] == "string"
+    resp422 = schema["paths"]["/api/docs"]["post"]["responses"]["422"]
+    ref = resp422["content"]["application/json"]["schema"]["$ref"]
+    assert ref.endswith("/ErrorEnvelope")

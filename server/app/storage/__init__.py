@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 
+from pydantic import ValidationError
 from pypdf import PdfReader
 
 from app.models import DocMeta
@@ -36,6 +37,10 @@ class InvalidPDFError(StorageError):
 
 class UnsupportedSchemaError(StorageError):
     """An on-disk file carries a ``schema_version`` this code cannot handle."""
+
+
+class CorruptMetadataError(StorageError):
+    """An on-disk ``meta.json`` is unreadable or has an invalid shape."""
 
 
 def _data_root() -> Path:
@@ -64,6 +69,23 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _fsync_dir(directory: Path) -> None:
+    """Flush a directory entry so a rename survives a crash (best-effort).
+
+    Some platforms/filesystems disallow opening a dir for fsync; ignore those.
+    """
+    try:
+        dir_fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(dir_fd)
+    except OSError:
+        pass
+    finally:
+        os.close(dir_fd)
+
+
 def _atomic_write(path: Path, data: bytes) -> None:
     """Write ``data`` to ``path`` atomically (temp in same dir + rename)."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -74,6 +96,7 @@ def _atomic_write(path: Path, data: bytes) -> None:
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp_name, path)
+        _fsync_dir(path.parent)
     except BaseException:
         # Never leave a partial temp file behind.
         try:
@@ -106,11 +129,17 @@ def _read_meta(doc_dir: Path) -> DocMeta | None:
     meta_path = doc_dir / "meta.json"
     if not meta_path.is_file():
         return None
-    payload = json.loads(meta_path.read_text())
-    version = payload.get("schema_version")
+    try:
+        payload = json.loads(meta_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise CorruptMetadataError(f"unreadable meta.json: {exc}") from exc
+    version = payload.get("schema_version") if isinstance(payload, dict) else None
     if version != META_SCHEMA_VERSION:
         raise UnsupportedSchemaError(f"unknown meta schema_version: {version!r}")
-    return DocMeta.model_validate(payload)
+    try:
+        return DocMeta.model_validate(payload)
+    except ValidationError as exc:
+        raise CorruptMetadataError(f"invalid meta.json shape: {exc}") from exc
 
 
 def _write_meta(doc_dir: Path, meta: DocMeta) -> None:

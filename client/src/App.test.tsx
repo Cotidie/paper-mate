@@ -58,6 +58,35 @@ describe("upload → S1 transition (AC-6)", () => {
   });
 });
 
+describe("review hardening", () => {
+  it("clears the file input value after a pick so the same file can re-fire (F6)", () => {
+    vi.spyOn(api, "uploadDoc").mockRejectedValue(new Error("bad"));
+    render(<App />);
+    const input = screen.getByTestId("dropzone-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [pdfFile()] } });
+    expect(input.value).toBe("");
+  });
+
+  it("disables the browse control while an upload is in flight (F5)", async () => {
+    let release!: (doc: api.Doc) => void;
+    vi.spyOn(api, "uploadDoc").mockReturnValue(
+      new Promise<api.Doc>((res) => {
+        release = res;
+      }),
+    );
+    render(<App />);
+    const browse = screen.getByRole("button", { name: "or browse…" });
+
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect((browse as HTMLButtonElement).disabled).toBe(true));
+
+    release(fakeDoc);
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+  });
+});
+
 describe("upload failure → toast, stay S0 (AC-5)", () => {
   it("shows the exact 'Couldn't open this file.' copy and stays in S0", async () => {
     vi.spyOn(api, "uploadDoc").mockRejectedValue(new Error("bad pdf"));

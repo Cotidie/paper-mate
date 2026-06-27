@@ -76,11 +76,6 @@ export interface components {
             /** Doc Id */
             doc_id: string;
         };
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
-        };
         /**
          * HealthStatus
          * @description Liveness response for ``GET /api/health``.
@@ -93,18 +88,10 @@ export interface components {
              */
             status: "ok";
         };
-        /** ValidationError */
-        ValidationError: {
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
+        /** ErrorEnvelope */
+        ErrorEnvelope: {
+            /** Detail */
+            detail: string;
         };
     };
     responses: never;
@@ -163,7 +150,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };
