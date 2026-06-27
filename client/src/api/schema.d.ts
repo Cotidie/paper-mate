@@ -24,10 +24,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Doc
+         * @description Import an uploaded PDF; return its ``doc_id`` + metadata.
+         */
+        post: operations["upload_doc_api_docs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_upload_doc_api_docs_post */
+        Body_upload_doc_api_docs_post: {
+            /** File */
+            file: string;
+        };
+        /**
+         * Doc
+         * @description API representation of an imported document = ``doc_id`` + its metadata.
+         */
+        Doc: {
+            /** Filename */
+            filename: string;
+            /** Title */
+            title?: string | null;
+            /** Page Count */
+            page_count: number;
+            /** Added */
+            added: string;
+            /** Last Opened */
+            last_opened: string;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Doc Id */
+            doc_id: string;
+        };
         /**
          * HealthStatus
          * @description Liveness response for ``GET /api/health``.
@@ -39,6 +87,11 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** ErrorEnvelope */
+        ErrorEnvelope: {
+            /** Detail */
+            detail: string;
         };
     };
     responses: never;
@@ -65,6 +118,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthStatus"];
+                };
+            };
+        };
+    };
+    upload_doc_api_docs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_doc_api_docs_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Doc"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };

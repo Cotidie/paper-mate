@@ -1,0 +1,57 @@
+/* S0 empty-dropzone. Tokens only — no raw hex/px (token layer owns px). */
+
+.dropzone {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 60%;
+  max-width: var(--dropzone-max-width);
+  height: 60%;
+  max-height: var(--dropzone-min-height);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  background: var(--color-canvas-soft);
+  color: var(--color-muted);
+  border: var(--dropzone-border) dashed var(--color-hairline-strong);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.dropzone--over {
+  border-color: var(--color-ink);
+}
+
+.dropzone__primary {
+  margin: 0;
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-leading);
+  color: var(--color-ink);
+}
+
+.dropzone__browse {
+  font-family: var(--font-sans);
+  font-size: var(--type-body-md-size);
+  color: var(--color-text-link);
+  background: transparent;
+  border: 0;
+  padding: var(--space-xxs) var(--space-xs);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/* Visually hidden but programmatically clickable; browse button is the control. */
+.dropzone__input {
+  position: absolute;
+  width: var(--hairline-width);
+  height: var(--hairline-width);
+  padding: 0;
+  margin: calc(-1 * var(--hairline-width));
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

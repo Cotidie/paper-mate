@@ -6,6 +6,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Storage root inside the container = the mounted volume (AD-8).
+    environment:
+      PAPER_MATE_DATA: /data
     # Bind to loopback only — no-auth, single-user, localhost deployment (AD-1/AD-10).
     ports:
       - "127.0.0.1:${PAPER_MATE_PORT:-8000}:8000"

@@ -1,0 +1,34 @@
+/* toast: dark, bottom-center, transient. Tokens only. */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--toast-offset);
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: var(--toast-max-width);
+  background: var(--color-surface-dark);
+  color: var(--color-on-dark);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-leading);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-base);
+  box-shadow: var(--shadow-card);
+}
+
+.toast__message {
+  font-family: var(--font-sans);
+}
+
+.toast__dismiss {
+  font-family: var(--font-sans);
+  font-size: var(--type-body-md-size);
+  line-height: 1;
+  color: var(--color-on-dark);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
