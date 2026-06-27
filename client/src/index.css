@@ -1,0 +1,27 @@
+/* Global base. Imports the token layer; uses tokens only — no raw hex/px. */
+@import "./theme/tokens.css";
+@import "./theme/components.css";
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-reader-backdrop);
+  overflow: hidden;
+}
+
+/* Visible 2px ink focus ring on all interactive chrome (UX-DR17). */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--focus-ring-width);
+}

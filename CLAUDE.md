@@ -4,7 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Paper Mate is a **web** PDF paper-reading companion: annotation + AI chat optimized for reading papers. **Planning is complete; code is not scaffolded yet.** No application code, `package.json`, build, lint, or test setup exists. When you scaffold it, record the real build/test/run commands here, replacing this paragraph.
+Paper Mate is a **web** PDF paper-reading companion: annotation + AI chat optimized for reading papers. **Scaffolded (Story 1.1 done): the walking-skeleton app shell boots to an empty S1 reader frame.** Two processes, one container (AD-1/AD-10): `client/` (React 19.2 + Vite 8 + TS 6.0 SPA) and `server/` (FastAPI + Pydantic v2, uv-managed).
+
+**Commands** (run client commands from `client/`, server from `server/`):
+
+- **Dev** (HMR + proxy): in one shell `cd server && uv run uvicorn app.main:app --reload --port 8000`; in another `cd client && npm run dev`. Vite serves the SPA and proxies `/api` → FastAPI (override target with `PAPER_MATE_API_TARGET`).
+- **Backend tests:** `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`. (`PYTHONPATH=` clears a host ROS leak; `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` avoids a stray ROS pytest plugin — we use no pytest plugins.)
+- **Frontend tests:** `cd client && npm test` (Vitest). **Typecheck:** `npm run typecheck`.
+- **Contract types:** `cd server && PYTHONPATH= uv run python -m app.export_openapi` writes `server/openapi.json`, then `cd client && npm run gen:api` regenerates `client/src/api/schema.d.ts` (committed). Never hand-author API types.
+- **Design tokens:** `cd client && npm run gen:tokens` regenerates `client/src/theme/tokens.css` from `DESIGN.md` (gitignored build artifact; `dev`/`build` run it automatically). Component dims/typography live hand-authored in `client/src/theme/components.css`. Both are the token layer; raw hex/px are allowed ONLY in `src/theme/**` — `src/no-raw-values.test.ts` enforces this.
+- **Prod build:** `cd client && npm run build` emits `client/dist/`, which FastAPI serves same-origin.
+- **Single-command boot:** `docker compose up` (host port `PAPER_MATE_PORT`, default 8000; data dir `PAPER_MATE_DATA`, default `~/.paper-mate` → `/data`). FastAPI serves API + built SPA from one origin (no CORS).
 
 Canonical planning artifacts live under `.bmad/planning-artifacts/` — PRD, architecture spine, epics + stories, UX, and an implementation-readiness report. Root `README.md`, `DESIGN.md`, and `EXPERIENCE.md` are also inputs. These override the older "Obsidian note / bootstrap prompt" as the spec of record.
 

@@ -1,0 +1,73 @@
+/* S1 reader frame. Tokens only — no inline hex/px (CLAUDE.md design rule). */
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* top-bar: 48px, hairline bottom, canvas bg, ink title-sm text */
+.top-bar {
+  height: var(--top-bar-height);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-base);
+  background: var(--color-canvas);
+  border-bottom: var(--top-bar-border) solid var(--color-hairline);
+  position: relative;
+  z-index: 5;
+}
+
+.top-bar__title {
+  font-size: var(--type-title-sm-size);
+  font-weight: var(--type-title-sm-weight);
+  line-height: var(--type-title-sm-leading);
+  color: var(--color-ink);
+}
+
+.top-bar__actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.pill {
+  font-family: var(--font-sans);
+  font-size: var(--type-title-sm-size);
+  color: var(--color-body);
+  background: var(--color-canvas);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-pill);
+  padding: var(--space-xxs) var(--space-sm);
+  cursor: pointer;
+}
+
+/* stage holds the canvas zone; chrome floats over it and never reflows it. */
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.reader-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--color-reader-backdrop);
+}
+
+/* tool-rail: collapsed placeholder, floats over the canvas (overlay). */
+.tool-rail {
+  position: absolute;
+  left: var(--tool-rail-offset);
+  top: var(--tool-rail-offset);
+  width: var(--tool-rail-width);
+  min-height: var(--tool-rail-width);
+  background: var(--color-surface-card);
+  border: var(--tool-rail-border) solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xs);
+  box-shadow: var(--shadow-card);
+  z-index: 4;
+}
