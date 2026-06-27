@@ -1,31 +1,76 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
+import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import App from "./App";
+import * as api from "./api/client";
 
 afterEach(cleanup);
+beforeEach(() => vi.restoreAllMocks());
 
-describe("S1 reader frame", () => {
-  it("renders the top-bar with the app title", () => {
+const fakeDoc: api.Doc = {
+  doc_id: "a".repeat(64),
+  filename: "paper.pdf",
+  title: "A Paper",
+  page_count: 3,
+  added: "2026-06-28T00:00:00+00:00",
+  last_opened: "2026-06-28T00:00:00+00:00",
+  schema_version: 1,
+};
+
+function pdfFile() {
+  return new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], "paper.pdf", {
+    type: "application/pdf",
+  });
+}
+
+describe("S0 empty state", () => {
+  it("shows the dropzone copy 'Drop a PDF here' / 'or browse…' (AC-1)", () => {
     render(<App />);
+    expect(screen.getByTestId("empty-dropzone")).toBeTruthy();
+    expect(screen.getByText("Drop a PDF here")).toBeTruthy();
+    expect(screen.getByText("or browse…")).toBeTruthy();
+  });
+
+  it("does not render the S1 reader frame before a PDF loads", () => {
+    render(<App />);
+    expect(screen.queryByTestId("reader-backdrop")).toBeNull();
+  });
+
+  it("exposes a keyboard-focusable browse control (focus-ring target, AC-1/UX-DR17)", () => {
+    render(<App />);
+    const browse = screen.getByRole("button", { name: "or browse…" });
+    browse.focus();
+    expect(document.activeElement).toBe(browse);
+  });
+});
+
+describe("upload → S1 transition (AC-6)", () => {
+  it("transitions to S1 and shows the filename in the top bar on success", async () => {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
     expect(screen.getByRole("banner")).toBeTruthy();
-    expect(screen.getByText("Paper Mate")).toBeTruthy();
+    expect(screen.getByText("paper.pdf")).toBeTruthy();
   });
+});
 
-  it("renders the reader-backdrop canvas region", () => {
+describe("upload failure → toast, stay S0 (AC-5)", () => {
+  it("shows the exact 'Couldn't open this file.' copy and stays in S0", async () => {
+    vi.spyOn(api, "uploadDoc").mockRejectedValue(new Error("bad pdf"));
     render(<App />);
-    expect(screen.getByTestId("reader-backdrop")).toBeTruthy();
-  });
 
-  it("renders the collapsed tool-rail placeholder", () => {
-    render(<App />);
-    expect(screen.getByTestId("tool-rail")).toBeTruthy();
-  });
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
 
-  it("exposes keyboard-focusable chrome (focus-ring target, AC-5)", () => {
-    render(<App />);
-    const buttons = screen.getAllByRole("button");
-    expect(buttons.length).toBeGreaterThan(0);
-    buttons[0].focus();
-    expect(document.activeElement).toBe(buttons[0]);
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't open this file.")).toBeTruthy(),
+    );
+    expect(screen.getByTestId("empty-dropzone")).toBeTruthy();
+    expect(screen.queryByTestId("reader-backdrop")).toBeNull();
   });
 });
