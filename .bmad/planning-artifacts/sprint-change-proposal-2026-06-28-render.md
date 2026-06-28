@@ -32,20 +32,20 @@ Two defects in already-done Epic 1 stories, plus a structural cleanup that deliv
 - **Epic 1:** completable as planned; these two stories complete it properly (B closes a Story 1.3 render gap; A closes the Story 1.4 NFR-2 claim). No epic added or removed.
 - **Stories:** 1.3/1.4 ACs were marked met but A/B reveal a figure-render gap and an unmet NFR-2. Cleanest path is two **new** Epic 1 stories rather than reopening done stories — preserves done history and keeps each fix independently reviewable.
 - **PRD / MVP:** unaffected. No scope change; NFR-2 (smoothness) is already in scope and this satisfies it.
-- **Architecture:** no spine change. The refactor is render-layer-internal; the AR-9 boundary (render knows nothing of annotations) is preserved. One AR-10-adjacent detail: the wasm/cmap/icc/font assets must be emitted into `dist/` so FastAPI serves them same-origin — covered by a Story 1.8 AC.
+- **Architecture:** no spine change. The refactor is render-layer-internal; the AR-9 boundary (render knows nothing of annotations) is preserved. One AR-10-adjacent detail: the wasm/cmap/icc/font assets must be emitted into `dist/` so FastAPI serves them same-origin — covered by a Story 1.6 AC.
 - **UX:** none.
 - **Other artifacts:** `client/vite.config.*` (static-copy of decoder assets), `client` dependencies (`vite-plugin-static-copy`).
 
 ## 3. Recommended path — Option 1 (Direct Adjustment), Hybrid
 
-Add two stories to Epic 1 and **resequence** so they run before the remaining backlog.
+Insert two render-fix stories as **1.6 / 1.7** and renumber the original pan/ToC stories to **1.8 / 1.9**, so the story number tracks execution order. Neither pan nor ToC had a story file or code under the old numbers, so renumbering breaks no links.
 
-**Execution order: 1.8 → 1.9 → 1.6 (pan) → 1.7 (toc).** Story 1.9 restructures `Reader.tsx`; pan and ToC build on it, so the refactor goes first to avoid building on the smeared structure and redoing it. Story 1.8 is cheap and independent, so it goes first of all. Story numbers reflect order added, not execution order.
+**Execution order = numbering: 1.6 (decoder) → 1.7 (perf/refactor) → 1.8 (pan) → 1.9 (toc).** Story 1.7 restructures `Reader.tsx`; pan and ToC build on it, so the refactor goes before them. Story 1.6 is cheap and independent, so it goes first.
 
 | Story | Effort | Risk | Notes |
 |-------|--------|------|-------|
-| 1.8 pdf.js decoder & asset wiring | Low | Low | Config + Vite static-copy |
-| 1.9 Render perf — windowing & viewport unification | Medium | Medium | Touches core render path; mitigated by existing zoom/render tests + manual scroll verify |
+| 1.6 pdf.js decoder & asset wiring | Low | Low | Config + Vite static-copy |
+| 1.7 Render perf — windowing & viewport unification | Medium | Medium | Touches core render path; mitigated by existing zoom/render tests + manual scroll verify |
 
 ### Path options considered
 
@@ -55,11 +55,11 @@ Add two stories to Epic 1 and **resequence** so they run before the remaining ba
 
 ## 4. Detailed artifact changes
 
-1. **`sprint-status.yaml`** (done): under epic-1, after `1-7-table-of-contents`, added `1-8-pdfjs-decoder-assets: backlog` and `1-9-render-perf-windowing: backlog` with an execution-order comment.
-2. **`epics.md`** (done): appended Story 1.8 and Story 1.9 to Epic 1 with full acceptance criteria and a resequencing note.
+1. **`sprint-status.yaml`** (done): under epic-1, inserted `1-6-pdfjs-decoder-assets: backlog` and `1-7-render-perf-windowing: backlog`, and renumbered the original `1-6-pan-hand-tool` → `1-8-pan-hand-tool` and `1-7-table-of-contents` → `1-9-table-of-contents`.
+2. **`epics.md`** (done): inserted Story 1.6 and Story 1.7 (full ACs) and renumbered the pan/ToC stories to 1.8/1.9, with provenance notes.
 3. **This proposal**: written to `.bmad/planning-artifacts/sprint-change-proposal-2026-06-28-render.md` (the plain-dated name was already taken by the zoom-control proposal).
 
-### Story 1.8: pdf.js decoder & asset wiring
+### Story 1.6: pdf.js decoder & asset wiring
 
 As a reader, I want figures and all glyphs to decode, so the page renders fully and the console stays clean.
 
@@ -68,7 +68,7 @@ As a reader, I want figures and all glyphs to decode, so the page renders fully 
 - Given a prod build, then decoder/cmap/icc/standard-font assets are emitted into `dist/` and served same-origin by FastAPI (AR-10).
 - Given an embedded non-standard font, then it renders via standard-font data with no fallback-font warning.
 
-### Story 1.9: Render performance — windowing & viewport unification
+### Story 1.7: Render performance — windowing & viewport unification
 
 As a reader, I want scroll to stay fluid on a long paper, so reading never stutters.
 
@@ -83,5 +83,5 @@ As a reader, I want scroll to stay fluid on a long paper, so reading never stutt
 - **Scope:** Moderate (backlog reorganization).
 - **Route:** create-story → dev-story cycle, per story, each in a fresh context window:
   - `[CS] bmad-create-story` → `[DS] bmad-dev-story` → `[CR] bmad-code-review`.
-- **Start with Story 1.8** (independent, low-risk, clears the console), then Story 1.9.
-- **Success criteria:** 1.8 — zero JpxError/OpenJPEG warnings on a JPX-bearing PDF, figures visible; 1.9 — no scroll jitter on a 50+ page paper, bounded live-canvas count, all existing render/zoom/nav tests green.
+- **Start with Story 1.6** (independent, low-risk, clears the console), then Story 1.7.
+- **Success criteria:** 1.6 — zero JpxError/OpenJPEG warnings on a JPX-bearing PDF, figures visible; 1.7 — no scroll jitter on a 50+ page paper, bounded live-canvas count, all existing render/zoom/nav tests green.

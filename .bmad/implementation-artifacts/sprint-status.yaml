@@ -56,12 +56,13 @@ development_status:
   1-3-render-pages: done
   1-4-scroll-and-page-navigation: done
   1-5-zoom: done
-  1-6-pan-hand-tool: backlog
-  1-7-table-of-contents: backlog
-  # Added 2026-06-28 via correct-course (render perf + decoder wiring).
-  # Exec order: 1-8 -> 1-9 -> 1-6 -> 1-7 (1-9 refactors Reader; pan/toc build on it).
-  1-8-pdfjs-decoder-assets: backlog
-  1-9-render-perf-windowing: backlog
+  # 2026-06-28 correct-course: inserted render-fix stories as 1-6/1-7 and
+  # renumbered the original pan/toc stories to 1-8/1-9 so number = exec order.
+  # (Neither pan nor toc had a story file or code under the old numbers.)
+  1-6-pdfjs-decoder-assets: backlog
+  1-7-render-perf-windowing: backlog
+  1-8-pan-hand-tool: backlog
+  1-9-table-of-contents: backlog
   epic-1-retrospective: optional
 
   # Epic 2: Annotate the paper

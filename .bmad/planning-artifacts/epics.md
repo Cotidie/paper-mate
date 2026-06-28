@@ -275,47 +275,9 @@ So that I can size the page to read comfortably.
 **Given** any zoom level
 **Then** the pdf-canvas box stays pixel-stable (chrome overlays, no reflow) and the anchor page box rescales so derived positions stay correct (NFR-1, NFR-3 foundation)
 
-### Story 1.6: Pan / hand tool
+### Story 1.6: pdf.js decoder & asset wiring
 
-As a reader,
-I want to pan the page by dragging with a hand tool or holding Space,
-So that I can reposition a zoomed-in page.
-
-**Acceptance Criteria:**
-
-**Given** the `{component.tool-rail}` cursor button
-**Then** its `{component.tool-flyout}` offers cursor / hand / box-select, and selecting hand arms panning (FR-6, UX-DR4)
-
-**Given** the hand tool armed or Space held
-**When** I drag
-**Then** the page pans without reflowing the canvas (FR-6, IP-4, UX-DR14)
-
-**Given** Space released or `V`/`Esc` pressed
-**Then** control returns to the cursor (UX-DR15)
-
-### Story 1.7: Table of contents
-
-As a reader,
-I want a table of contents I can open and click,
-So that I can jump to a section without scroll-hunting.
-
-**Acceptance Criteria:**
-
-**Given** a PDF with an embedded outline
-**When** I toggle the ToC
-**Then** `{component.toc-panel}` (280px overlay) lists sections, overlays the canvas, and never reflows it (FR-3, UX-DR11, NFR-1)
-
-**Given** a ToC row
-**When** I click it
-**Then** the canvas jumps to that section (FR-3)
-
-**Given** a PDF with no embedded outline
-**Then** the ToC panel shows an empty/unavailable state rather than erroring (edge case)
-
-### Story 1.8: pdf.js decoder & asset wiring
-
-> Added 2026-06-28 via correct-course (sprint-change-proposal-2026-06-28-render.md). Closes a Story 1.3 render gap: the pdf.js WASM image decoders and CMap/ICC/font assets were never referenced, so JPEG2000 (and JBIG2) images failed and the console flooded with `JpxError: OpenJPEG failed to initialize` + `Dependent image isn't ready yet`.
-> **Exec order:** 1.8 → 1.9 → 1.6 → 1.7 (1.9 restructures the render layer that pan/ToC build on; 1.8 is independent and cheap, so it goes first). Story numbers reflect order added, not execution order.
+> Added 2026-06-28 via correct-course (sprint-change-proposal-2026-06-28-render.md). Closes a Story 1.3 render gap: the pdf.js WASM image decoders and CMap/ICC/font assets were never referenced, so JPEG2000 (and JBIG2) images failed and the console flooded with `JpxError: OpenJPEG failed to initialize` + `Dependent image isn't ready yet`. Sequenced ahead of the original pan/ToC stories (now 1.8/1.9): independent and cheap, so it lands first.
 
 As a reader,
 I want figures and all glyphs to decode,
@@ -336,9 +298,9 @@ So that the page renders fully and the console stays clean.
 **Given** an embedded non-standard font
 **Then** it renders via the standard-font data with no fallback-font warning
 
-### Story 1.9: Render performance — windowing & viewport unification
+### Story 1.7: Render performance — windowing & viewport unification
 
-> Added 2026-06-28 via correct-course. Completes the Story 1.4 NFR-2 claim (scroll was jittery, not ~60fps) and resolves the virtualization item in deferred-work.md. Root cause: `PageCard` marked a page visible once and never released its painted canvas + text layer, so painted hi-DPI canvases accumulated forever (cost scaling with zoom²), amplified by an always-on off-screen skeleton animation.
+> Added 2026-06-28 via correct-course. Completes the Story 1.4 NFR-2 claim (scroll was jittery, not ~60fps) and resolves the virtualization item in deferred-work.md. Root cause: `PageCard` marked a page visible once and never released its painted canvas + text layer, so painted hi-DPI canvases accumulated forever (cost scaling with zoom²), amplified by an always-on off-screen skeleton animation. Sequenced ahead of pan/ToC (1.8/1.9): it restructures the render layer those stories build on.
 
 As a reader,
 I want scroll to stay fluid on a long paper,
@@ -361,6 +323,47 @@ So that reading never stutters.
 
 **Given** zoom, page-in-view, and PgUp/PgDn
 **Then** all existing Story 1.4 / 1.5 behaviors and tests still pass
+
+### Story 1.8: Pan / hand tool
+
+> Renumbered from Story 1.6 → 1.8 on 2026-06-28 (correct-course) so story numbers track execution order after the render-fix stories (1.6/1.7) were sequenced first. No code or story file existed under the old number.
+
+As a reader,
+I want to pan the page by dragging with a hand tool or holding Space,
+So that I can reposition a zoomed-in page.
+
+**Acceptance Criteria:**
+
+**Given** the `{component.tool-rail}` cursor button
+**Then** its `{component.tool-flyout}` offers cursor / hand / box-select, and selecting hand arms panning (FR-6, UX-DR4)
+
+**Given** the hand tool armed or Space held
+**When** I drag
+**Then** the page pans without reflowing the canvas (FR-6, IP-4, UX-DR14)
+
+**Given** Space released or `V`/`Esc` pressed
+**Then** control returns to the cursor (UX-DR15)
+
+### Story 1.9: Table of contents
+
+> Renumbered from Story 1.7 → 1.9 on 2026-06-28 (correct-course). No code or story file existed under the old number.
+
+As a reader,
+I want a table of contents I can open and click,
+So that I can jump to a section without scroll-hunting.
+
+**Acceptance Criteria:**
+
+**Given** a PDF with an embedded outline
+**When** I toggle the ToC
+**Then** `{component.toc-panel}` (280px overlay) lists sections, overlays the canvas, and never reflows it (FR-3, UX-DR11, NFR-1)
+
+**Given** a ToC row
+**When** I click it
+**Then** the canvas jumps to that section (FR-3)
+
+**Given** a PDF with no embedded outline
+**Then** the ToC panel shows an empty/unavailable state rather than erroring (edge case)
 
 ## Epic 2: Annotate the paper
 
