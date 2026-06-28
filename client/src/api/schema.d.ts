@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Get Health
-         * @description Return liveness. No filesystem access (AD-9).
+         * @description Return liveness + app version. No filesystem access (AD-9).
          */
         get: operations["get_health_api_health_get"];
         put?: never;
@@ -101,7 +101,8 @@ export interface components {
         };
         /**
          * HealthStatus
-         * @description Liveness response for ``GET /api/health``.
+         * @description Liveness response for ``GET /api/health``. Also carries the app version
+         *     (single source: ``server/pyproject.toml`` via ``app.version``).
          */
         HealthStatus: {
             /**
@@ -110,6 +111,8 @@ export interface components {
              * @constant
              */
             status: "ok";
+            /** Version */
+            version: string;
         };
         /** ErrorEnvelope */
         ErrorEnvelope: {

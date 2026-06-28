@@ -33,7 +33,12 @@ vi.mock("./render", () => ({
 }));
 
 afterEach(cleanup);
-beforeEach(() => vi.restoreAllMocks());
+beforeEach(() => {
+  vi.restoreAllMocks();
+  // App fetches the version on mount (GET /api/health). Stub it so tests never
+  // hit the network; individual tests override when they assert the value.
+  vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9" });
+});
 
 const fakeDoc: api.Doc = {
   doc_id: "a".repeat(64),
@@ -84,6 +89,19 @@ describe("upload → S1 transition (AC-6)", () => {
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
     expect(screen.getByRole("banner")).toBeTruthy();
     expect(screen.getByText("paper.pdf")).toBeTruthy();
+  });
+
+  it("shows the app version badge (from /api/health) in the top bar", async () => {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.0.1" });
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+
+    await waitFor(() => expect(screen.getByText("v0.0.1")).toBeTruthy());
+    expect(screen.getByRole("banner").contains(screen.getByText("v0.0.1"))).toBe(true);
   });
 
   it("shows the 'Page N of M' indicator in the top bar (AC-2)", async () => {

@@ -39,7 +39,17 @@
 .top-bar__actions {
   margin-left: auto;
   display: flex;
+  align-items: center;
   gap: var(--space-xs);
+}
+
+/* version: quiet mono caption badge at the far right of the top-bar. */
+.top-bar__version {
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-leading);
+  color: var(--color-muted);
+  padding-left: var(--space-xxs);
 }
 
 .pill {

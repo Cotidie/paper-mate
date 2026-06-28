@@ -21,8 +21,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.routes import api_router
+from app.version import get_version
 
-app = FastAPI(title="Paper Mate", version="0.1.0")
+app = FastAPI(title="Paper Mate", version=get_version())
 
 # API first so /api/* always wins over the SPA catch-all.
 app.include_router(api_router)

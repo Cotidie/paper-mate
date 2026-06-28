@@ -7,7 +7,7 @@ import ToolRail, { type ToolMode } from "./ToolRail";
 import ZoomControl from "./ZoomControl";
 import TocPanel from "./TocPanel";
 import Toast from "./Toast";
-import { uploadDoc, type Doc } from "./api/client";
+import { uploadDoc, fetchHealth, type Doc } from "./api/client";
 import type { TocEntry } from "./render";
 
 /**
@@ -40,6 +40,21 @@ export default function App() {
   // Imperative zoom handle into the Reader (it owns `scale` + the scroll
   // container needed for focal-point zoom); the top-bar control drives it.
   const readerRef = useRef<ReaderHandle>(null);
+  // App version for the top-bar badge. Single source = the backend
+  // (server/pyproject.toml → GET /api/health); fetched once on mount. Stays
+  // null on failure so the badge simply doesn't render.
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchHealth()
+      .then((h) => {
+        if (live) setVersion(h.version);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Document-level tool keys (UX-DR15), mirroring the Reader's zoom-key effect:
   // `V`/`Esc` → cursor, `[` → toggle the rail. Only active while a doc is open.
@@ -135,6 +150,11 @@ export default function App() {
           >
             <Cards aria-hidden />
           </button>
+          {version && (
+            <span className="top-bar__version" title="Paper Mate version">
+              v{version}
+            </span>
+          )}
         </div>
       </header>
 

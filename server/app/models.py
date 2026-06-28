@@ -14,9 +14,11 @@ from pydantic import BaseModel
 
 
 class HealthStatus(BaseModel):
-    """Liveness response for ``GET /api/health``."""
+    """Liveness response for ``GET /api/health``. Also carries the app version
+    (single source: ``server/pyproject.toml`` via ``app.version``)."""
 
     status: Literal["ok"] = "ok"
+    version: str
 
 
 class DocMeta(BaseModel):

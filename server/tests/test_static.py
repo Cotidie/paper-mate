@@ -33,7 +33,8 @@ def test_spa_fallback_serves_index_for_client_route(client) -> None:
 
 
 def test_api_surface_not_shadowed_by_fallback(client) -> None:
-    assert client.get("/api/health").json() == {"status": "ok"}
+    body = client.get("/api/health").json()
+    assert body["status"] == "ok"
 
 
 def test_non_api_lookalike_is_not_blocked(client) -> None:

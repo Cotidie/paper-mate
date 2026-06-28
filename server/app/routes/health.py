@@ -3,11 +3,12 @@
 from fastapi import APIRouter
 
 from app.models import HealthStatus
+from app.version import get_version
 
 router = APIRouter(tags=["health"])
 
 
 @router.get("/health", response_model=HealthStatus)
 def get_health() -> HealthStatus:
-    """Return liveness. No filesystem access (AD-9)."""
-    return HealthStatus()
+    """Return liveness + app version. No filesystem access (AD-9)."""
+    return HealthStatus(version=get_version())

@@ -21,8 +21,10 @@ Liveness probe. No filesystem access.
 
 - **200** → `HealthStatus`
   ```json
-  { "status": "ok" }
+  { "status": "ok", "version": "0.0.1" }
   ```
+  `version` is the running app version. Single source = `server/pyproject.toml`
+  (`[project].version`), read at runtime via `app.version.get_version()`.
 
 ### `POST /api/docs` — import a PDF
 
@@ -73,6 +75,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-06-29:** `HealthStatus` gains `version` (app version, single source `server/pyproject.toml`); surfaced for the top-bar version badge.
 - **2026-06-28 (Story 1.3):** added `GET /api/docs/{doc_id}/file` (stream stored PDF bytes).
 - **2026-06-28 (Story 1.2):** added `POST /api/docs` (PDF import) + `Doc`/`DocMeta` models.
 - **2026-06-28 (Story 1.1):** `GET /api/health` + the contract-generation pipeline.
