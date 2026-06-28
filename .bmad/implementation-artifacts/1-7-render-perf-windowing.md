@@ -4,7 +4,7 @@ baseline_commit: 1874153d38d285f7f5a21ad15701160a46401b9d
 
 # Story 1.7: Render performance — windowing & viewport unification
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -163,3 +163,52 @@ claude-opus-4-8 (Claude Code, bmad-dev-story)
 |------|--------|
 | 2026-06-28 | Created Story 1.7 (render perf — windowing & viewport unification): single `usePageViewport` IntersectionObserver, `pageWindow` ±N release, `content-visibility`/`contain-intrinsic-size`, `PageCard` paint+release on a `live` prop. Status → ready-for-dev. |
 | 2026-06-28 | Implemented Story 1.7. Unified the two observers into `usePageViewport`; `PageCard` paints/releases on a `live` prop bounded to ±`WINDOW_RADIUS`; `content-visibility: auto` + inline `contain-intrinsic-size` on `.page-surface`. Live smoke on a 69-page PDF: live canvases bounded to 3–5, geometry stable (scrollHeight 110976), console clean. 79/79 tests green, typecheck/build clean. Status → review. |
+
+## Senior Developer Review (AI)
+
+### Outcome
+
+Approve
+
+### Review Date
+
+2026-06-28
+
+### Reviewer Engine
+
+Codex CLI (`codex exec`) as an independent senior reviewer. Ran the BMad `code-review` workflow with sequential Blind Hunter, Edge Case Hunter, and Acceptance Auditor passes.
+
+### Scope Reviewed
+
+- Diff `1874153d38d285f7f5a21ad15701160a46401b9d..HEAD` at latest commit `0aff11e` (`Feat: Window Render To Bound Live Canvases`).
+- In scope: `client/src/render/index.ts`, `client/src/render/usePageViewport.ts`, `client/src/Reader.tsx`, `client/src/Reader.css`, render/Reader/App tests, story and sprint status updates.
+- Confirmed no backend, API contract, OpenAPI, or `docs/API.md` changes.
+
+### Acceptance Criteria Assessment
+
+- AC-1 / NFR-2 scroll performance: Satisfied by bounded live-window implementation and release lifecycle inspection; no accumulated canvas/text-layer path found.
+- AC-2 / NFR-1 bounded canvases with stable geometry: Satisfied. `PageCard` releases backing stores/text DOM on `live=false` without touching reserved card width/height.
+- AC-3 / NFR-5 off-screen paint: Satisfied. `.page-surface` uses `content-visibility: auto`; skeleton rendering is gated by `live`.
+- AC-4 / AR-9 single observer and render boundary: Satisfied. `usePageViewport` owns the observer/registry/window and imports only React plus render helpers; no annotation/store imports or coordinate normalization were introduced.
+- AC-5 regression surface: Satisfied by automated test/type/build results and source inspection of zoom, page-in-view, and PgUp/PgDn wiring.
+
+### Verification
+
+- `cd client && npm test` — passed, 9 files / 79 tests.
+- `cd client && npm run typecheck` — passed.
+- `cd client && npm run build` — passed; Vite emitted only the existing large-chunk warning.
+- Guardrail checks: no touched server/contract files; no raw hex/px matches in touched non-theme source; render-layer boundary check found only existing/comment references.
+
+### Severity Breakdown
+
+- High: 0
+- Medium: 0
+- Low: 0
+
+### Action Items
+
+- [x] [LOW] No required changes. Sequential review passes found no actionable defects in the render windowing implementation.
+
+### Review Follow-ups (AI)
+
+- [x] No follow-up tasks created.
