@@ -3,6 +3,17 @@ import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/re
 import App from "./App";
 import * as api from "./api/client";
 
+// The S1 Reader pulls in pdf.js, which can't run under jsdom. These App tests
+// only care about the S0↔S1 shell, so stub the render layer; loadDocument stays
+// pending so the Reader sits in its loading phase (the pdf-canvas is present).
+vi.mock("./render", () => ({
+  loadDocument: vi.fn(() => new Promise(() => {})),
+  destroyDocument: vi.fn(),
+  getPageBox: vi.fn(() => ({ width: 600, height: 800 })),
+  renderPage: vi.fn(() => ({ done: Promise.resolve(), cancel: vi.fn() })),
+  fitToWidthScale: vi.fn(() => 1),
+}));
+
 afterEach(cleanup);
 beforeEach(() => vi.restoreAllMocks());
 

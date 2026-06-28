@@ -103,3 +103,32 @@ def test_atomic_write_leaves_no_temp_files(data_root):
     doc_dir = data_root / "library" / doc_id
     leftovers = [p.name for p in doc_dir.iterdir() if ".tmp" in p.name or p.name.endswith("~")]
     assert leftovers == []
+
+
+def test_source_path_returns_stored_pdf(data_root):
+    raw = make_pdf_bytes(pages=2)
+    doc_id, _ = storage.import_pdf(raw, "s.pdf")
+    path = storage.source_path(doc_id)
+    assert path.read_bytes() == raw
+    assert path == data_root / "library" / doc_id / "source.pdf"
+
+
+def test_source_path_unknown_doc_raises_not_found(data_root):
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.source_path("0" * 64)
+
+
+def test_source_path_without_meta_raises_not_found(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "n.pdf")
+    (data_root / "library" / doc_id / "meta.json").unlink()
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.source_path(doc_id)
+
+
+def test_source_path_corrupt_meta_raises_storage_error(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "n.pdf")
+    (data_root / "library" / doc_id / "meta.json").write_text("{ corrupt")
+    with pytest.raises(storage.StorageError):
+        storage.source_path(doc_id)

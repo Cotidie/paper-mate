@@ -51,6 +51,14 @@ the same bytes never overwrites an existing `annotations.json`/`meta.json` — o
 > `filename, title, page_count, added, last_opened, schema_version`). `doc_id`
 > is the library folder name and is **not** stored inside `meta.json` (AD-8).
 
+### `GET /api/docs/{doc_id}/file` — stream the stored PDF
+
+Return the raw bytes of a document's stored `source.pdf`. The render layer
+fetches this by `doc_id` (never the filesystem); storage owns the path (AR-9).
+
+- **200** → `application/pdf` (the exact stored bytes; `FileResponse`).
+- **404** → `{ "detail": "Document not found" }` — no document or `source.pdf` for `doc_id`.
+
 ## Reserved (not yet built)
 
 Declared by the architecture (AR-11), implemented in later stories. Do not
@@ -60,11 +68,11 @@ assume these exist until they appear above.
 | --- | --- | --- |
 | `GET /api/docs` | List library documents | TBD |
 | `GET /api/docs/{doc_id}` | Get one document's metadata | TBD |
-| `GET /api/docs/{doc_id}/file` | Stream the stored `source.pdf` | Epic 1 (render) |
 | `GET /api/docs/{doc_id}/annotations` | Fetch the saved annotation set | Epic 3 |
 | `PUT /api/docs/{doc_id}/annotations` | Overwrite the full annotation set (atomic) | Epic 3 |
 
 ## Changelog
 
+- **2026-06-28 (Story 1.3):** added `GET /api/docs/{doc_id}/file` (stream stored PDF bytes).
 - **2026-06-28 (Story 1.2):** added `POST /api/docs` (PDF import) + `Doc`/`DocMeta` models.
 - **2026-06-28 (Story 1.1):** `GET /api/health` + the contract-generation pipeline.

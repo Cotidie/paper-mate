@@ -43,6 +43,10 @@ class CorruptMetadataError(StorageError):
     """An on-disk ``meta.json`` is unreadable or has an invalid shape."""
 
 
+class DocumentNotFoundError(StorageError):
+    """No imported document (or its ``source.pdf``) exists for the given ``doc_id``."""
+
+
 def _data_root() -> Path:
     """Resolve the storage root: ``PAPER_MATE_DATA`` env, default ``~/.paper-mate``.
 
@@ -144,6 +148,30 @@ def _read_meta(doc_dir: Path) -> DocMeta | None:
 
 def _write_meta(doc_dir: Path, meta: DocMeta) -> None:
     _atomic_write(doc_dir / "meta.json", meta.model_dump_json(indent=2).encode("utf-8"))
+
+
+def source_path(doc_id: str) -> Path:
+    """Resolve a document's stored ``source.pdf`` path (AD-9: storage owns the root).
+
+    Reuses ``_doc_dir`` for the same library-root containment guarantee. Raises
+    ``DocumentNotFoundError`` when the id is unresolvable, the document has no
+    valid ``meta.json`` record, or its ``source.pdf`` is absent — so routes never
+    touch the filesystem and a stray ``source.pdf`` with no metadata is not
+    served as if it were an imported document. A *corrupt* on-disk record still
+    surfaces as its specific ``StorageError`` (not a 404).
+    """
+    try:
+        doc_dir = _doc_dir(doc_id)
+    except StorageError as exc:
+        # An id that can't resolve inside the library root (e.g. a traversal
+        # attempt) is, to the caller, simply not a known document.
+        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
+    if _read_meta(doc_dir) is None:
+        raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
+    source = doc_dir / "source.pdf"
+    if not source.is_file():
+        raise DocumentNotFoundError(f"no source.pdf for doc_id {doc_id!r}")
+    return source
 
 
 def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
