@@ -359,8 +359,15 @@ export function renderPage(
     // must be carried over to the live node on the swap or the selection layer
     // drifts out of alignment with the canvas.
     textLayerDiv.style.cssText = offText.style.cssText;
+    // BOTH scale vars are the CSS-px zoom (`scale`), NOT scale*DPR. The text
+    // layer lays out in CSS px (the canvas is CSS-sized to viewport.width px;
+    // DPR only inflates the canvas backing store, not layout). pdf.js's
+    // `.textLayer` CSS sizes glyph font/position by `--total-scale-factor`, so
+    // multiplying it by the device-pixel-ratio stretched the (left-anchored)
+    // text ~DPR× too wide — selection/highlight rects then overshot each line
+    // into the right margin on any HiDPI display (DPR>1). Keep both = `scale`.
     textLayerDiv.style.setProperty("--scale-factor", String(scale));
-    textLayerDiv.style.setProperty("--total-scale-factor", String(scale * outputScale));
+    textLayerDiv.style.setProperty("--total-scale-factor", String(scale));
     textLayerDiv.replaceChildren(...offText.childNodes);
   })();
   // Swallow the cancel rejection so an aborted render never surfaces as an
