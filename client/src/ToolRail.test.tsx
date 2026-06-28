@@ -70,6 +70,20 @@ describe("ToolRail", () => {
     expect(screen.queryByTestId("tool-flyout")).toBeNull();
   });
 
+  it("closes an open pointer flyout when the active tool switches to an annotation tool (AC4, review MED)", () => {
+    // Open the flyout in cursor mode, then re-render as if `H`/Highlight switched
+    // activeTool to highlight: the stale pointer sub-toolbox must not remain.
+    const { rerender } = render(
+      <ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    expect(screen.getByTestId("tool-flyout")).toBeTruthy();
+    rerender(
+      <ToolRail activeTool="highlight" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
+    );
+    expect(screen.queryByTestId("tool-flyout")).toBeNull();
+  });
+
   it("gives every tool a hover tooltip (native title) describing it + its shortcut", () => {
     render(<ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
     // Rail button + collapse have tooltips.

@@ -90,6 +90,10 @@ so that arming a tool never lets another (pan) swallow my gesture and the rail a
   - [x] No `/api` change → `docs/API.md` untouched (do not edit).
   - [x] Update `client/src/annotations/README.md`: note the tool state is now one `activeTool` FSM (AD-11), the overlay machine is driven by it (not a parallel arm/disarm), and that the per-tool quick-box opens only on drag-release or when the tool is already active (never replacing a switch) — so Story 2.6's arm-time picker and Story 2.5's selection both build on this one model.
 
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][MED] Close the pointer flyout whenever a rail action switches to an annotation tool, so an already-open cursor/hand/box sub-toolbox cannot remain visible after Highlight is selected. [client/src/ToolRail.tsx:117] — RESOLVED: added a `useEffect(() => { if (!pointerActive) setOpen(false); }, [pointerActive])` in `ToolRail.tsx` so the flyout closes whenever `activeTool` stops being a pointer tool (covers both the `H` and click-Highlight paths). Regression test added in `ToolRail.test.tsx`; verified live (flyout open → click Highlight → highlight armed AND flyout closed).
+
 ## Dev Notes
 
 ### What "unify" actually means here (the core of the story)
@@ -252,3 +256,32 @@ claude-opus-4-8 (Claude Code, bmad-dev-story)
 ## Change Log
 
 - 2026-06-29: Unified the tool state into one `activeTool` FSM (AD-11). Replaced App's `mode`+`armedTool` pair and the Story 2.3 cross-setter with a single source of truth; pan + overlay armed-tool now derive from it; ToolRail switches in a single click (AC4); overlay machine driven by the one model (single writer). Behavior-preserving refactor; live smoke re-passed the pan-doesn't-eat-the-drag + single-click-switch scenarios at DPR 1.25.
+- 2026-06-29: Addressed cross-model code review (Codex) — 1 MED item resolved. Close the pointer flyout whenever `activeTool` stops being a pointer tool, so switching to Highlight never leaves a stale cursor/hand/box sub-toolbox open (AC4). Added a regression test (213 FE tests green).
+
+## Senior Developer Review (AI)
+
+Reviewer: Codex (cross-model review, bmad-code-review, non-interactive)
+Outcome: **Changes Requested** → all action items resolved 2026-06-29 (see Review Follow-ups); the single MED finding is fixed + tested.
+
+### Findings
+
+**High:** None.
+
+**Medium:**
+- [AI-Review][MED] Stale pointer flyout can remain open after switching to Highlight. In `ToolRail`, clicking the pointer button while an annotation tool is active correctly commits to cursor without opening the flyout, but the reverse path is not symmetric: if the pointer flyout is already open and the user clicks Highlight (or uses `H`), `open` stays true because the click is inside `rootRef` and the Highlight handler only calls `onSelectTool(...)`. The app ends with `activeTool === "highlight"` while the cursor/hand/box sub-toolbox remains visible, which violates the AC4 intent that tool switches not leave another tool's sub-toolbox in place of the switch. Fix: close the flyout when selecting Highlight or add an effect that closes it whenever `activeTool` is no longer a pointer tool. Evidence: `client/src/ToolRail.tsx:117` only closes via pointer option selection; `client/src/ToolRail.tsx:161` switches Highlight without closing local flyout state.
+
+**Low:** None.
+
+### Acceptance Notes
+
+- AC1/AC2: App now has one stored `activeTool`; `panArmed` and overlay `armedTool` are pure derivations. The old `mode`/`armedTool` cross-setters are gone.
+- AC3: The overlay machine still uses the minimal mirror path. `arm`/`disarm` are only driven by the `armedTool` prop sync, and the disarm-while-pending `removeAllRanges()` fix remains in `AnnotationInteraction`.
+- AC4: The required Highlight to cursor single-click path is implemented and tested. The Medium finding is the stale-open inverse path from an already-open pointer flyout to Highlight.
+- AC6: `client/src/tools.ts` is a zero-import leaf; no `anchor/`, `render/`, `store/`, Pydantic, OpenAPI, or generated client type changes were introduced by the implementation commit.
+
+### Verification
+
+- `cd client && npm test`: first run reported 211/212 passing with one transient `Reader.test.tsx` Space-pan assertion failure; immediate rerun passed 23 files, 212 tests.
+- `cd client && npm run typecheck`: passed.
+- `git diff --stat 85945fb..HEAD -- server/openapi.json client/src/api/schema.d.ts`: empty.
+- `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`: could not complete in this sandbox. The unmodified command failed first because uv tried to write `/home/cotidie/.cache/uv` on a read-only filesystem. With `UV_CACHE_DIR=/tmp/uv-cache` and with direct `.venv/bin/python -m pytest`, collection succeeded (38 tests), and `test_models.py`, `test_openapi.py`, and `test_storage.py` passed in isolation (20 tests), but TestClient-backed `test_health.py`, `test_docs.py`, and `test_static.py` hung before completing. This is recorded as a verification caveat, not a Story 2.4 code finding.

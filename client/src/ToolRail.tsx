@@ -76,6 +76,14 @@ export default function ToolRail({
   // fix, re-expressed against `activeTool`). When an annotation tool is active,
   // this button is not active; that tool's button is. Exactly one reads active.
   const pointerActive = isPointerTool(activeTool);
+
+  // Switching to an annotation tool (via `H` or the Highlight button while the
+  // pointer flyout is open) must not leave the pointer sub-toolbox visible —
+  // AC4: a switch never leaves another tool's flyout in its place. Close it
+  // whenever the active tool is no longer a pointer tool.
+  useEffect(() => {
+    if (!pointerActive) setOpen(false);
+  }, [pointerActive]);
   // The pointer sub-mode the button shows + commits to in one click: the active
   // pointer tool when one is active, else cursor (the default, AC4).
   const pointerMode: PointerTool = isPointerTool(activeTool) ? activeTool : "cursor";
