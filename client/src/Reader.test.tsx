@@ -143,6 +143,45 @@ describe("Reader", () => {
     expect(canvas.hasAttribute("data-pan")).toBe(false);
   });
 
+  it("arms hold-Space from the document, regardless of which element has focus (focus-independent)", async () => {
+    render(<Reader doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop");
+    // Space dispatched on document.body (focus NOT on the canvas) still arms pan.
+    const e = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    await waitFor(() => expect(canvas.hasAttribute("data-pan")).toBe(true));
+    document.body.dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true }));
+    await waitFor(() => expect(canvas.hasAttribute("data-pan")).toBe(false));
+  });
+
+  it("stops an in-flight Space pan the moment Space is released (cursor tool) (AC-3)", async () => {
+    render(<Reader doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop");
+    // Hold Space → pannable; start a drag.
+    fireEvent.keyDown(canvas, { key: " " });
+    await waitFor(() => expect(canvas.getAttribute("data-pan")).toBe(""));
+    fireEvent.pointerDown(canvas, { button: 0, pointerId: 7, clientX: 10, clientY: 10 });
+    expect(canvas.getAttribute("data-pan")).toBe("grabbing");
+    // Release Space mid-drag (button still down): the pan must stop, not continue.
+    fireEvent.keyUp(canvas, { key: " " });
+    await waitFor(() => expect(canvas.hasAttribute("data-pan")).toBe(false));
+  });
+
+  it("keeps a hand-armed drag going when Space is released (hand stays armed)", async () => {
+    render(<Reader doc={doc} panArmed />);
+    await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop");
+    fireEvent.keyDown(canvas, { key: " " });
+    fireEvent.pointerDown(canvas, { button: 0, pointerId: 8, clientX: 10, clientY: 10 });
+    expect(canvas.getAttribute("data-pan")).toBe("grabbing");
+    // Space release → canPan still true via panArmed → drag continues.
+    fireEvent.keyUp(canvas, { key: " " });
+    await waitFor(() => expect(canvas.getAttribute("data-pan")).toBe("grabbing"));
+  });
+
   it("does not swallow Space when no doc is ready / leaves nav keys intact", async () => {
     render(<Reader doc={doc} />);
     const canvas = await screen.findByTestId("reader-backdrop");

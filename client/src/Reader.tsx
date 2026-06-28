@@ -82,6 +82,9 @@ export default function Reader({
   const dragOrigin = useRef<
     { x: number; y: number; scrollLeft: number; scrollTop: number } | null
   >(null);
+  // The captured pointer for the active drag, so an interrupted pan (e.g. Space
+  // released mid-drag → no longer pannable) can release capture + stop.
+  const dragPointerId = useRef<number | null>(null);
 
   // Single IntersectionObserver (render/ hook): owns the card registry and drives
   // BOTH the page-in-view indicator (`currentPage`) and the per-card paint/release
@@ -307,21 +310,67 @@ export default function Reader({
     return () => document.removeEventListener("keydown", onKey);
   }, [phase, zoomIn, zoomOut, resetZoom]);
 
+  // Hold-`Space` temp-pan (AC-2/AC-3), bound at the DOCUMENT level (guarded
+  // `phase === "ready"`) so it arms regardless of which reader element has focus —
+  // mirroring the zoom-key effect. Skip editable fields and buttons so Space still
+  // activates a focused control (and the rail/flyout buttons keep working). Ignore
+  // auto-repeat so a held key doesn't thrash. keydown suppresses the browser's
+  // page-scroll-on-Space; keyup drops `spaceHeld` so `canPan` falls back to the
+  // armed tool (the active-drag teardown below stops any pan already in flight).
+  useEffect(() => {
+    if (phase !== "ready") return;
+    const isExempt = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el || !el.tagName) return false;
+      const tag = el.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        tag === "BUTTON" ||
+        el.isContentEditable
+      );
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== " " || isExempt(e.target)) return;
+      if (!e.repeat) setSpaceHeld(true);
+      e.preventDefault();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === " ") setSpaceHeld(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup", onKeyUp);
+    };
+  }, [phase]);
+
+  // Stop an in-flight pan the moment it stops being pannable — e.g. `Space` is
+  // released mid-drag while the armed tool is cursor (AC-3: control returns to the
+  // previous tool). With the hand armed, `canPan` stays true so the drag continues
+  // until pointerup. Releases any captured pointer so a later move can't resume it.
+  useEffect(() => {
+    if (canPan || !dragOrigin.current) return;
+    const container = scrollRef.current;
+    if (container && dragPointerId.current !== null) {
+      try {
+        container.releasePointerCapture?.(dragPointerId.current);
+      } catch {
+        /* capture already gone */
+      }
+    }
+    dragOrigin.current = null;
+    dragPointerId.current = null;
+    setDragging(false);
+  }, [canPan]);
+
   // PgUp/PgDn (and Ctrl+Down/Ctrl+Up aliases): move one page. Scroll the target
   // card's top to the canvas top and suppress the browser's native page-scroll
   // so it never double-scrolls (AC-3). (Zoom keys are handled document-level
   // above, not here, so they work without canvas focus.)
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    // Hold-`Space` temp-pan (AC-2/AC-3): arm panning while held, suppressing the
-    // browser's page-scroll-on-Space. Ignore auto-repeat so a held key doesn't
-    // thrash. This lives on the focused .pdf-canvas (not document) so it never
-    // fights a focused button's Space-activate. On keyup `canPan` falls back to
-    // the armed tool (handleKeyUp).
-    if (e.key === " " && phase === "ready") {
-      if (!e.repeat) setSpaceHeld(true);
-      e.preventDefault();
-      return;
-    }
     // Ctrl ONLY (no Shift/Alt/Meta) so adjacent chords aren't swallowed — most
     // notably Ctrl+Shift+Arrow, the extend-text-selection chord over the page's
     // text layer. Matches the app's Ctrl-only keyboard map.
@@ -344,11 +393,6 @@ export default function Reader({
     });
   }
 
-  // Release the Space temp-pan: `canPan` falls back to `panArmed` (AC-3).
-  function handleKeyUp(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key === " ") setSpaceHeld(false);
-  }
-
   // Pointer-drag pan: only when pannable and with the primary button. Capture the
   // pointer so a fast drag off the canvas keeps panning and still gets pointerup;
   // preventDefault suppresses text selection / native image drag. The page follows
@@ -366,6 +410,7 @@ export default function Reader({
       scrollLeft: container.scrollLeft,
       scrollTop: container.scrollTop,
     };
+    dragPointerId.current = e.pointerId;
     setDragging(true);
     e.preventDefault();
     try {
@@ -376,6 +421,10 @@ export default function Reader({
   }
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    // Re-check `canPan`: if the gesture stopped being pannable mid-drag (Space
+    // released while cursor is the armed tool), don't keep panning (AC-3). The
+    // canPan effect above also tears the drag down, but gating here is immediate.
+    if (!canPan) return;
     const origin = dragOrigin.current;
     const container = scrollRef.current;
     if (!origin || !container) return;
@@ -387,6 +436,7 @@ export default function Reader({
     if (!dragOrigin.current) return;
     scrollRef.current?.releasePointerCapture?.(e.pointerId);
     dragOrigin.current = null;
+    dragPointerId.current = null;
     setDragging(false);
   }
 
@@ -402,7 +452,6 @@ export default function Reader({
       // and the Story 1.3 selectable text layer is untouched.
       data-pan={canPan ? (dragging ? "grabbing" : "") : undefined}
       onKeyDown={handleKeyDown}
-      onKeyUp={handleKeyUp}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={endDrag}

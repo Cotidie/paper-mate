@@ -8,11 +8,15 @@ import { useEffect, useRef, useState } from "react";
  */
 export type ToolMode = "cursor" | "hand" | "box-select";
 
-/** The cursor-family options, in flyout order, with their glyphs + labels. */
-const OPTIONS: { value: ToolMode; label: string; glyph: string }[] = [
-  { value: "cursor", label: "Cursor", glyph: "↖" }, // ↖
-  { value: "hand", label: "Hand", glyph: "✋" }, // ✋
-  { value: "box-select", label: "Box select", glyph: "⤢" }, // ⤢
+/**
+ * The cursor-family options, in flyout order. `glyph` is the icon shown on the
+ * button; `hint` is the hover tooltip (native `title`) describing the tool + its
+ * shortcut. `label` stays the accessible name (aria-label).
+ */
+const OPTIONS: { value: ToolMode; label: string; glyph: string; hint: string }[] = [
+  { value: "cursor", label: "Cursor", glyph: "🖱️", hint: "Cursor — select & read text (V)" },
+  { value: "hand", label: "Hand", glyph: "✋", hint: "Hand — drag to pan, or hold Space" },
+  { value: "box-select", label: "Box select", glyph: "🔲", hint: "Box select" },
 ];
 
 /**
@@ -71,6 +75,7 @@ export default function ToolRail({
           type="button"
           className="tool-button"
           aria-label="Expand tools"
+          title="Expand tools ([)"
           data-testid="tool-rail-collapse"
           onClick={onToggleCollapse}
         >
@@ -86,6 +91,7 @@ export default function ToolRail({
         type="button"
         className={armed ? "tool-button tool-button--armed" : "tool-button"}
         aria-label={`Pointer tool: ${active.label}`}
+        title={active.hint}
         aria-haspopup="menu"
         aria-expanded={open}
         data-testid="tool-cursor-button"
@@ -103,6 +109,7 @@ export default function ToolRail({
               role="menuitemradio"
               className={mode === o.value ? "tool-button tool-button--armed" : "tool-button"}
               aria-label={o.label}
+              title={o.hint}
               aria-pressed={mode === o.value}
               data-testid={`tool-option-${o.value}`}
               onClick={() => {
@@ -120,6 +127,7 @@ export default function ToolRail({
         type="button"
         className="tool-button tool-rail__collapse"
         aria-label="Collapse tools"
+        title="Collapse tools ([)"
         data-testid="tool-rail-collapse"
         onClick={onToggleCollapse}
       >

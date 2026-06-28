@@ -47,6 +47,20 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-cursor-button").className).not.toContain("tool-button--armed");
   });
 
+  it("gives every tool a hover tooltip (native title) describing it + its shortcut", () => {
+    render(<ToolRail mode="cursor" onMode={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+    // Rail button + collapse have tooltips.
+    expect(screen.getByTestId("tool-cursor-button").getAttribute("title")).toBeTruthy();
+    expect(screen.getByTestId("tool-rail-collapse").getAttribute("title")).toBeTruthy();
+    // Each flyout option has a descriptive tooltip.
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    for (const v of ["cursor", "hand", "box-select"]) {
+      expect(screen.getByTestId(`tool-option-${v}`).getAttribute("title")).toBeTruthy();
+    }
+    // The hand tooltip mentions panning + the Space shortcut.
+    expect(screen.getByTestId("tool-option-hand").getAttribute("title")).toMatch(/pan/i);
+  });
+
   it("calls onToggleCollapse from the collapse affordance", () => {
     const onToggleCollapse = vi.fn();
     render(

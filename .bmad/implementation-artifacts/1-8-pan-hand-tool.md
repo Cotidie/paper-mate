@@ -145,7 +145,16 @@ claude-opus-4-8 (BMad dev-story workflow)
 - `Reader` gained `panArmed`, internal `spaceHeld`, `canPan = panArmed || spaceHeld`, hold-`Space` temp-pan (keydown/up on the focused `.pdf-canvas`, ignores `e.repeat`), and pointer-drag pan via the pure `panScroll` helper — moving ONLY `scrollLeft`/`scrollTop`, never scale/card geometry/page box (NFR-1) and no anchor math (AR-9). `data-pan` drives the grab→grabbing cursor + `user-select: none`.
 - `panScroll(startScroll, pointerDelta) = startScroll - pointerDelta` added next to `focalScroll` in `render/index.ts` (DOM-free, unit-tested).
 - Tokens: added `--tool-button-size`, `--tool-flyout-offset`, `--tool-rail-gap` to `components.css`; rail/button/flyout + `.pdf-canvas[data-pan]` cursor CSS in `App.css` (tokens only). `no-raw-values` + `focus-ring` stay green.
-- Tests: `97 passed` (added `render/pan.test.ts`, `ToolRail.test.tsx`, and Reader/App cases for Space + pointer wiring + key map); `npm run typecheck` clean; `npm run build` succeeds. No backend / OpenAPI / `docs/API.md` change.
+- Tests: `101 passed` (added `render/pan.test.ts`, `ToolRail.test.tsx`, and Reader/App cases for Space + pointer wiring + key map + tooltips + the two review fixes); `npm run typecheck` clean; `npm run build` succeeds. No backend / OpenAPI / `docs/API.md` change.
+
+### Review Follow-ups (post-codex `bmad-code-review`, 2026-06-28)
+
+Ran the project `bmad-code-review` skill via `codex exec` (different model). Verdict CHANGES-REQUESTED, 2 findings — both addressed + live-verified:
+
+- ✅ Resolved review finding [High]: Space released mid-drag (cursor armed) kept panning — `handlePointerMove` ignored `canPan` and `dragOrigin` stayed set. Now `handlePointerMove` re-checks `canPan`, and a `canPan`-false effect tears down the active drag (releases captured pointer via the new `dragPointerId` ref). With the hand armed the drag continues (canPan stays true). [client/src/Reader.tsx]
+- ✅ Resolved review finding [Medium]: hold-`Space` only armed when `.pdf-canvas` had focus. Moved Space keydown/keyup to a document-level effect (gated `phase === "ready"`, mirrors the zoom-key effect), exempting editable fields + buttons so focused controls keep their Space-activate. [client/src/Reader.tsx]
+- Feature (user request): hover tooltips (native `title`) on every rail/flyout/collapse button, and replaced the line glyphs with emoji icons (🖱️ cursor, ✋ hand, 🔲 box-select). [client/src/ToolRail.tsx]
+- Live re-verified: doc-level Space arms with focus off-canvas; Space-release mid-drag stops the pan (further pointer-move = 0 movement); hand-armed drag survives Space release; emoji + tooltips render.
 
 ### File List
 
@@ -167,3 +176,4 @@ claude-opus-4-8 (BMad dev-story workflow)
 |------|--------|
 | 2026-06-28 | Created Story 1.8 (pan / hand tool): first tool-rail (cursor button + cursor/hand/box-select flyout + `[` collapse), App-level tool `mode`/`V`/`Esc` keys, Reader hold-`Space` + pointer-drag pan via `panScroll`, no-reflow scroll-offset only. Status → ready-for-dev. |
 | 2026-06-28 | Implemented Story 1.8: `ToolRail` + `ToolMode`, App tool-mode/`V`/`Esc`/`[` keys, Reader hold-`Space` + pointer-drag pan, pure `panScroll`, tool tokens + CSS. All 4 ACs verified via unit tests (97 passing) + live browser smoke (real scroll-offset pan, no reflow). Status → review. |
+| 2026-06-28 | Addressed codex `bmad-code-review` findings (2 resolved: High Space-release-mid-drag stops pan; Medium document-level hold-Space) + added hover tooltips and emoji tool icons (user request). Tests now 101 passing; typecheck/build clean; fixes live-verified. |
