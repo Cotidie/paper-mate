@@ -13,6 +13,13 @@ vi.mock("./render", () => ({
   renderPage: vi.fn(() => ({ done: Promise.resolve(), cancel: vi.fn() })),
   fitToWidthScale: vi.fn(() => 1),
   currentPageInView: vi.fn(() => 1),
+  // The real usePageViewport hook (sub-path import) calls pageWindow at render,
+  // so the mocked render barrel must export it (+ WINDOW_RADIUS).
+  pageWindow: vi.fn((c: number, r: number, n: number) => ({
+    start: Math.max(1, c - r),
+    end: Math.min(n, c + r),
+  })),
+  WINDOW_RADIUS: 2,
   pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
   nextZoom: vi.fn((s: number, dir: number) => (dir >= 0 ? s * 2 : s / 2)),
   focalScroll: vi.fn((edge: number, size: number, frac: number, focal: number) => edge + frac * size - focal),

@@ -6,7 +6,7 @@ vi.mock("pdfjs-dist", () => ({ GlobalWorkerOptions: {}, getDocument: vi.fn(), Te
 vi.mock("pdfjs-dist/build/pdf.worker.min.mjs?url", () => ({ default: "worker.js" }));
 vi.mock("pdfjs-dist/web/pdf_viewer.css", () => ({}));
 
-import { currentPageInView, pageNavTarget, type PageExtent } from "./index";
+import { currentPageInView, pageNavTarget, pageWindow, type PageExtent } from "./index";
 
 // Three 100px-tall pages stacked at 0, 100, 200 (no gaps, for simple math).
 const pages: PageExtent[] = [
@@ -59,5 +59,34 @@ describe("pageNavTarget", () => {
 
   it("is safe for an empty/zero-page document", () => {
     expect(pageNavTarget(1, 1, 0)).toBe(1);
+  });
+});
+
+describe("pageWindow", () => {
+  it("spans ±radius around a mid page", () => {
+    expect(pageWindow(10, 2, 50)).toEqual({ start: 8, end: 12 });
+  });
+
+  it("clamps the start at the first page", () => {
+    expect(pageWindow(1, 2, 50)).toEqual({ start: 1, end: 3 });
+    expect(pageWindow(2, 2, 50)).toEqual({ start: 1, end: 4 });
+  });
+
+  it("clamps the end at the last page", () => {
+    expect(pageWindow(50, 2, 50)).toEqual({ start: 48, end: 50 });
+    expect(pageWindow(49, 2, 50)).toEqual({ start: 47, end: 50 });
+  });
+
+  it("radius 0 is the single current page", () => {
+    expect(pageWindow(7, 0, 50)).toEqual({ start: 7, end: 7 });
+  });
+
+  it("is safe for a single-page document", () => {
+    expect(pageWindow(1, 2, 1)).toEqual({ start: 1, end: 1 });
+  });
+
+  it("yields an empty range for a zero-page document (start > end)", () => {
+    const w = pageWindow(1, 2, 0);
+    expect(w.start).toBeGreaterThan(w.end);
   });
 });
