@@ -101,6 +101,17 @@ describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
     expect(screen.queryByTestId("quick-box")).toBeNull();
   });
 
+  it("dismisses the quick-box on scroll (transient overlay, #1)", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />);
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    await screen.findByTestId("quick-box");
+    // Scrolling the canvas pins-detaches the popup, so it dismisses.
+    fireEvent.scroll(document, {});
+    await waitFor(() => expect(screen.queryByTestId("quick-box")).toBeNull());
+  });
+
   it("does nothing when disabled (phase not ready)", () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];

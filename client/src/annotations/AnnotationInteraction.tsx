@@ -155,9 +155,15 @@ export default function AnnotationInteraction({
     document.addEventListener("keydown", onKey);
     // Capture phase so the dismiss runs before a fresh selection's pointerdown.
     document.addEventListener("pointerdown", onPointerDown, true);
+    // The quick-box is a transient popup pinned to the release point (fixed
+    // position); once the canvas scrolls it would float detached from its mark,
+    // so scrolling dismisses it. Capture-phase: `scroll` does not bubble, and the
+    // scrolling element is the pdf-canvas, not window.
+    document.addEventListener("scroll", dismiss, true);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("scroll", dismiss, true);
     };
   }, [pending, dismiss]);
 

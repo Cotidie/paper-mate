@@ -81,11 +81,14 @@ export default function ToolRail({
     };
   }, [open]);
 
-  // The icon shown on the rail button reflects the armed sub-mode.
+  // The icon shown on the rail button reflects the active pointer sub-mode.
   const active = OPTIONS.find((o) => o.value === mode) ?? OPTIONS[0];
   const ActiveIcon = active.Icon;
-  // A non-default tool (hand / box-select) shows the armed state on the button.
-  const armed = mode !== "cursor";
+  // The pointer tool is the ACTIVE tool whenever no annotation tool is armed —
+  // including plain cursor mode, which must show an active indicator too (#3).
+  // When an annotation tool (highlight) is armed, this button is not armed; that
+  // button is. Exactly one tool reads as active (mutual exclusion).
+  const armed = armedTool == null;
 
   if (collapsed) {
     // Minimal rail: a single affordance to expand again (`[` or click round-trips).

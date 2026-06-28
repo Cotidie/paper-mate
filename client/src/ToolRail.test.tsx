@@ -42,9 +42,20 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-option-cursor").getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("cursor mode does not show the rail button as armed", () => {
-    render(<ToolRail mode="cursor" onMode={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+  it("shows the pointer button active in plain cursor mode when no tool armed (#3)", () => {
+    render(
+      <ToolRail mode="cursor" onMode={vi.fn()} armedTool={null} onArmTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
+    );
+    // The selection tool IS the active tool in cursor mode — it must read active.
+    expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
+  });
+
+  it("pointer button is NOT active when an annotation tool is armed (mutual exclusion)", () => {
+    render(
+      <ToolRail mode="cursor" onMode={vi.fn()} armedTool="highlight" onArmTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
+    );
     expect(screen.getByTestId("tool-cursor-button").className).not.toContain("tool-button--armed");
+    expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
   });
 
   it("gives every tool a hover tooltip (native title) describing it + its shortcut", () => {

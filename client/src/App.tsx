@@ -94,7 +94,10 @@ export default function App() {
         setArmedTool(null);
       } else if (e.key === "h" || e.key === "H") {
         e.preventDefault();
+        // Exclusive: arming an annotation tool returns the pointer to cursor so a
+        // still-armed hand/box pan can't eat the highlight drag (one tool active).
         setArmedTool("highlight");
+        setMode("cursor");
       } else if (e.key === "[") {
         e.preventDefault();
         setRailCollapsed((c) => !c);
@@ -190,9 +193,19 @@ export default function App() {
         />
         <ToolRail
           mode={mode}
-          onMode={setMode}
+          // Picking a pointer sub-mode (cursor/hand/box) disarms any annotation
+          // tool: exactly one tool is active at a time (mutual exclusion).
+          onMode={(m) => {
+            setMode(m);
+            setArmedTool(null);
+          }}
           armedTool={armedTool}
-          onArmTool={(t) => setArmedTool((cur) => (cur === t ? null : t))}
+          // Arming/toggling an annotation tool returns the pointer to cursor so a
+          // still-armed hand pan can't swallow the drag (the #5 bug).
+          onArmTool={(t) => {
+            setArmedTool((cur) => (cur === t ? null : t));
+            setMode("cursor");
+          }}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
         />

@@ -84,7 +84,7 @@ so that I mark passages and the page never moves.
   - [x] `store`: `recolorAnnotation` changes `style.color` + `updated_at`, keyed by id, and recolors a 2-id group together.
   - [x] **Render-mock barrels:** this story adds NO new `render/index.ts` export (the overlay consumes the existing `getPageBox` seam), so NO `vi.mock("./render")` barrel edit is needed — confirm you did not add one. If you somehow must, update BOTH barrels (`App.test.tsx`, `Reader.test.tsx`) the same change (CLAUDE.md AP-2).
   - [x] Full regression: `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` and `cd client && npm test` + `npm run typecheck` — all green. No contract change expected (no Pydantic/endpoint edits), so `server/openapi.json` + `client/src/api/schema.d.ts` stay byte-identical — verify no diff.
-  - [ ] **Live smoke (the real NFR-3/NFR-1 verifier, Epic-1 retro) — OWED, run in browser:** run the host two-process flow (`cd server && uv run uvicorn app.main:app --reload --port 8000` + `cd client && npm run dev`), open a PDF, press `H`, drag across text → the highlight lands and the page does NOT jump; the swatch row appears; pick green → recolors; zoom in/out → the highlight stays glued to the run.
+  - [x] **Live smoke (the real NFR-3/NFR-1 verifier, Epic-1 retro) — DONE via Playwright (found + fixed 3 regressions, see Live-smoke findings):** run the host two-process flow (`cd server && uv run uvicorn app.main:app --reload --port 8000` + `cd client && npm run dev`), open a PDF, press `H`, drag across text → the highlight lands and the page does NOT jump; the swatch row appears; pick green → recolors; zoom in/out → the highlight stays glued to the run.
 
 - [x] **Task 7 — Docs (AC: 8)**
   - [x] No `/api` change → `docs/API.md` is untouched this story (do not edit it).
@@ -255,3 +255,17 @@ Verdict: Changes-Requested
 0 decision-needed, 2 patch, 0 defer, 1 dismissed
 
 - 2026-06-29 (Story 2.3, post-review): addressed code-review (Codex, cross-model) findings — 2 patches resolved. Exempted SELECT/BUTTON in the App document-level key handler; cleared the live selection on prop-driven disarm of an open quick-box (re-pop guard). Tests added for both. Frontend 191 pass, typecheck clean, backend 38 pass.
+
+## Live-smoke findings (Playwright, 2026-06-29)
+
+Ran the owed live smoke by driving the running app (uvicorn + vite) with Playwright, loading `fixtures/sample-pdfs/09-regularization.pdf`. Confirmed AC-2 (highlight lands, no reflow) and AC-7 (mark stays glued across a 157%→197% zoom) hold. Found and fixed 3 regressions the jsdom tests could not catch:
+
+- [x] [Smoke][Patch] **Highlight-on-drag does nothing when the hand tool is also armed (the user's #5).** ROOT CAUSE = the orthogonal `mode` (cursor/hand/box) vs `armedTool` design let pan stay active while highlight was armed; the Reader's pan handler ate the drag (`data-pan` suppresses selection), so no selection reached the highlight create path. FIX = mutual exclusion in `App.tsx`: arming an annotation tool (`H` or rail) forces `mode="cursor"`; picking a pointer sub-mode clears `armedTool`. Exactly one tool active. Verified live: hand→`H`→drag now highlights (was: panned). [client/src/App.tsx]
+- [x] [Smoke][Patch] **Pointer button shows no active state in plain cursor mode (#3).** FIX = the cursor-family rail button is armed whenever no annotation tool is armed (`armedTool == null`), so the default selection tool reads active; not armed when highlight is armed. [client/src/ToolRail.tsx]
+- [x] [Smoke][Patch] **Quick-box floats detached on scroll (#1).** The popup is pinned to the release point (`position: fixed`); FIX = it dismisses on canvas scroll (capture-phase `scroll` listener while pending). Verified live. [client/src/annotations/AnnotationInteraction.tsx]
+
+Deferred to correct-course (sprint change, separate from 2.3 scope):
+- **#2 full tool-state FSM** — this story does the surgical mutual-exclusion fix; the complete single-`activeTool` state machine (folding cursor/hand/box/highlight/underline/... into one model, Epic-1 retro PREP-3) is a foundation refactor that ripples to 2.2 + 2.4-2.9.
+- **#4 color quick-pick on arm** — show the swatch row when highlight is armed (choose default color before drawing), not only after creation. Changes the EXPERIENCE.md quick-box mapping (IP-3) → spec change.
+
+- 2026-06-29 (Story 2.3, live-smoke): fixed 3 regressions found by the Playwright live smoke — highlight-drag eaten by an also-armed pan (#5, root cause of "no reaction"; fixed via tool mutual-exclusion), cursor button inactive in cursor mode (#3), quick-box not dismissed on scroll (#1). Tests added (App mutual-exclusion ×2, ToolRail active-state ×2, scroll-dismiss ×1). Frontend 195 pass, typecheck clean. #2 (full FSM) and #4 (color-pick-on-arm) routed to correct-course.
