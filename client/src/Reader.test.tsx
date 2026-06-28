@@ -14,6 +14,8 @@ vi.mock("./render", () => {
     getPageBox: vi.fn(() => ({ width: 600, height: 800 })),
     renderPage: vi.fn(() => ({ done: Promise.resolve(), cancel: vi.fn() })),
     fitToWidthScale: vi.fn(() => 1),
+    currentPageInView: vi.fn(() => 1),
+    pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
   };
 });
 
@@ -65,5 +67,18 @@ describe("Reader", () => {
   it("exposes the pdf-canvas scroll region (reader-backdrop)", async () => {
     render(<Reader doc={doc} />);
     expect(screen.getByTestId("reader-backdrop")).toBeTruthy();
+  });
+
+  it("makes the canvas keyboard-focusable for page nav (AC-3/UX-DR17)", async () => {
+    render(<Reader doc={doc} />);
+    const canvas = screen.getByTestId("reader-backdrop");
+    expect((canvas as HTMLElement).tabIndex).toBe(0);
+  });
+
+  it("reports the page in view to the parent, defaulting to page 1 (AC-2)", async () => {
+    const onVisiblePageChange = vi.fn();
+    render(<Reader doc={doc} onVisiblePageChange={onVisiblePageChange} />);
+    await screen.findAllByTestId("page-surface");
+    await waitFor(() => expect(onVisiblePageChange).toHaveBeenCalledWith(1));
   });
 });

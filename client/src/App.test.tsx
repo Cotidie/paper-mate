@@ -12,6 +12,8 @@ vi.mock("./render", () => ({
   getPageBox: vi.fn(() => ({ width: 600, height: 800 })),
   renderPage: vi.fn(() => ({ done: Promise.resolve(), cancel: vi.fn() })),
   fitToWidthScale: vi.fn(() => 1),
+  currentPageInView: vi.fn(() => 1),
+  pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
 }));
 
 afterEach(cleanup);
@@ -66,6 +68,18 @@ describe("upload → S1 transition (AC-6)", () => {
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
     expect(screen.getByRole("banner")).toBeTruthy();
     expect(screen.getByText("paper.pdf")).toBeTruthy();
+  });
+
+  it("shows the 'Page N of M' indicator in the top bar (AC-2)", async () => {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+
+    // Reader (mocked render) reports page 1; M = doc.page_count (3).
+    await waitFor(() => expect(screen.getByText("Page 1 of 3")).toBeTruthy());
   });
 });
 
