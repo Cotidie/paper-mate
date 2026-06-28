@@ -32,6 +32,13 @@ describe("TocPanel", () => {
     expect(onJump).toHaveBeenCalledWith(5);
   });
 
+  it("shows a loading note (not the empty state) while the outline is null", () => {
+    render(<TocPanel open entries={null} onJump={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByTestId("toc-loading")).toBeTruthy();
+    expect(screen.queryByTestId("toc-empty")).toBeNull();
+    expect(screen.queryByTestId("toc-row-0")).toBeNull();
+  });
+
   it("shows the empty state (not a list) when there is no outline", () => {
     render(<TocPanel open entries={[]} onJump={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByTestId("toc-empty").textContent).toContain("no table of contents");

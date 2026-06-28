@@ -210,6 +210,10 @@ export default function Reader({
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       container.scrollTo({ top: card.offsetTop, behavior: reduceMotion ? "auto" : "smooth" });
+      // Return keyboard focus to the canvas so PgUp/PgDn nav stays live after a
+      // jump (a ToC row click unmounts the panel, dropping focus to <body>).
+      // `preventScroll` so the focus call can't fight the smooth scroll above.
+      container.focus?.({ preventScroll: true });
     },
     [doc.page_count],
   );

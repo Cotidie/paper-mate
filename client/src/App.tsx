@@ -31,9 +31,11 @@ export default function App() {
   const [mode, setMode] = useState<ToolMode>("cursor");
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
-  // the document is ready). Lightweight React state (see the header note).
+  // the document is ready). `null` until the Reader reports, so the panel shows
+  // a loading note instead of the no-outline empty state mid-load. Lightweight
+  // React state (see the header note).
   const [tocOpen, setTocOpen] = useState(false);
-  const [toc, setToc] = useState<TocEntry[]>([]);
+  const [toc, setToc] = useState<TocEntry[] | null>(null);
   // Imperative zoom handle into the Reader (it owns `scale` + the scroll
   // container needed for focal-point zoom); the top-bar control drives it.
   const readerRef = useRef<ReaderHandle>(null);

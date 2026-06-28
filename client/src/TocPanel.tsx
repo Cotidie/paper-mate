@@ -23,7 +23,9 @@ export default function TocPanel({
   onClose,
 }: {
   open: boolean;
-  entries: TocEntry[];
+  /** The resolved outline, or `null` while it is still loading (so a pending
+   *  outline shows a loading note, not the no-outline empty state). */
+  entries: TocEntry[] | null;
   onJump: (pageNumber: number) => void;
   onClose: () => void;
 }) {
@@ -55,7 +57,11 @@ export default function TocPanel({
         </button>
       </div>
 
-      {entries.length === 0 ? (
+      {entries === null ? (
+        <p className="toc-panel__empty" data-testid="toc-loading">
+          Loading contents…
+        </p>
+      ) : entries.length === 0 ? (
         <p className="toc-panel__empty" data-testid="toc-empty">
           This PDF has no table of contents.
         </p>

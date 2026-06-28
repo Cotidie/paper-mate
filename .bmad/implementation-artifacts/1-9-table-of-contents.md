@@ -79,6 +79,12 @@ so that I can jump to a section without scroll-hunting.
     - Sanity: `PgUp`/`PgDn`, zoom (`Ctrl +/-/0`, `Ctrl+scroll`), pan (hand / Space), and plain scroll still work (the `scrollToPage` refactor changed nothing for them).
   - [x] No backend change — do not regenerate the OpenAPI contract or edit `docs/API.md`.
 
+### Review Follow-ups (AI)
+
+- [ ] [Review][Medium] Distinguish outline loading from no-outline empty state. `toc` initializes as `[]`, and `TocPanel` renders "This PDF has no table of contents." whenever `entries.length === 0`; an outlined PDF opened before `Reader` resolves `getOutline` can show the no-outline message instead of a pending state. Use a distinct pending state (`TocEntry[] | null` or equivalent) so AC-1 PDFs do not show AC-3 empty copy until outline resolution has completed. [client/src/App.tsx:35, client/src/TocPanel.tsx:58, client/src/Reader.tsx:294]
+- [ ] [Review][Medium] Restore keyboard focus to the reader after a ToC row jump. Row activation closes the panel and unmounts the focused row button, but PgUp/PgDn navigation is still bound to `.pdf-canvas`; keyboard users can lose reader navigation immediately after a successful jump. Focus the canvas as part of `jumpToPage` or the row-jump handoff without introducing an extra scroll. [client/src/App.tsx:147, client/src/Reader.tsx:423]
+- [ ] [Review][Low] Constrain the ToC overlay on narrow stages. `.toc-panel` is fixed at `--toc-panel-width` plus the right offset; below roughly the panel width plus both offsets, the overlay can clip row text or the close affordance. Cap width against the available stage width while preserving the 280px token at normal sizes. [client/src/App.css:201]
+
 ## Dev Notes
 
 ### Architecture patterns & constraints (binding)
@@ -188,3 +194,70 @@ claude-opus-4-8 (BMad dev-story workflow)
 |------|--------|
 | 2026-06-28 | Created Story 1.9 (table of contents): `getOutline` outline reader in `render/`, new `TocPanel` overlay (280px, rows + empty state + Esc/close), Reader `onOutline` report + `jumpToPage` on `ReaderHandle` (PgUp/PgDn scroll refactored into shared `scrollToPage`), App wires the existing top-bar ToC pill. Page-level jump, overlay never reflows canvas (NFR-1), no anchor math (AR-9), no backend change. Status → ready-for-dev. |
 | 2026-06-28 | Implemented Story 1.9: `getOutline`+`TocEntry` (all dest shapes, never throws), `TocPanel` (280px right overlay, depth-indented rows, empty state, Esc/close), Reader `scrollToPage` refactor + `jumpToPage` + `onOutline` effect, App top-bar ToC toggle. 124 unit tests pass; typecheck/build clean. All 3 ACs verified via live Playwright smoke (resolvable outline → rows + page-4 jump with no reflow; no-outline → empty state). Added `outlined-sample.pdf`/`no-outline.pdf` fixtures (the existing `09-regularization.pdf` has pdf.js-unresolvable named dests). Status → review. |
+| 2026-06-28 | Addressed codex `bmad-code-review` findings (Changes Requested → 3 resolved): [Med] loading vs no-outline state (`toc: TocEntry[] \| null` + `TocPanel` loading note); [Med] restore canvas focus after a ToC jump (`scrollToPage` focuses `.pdf-canvas`, live-verified PgDn works post-jump); [Low] `.toc-panel` `max-width` so it shrinks on narrow stages. Hardened the two `jumpToPage` tests against a React 19 + jsdom last-card registration race. 125 tests pass; typecheck/build clean. |
+
+## Senior Developer Review (AI)
+
+### Outcome
+
+Changes Requested
+
+### Review Date
+
+2026-06-28
+
+### Reviewer Engine
+
+Codex CLI as an independent senior reviewer. Ran the project BMad `bmad-code-review` workflow with Blind Hunter, Edge Case Hunter, and Acceptance Auditor layers, then triaged findings against Story 1.9 and the binding architecture constraints.
+
+### Scope Reviewed
+
+- Diff `39755cc..HEAD` on branch `story-1-9-table-of-contents` at commit `18574f4`.
+- In scope: `client/src/render/index.ts`, `client/src/Reader.tsx`, `client/src/TocPanel.tsx`, `client/src/App.tsx`, `client/src/App.css`, `client/src/theme/components.css`, added/updated client tests, and the two sample PDF fixtures.
+- Confirmed no backend, package/dependency, OpenAPI, or `docs/API.md` changes in the story diff.
+
+### Acceptance Criteria Assessment
+
+- AC-1 / NFR-1 overlay listing: Mostly satisfied. The panel is an absolute overlay and does not reflow the canvas, and resolved outlines render as rows. However, App cannot distinguish "outline still loading" from "loaded with no outline", so an outlined PDF can temporarily show the no-outline empty state if ToC is opened before `getOutline` resolves.
+- AC-2 / page-level jump: Mostly satisfied. `jumpToPage` reuses the same scroll-offset-only mechanic as PgUp/PgDn and does no coordinate math. However, activating a ToC row can leave keyboard focus on an unmounted button/body, so PgUp/PgDn reader navigation is not reliably available after a keyboard-initiated jump.
+- AC-3 / no-outline empty state: Satisfied for a resolved no-outline PDF. The same empty copy is currently also used for the pending-outline state, which is tracked as an AC-1 follow-up above.
+- AD-9 / AR-9 render boundary: Satisfied. `render/` imports no anchor/annotation/store modules and performs no screen-to-PDF coordinate math.
+- Dependency/API/token guardrails: Satisfied by diff inspection. No new dependency, no Zustand, no backend/API docs change, and raw px additions are confined to `client/src/theme/**`.
+
+### Verification
+
+- `cd client && npm test` - passed, 13 files / 124 tests.
+- `cd client && npm run typecheck` - passed.
+- `cd client && npm run build` - passed; Vite emitted only the existing large-chunk warning.
+- `git diff --check 39755cc..HEAD` reports trailing spaces in the hand-authored PDF fixture xref rows; not elevated to a story defect because the requested client validation passes and those lines are fixture internals, not product behavior.
+
+### Severity Breakdown
+
+- High: 0
+- Medium: 2
+- Low: 1
+- Deferred: 0
+- Dismissed during triage: 5
+
+### Action Items
+
+- [x] [Medium] Distinguish outline loading from no-outline empty state. [client/src/App.tsx:35, client/src/TocPanel.tsx:58, client/src/Reader.tsx:294]
+- [x] [Medium] Restore keyboard focus to the reader after a ToC row jump. [client/src/App.tsx:147, client/src/Reader.tsx:423]
+- [x] [Low] Constrain the ToC overlay on narrow stages. [client/src/App.css:201]
+
+### Review Follow-ups (AI) — Resolutions
+
+All three findings addressed (2026-06-28) and re-validated (`npm test` 125 passing, typecheck + build clean; M2 re-verified live):
+
+- ✅ Resolved review finding [Medium] — outline loading vs no-outline: `App.toc` is now `TocEntry[] | null` (`null` until the Reader reports). `TocPanel` renders a "Loading contents…" note (`data-testid="toc-loading"`) for `null`, the "This PDF has no table of contents." empty state only for a resolved `[]`. New `TocPanel` test covers the loading branch. [client/src/App.tsx, client/src/TocPanel.tsx]
+- ✅ Resolved review finding [Medium] — focus after jump: `Reader.scrollToPage` now calls `container.focus({ preventScroll: true })` after the scroll, so PgUp/PgDn nav stays live after a ToC row click (a row click unmounts the panel, which otherwise drops focus to `<body>`). `preventScroll` keeps it from fighting the smooth scroll. Live-verified: post-jump `document.activeElement` is the `.pdf-canvas` and PgDn moves the page. [client/src/Reader.tsx]
+- ✅ Resolved review finding [Low] — narrow-stage clip: `.toc-panel` gains `max-width: calc(100% - var(--toc-panel-offset) * 2)`, so the panel shrinks instead of clipping off the left edge on a narrow viewport. [client/src/App.css]
+- Test-hardening (incidental): the two `jumpToPage` Reader tests now retry the call via `waitFor` — the last page's card registers on a deferred effect under React 19 + jsdom, so a single immediate jump to the final page could race registration (the PgUp/PgDn tests already dodge this by asserting the delta, not the scroll). [client/src/Reader.test.tsx]
+
+### Triage Notes
+
+- Dismissed: out-of-range numeric PDF destinations are explicitly clamped by the story task, not skipped.
+- Dismissed: stale ToC on future in-place document swapping is outside the current single-doc v1 flow.
+- Dismissed: ToC `Escape` also reaching App's cursor reset is consistent with prior story notes and UX-DR15.
+- Dismissed: the Reader outline effect relies on `getOutline`'s internal guards; no current rejected-path evidence was found.
+- Dismissed: moving focus into the panel on open and changing the ToC trigger from `aria-pressed` to disclosure semantics would contradict explicit story instructions for this implementation.

@@ -203,6 +203,9 @@
   top: var(--toc-panel-offset);
   right: var(--toc-panel-offset);
   width: var(--toc-panel-width);
+  /* Never exceed the stage width less both insets, so the panel can't clip off
+     the left edge on a very narrow viewport (it shrinks instead). */
+  max-width: calc(100% - var(--toc-panel-offset) * 2);
   max-height: var(--toc-panel-max-height);
   display: flex;
   flex-direction: column;
