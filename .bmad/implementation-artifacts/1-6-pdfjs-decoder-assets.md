@@ -4,7 +4,7 @@ baseline_commit: 75cafb105e5fb2e9e5dfa146d4a45ae76a555d63
 
 # Story 1.6: pdf.js decoder & asset wiring
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
