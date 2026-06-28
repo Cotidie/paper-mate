@@ -530,6 +530,7 @@ export default function Reader({
           {boxes.map((box, i) => (
             <PageCard
               key={i}
+              docId={doc.doc_id}
               pdf={pdf}
               pageNumber={i + 1}
               box={box}
@@ -584,6 +585,7 @@ const REPAINT_DEBOUNCE = 150;
  * purely presentational: it owns no observer and no window/visibility decision.
  */
 function PageCard({
+  docId,
   pdf,
   pageNumber,
   box,
@@ -591,6 +593,7 @@ function PageCard({
   live,
   register,
 }: {
+  docId: string;
   pdf: PDFDocumentProxy | null;
   pageNumber: number;
   box: PageBox;
@@ -713,7 +716,7 @@ function PageCard({
       <div ref={textRef} className="textLayer" />
       {/* Annotation marks for this page, positioned card-local via the anchor
           service against this card's box + scale (re-derives on every zoom). */}
-      <AnnotationLayer pageIndex={pageNumber - 1} box={box} scale={scale} />
+      <AnnotationLayer docId={docId} pageIndex={pageNumber - 1} box={box} scale={scale} />
     </div>
   );
 }

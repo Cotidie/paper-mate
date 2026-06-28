@@ -79,6 +79,14 @@ export default function AnnotationInteraction({
     return () => document.removeEventListener("pointerup", onPointerUp);
   }, [enabled]);
 
+  // Dismiss the quick-box AND clear the browser selection. Clearing is required:
+  // otherwise the still-live selection is re-read by the global pointerup handler
+  // (or the next click) and immediately re-pops the quick-box (review finding).
+  const dismiss = useCallback(() => {
+    window.getSelection()?.removeAllRanges();
+    dispatch({ type: "dismiss" });
+  }, []);
+
   // Esc dismisses the quick-box; an outside pointer-down dismisses it too — both
   // document-level. Only while pending so we don't shadow other Esc handlers.
   useEffect(() => {
@@ -86,12 +94,12 @@ export default function AnnotationInteraction({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        dispatch({ type: "dismiss" });
+        dismiss();
       }
     };
     const onPointerDown = (e: PointerEvent) => {
       if (quickBoxRef.current && !quickBoxRef.current.contains(e.target as Node)) {
-        dispatch({ type: "dismiss" });
+        dismiss();
       }
     };
     document.addEventListener("keydown", onKey);
@@ -101,7 +109,7 @@ export default function AnnotationInteraction({
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [pending]);
+  }, [pending, dismiss]);
 
   // Focus moves INTO the quick-box on open and RETURNS to the prior element on
   // dismiss (EXPERIENCE.md accessibility floor). Also nudges the box on-screen

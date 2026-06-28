@@ -6,26 +6,32 @@
 // NEVER off `type` (AD-5).
 
 import { useAnnotationStore } from "../store";
-import { denormalizeRect } from "../anchor";
-import type { PageBox } from "../render";
+import { denormalizeRect, type PageBox } from "../anchor";
 import "./Annotations.css";
 
 export default function AnnotationLayer({
+  docId,
   pageIndex,
   box,
   scale,
 }: {
+  /** The document this card belongs to. Marks are filtered by it so the
+   *  singleton store never bleeds one doc's annotations onto another doc with
+   *  the same page index (the store is not cleared on doc switch until Epic 3). */
+  docId: string;
   /** 0-based page index this layer renders for. */
   pageIndex: number;
-  /** The page's scale-1.0 box (render layer's getPageBox). */
+  /** The page's scale-1.0 box (render layer's getPageBox, structurally a PageBox). */
   box: PageBox;
   /** Current zoom scale (drives re-derivation, AC-6). */
   scale: number;
 }) {
-  // Subscribe to the keyed map; filter to this page. (Story 2.2 keeps it simple;
-  // a per-page selector is an Epic-3 perf concern.)
+  // Subscribe to the keyed map; filter to this doc + page. (Story 2.2 keeps it
+  // simple; a per-page selector is an Epic-3 perf concern.)
   const annotations = useAnnotationStore((s) => s.annotations);
-  const marks = [...annotations.values()].filter((a) => a.anchor.page_index === pageIndex);
+  const marks = [...annotations.values()].filter(
+    (a) => a.doc_id === docId && a.anchor.page_index === pageIndex,
+  );
 
   return (
     <div className="annotation-layer" aria-hidden="true" data-testid={`annotation-layer-${pageIndex}`}>

@@ -2,8 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import AnnotationInteraction from "./AnnotationInteraction";
 import { useAnnotationStore } from "../store";
-import type { PageCardRef } from "../anchor";
-import type { PageBox } from "../render";
+import type { PageCardRef, PageBox } from "../anchor";
 
 const box: PageBox = { width: 600, height: 800 };
 
@@ -15,18 +14,26 @@ function fakeCard(pageIndex: number, top: number): PageCardRef {
   return { pageIndex, cardEl: el, box };
 }
 
-/** Stub a non-collapsed selection whose client rects fall on the given y bands. */
+/** Stub a non-collapsed selection whose client rects fall on the given y bands.
+ *  Stateful: `removeAllRanges()` actually collapses it, so a follow-up pointerup
+ *  reads an empty selection (proves dismiss can't re-pop the quick-box). */
 function stubSelection(rects: { left: number; top: number; right: number; bottom: number }[]) {
   const domRects = rects.map((r) => ({ ...r, width: r.right - r.left, height: r.bottom - r.top }));
   const range = { getClientRects: () => domRects } as unknown as Range;
+  const removeAllRanges = vi.fn();
   const selection = {
-    rangeCount: 1,
-    isCollapsed: false,
+    get rangeCount() {
+      return removeAllRanges.mock.calls.length > 0 ? 0 : 1;
+    },
+    get isCollapsed() {
+      return removeAllRanges.mock.calls.length > 0;
+    },
     getRangeAt: () => range,
     toString: () => "selected text",
-    removeAllRanges: vi.fn(),
+    removeAllRanges,
   } as unknown as Selection;
   vi.spyOn(window, "getSelection").mockReturnValue(selection);
+  return { removeAllRanges };
 }
 
 beforeEach(() => useAnnotationStore.setState({ annotations: new Map() }));
@@ -76,8 +83,8 @@ describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
     expect(all.map((a) => a.anchor.page_index).sort()).toEqual([0, 1]);
   });
 
-  it("Escape dismisses the quick-box without storing anything (AC-7)", async () => {
-    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+  it("Escape dismisses, clears the selection, and cannot re-pop from it (AC-4/AC-7)", async () => {
+    const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />);
 
@@ -86,7 +93,12 @@ describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
     fireEvent.keyDown(document, { key: "Escape" });
 
     await waitFor(() => expect(screen.queryByTestId("quick-box")).toBeNull());
+    expect(removeAllRanges).toHaveBeenCalled();
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
+
+    // The cleared selection must NOT re-pop the quick-box on the next pointerup.
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    expect(screen.queryByTestId("quick-box")).toBeNull();
   });
 
   it("does nothing when disabled (phase not ready)", () => {

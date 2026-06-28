@@ -4,7 +4,7 @@ baseline_commit: c267bbb987ae7f66d50e1323494572f34d6bc98a
 
 # Story 2.2: Annotation foundation (anchor service + store + overlay)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -34,7 +34,7 @@ so that every annotation tool is built on one proven spatial foundation.
 
 ## Acceptance Criteria
 
-1. **Anchor service = the only home of coordinate math (AD-4, AD-9, NFR-3).** Given the render layer's scale-1.0 page box (`getPageBox`), the `anchor/` service provides normalize (screen rect → page-normalized `[0,1]` fractions) and denormalize (normalized → screen rect at the current scale) built on pdf.js `viewport.convertToPdfPoint` / `convertToViewportPoint` (adopt the stable primitive — do NOT hand-roll the projection). No other module (`render/`, `annotations/`, `store/`, components) computes screen↔PDF coordinates. [Source: ARCHITECTURE-SPINE.md#AD-4, #AD-9]
+1. **Anchor service = the only home of coordinate math (AD-4, AD-9, NFR-3).** Given the render layer's scale-1.0 page box (`getPageBox`), the `anchor/` service provides normalize (screen rect → page-normalized `[0,1]` fractions) and denormalize (normalized → screen rect at the current scale). **The pdf.js viewport projection (bottom-left→top-left + `/Rotate`) is adopted UPSTREAM via `render/getViewport`→`getPageBox` — so the anchor service consumes that already-baked, already-top-left box and does pure `[0,1]` scale-normalization (`box * scale`) on top; it does NOT re-invoke `convertToPdfPoint`/`convertToViewportPoint`, because those return y-up PDF points and would force the `height - y` re-flip the Dev Notes forbid AND violate AC-2's top-left y-down requirement.** This is the adopt-stable primitive in its correct layer; do NOT hand-roll the bottom-left→top-left projection (render already owns it). No other module (`render/`, `annotations/`, `store/`, components) computes screen↔PDF coordinates. [Source: ARCHITECTURE-SPINE.md#AD-4, #AD-9; amended 2026-06-29 per code-review to resolve the AC-1↔AC-2 wording conflict]
 
 2. **Text-run rects from the native Selection API (AD-4).** Given a drag text selection over the pdf.js text layer, text-run rects come from `window.getSelection()` + `Range.getClientRects()` (stable primitive, NOT a glyph hit-test), each normalized to canonical `{x0,y0,x1,y1}` with `x0≤x1, y0≤y1`, top-left origin, against the rendered page box. Screen position is always derived, never persisted. [Source: ARCHITECTURE-SPINE.md#AD-4]
 
@@ -265,3 +265,15 @@ claude-opus-4-8 (Claude Code, bmad-dev-story workflow).
 ### Change Log
 
 - 2026-06-29 (Story 2.2): Annotation foundation. Added the `anchor/` projection service, the `store/` Zustand working copy, the `annotations/` overlay (per-page view + state machine + quick-box shell + one highlight proof action), and the Pydantic `Annotation` entity surfaced into OpenAPI → generated TS. Mounted the overlay in the Reader (AD-9 layering preserved). Tests: anchor math, reducer, build/group, clamp, store→layer reposition, proof-path commit, backend model round-trip + OpenAPI presence. No regressions (frontend 169, backend 38).
+
+## Review Findings (code-review via Codex gpt-5.5, 2026-06-29)
+
+Cross-model review (Opus implemented, Codex reviewed). Verdict: Changes-Requested.
+
+- [x] [Review][Decision] AC-1 anchor math does not call pdf.js `convertToPdfPoint`/`convertToViewportPoint` (AC-2/AD-4). RESOLVED: amended AC-1 (user decision 2026-06-29). Literal `convertToPdfPoint` returns y-up → would force the `height - y` flip the Dev Notes forbid AND violate AC-2 (top-left y-down); the pure `box*scale` normalization on top of render's already-baked top-left box is the correct adopt-stable layering. Math verified correct across zoom + baked `/Rotate`. AC-1 reworded accordingly.
+- [x] [Review][Patch] Dismiss now clears the browser selection so the global pointerup cannot re-pop the quick-box [client/src/annotations/AnnotationInteraction.tsx] (AC-4/AC-7) — `dismiss()` calls `removeAllRanges()` then dispatches; covered by a no-reopen test.
+- [x] [Review][Patch] AnnotationLayer now filters by `doc_id` AND `page_index` so the singleton store cannot bleed one doc's marks onto another [client/src/annotations/AnnotationLayer.tsx] (AC-3/AC-8) — `docId` threaded through `PageCard`; cross-doc test added.
+- [x] [Review][Patch] Layering fixed: `PageBox` type now owned by `anchor/`; `anchor/` and `annotations/` no longer import from `render/` (the box VALUE still flows down from render, structurally compatible) [client/src/anchor/index.ts, client/src/annotations/AnnotationLayer.tsx] (AC-8).
+- [x] [Review][Patch] `normalizeRect` now clamps fractions to `[0,1]` after canonicalization [client/src/anchor/index.ts] (AC-2/AD-4) — overshoot test added.
+
+- 2026-06-29 (Story 2.2, post-review): addressed code-review (Codex) findings — 5 items resolved. Amended AC-1 wording (AC-1↔AC-2 conflict); cleared selection on quick-box dismiss; filtered AnnotationLayer by doc_id; moved the PageBox type into anchor/ to remove the upward render import (AD-9); clamped normalizeRect to [0,1]. Tests added: normalize clamp, cross-doc no-bleed, dismiss-no-reopen. Frontend 171 pass, backend 38 pass, typecheck clean.

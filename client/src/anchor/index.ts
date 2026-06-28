@@ -19,8 +19,19 @@
 // normalization (divide/multiply by `box * scale`), which round-trips correctly
 // across zoom AND rotation because both directions use the same baked box.
 
-import type { PageBox } from "../render";
 import type { Rect } from "../api/client";
+
+/**
+ * The page box the anchor service normalizes against: logical page dimensions
+ * in CSS px at scale 1.0 (CropBox + `/Rotate` baked in). The render layer's
+ * `getPageBox` returns a structurally identical shape — the VALUE flows down
+ * from render at runtime — but the anchor layer owns this TYPE so it never
+ * imports upward from `render/` (AD-9 layering).
+ */
+export interface PageBox {
+  width: number;
+  height: number;
+}
 
 /** A rect in page-card-local CSS px (top-left origin), pre-normalization. */
 export interface LocalRect {
@@ -58,12 +69,21 @@ export function normalizeRect(local: LocalRect, box: PageBox, scale: number): Re
   const w = box.width * scale;
   const h = box.height * scale;
   const c = canonicalize(local.x0, local.y0, local.x1, local.y1);
+  // Clamp to [0,1]: a text-selection client rect can overshoot the page card by
+  // a sub-pixel (anti-aliasing, glyph descenders), and AD-4 defines the
+  // normalized anchor as [0,1] fractions of the page. Out-of-page marks are not
+  // a valid case in Story 2.2 (selection is over the page text layer).
   return {
-    x0: w > 0 ? c.x0 / w : 0,
-    y0: h > 0 ? c.y0 / h : 0,
-    x1: w > 0 ? c.x1 / w : 0,
-    y1: h > 0 ? c.y1 / h : 0,
+    x0: w > 0 ? clamp01(c.x0 / w) : 0,
+    y0: h > 0 ? clamp01(c.y0 / h) : 0,
+    x1: w > 0 ? clamp01(c.x1 / w) : 0,
+    y1: h > 0 ? clamp01(c.y1 / h) : 0,
   };
+}
+
+/** Clamp a fraction to the `[0,1]` page range. */
+function clamp01(v: number): number {
+  return Math.min(1, Math.max(0, v));
 }
 
 /**

@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canonicalize, normalizeRect, denormalizeRect, pickPage } from "./index";
-import type { PageBox } from "../render";
+import { canonicalize, normalizeRect, denormalizeRect, pickPage, type PageBox } from "./index";
 
 const box: PageBox = { width: 600, height: 800 };
 
@@ -37,6 +36,16 @@ describe("normalizeRect", () => {
       y1: 0.5,
     });
   });
+  it("clamps overshoot back into [0,1] (sub-pixel selection past the card edge)", () => {
+    // A rect a few px past the 600x800 card → fractions just over 1 → clamped.
+    expect(normalizeRect({ x0: -2, y0: -3, x1: 606, y1: 808 }, box, 1)).toEqual({
+      x0: 0,
+      y0: 0,
+      x1: 1,
+      y1: 1,
+    });
+  });
+
   it("guards divide-by-zero on a zero-size box", () => {
     expect(normalizeRect({ x0: 1, y0: 1, x1: 2, y1: 2 }, { width: 0, height: 0 }, 1)).toEqual({
       x0: 0,
