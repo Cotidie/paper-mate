@@ -50,6 +50,9 @@
 
 .page-surface__canvas {
   display: block;
+  /* Anchor the live zoom CSS pre-scale (Reader.tsx) to the card's top-left so
+     the stretched bitmap stays aligned with the reserved card geometry. */
+  transform-origin: 0 0;
 }
 
 /* Reserved-geometry placeholder shown until the page paints. */

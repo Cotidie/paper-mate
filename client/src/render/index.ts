@@ -161,6 +161,13 @@ export function pageNavTarget(current: number, delta: number, pageCount: number)
  * `textLayerDiv`, both at `scale`. Returns a handle whose `cancel()` aborts the
  * in-flight work — call it on unmount / scale change to avoid "canvas already
  * in use" errors and leaks during fast scroll.
+ *
+ * Flicker-free re-render (zoom): the page is rendered into an OFFSCREEN canvas
+ * and the selectable text into a DETACHED container, then both are swapped onto
+ * the live nodes in one synchronous block at the end. The visible canvas is
+ * therefore never resized-to-blank mid-render and the old text never clears
+ * early — so a zoom re-paint shows the previous frame until the crisp one is
+ * ready (PageCard CSS-stretches it in the meantime), no strobe.
  */
 export function renderPage(
   page: PDFPageProxy,
@@ -169,29 +176,47 @@ export function renderPage(
   const viewport = page.getViewport({ scale });
   const outputScale = window.devicePixelRatio || 1;
 
-  canvas.width = Math.floor(viewport.width * outputScale);
-  canvas.height = Math.floor(viewport.height * outputScale);
-  canvas.style.width = Math.floor(viewport.width) + "px";
-  canvas.style.height = Math.floor(viewport.height) + "px";
+  // Render into an offscreen canvas so the live one keeps its pixels until swap.
+  const offscreen = document.createElement("canvas");
+  offscreen.width = Math.floor(viewport.width * outputScale);
+  offscreen.height = Math.floor(viewport.height * outputScale);
+  const offCtx = offscreen.getContext("2d");
+  if (!offCtx) throw new Error("2d canvas context unavailable");
 
   const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
-  const canvasContext = canvas.getContext("2d");
-  if (!canvasContext) throw new Error("2d canvas context unavailable");
+  let task: RenderTask | null = page.render({
+    canvas: offscreen,
+    canvasContext: offCtx,
+    transform,
+    viewport,
+  });
 
-  let task: RenderTask | null = page.render({ canvas, canvasContext, transform, viewport });
-
+  // Render text into a detached container, then swap it in atomically.
+  const offText = document.createElement("div");
   const textLayer = new TextLayer({
     textContentSource: page.streamTextContent({
       includeMarkedContent: true,
       disableNormalization: true,
     }),
-    container: textLayerDiv,
+    container: offText,
     viewport,
   });
 
   const done = (async () => {
     await task!.promise;
     await textLayer.render();
+    // Atomic swap (one synchronous block → composited in a single frame):
+    // size the live canvas to match and blit the finished bitmap...
+    canvas.width = offscreen.width;
+    canvas.height = offscreen.height;
+    canvas.style.width = Math.floor(viewport.width) + "px";
+    canvas.style.height = Math.floor(viewport.height) + "px";
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.drawImage(offscreen, 0, 0);
+    // ...and move the new text nodes in, carrying the container's inline style
+    // (pdf.js sets `--scale-factor` etc there, which the spans position against).
+    textLayerDiv.style.cssText = offText.style.cssText;
+    textLayerDiv.replaceChildren(...offText.childNodes);
   })();
   // Swallow the cancel rejection so an aborted render never surfaces as an
   // unhandled rejection; real failures still reject `done` for the caller.

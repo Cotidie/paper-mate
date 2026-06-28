@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
 import Reader from "./Reader";
 import type { Doc } from "./api/client";
 import * as renderLayer from "./render";
@@ -178,5 +178,30 @@ describe("Reader", () => {
     // Ctrl+wheel up → zoom in (mock ×2).
     fireEvent.wheel(canvas, { deltaY: -1, ctrlKey: true });
     await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
+  });
+
+  it("CSS pre-scales the canvas on zoom instead of blanking it, and never re-flashes the skeleton (no flicker)", async () => {
+    render(<Reader doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    // Wait for the first paint to complete (skeletons clear).
+    await waitFor(() => expect(document.querySelector(".page-surface__skeleton")).toBeNull());
+    const canvas = document.querySelector(".page-surface__canvas") as HTMLCanvasElement;
+    expect(canvas.style.transform).toBe("");
+
+    // Freeze the debounced crisp re-render so the transient pre-scale is stable.
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        document.body.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "+", ctrlKey: true, bubbles: true }),
+        );
+      });
+      // Instant CSS pre-scale (nextZoom mock ×2 → scale 2 / rendered 1), and the
+      // skeleton must NOT come back (the old code blanked + re-skeletoned here).
+      expect(canvas.style.transform).toBe("scale(2)");
+      expect(document.querySelector(".page-surface__skeleton")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
