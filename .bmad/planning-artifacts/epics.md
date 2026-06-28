@@ -97,7 +97,7 @@ From DESIGN.md (visual identity / tokens / component catalog) and EXPERIENCE.md 
 - **UX-DR7 On-page annotation rendering** — `{component.annotation-highlight}` (accent ~0.4 opacity), `{component.annotation-underline}` (2px accent), `{component.annotation-pen}` (vector stroke, width from quick-box), `{component.annotation-memo}` (free-floating text box, no page displacement), `{component.annotation-comment-pin}` (highlight + round pin).
 - **UX-DR8 Comment bubble** — `{component.comment-bubble}` opens on pin click for read/edit; keyboard-reachable, `Esc`-dismissable, focus moves in on open and returns on close.
 - **UX-DR9 Annotation Bank panel** — `{component.annotation-bank-panel}` 320px right-overlay, toggled (`Ctrl B`); rows `{component.bank-list-item}` = type glyph + color dot + snippet + page; hover state; empty copy "No annotations yet."; click row → canvas jumps + target flashes.
-- **UX-DR10 Zoom control** — `{component.zoom-control}` bottom-right pill: `−` / live `%` / `+`; mirrors keyboard + `ctrl+scroll`.
+- **UX-DR10 Zoom control** — `{component.zoom-control}` in the top bar, left of the ToC button: `−` / live `%` / `+`; mirrors keyboard + `ctrl+scroll`. (Revised 2026-06-28 by sprint-change-proposal-2026-06-28.md; originally a bottom-right floating pill, moved to the top bar to free the reading area.)
 - **UX-DR11 Table-of-contents panel** — `{component.toc-panel}` 280px overlay; rows jump to section.
 - **UX-DR12 Top bar & save indicator** — `{component.top-bar}` filename + `{component.save-indicator}` ("Saving…" → "Saved" flashing success → settles muted) + Bank/ToC toggles.
 - **UX-DR13 Toast / error surface** — `{component.toast}` bottom-center dark for load/save failures; copy "Couldn't open this file." / "Couldn't save — changes kept in this session."
@@ -275,7 +275,58 @@ So that I can size the page to read comfortably.
 **Given** any zoom level
 **Then** the pdf-canvas box stays pixel-stable (chrome overlays, no reflow) and the anchor page box rescales so derived positions stay correct (NFR-1, NFR-3 foundation)
 
-### Story 1.6: Pan / hand tool
+### Story 1.6: pdf.js decoder & asset wiring
+
+> Added 2026-06-28 via correct-course (sprint-change-proposal-2026-06-28-render.md). Closes a Story 1.3 render gap: the pdf.js WASM image decoders and CMap/ICC/font assets were never referenced, so JPEG2000 (and JBIG2) images failed and the console flooded with `JpxError: OpenJPEG failed to initialize` + `Dependent image isn't ready yet`. Sequenced ahead of the original pan/ToC stories (now 1.8/1.9): independent and cheap, so it lands first.
+
+As a reader,
+I want figures and all glyphs to decode,
+So that the page renders fully and the console stays clean.
+
+**Acceptance Criteria:**
+
+**Given** a PDF with JPEG2000 / JBIG2 images
+**When** it renders
+**Then** images decode with no `JpxError` / OpenJPEG console warnings (FR-2, AR-2)
+
+**Given** the render layer
+**Then** pdf.js asset URLs (`wasmUrl`, `cMapUrl` + `cMapPacked`, `iccUrl`, `standardFontDataUrl`) are configured in one place (`render/config.ts`) consumed by `loadDocument` (AR-2, AR-9)
+
+**Given** a prod build
+**Then** decoder / cmap / icc / standard-font assets are emitted into `dist/` and served same-origin by FastAPI (AR-10)
+
+**Given** an embedded non-standard font
+**Then** it renders via the standard-font data with no fallback-font warning
+
+### Story 1.7: Render performance — windowing & viewport unification
+
+> Added 2026-06-28 via correct-course. Completes the Story 1.4 NFR-2 claim (scroll was jittery, not ~60fps) and resolves the virtualization item in deferred-work.md. Root cause: `PageCard` marked a page visible once and never released its painted canvas + text layer, so painted hi-DPI canvases accumulated forever (cost scaling with zoom²), amplified by an always-on off-screen skeleton animation. Sequenced ahead of pan/ToC (1.8/1.9): it restructures the render layer those stories build on.
+
+As a reader,
+I want scroll to stay fluid on a long paper,
+So that reading never stutters.
+
+**Acceptance Criteria:**
+
+**Given** a 50+ page paper
+**When** I scroll up and down
+**Then** it holds ~60fps with no jitter (FR-4, NFR-2)
+
+**Given** pages scrolled out of view
+**Then** their canvas / text-layer bitmaps are released beyond a ±N-page window (bounded live canvases), with card geometry preserved so layout never shifts (NFR-1)
+
+**Given** off-screen cards
+**Then** they incur no continuous paint (`content-visibility: auto` + `contain-intrinsic-size`; skeleton animation runs only near the viewport) (NFR-2, NFR-5)
+
+**Given** the render layer
+**Then** a single `IntersectionObserver` (a `usePageViewport` hook) drives both current-page tracking and per-card paint / release; `PageCard` holds no lifecycle logic and `Reader` is a pure shell (AR-9)
+
+**Given** zoom, page-in-view, and PgUp/PgDn
+**Then** all existing Story 1.4 / 1.5 behaviors and tests still pass
+
+### Story 1.8: Pan / hand tool
+
+> Renumbered from Story 1.6 → 1.8 on 2026-06-28 (correct-course) so story numbers track execution order after the render-fix stories (1.6/1.7) were sequenced first. No code or story file existed under the old number.
 
 As a reader,
 I want to pan the page by dragging with a hand tool or holding Space,
@@ -293,7 +344,9 @@ So that I can reposition a zoomed-in page.
 **Given** Space released or `V`/`Esc` pressed
 **Then** control returns to the cursor (UX-DR15)
 
-### Story 1.7: Table of contents
+### Story 1.9: Table of contents
+
+> Renumbered from Story 1.7 → 1.9 on 2026-06-28 (correct-course). No code or story file existed under the old number.
 
 As a reader,
 I want a table of contents I can open and click,

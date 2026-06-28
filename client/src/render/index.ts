@@ -80,6 +80,44 @@ export function fitToWidthScale(
   return Math.min(cap, canvasWidth / boxWidth);
 }
 
+/**
+ * Zoom interaction constants (behavioral, not design dims — so they live here,
+ * not in the token layer). `nextZoom` clamps to `[ZOOM_MIN, ZOOM_MAX]`. The
+ * keyboard/button step is the coarse `ZOOM_STEP`; the wheel uses the finer
+ * `ZOOM_WHEEL_STEP` (~10%/notch) so `Ctrl+scroll` doesn't jump (250%→315%).
+ */
+export const ZOOM_MIN = 0.25;
+export const ZOOM_MAX = 4;
+export const ZOOM_STEP = 1.25;
+export const ZOOM_WHEEL_STEP = 1.1;
+
+/**
+ * Pure helper: the scale one step `direction` (+1 in / -1 out) from `current`,
+ * multiplicative by `step` and clamped to `[ZOOM_MIN, ZOOM_MAX]`. DOM-free,
+ * unit-tested. Plain interaction arithmetic — no anchor/coordinate math (AD-9).
+ */
+export function nextZoom(current: number, direction: number, step: number = ZOOM_STEP): number {
+  const raw = direction >= 0 ? current * step : current / step;
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, raw));
+}
+
+/**
+ * Pure helper: the scroll offset (one axis) that keeps a focal point fixed
+ * across a zoom, anchored to the page card under it. `cardEdge` = the anchor
+ * card's top/left in CONTENT coordinates (scroll-independent) AFTER the zoom
+ * re-layout, `cardSize` = that card's new height/width, `frac` = where in the
+ * card the focal point sat (0..1, captured before the zoom), `focal` = the focal
+ * point's offset from the scroll-container edge. The content coord to pin under
+ * the focal point is `cardEdge + frac * cardSize`, so the new scroll is
+ * `that - focal`. Anchoring to the card (not a uniform `factor`) keeps it correct
+ * even though fixed chrome — column padding, inter-card gaps — does NOT scale.
+ * The browser clamps the assigned value to range. DOM-free, unit-tested. Layout
+ * arithmetic, not anchor math (AD-9).
+ */
+export function focalScroll(cardEdge: number, cardSize: number, frac: number, focal: number): number {
+  return cardEdge + frac * cardSize - focal;
+}
+
 /** A page card's vertical extent (top/bottom) in any single coordinate space. */
 export interface PageExtent {
   pageNumber: number;
@@ -126,6 +164,13 @@ export function pageNavTarget(current: number, delta: number, pageCount: number)
  * `textLayerDiv`, both at `scale`. Returns a handle whose `cancel()` aborts the
  * in-flight work — call it on unmount / scale change to avoid "canvas already
  * in use" errors and leaks during fast scroll.
+ *
+ * Flicker-free re-render (zoom): the page is rendered into an OFFSCREEN canvas
+ * and the selectable text into a DETACHED container, then both are swapped onto
+ * the live nodes in one synchronous block at the end. The visible canvas is
+ * therefore never resized-to-blank mid-render and the old text never clears
+ * early — so a zoom re-paint shows the previous frame until the crisp one is
+ * ready (PageCard CSS-stretches it in the meantime), no strobe.
  */
 export function renderPage(
   page: PDFPageProxy,
@@ -134,29 +179,52 @@ export function renderPage(
   const viewport = page.getViewport({ scale });
   const outputScale = window.devicePixelRatio || 1;
 
-  canvas.width = Math.floor(viewport.width * outputScale);
-  canvas.height = Math.floor(viewport.height * outputScale);
-  canvas.style.width = Math.floor(viewport.width) + "px";
-  canvas.style.height = Math.floor(viewport.height) + "px";
+  // Render into an offscreen canvas so the live one keeps its pixels until swap.
+  const offscreen = document.createElement("canvas");
+  offscreen.width = Math.floor(viewport.width * outputScale);
+  offscreen.height = Math.floor(viewport.height * outputScale);
+  const offCtx = offscreen.getContext("2d");
+  if (!offCtx) throw new Error("2d canvas context unavailable");
 
   const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
-  const canvasContext = canvas.getContext("2d");
-  if (!canvasContext) throw new Error("2d canvas context unavailable");
+  let task: RenderTask | null = page.render({
+    canvas: offscreen,
+    canvasContext: offCtx,
+    transform,
+    viewport,
+  });
 
-  let task: RenderTask | null = page.render({ canvas, canvasContext, transform, viewport });
-
+  // Render text into a detached container, then swap it in atomically.
+  const offText = document.createElement("div");
   const textLayer = new TextLayer({
     textContentSource: page.streamTextContent({
       includeMarkedContent: true,
       disableNormalization: true,
     }),
-    container: textLayerDiv,
+    container: offText,
     viewport,
   });
 
   const done = (async () => {
     await task!.promise;
     await textLayer.render();
+    // Atomic swap (one synchronous block → composited in a single frame):
+    // size the live canvas to match and blit the finished bitmap...
+    canvas.width = offscreen.width;
+    canvas.height = offscreen.height;
+    canvas.style.width = Math.floor(viewport.width) + "px";
+    canvas.style.height = Math.floor(viewport.height) + "px";
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.drawImage(offscreen, 0, 0);
+    // ...and move the new text nodes in, carrying the container's inline style,
+    // then explicitly (re)assert the scale factors the `.textLayer` CSS positions
+    // spans against — pdf.js sets these on the container it renders into, so they
+    // must be carried over to the live node on the swap or the selection layer
+    // drifts out of alignment with the canvas.
+    textLayerDiv.style.cssText = offText.style.cssText;
+    textLayerDiv.style.setProperty("--scale-factor", String(scale));
+    textLayerDiv.style.setProperty("--total-scale-factor", String(scale * outputScale));
+    textLayerDiv.replaceChildren(...offText.childNodes);
   })();
   // Swallow the cancel rejection so an aborted render never surfaces as an
   // unhandled rejection; real failures still reject `done` for the caller.

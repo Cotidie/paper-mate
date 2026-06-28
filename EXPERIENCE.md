@@ -29,7 +29,7 @@ Near single-surface.
   - **PDF canvas** (`{component.pdf-canvas}`) — centered `{component.page-surface}` pages, vertical scroll. **Fixed box.**
   - **Tool rail** (`{component.tool-rail}`) — collapsible, overlays left edge.
   - **Annotation Bank** (`{component.annotation-bank-panel}`) — overlays right edge when open.
-  - **Zoom control** (`{component.zoom-control}`) — bottom-right pill.
+  - **Zoom control** (`{component.zoom-control}`) — top bar, left of the ToC button (revised 2026-06-28; was a bottom-right pill).
 - **Transient overlays** — contextual `{component.quick-box}`, `{component.tool-flyout}`, `{component.toc-panel}`, `{component.comment-bubble}`, `{component.toast}`.
 
 Visual reference for S1: [`mockups/reader-mock.html`](mockups/reader-mock.html). Spines win over the mock on conflict.

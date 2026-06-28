@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
 import Reader from "./Reader";
 import type { Doc } from "./api/client";
 import * as renderLayer from "./render";
@@ -16,6 +16,11 @@ vi.mock("./render", () => {
     fitToWidthScale: vi.fn(() => 1),
     currentPageInView: vi.fn(() => 1),
     pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
+    // Deterministic zoom math for the jsdom tests: ×2 in / ÷2 out.
+    nextZoom: vi.fn((s: number, dir: number) => (dir >= 0 ? s * 2 : s / 2)),
+    focalScroll: vi.fn((edge: number, size: number, frac: number, focal: number) => edge + frac * size - focal),
+    ZOOM_STEP: 1.25,
+    ZOOM_WHEEL_STEP: 1.1,
   };
 });
 
@@ -112,5 +117,107 @@ describe("Reader", () => {
     expect(pageNavTarget.mock.calls.at(-1)?.[1]).toBe(-1);
     fireEvent.keyDown(canvas, { key: "PageDown" });
     expect(pageNavTarget.mock.calls.at(-1)?.[1]).toBe(1);
+  });
+
+  it("reports the live zoom percent up, defaulting to fit (100%) (AC-3)", async () => {
+    const onZoomChange = vi.fn();
+    render(<Reader doc={doc} onZoomChange={onZoomChange} />);
+    await screen.findAllByTestId("page-surface");
+    // fitToWidthScale mock = 1 → 100%.
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
+  });
+
+  it("zooms via Ctrl +/-/0 from the DOCUMENT, not only the focused canvas (AC-1, HIGH fix)", async () => {
+    const onZoomChange = vi.fn();
+    render(<Reader doc={doc} onZoomChange={onZoomChange} />);
+    await screen.findAllByTestId("page-surface");
+    onZoomChange.mockClear();
+
+    // Keydown on document.body (NOT the canvas) — shortcuts are focus-independent.
+    // nextZoom mock = ×2 in / ÷2 out; preventDefault blocks the browser's zoom.
+    const press = (key: string) => {
+      const e = new KeyboardEvent("keydown", { key, ctrlKey: true, cancelable: true, bubbles: true });
+      document.body.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    expect(press("+")).toBe(true);
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
+    expect(press("-")).toBe(true);
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
+    expect(press("=")).toBe(true); // unshifted "+" key
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
+    expect(press("0")).toBe(true); // fit → mock 1 → 100%
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
+  });
+
+  it("exposes an imperative zoom handle for the top-bar control (AC-3)", async () => {
+    const ref = { current: null as null | import("./Reader").ReaderHandle };
+    const onZoomChange = vi.fn();
+    render(<Reader ref={ref} doc={doc} onZoomChange={onZoomChange} />);
+    await screen.findAllByTestId("page-surface");
+    onZoomChange.mockClear();
+    expect(typeof ref.current?.zoomIn).toBe("function");
+    ref.current!.zoomIn();
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
+    ref.current!.zoomOut();
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
+  });
+
+  it("ignores plain wheel, and a Ctrl+wheel with deltaY===0 (no zoom-out) (AC-2 / LOW fix)", async () => {
+    const onZoomChange = vi.fn();
+    render(<Reader doc={doc} onZoomChange={onZoomChange} />);
+    await screen.findAllByTestId("page-surface");
+    onZoomChange.mockClear();
+    const wheel = (init: WheelEventInit) => {
+      const e = new WheelEvent("wheel", { bubbles: true, cancelable: true, ...init });
+      document.body.dispatchEvent(e);
+      return e;
+    };
+
+    // Plain wheel (no Ctrl): not zoom, and not preventDefaulted (normal scroll).
+    expect(wheel({ deltaY: -1 }).defaultPrevented).toBe(false);
+    // Ctrl+wheel with deltaY === 0 (horizontal): browser zoom still blocked, but
+    // it must NOT be treated as zoom-out.
+    expect(wheel({ deltaY: 0, ctrlKey: true }).defaultPrevented).toBe(true);
+    await Promise.resolve();
+    expect(onZoomChange).not.toHaveBeenCalled();
+  });
+
+  it("zooms on Ctrl+wheel even when the pointer is off the canvas (over top-bar control) — HIGH fix", async () => {
+    const onZoomChange = vi.fn();
+    render(<Reader doc={doc} onZoomChange={onZoomChange} />);
+    await screen.findAllByTestId("page-surface");
+    onZoomChange.mockClear();
+    // Listener is document-level, so a Ctrl+wheel dispatched OUTSIDE .pdf-canvas
+    // (e.g. over the relocated top-bar zoom control) is still caught + prevented.
+    const e = new WheelEvent("wheel", { deltaY: -1, ctrlKey: true, cancelable: true, bubbles: true });
+    document.body.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
+  });
+
+  it("CSS pre-scales the canvas on zoom instead of blanking it, and never re-flashes the skeleton (no flicker)", async () => {
+    render(<Reader doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    // Wait for the first paint to complete (skeletons clear).
+    await waitFor(() => expect(document.querySelector(".page-surface__skeleton")).toBeNull());
+    const canvas = document.querySelector(".page-surface__canvas") as HTMLCanvasElement;
+    expect(canvas.style.transform).toBe("");
+
+    // Freeze the debounced crisp re-render so the transient pre-scale is stable.
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        document.body.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "+", ctrlKey: true, bubbles: true }),
+        );
+      });
+      // Instant CSS pre-scale (nextZoom mock ×2 → scale 2 / rendered 1), and the
+      // skeleton must NOT come back (the old code blanked + re-skeletoned here).
+      expect(canvas.style.transform).toBe("scale(2)");
+      expect(document.querySelector(".page-surface__skeleton")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

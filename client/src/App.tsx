@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import "./App.css";
 import EmptyDropzone from "./EmptyDropzone";
-import Reader from "./Reader";
+import Reader, { type ReaderHandle } from "./Reader";
+import ZoomControl from "./ZoomControl";
 import Toast from "./Toast";
 import { uploadDoc, type Doc } from "./api/client";
 
@@ -19,6 +20,11 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   // 1-based page in view, reported by the Reader for the top-bar indicator.
   const [currentPage, setCurrentPage] = useState(1);
+  // Live zoom percent, reported by the Reader for the top-bar zoom control.
+  const [zoomPercent, setZoomPercent] = useState(100);
+  // Imperative zoom handle into the Reader (it owns `scale` + the scroll
+  // container needed for focal-point zoom); the top-bar control drives it.
+  const readerRef = useRef<ReaderHandle>(null);
 
   async function handleFile(file: File) {
     // Single-flight: ignore a new pick while an upload is in flight, so an
@@ -57,6 +63,13 @@ export default function App() {
           Page {currentPage} of {doc.page_count}
         </span>
         <div className="top-bar__actions">
+          {/* Zoom control sits left of ToC (UX-DR10 revised 2026-06-28). */}
+          <ZoomControl
+            percent={zoomPercent}
+            onZoomIn={() => readerRef.current?.zoomIn()}
+            onZoomOut={() => readerRef.current?.zoomOut()}
+            onReset={() => readerRef.current?.resetZoom()}
+          />
           {/* Focusable placeholders — behavior wired in later stories
               (ToC 1.7, Bank 3.6). Present now so chrome shows the focus ring. */}
           <button type="button" className="pill">
@@ -69,7 +82,12 @@ export default function App() {
       </header>
 
       <main className="stage" role="main">
-        <Reader doc={doc} onVisiblePageChange={setCurrentPage} />
+        <Reader
+          ref={readerRef}
+          doc={doc}
+          onVisiblePageChange={setCurrentPage}
+          onZoomChange={setZoomPercent}
+        />
         <aside className="tool-rail" data-testid="tool-rail" aria-label="Tools (collapsed)">
           {/* Collapsed placeholder. Tool buttons arrive in Epic 2. */}
         </aside>

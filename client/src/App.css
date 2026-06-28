@@ -60,6 +60,47 @@
   min-height: 0;
 }
 
+/* zoom-control: top-bar pill (left of ToC). −/%/+ in caption type. Inline chrome
+   in the top bar, so it consumes no canvas width and never reflows it (NFR-1). */
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: var(--zoom-control-gap);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-pill);
+  padding: var(--space-xxs) var(--space-xs);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+}
+
+.zoom-control__button,
+.zoom-control__percent {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* −/+ get a real hit target (UX-DR17 keyboard/pointer reachability). */
+.zoom-control__button {
+  min-width: var(--zoom-control-button-size);
+  min-height: var(--zoom-control-button-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-control__percent {
+  min-width: var(--zoom-control-percent-min);
+  text-align: center;
+}
+
 /* tool-rail: collapsed placeholder, floats over the canvas (overlay). */
 .tool-rail {
   position: absolute;
