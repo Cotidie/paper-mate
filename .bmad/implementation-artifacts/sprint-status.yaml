@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: 2026-06-29 (1-9 table-of-contents done, PR #9 merged; epic-1 complete)
+last_updated: 2026-06-29 (epic-1 retrospective done; 7 action items recorded)
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -63,7 +63,7 @@ development_status:
   1-7-render-perf-windowing: done
   1-8-pan-hand-tool: done
   1-9-table-of-contents: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # Epic 2: Annotate the paper
   epic-2: backlog
@@ -85,3 +85,33 @@ development_status:
   3-5-restore-on-reopen: backlog
   3-6-annotation-bank: backlog
   epic-3-retrospective: optional
+
+action_items:
+  - epic: 1
+    action: "Codify a document-level interaction-handler convention in CLAUDE.md (bind key/pointer handlers at document level, phase-gated, exempt editable/buttons) to stop the recurring focus bug"
+    owner: "Wonseok"
+    status: open
+  - epic: 1
+    action: "When adding any render/ export, update both vi.mock('./render') barrels (App.test, Reader.test) in the same change; note in dev-story checklist/CLAUDE.md"
+    owner: "Wonseok"
+    status: open
+  - epic: 1
+    action: "Keep cross-model code review (bmad-code-review via Codex) as standing practice for every story"
+    owner: "Wonseok"
+    status: open
+  - epic: 1
+    action: "Standing principle: don't reinvent wheels, adopt stable solutions over from-scratch; first applied to the Epic 2 anchor layer"
+    owner: "Wonseok"
+    status: open
+  - epic: 1
+    action: "PREP-1 (critical, before story 2-1): anchor/ primitives spike, adopt pdf.js convertToPdfPoint/convertToViewportPoint + native Selection/getClientRects rather than hand-rolling the anchor math"
+    owner: "Wonseok"
+    status: open
+  - epic: 1
+    action: "PREP-2: decide the command-stack approach (zundo / immer-patches vs bespoke) before Epic 3"
+    owner: "Wonseok"
+    status: open
+  - epic: 1
+    action: "PREP-3: design the transient-overlay state machine once (armed-tool + quick-box + pending/empty), reusing the ToC overlay lessons"
+    owner: "Wonseok"
+    status: open
