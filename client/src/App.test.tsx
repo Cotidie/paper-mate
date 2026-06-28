@@ -278,6 +278,14 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(hi().className).not.toContain("tool-button--armed");
   });
 
+  it("'H' over a focused button/select does NOT arm (handler exempts controls)", async () => {
+    await openReader();
+    const btn = screen.getByTestId("tool-highlight-button");
+    // Key event whose target is a BUTTON must be ignored by the document handler.
+    fireEvent.keyDown(btn, { key: "h" });
+    expect(btn.className).not.toContain("tool-button--armed");
+  });
+
   it("clicking the Highlight rail button toggles it armed (Story 2.3)", async () => {
     await openReader();
     const btn = screen.getByTestId("tool-highlight-button");

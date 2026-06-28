@@ -78,12 +78,23 @@ export default function AnnotationInteraction({
   armedToolRef.current = armedTool;
 
   const pending = state.status === "pending" ? state : null;
+  // Readable from the disarm effect below without making `pending` a dep.
+  const pendingRef = useRef(false);
+  pendingRef.current = pending !== null;
 
   // Sync the armed tool from App into the machine, so `currentTool(state)` (and
   // thus `pending.tool`) reflects it and the machine rests back to armed (sticky)
-  // after a mark. App owns the armed tool; the machine just carries it.
+  // after a mark. App owns the armed tool; the machine just carries it. When a
+  // prop-driven disarm (V/Esc clears the tool) drops an OPEN quick-box, clear the
+  // live browser selection too — otherwise the stale selection re-pops the
+  // quick-box on the next pointerup (the 2.2 re-pop fix, which `dismiss()` does).
   useEffect(() => {
-    dispatch(armedTool ? { type: "arm", tool: armedTool } : { type: "disarm" });
+    if (armedTool) {
+      dispatch({ type: "arm", tool: armedTool });
+    } else {
+      if (pendingRef.current) window.getSelection()?.removeAllRanges();
+      dispatch({ type: "disarm" });
+    }
   }, [armedTool]);
 
   // Pointer release: if the user just drag-selected text, build the anchor(s).

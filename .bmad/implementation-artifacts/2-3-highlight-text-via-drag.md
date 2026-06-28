@@ -4,7 +4,7 @@ baseline_commit: 9b013cfebd60267618f3d25f56d8e5bc685296e5
 
 # Story 2.3: Highlight text via drag
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -244,3 +244,14 @@ claude-opus-4-8 (Claude Code, bmad-dev-story workflow).
 ### Change Log
 
 - 2026-06-29 (Story 2.3): Highlight text via drag. Added the armed Highlight tool (rail button + `H`, sticky), create-on-release at the default color, and the `ColorSwatchRow` quick-box recolor row backed by a thin `store.recolorAnnotation`. Reused the 2.2 anchor/store/overlay/quick-box foundation unchanged (no new coordinate math, no `render/` export, no contract change). Lifted `armedTool` to App as the single source. Tests: ToolRail arm + App keys + AnnotationInteraction create/recolor/sticky/two-page + ColorSwatchRow + store. Frontend 189 pass, backend 38 pass, typecheck clean. Live smoke owed.
+
+## Review Findings (code-review via Codex, 2026-06-29)
+
+Verdict: Changes-Requested
+
+- [x] [Review][Patch] `H` hotkey does not exempt all required controls [client/src/App.tsx:80] — the document-level key guard skips `INPUT`/`TEXTAREA`/contentEditable but not `SELECT` or `BUTTON`, so pressing `H` while a select or button has focus can arm Highlight despite AC1 and the document-level handler constraint requiring both to be exempt. RESOLVED: extended the App key guard to also exempt `SELECT` and `BUTTON` (matches the annotations-layer `isExempt` convention); test added (`H` over the rail button does not arm).
+- [x] [Review][Patch] Disarming while quick-box is pending bypasses selection clearing [client/src/annotations/AnnotationInteraction.tsx:85] — when `V` clears `armedTool`, the sync effect dispatches `disarm` directly, dropping pending state without calling `dismiss()` and therefore without `removeAllRanges()` at lines 124-126; the stale browser selection can re-pop the cursor-mode quick-box on the next pointer release, violating AC1/AC5 and the 2.2 re-pop fix. RESOLVED: the disarm effect now clears the live selection (`removeAllRanges()`) when it drops an open quick-box (tracked via `pendingRef`); test added (disarm-while-pending clears selection and cannot re-pop).
+
+0 decision-needed, 2 patch, 0 defer, 1 dismissed
+
+- 2026-06-29 (Story 2.3, post-review): addressed code-review (Codex, cross-model) findings — 2 patches resolved. Exempted SELECT/BUTTON in the App document-level key handler; cleared the live selection on prop-driven disarm of an open quick-box (re-pop guard). Tests added for both. Frontend 191 pass, typecheck clean, backend 38 pass.

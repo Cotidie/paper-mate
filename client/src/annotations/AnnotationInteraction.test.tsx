@@ -183,6 +183,27 @@ describe("AnnotationInteraction highlight tool (Story 2.3 — AC-1,2,4,5)", () =
     expect(useAnnotationStore.getState().all()).toHaveLength(2);
   });
 
+  it("disarming (V) while the quick-box is open clears the selection and cannot re-pop (review fix)", async () => {
+    const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    const { rerender } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    await screen.findByTestId("quick-box");
+
+    // V disarms in App → armedTool becomes null while a quick-box is pending.
+    rerender(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool={null} />,
+    );
+    await waitFor(() => expect(screen.queryByTestId("quick-box")).toBeNull());
+    expect(removeAllRanges).toHaveBeenCalled();
+
+    // The cleared selection must NOT re-pop the quick-box on the next pointerup.
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+  });
+
   it("cursor mode (no armed tool) keeps the 2.2 proof button, not the swatch row", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];

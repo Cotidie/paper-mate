@@ -74,10 +74,17 @@ export default function App() {
     if (!docOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.altKey || e.metaKey) return;
+      // Exempt editable fields AND controls (SELECT/BUTTON) so a focused control
+      // keeps its own keys — matches the annotations-layer `isExempt` convention
+      // and AC1's document-level handler requirement (Epic-1 retro AP-1).
       const t = e.target as HTMLElement | null;
       if (
         t &&
-        (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.tagName === "BUTTON" ||
+          t.isContentEditable)
       )
         return;
       if (e.key === "v" || e.key === "V" || e.key === "Escape") {
