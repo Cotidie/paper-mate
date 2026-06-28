@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import App from "./App";
 import * as api from "./api/client";
+import * as renderLayer from "./render";
 
 // The S1 Reader pulls in pdf.js, which can't run under jsdom. These App tests
 // only care about the S0↔S1 shell, so stub the render layer; loadDocument stays
@@ -10,6 +11,9 @@ vi.mock("./render", () => ({
   loadDocument: vi.fn(() => new Promise(() => {})),
   destroyDocument: vi.fn(),
   getPageBox: vi.fn(() => ({ width: 600, height: 800 })),
+  // ToC outline read (Story 1.9): the Reader imports it, so the mocked barrel
+  // must export it or the outline effect throws. Default to no outline.
+  getOutline: vi.fn(async () => []),
   renderPage: vi.fn(() => ({ done: Promise.resolve(), cancel: vi.fn() })),
   fitToWidthScale: vi.fn(() => 1),
   currentPageInView: vi.fn(() => 1),
@@ -116,6 +120,48 @@ describe("upload → S1 transition (AC-6)", () => {
     await waitFor(() => expect(screen.getByTestId("zoom-percent").textContent).toBe("200%"));
     fireEvent.click(screen.getByLabelText("Zoom out"));
     await waitFor(() => expect(screen.getByTestId("zoom-percent").textContent).toBe("100%"));
+  });
+});
+
+describe("table of contents (Story 1.9)", () => {
+  // Resolve loadDocument (the shell tests leave it pending) so the Reader reaches
+  // its ready phase and reports the outline up via onOutline → App's `toc` state.
+  async function openedApp(entries: renderLayer.TocEntry[] = []) {
+    vi.mocked(renderLayer.loadDocument).mockResolvedValue({
+      getPage: vi.fn(async () => ({})),
+    } as unknown as Awaited<ReturnType<typeof renderLayer.loadDocument>>);
+    vi.mocked(renderLayer.getOutline).mockResolvedValue(entries);
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    render(<App />);
+    fireEvent.change(screen.getByTestId("dropzone-input"), { target: { files: [pdfFile()] } });
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+  }
+
+  it("toggles the ToC panel open and closed from the top-bar button (AC-1)", async () => {
+    await openedApp([{ title: "Intro", pageNumber: 1, depth: 0 }]);
+    expect(screen.queryByTestId("toc-panel")).toBeNull();
+    const toc = screen.getByRole("button", { name: "ToC" });
+    fireEvent.click(toc);
+    await waitFor(() => expect(screen.getByTestId("toc-panel")).toBeTruthy());
+    expect(toc.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(toc);
+    expect(screen.queryByTestId("toc-panel")).toBeNull();
+  });
+
+  it("shows the empty state for a PDF with no outline (AC-3)", async () => {
+    await openedApp([]);
+    fireEvent.click(screen.getByRole("button", { name: "ToC" }));
+    await waitFor(() => expect(screen.getByTestId("toc-empty")).toBeTruthy());
+  });
+
+  it("clicking a row jumps the reader and closes the panel (AC-2)", async () => {
+    await openedApp([{ title: "Methods", pageNumber: 2, depth: 0 }]);
+    fireEvent.click(screen.getByRole("button", { name: "ToC" }));
+    const row = await screen.findByTestId("toc-row-0");
+    // jsdom has no scrollTo on the canvas; the jump no-ops there, but the panel
+    // must still close (the click reached App's onJump).
+    fireEvent.click(row);
+    await waitFor(() => expect(screen.queryByTestId("toc-panel")).toBeNull());
   });
 });
 

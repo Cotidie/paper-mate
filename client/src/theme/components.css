@@ -13,6 +13,11 @@
   --type-title-sm-weight: 600;
   --type-title-sm-leading: 1.4;
 
+  /* typography: title-md (panel titles — Annotation Bank, ToC) */
+  --type-title-md-size: 18px;
+  --type-title-md-weight: 600;
+  --type-title-md-leading: 1.4;
+
   /* typography: body-md (dropzone) / body-sm (toast) / caption (save-indicator) */
   --type-body-md-size: 16px;
   --type-body-md-weight: 400;
@@ -49,6 +54,19 @@
   --tool-icon-size: 20px;
   /* Gap between the rail and the flyout that opens beside it. */
   --tool-flyout-offset: 8px;
+
+  /* toc-panel (table-of-contents overlay; DESIGN.md components.toc-panel) */
+  --toc-panel-width: 280px;
+  /* Inset from the stage top/right edge (matches the rail's 16px feel). */
+  --toc-panel-offset: 16px;
+  /* Cap the panel height so a long outline scrolls inside it, never past the
+     viewport — the panel scrolls, the canvas never moves (NFR-1). */
+  --toc-panel-max-height: 70vh;
+  --toc-row-gap: 2px;
+  /* Per-depth indentation step for nested outline rows. */
+  --toc-indent-step: 12px;
+  /* Phosphor close glyph size. */
+  --toc-icon-size: 18px;
 
   /* zoom-control (top-bar pill, left of ToC; DESIGN.md components.zoom-control) */
   --zoom-control-gap: 4px;

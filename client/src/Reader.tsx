@@ -13,6 +13,7 @@ import {
   loadDocument,
   destroyDocument,
   getPageBox,
+  getOutline,
   renderPage,
   fitToWidthScale,
   pageNavTarget,
@@ -23,17 +24,22 @@ import {
   ZOOM_WHEEL_STEP,
   type PageBox,
   type PageRender,
+  type TocEntry,
 } from "./render";
 // The single IntersectionObserver lives here (imported by sub-path, NOT the
 // `./render` barrel, so `vi.mock("./render")` in the tests leaves it real).
 import { usePageViewport } from "./render/usePageViewport";
 import "./Reader.css";
 
-/** Imperative zoom API the top-bar `ZoomControl` (owned by `App`) drives. */
+/** Imperative API the top-bar chrome (owned by `App`) drives: zoom buttons +
+ *  the ToC panel's jump-to-page. */
 export interface ReaderHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   resetZoom: () => void;
+  /** Scroll the given 1-based page to the top of the viewport (ToC jump,
+   *  Story 1.9). Same no-reflow scroll mechanic as PgUp/PgDn. */
+  jumpToPage: (pageNumber: number) => void;
 }
 
 /**
@@ -51,6 +57,7 @@ export default function Reader({
   panArmed,
   onVisiblePageChange,
   onZoomChange,
+  onOutline,
   ref,
 }: {
   doc: Doc;
@@ -61,7 +68,11 @@ export default function Reader({
   onVisiblePageChange?: (page: number) => void;
   /** Reports the live zoom percent (rounded) for the top-bar zoom control. */
   onZoomChange?: (percent: number) => void;
-  /** Imperative zoom handle for the top-bar control (React 19 ref-as-prop). */
+  /** Reports the PDF's embedded outline (flattened, page-resolved) once the
+   * document is ready, for the ToC panel (Story 1.9). `[]` when there is none. */
+  onOutline?: (entries: TocEntry[]) => void;
+  /** Imperative handle (zoom + ToC jump) for the top-bar control (React 19
+   * ref-as-prop). */
   ref?: Ref<ReaderHandle>;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -184,8 +195,31 @@ export default function Reader({
     [applyScale, centerFocal, computeFitScale, boxes],
   );
 
-  // Expose the zoom commands to the top-bar control owned by App.
-  useImperativeHandle(ref, () => ({ zoomIn, zoomOut, resetZoom }), [zoomIn, zoomOut, resetZoom]);
+  // Scroll a 1-based page to the top of the viewport. The shared mechanic behind
+  // BOTH PgUp/PgDn and the ToC jump (Story 1.9): clamp the target, find its card,
+  // and `scrollTo` its top — offset-only, so nothing reflows (NFR-1). Honors
+  // `prefers-reduced-motion` (smooth → instant). No-ops where layout/scrollTo is
+  // unavailable (jsdom). No anchor/coordinate math (AR-9).
+  const scrollToPage = useCallback(
+    (pageNumber: number) => {
+      const target = Math.min(doc.page_count, Math.max(1, pageNumber));
+      const card = cards.current.get(target);
+      const container = scrollRef.current;
+      if (!card || !container || typeof container.scrollTo !== "function") return;
+      const reduceMotion =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      container.scrollTo({ top: card.offsetTop, behavior: reduceMotion ? "auto" : "smooth" });
+    },
+    [doc.page_count],
+  );
+
+  // Expose zoom + ToC jump to the top-bar chrome owned by App.
+  useImperativeHandle(
+    ref,
+    () => ({ zoomIn, zoomOut, resetZoom, jumpToPage: scrollToPage }),
+    [zoomIn, zoomOut, resetZoom, scrollToPage],
+  );
 
   // Keep scaleRef in sync AND apply focal-point scroll compensation after the
   // DOM has re-laid-out at the new scale (useLayoutEffect → before paint, no
@@ -251,6 +285,22 @@ export default function Reader({
   useEffect(() => {
     onVisiblePageChange?.(currentPage);
   }, [currentPage, onVisiblePageChange]);
+
+  // Read the embedded outline for the ToC panel (Story 1.9) once the document is
+  // loaded. A separate effect (keyed on `pdf`) so it never gates the page-box
+  // reservation (NFR-1) and a changing `onOutline` can't trigger a document
+  // reload. getOutline never throws — a missing/broken outline reports `[]`, so
+  // the panel shows its empty state rather than erroring (AC-3).
+  useEffect(() => {
+    if (!pdf) return;
+    let cancelled = false;
+    getOutline(pdf).then((entries) => {
+      if (!cancelled) onOutline?.(entries);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pdf, onOutline]);
 
   // Ctrl+scroll (and trackpad pinch, which dispatches `wheel` with ctrlKey) zoom,
   // about the cursor, with the FINER wheel step. Bound at the DOCUMENT level
@@ -380,17 +430,7 @@ export default function Reader({
     if (!forward && !backward) return;
     e.preventDefault();
     const delta = forward ? 1 : -1;
-    const target = pageNavTarget(currentPage, delta, doc.page_count);
-    const card = cards.current.get(target);
-    const container = scrollRef.current;
-    if (!card || !container || typeof container.scrollTo !== "function") return;
-    const reduceMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    container.scrollTo({
-      top: card.offsetTop,
-      behavior: reduceMotion ? "auto" : "smooth",
-    });
+    scrollToPage(pageNavTarget(currentPage, delta, doc.page_count));
   }
 
   // Pointer-drag pan: only when pannable and with the primary button. Capture the

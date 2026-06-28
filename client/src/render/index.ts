@@ -61,6 +61,95 @@ export function destroyDocument(pdf: PDFDocumentProxy): Promise<void> {
 }
 
 /**
+ * One flattened Table-of-Contents row, resolved to a 1-based page. `depth`
+ * (0-based) drives the panel's indentation; only entries that resolve to a page
+ * are included (url-only / broken bookmarks are dropped). ToC is a viewport
+ * concern (FR-3 lives in render/) — no anchor/normalize math (AD-9).
+ */
+export interface TocEntry {
+  title: string;
+  pageNumber: number;
+  depth: number;
+}
+
+/** A pdf.js explicit destination: `[pageRef, {name}, ...args]`. The first
+ *  element is either a page reference object or a 0-based page index. */
+type PdfDest = unknown[];
+interface OutlineNode {
+  title: string;
+  dest: string | PdfDest | null;
+  items?: OutlineNode[];
+}
+// The slice of PDFDocumentProxy this reader needs; pdfjs-dist 6's bundled types
+// give getOutline a wide inline shape, so we narrow to what we consume.
+interface OutlineCapableDoc {
+  numPages: number;
+  getOutline(): Promise<OutlineNode[] | null>;
+  getDestination(id: string): Promise<PdfDest | null>;
+  getPageIndex(ref: object): Promise<number>;
+}
+
+/**
+ * Read the PDF's embedded outline (bookmarks) as a flat, page-resolved list for
+ * the Table-of-Contents panel (FR-3). Recurses the outline tree carrying depth,
+ * and resolves each node's `dest` to a 1-based page number, tolerating every
+ * destination shape (named string, explicit array, RefProxy or numeric first
+ * element). Entries with no resolvable page (url-only, null, or a throwing
+ * lookup) are skipped, so one broken bookmark never aborts the outline. Returns
+ * `[]` when the PDF has no outline — the panel renders its empty state from that.
+ *
+ * Pure pdf.js read: touches only the document proxy, no DOM and no normalize/
+ * screen math — ToC stays a render/ (viewport) concern (AD-9, AR-9).
+ */
+export async function getOutline(pdf: PDFDocumentProxy): Promise<TocEntry[]> {
+  const doc = pdf as unknown as OutlineCapableDoc;
+  let roots: OutlineNode[] | null;
+  try {
+    roots = await doc.getOutline();
+  } catch {
+    return [];
+  }
+  if (!roots || roots.length === 0) return [];
+
+  const out: TocEntry[] = [];
+  const walk = async (nodes: OutlineNode[], depth: number): Promise<void> => {
+    for (const node of nodes) {
+      const title = (node.title ?? "").trim();
+      if (title) {
+        const pageNumber = await resolveDestPage(doc, node.dest);
+        if (pageNumber !== null) out.push({ title, pageNumber, depth });
+      }
+      if (node.items && node.items.length > 0) await walk(node.items, depth + 1);
+    }
+  };
+  await walk(roots, 0);
+  return out;
+}
+
+/** Resolve an outline node's `dest` to a clamped 1-based page, or `null` when it
+ *  is missing, url-only, or unresolvable. Each lookup is guarded so a single bad
+ *  bookmark yields `null` rather than rejecting the whole outline. */
+async function resolveDestPage(doc: OutlineCapableDoc, dest: string | PdfDest | null): Promise<number | null> {
+  try {
+    const explicit = typeof dest === "string" ? await doc.getDestination(dest) : dest;
+    if (!explicit || explicit.length === 0) return null;
+    const target = explicit[0];
+    let pageIndex: number;
+    if (typeof target === "number") {
+      pageIndex = target; // already a 0-based page index
+    } else if (target && typeof target === "object") {
+      pageIndex = await doc.getPageIndex(target); // a RefProxy {num, gen}
+    } else {
+      return null;
+    }
+    if (!Number.isInteger(pageIndex)) return null;
+    return Math.min(doc.numPages, Math.max(1, pageIndex + 1));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The AD-4 page box: the PDF.js viewport at scale 1.0. `getViewport` bakes in
  * the CropBox and `/Rotate`, and the result is in CSS px (DPR is NOT applied
  * here — it only scales the canvas backing store). This is the value the anchor
