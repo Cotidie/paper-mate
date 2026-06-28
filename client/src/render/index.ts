@@ -21,6 +21,8 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
 
 import { docFileUrl } from "../api/client";
+// The single home for pdf.js asset URLs (decoders/cmaps/iccs/standard fonts).
+import { PDFJS_ASSET_CONFIG } from "./config";
 
 // Configure the worker once, at module load.
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -43,7 +45,10 @@ export interface PageRender {
  * prior session renders given only its id (AD-6).
  */
 export function loadDocument(docId: string): Promise<PDFDocumentProxy> {
-  return getDocument({ url: docFileUrl(docId) }).promise;
+  // Spread the asset config so the worker can fetch the bundled WASM image
+  // decoders (JPEG2000/JBIG2), CMaps, ICC profiles, and standard-font data —
+  // otherwise figures fail to decode and the console floods with JpxError.
+  return getDocument({ url: docFileUrl(docId), ...PDFJS_ASSET_CONFIG }).promise;
 }
 
 /**
