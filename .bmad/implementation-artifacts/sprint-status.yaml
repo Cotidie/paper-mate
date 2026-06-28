@@ -55,9 +55,13 @@ development_status:
   1-2-open-a-pdf-from-disk: done
   1-3-render-pages: done
   1-4-scroll-and-page-navigation: done
-  1-5-zoom: review
+  1-5-zoom: done
   1-6-pan-hand-tool: backlog
   1-7-table-of-contents: backlog
+  # Added 2026-06-28 via correct-course (render perf + decoder wiring).
+  # Exec order: 1-8 -> 1-9 -> 1-6 -> 1-7 (1-9 refactors Reader; pan/toc build on it).
+  1-8-pdfjs-decoder-assets: backlog
+  1-9-render-perf-windowing: backlog
   epic-1-retrospective: optional
 
   # Epic 2: Annotate the paper

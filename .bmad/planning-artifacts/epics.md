@@ -312,6 +312,56 @@ So that I can jump to a section without scroll-hunting.
 **Given** a PDF with no embedded outline
 **Then** the ToC panel shows an empty/unavailable state rather than erroring (edge case)
 
+### Story 1.8: pdf.js decoder & asset wiring
+
+> Added 2026-06-28 via correct-course (sprint-change-proposal-2026-06-28-render.md). Closes a Story 1.3 render gap: the pdf.js WASM image decoders and CMap/ICC/font assets were never referenced, so JPEG2000 (and JBIG2) images failed and the console flooded with `JpxError: OpenJPEG failed to initialize` + `Dependent image isn't ready yet`.
+> **Exec order:** 1.8 → 1.9 → 1.6 → 1.7 (1.9 restructures the render layer that pan/ToC build on; 1.8 is independent and cheap, so it goes first). Story numbers reflect order added, not execution order.
+
+As a reader,
+I want figures and all glyphs to decode,
+So that the page renders fully and the console stays clean.
+
+**Acceptance Criteria:**
+
+**Given** a PDF with JPEG2000 / JBIG2 images
+**When** it renders
+**Then** images decode with no `JpxError` / OpenJPEG console warnings (FR-2, AR-2)
+
+**Given** the render layer
+**Then** pdf.js asset URLs (`wasmUrl`, `cMapUrl` + `cMapPacked`, `iccUrl`, `standardFontDataUrl`) are configured in one place (`render/config.ts`) consumed by `loadDocument` (AR-2, AR-9)
+
+**Given** a prod build
+**Then** decoder / cmap / icc / standard-font assets are emitted into `dist/` and served same-origin by FastAPI (AR-10)
+
+**Given** an embedded non-standard font
+**Then** it renders via the standard-font data with no fallback-font warning
+
+### Story 1.9: Render performance — windowing & viewport unification
+
+> Added 2026-06-28 via correct-course. Completes the Story 1.4 NFR-2 claim (scroll was jittery, not ~60fps) and resolves the virtualization item in deferred-work.md. Root cause: `PageCard` marked a page visible once and never released its painted canvas + text layer, so painted hi-DPI canvases accumulated forever (cost scaling with zoom²), amplified by an always-on off-screen skeleton animation.
+
+As a reader,
+I want scroll to stay fluid on a long paper,
+So that reading never stutters.
+
+**Acceptance Criteria:**
+
+**Given** a 50+ page paper
+**When** I scroll up and down
+**Then** it holds ~60fps with no jitter (FR-4, NFR-2)
+
+**Given** pages scrolled out of view
+**Then** their canvas / text-layer bitmaps are released beyond a ±N-page window (bounded live canvases), with card geometry preserved so layout never shifts (NFR-1)
+
+**Given** off-screen cards
+**Then** they incur no continuous paint (`content-visibility: auto` + `contain-intrinsic-size`; skeleton animation runs only near the viewport) (NFR-2, NFR-5)
+
+**Given** the render layer
+**Then** a single `IntersectionObserver` (a `usePageViewport` hook) drives both current-page tracking and per-card paint / release; `PageCard` holds no lifecycle logic and `Reader` is a pure shell (AR-9)
+
+**Given** zoom, page-in-view, and PgUp/PgDn
+**Then** all existing Story 1.4 / 1.5 behaviors and tests still pass
+
 ## Epic 2: Annotate the paper
 
 Mark up the page with all six tools via drag-to-annotate and the contextual quick-box. Marks land anchored to exact PDF coordinates and the page never moves. This epic proves the spatial-anchor model holds across zoom (NFR-3) and defines the Annotation entity (AR-5).
