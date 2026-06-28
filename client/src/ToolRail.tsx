@@ -23,8 +23,8 @@ export type ToolMode = "cursor" | "hand" | "box-select";
  * `title`); `label` is the accessible name (aria-label).
  */
 const OPTIONS: { value: ToolMode; label: string; hint: string; Icon: Icon }[] = [
-  { value: "cursor", label: "Cursor", hint: "Cursor — select & read text (V)", Icon: Cursor },
-  { value: "hand", label: "Hand", hint: "Hand — drag to pan, or hold Space", Icon: Hand },
+  { value: "cursor", label: "Cursor", hint: "Cursor: select & read text (V)", Icon: Cursor },
+  { value: "hand", label: "Hand", hint: "Hand: drag to pan, or hold Space", Icon: Hand },
   { value: "box-select", label: "Box select", hint: "Box select", Icon: Selection },
 ];
 
