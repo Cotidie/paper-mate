@@ -90,7 +90,7 @@ Loading and rendering must **never** shift final page geometry — reserve the l
 | IP-3 | Contextual quick-box | On drag-release, a mode-specific `{component.quick-box}` pops (table below). |
 | IP-4 | Pan | Hand tool drag, or hold `Space` + drag. |
 | IP-5 | Zoom | `Ctrl +/-`, `Ctrl 0` reset/fit, `Ctrl+scroll`, bottom-right buttons; live %. |
-| IP-6 | Edit | Click selects; drag handles move/resize; re-open quick-box to restyle; double-click text annotations to re-edit. |
+| IP-6 | Edit | Click selects a mark (cursor mode or while an annotation tool is active; single selection, AD-12). On a selected mark: re-open the quick-box to restyle/recolor, and delete (lightweight, Story 2.5). Drag-handle move/resize and double-click-to-re-edit text are heavier edits (Epic 3, Story 3.1). |
 | IP-7 | Undo / redo | `Ctrl Z` / `Ctrl Shift Z`. |
 | IP-8 | Delete | `Del` / `Backspace` on selected annotation. |
 | IP-9 | Freehand | Pen drag draws a vector stroke; quick-box sets color + width. |

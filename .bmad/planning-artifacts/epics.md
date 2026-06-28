@@ -123,9 +123,9 @@ From DESIGN.md (visual identity / tokens / component catalog) and EXPERIENCE.md 
 - **FR-12** Range/area box selection → Epic 2
 - **FR-13** Drag-to-annotate → Epic 2
 - **FR-14** Drag-to-change-tool (contextual quick-box) → Epic 2
-- **FR-15** Edit annotation (move/resize/restyle/re-edit) → Epic 3
+- **FR-15** Edit annotation (move/resize/restyle/re-edit) → Epic 3 (lightweight restyle/recolor slice in Epic 2 Story 2.5)
 - **FR-16** Undo / redo → Epic 3
-- **FR-17** Delete annotation → Epic 3
+- **FR-17** Delete annotation → Epic 2 Story 2.5 (client delete seed) + Epic 3 Story 3.3 (command-path delete + undo)
 - **FR-18** Annotation Bank toggle drawer → Epic 3
 - **FR-19** Bank lists all annotations → Epic 3
 - **FR-20** Bank click-to-jump → Epic 3
@@ -373,6 +373,8 @@ Mark up the page with all six tools via drag-to-annotate and the contextual quic
 
 > Restructured again 2026-06-29 (correct-course, see `sprint-change-proposal-2026-06-29-tool-fsm.md`): the Story 2.3 live smoke found two design changes — tool state was two orthogonal fields (pan could eat an annotation drag) and there was no arm-time color pick. Inserted Story 2.4 (unify tool state into one `activeTool` FSM, AD-11) and Story 2.5 (arm-time color quick-pick) ahead of the remaining tool features, renumbering the old 2.4–2.9 to 2.6–2.11 so number = execution order. The FSM (PREP-3) lands first so the later tool stories build on one mutually-exclusive model.
 
+> Restructured again 2026-06-29 (correct-course, see `sprint-change-proposal-2026-06-29-select-highlight.md`): the same Story 2.3 live smoke also found highlights are not selectable (no recolor/delete after creation), and Epic 3's Stories 3.1/3.3 silently assume a selection seam nobody builds. Added one AC to Story 2.4 (a rail click switches `activeTool` in a single click; a tool's quick-box never opens in place of the switch) and inserted Story 2.5 "Select a highlight (click-select, recolor, delete)" right after the FSM (AD-12), renumbering the old 2.5–2.11 to 2.6–2.12. Lightweight click-select + recolor/delete lands in Epic 2; drag-handle move/resize + text re-edit stay in Story 3.1.
+
 ### Story 2.1: Dev-infra enabler (local Docker dev loop)
 
 As a developer,
@@ -399,7 +401,7 @@ As a reader,
 I want a single mark to land anchored to exact PDF coordinates and survive zoom,
 So that every annotation tool is built on one proven spatial foundation.
 
-> The architectural through-line of the epic (AR-4/AD-4). Stands up `anchor/`, the `Annotation` entity, the Zustand `store/`, the `annotations/` overlay, and the quick-box shell — proven end-to-end by the simplest mark — so Stories 2.3–2.9 are thin features on top. Adopt stable primitives (Epic 1 retro AP-4/PREP-1).
+> The architectural through-line of the epic (AR-4/AD-4). Stands up `anchor/`, the `Annotation` entity, the Zustand `store/`, the `annotations/` overlay, and the quick-box shell — proven end-to-end by the simplest mark — so Stories 2.3–2.12 are thin features on top. Adopt stable primitives (Epic 1 retro AP-4/PREP-1).
 
 **Acceptance Criteria:**
 
@@ -456,7 +458,7 @@ So that I mark passages and the page never moves.
 
 ### Story 2.4: Unify tool state (single activeTool FSM)
 
-> Added 2026-06-29 via correct-course (`sprint-change-proposal-2026-06-29-tool-fsm.md`). Story 2.3 live smoke found that `mode` (cursor/hand/box) and `armedTool` (highlight) being two orthogonal states let pan and highlight both arm at once, so pan ate the highlight drag ("no reaction"). 2.3 shipped a surgical mutual-exclusion patch; this story replaces it with one finite-state model. Sequenced first so the remaining tool stories (2.6–2.11) build on it (Epic-1 retro PREP-3: design the overlay state machine once).
+> Added 2026-06-29 via correct-course (`sprint-change-proposal-2026-06-29-tool-fsm.md`). Story 2.3 live smoke found that `mode` (cursor/hand/box) and `armedTool` (highlight) being two orthogonal states let pan and highlight both arm at once, so pan ate the highlight drag ("no reaction"). 2.3 shipped a surgical mutual-exclusion patch; this story replaces it with one finite-state model. Sequenced first so the remaining tool stories (2.7–2.12) build on it (Epic-1 retro PREP-3: design the overlay state machine once).
 
 As a reader,
 I want exactly one tool active at a time,
@@ -474,10 +476,43 @@ So that arming a tool never lets another (pan) swallow my gesture and the rail a
 **Given** the overlay
 **Then** the transient quick-box machine (`armed/annotating/pending/empty`) is driven by the same model, not a parallel one (PREP-3)
 
+**Given** the tool rail
+**When** I click any tool button
+**Then** `activeTool` switches to it in a single click and the rail reflects it immediately; a tool's quick-box (arm-time picker or recolor row) opens only when that tool is already active or on drag-release, never in place of the switch — so clicking cursor/selection while highlight is armed switches to cursor in one click and does NOT open a sub-toolbox (AD-11; fixes the Story 2.3 live-smoke single-click-switch issue)
+
 **Given** existing behavior
 **Then** highlight-on-drag (2.3), pan (`activeTool==="hand"`), zoom/scroll, and all current tests still pass; FSM transition unit tests added; no anchor/store/contract change (AD-9)
 
-### Story 2.5: Arm-time color quick-pick
+### Story 2.5: Select a highlight (click-select, recolor, delete)
+
+> Added 2026-06-29 via correct-course (`sprint-change-proposal-2026-06-29-select-highlight.md`). Story 2.3 live smoke surfaced that highlights are not selectable — there is no way to recolor or remove a mark after creation. Epic 3 Stories 3.1/3.3 assume a "selected annotation" exists but nothing builds the hit-test + selected-state seam, and they assume cursor-mode drag-handles, not cross-mode click-select. This story builds the selection seam (AD-12) plus the lightweight recolor/delete edit; the heavier drag-handle move/resize and text re-edit stay in 3.1. Sequenced right after the FSM (2.4) because cross-mode click-select depends on the single `activeTool` model.
+
+As a reader,
+I want to click a highlight to select it and then recolor or delete it,
+So that I can fix or remove marks without re-creating them.
+
+**Acceptance Criteria:**
+
+**Given** a rendered highlight
+**When** I single-click it in cursor mode OR while a highlight tool is active
+**Then** it becomes the selected annotation (single selection; one nullable `selectedId` in the store), hit-tested against its page-normalized rects via the anchor service (AD-4, recent-wins on overlap); clicking empty space or `Esc` clears selection (AD-12)
+
+**Given** a selected highlight
+**Then** its quick-box opens with the color-swatch row for recolor (reuses `recolorAnnotation` + `ColorSwatchRow` from 2.3) plus a delete affordance; recolor writes through the store; delete removes the mark by `id` and its `group_id` siblings across pages (AR-4)
+
+**Given** a selected highlight
+**When** I press `Del`/`Backspace`
+**Then** it is deleted (IP-8); this delete path is the seed Epic 3's Story 3.3 reuses — no command stack / undo yet (those arrive in 3.2/3.3)
+
+**Given** an active annotation tool
+**Then** click-select vs new-create is disambiguated by hit-test: pointerdown on an existing mark selects it; pointerdown on empty text starts a create (consistent with the 2.4 `activeTool` FSM, AD-11)
+
+**Given** the selection + delete
+**Then** they stay client-side (`store/` + `annotations/` only); persistence and undo are deferred to Epic 3; no anchor/store/contract change beyond the `selectedId` UI state and a client delete action (AD-9 layering preserved)
+
+**SCOPE GUARD:** lightweight edit only — NO drag handles, move, resize, or text re-edit. Those remain Story 3.1.
+
+### Story 2.6: Arm-time color quick-pick
 
 > Added 2026-06-29 via correct-course. Story 2.3's swatch row only recolors a mark *after* it is created; users expect to pick a color when arming the tool. Sequenced before the color tools (underline/pen) so they inherit it.
 
@@ -500,7 +535,7 @@ So that new marks land in my chosen color without a recolor step.
 **Given** the on-arm picker
 **Then** it is keyboard-reachable, `Esc`-dismissable, and never shifts the canvas (NFR-1, UX-DR17); no anchor/contract change
 
-### Story 2.6: Underline text
+### Story 2.7: Underline text
 
 As a reader,
 I want to underline text,
@@ -518,7 +553,7 @@ So that I emphasize lines without the page moving.
 **Given** zoom
 **Then** the underline stays anchored across zoom levels (NFR-3)
 
-### Story 2.7: Pen / freehand
+### Story 2.8: Pen / freehand
 
 As a reader,
 I want to draw freehand on the page,
@@ -536,7 +571,7 @@ So that I can sketch marks beside the text.
 **Given** zoom
 **Then** the stroke re-renders at correct scale and position (NFR-3)
 
-### Story 2.8: Textbox memo
+### Story 2.9: Textbox memo
 
 As a reader,
 I want a free-floating memo,
@@ -557,7 +592,7 @@ So that I type a note onto the page without displacing the text.
 **Given** zoom
 **Then** the memo box stays anchored (NFR-3)
 
-### Story 2.9: Comment (highlight + pin + bubble)
+### Story 2.10: Comment (highlight + pin + bubble)
 
 As a reader,
 I want a comment anchored to a spot,
@@ -579,7 +614,7 @@ So that I attach a note that opens on click.
 **Given** zoom
 **Then** the highlight and pin stay anchored (NFR-3)
 
-### Story 2.10: Box-select a region
+### Story 2.11: Box-select a region
 
 As a reader,
 I want to box-select an area,
@@ -597,7 +632,7 @@ So that I can mark a region, not just text.
 **Given** the region
 **Then** the overlay never reflows the page (NFR-1)
 
-### Story 2.11: Drag-to-change-tool quick-box
+### Story 2.12: Drag-to-change-tool quick-box
 
 As a reader,
 I want a tool picker on drag in cursor mode,
