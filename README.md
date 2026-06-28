@@ -1,1 +1,54 @@
-# paper-mate
+# Paper Mate
+
+A web PDF paper-reading companion: annotation plus AI chat, optimized for reading papers.
+
+Two processes, one container: `client/` (React 19.2 + Vite 8 + TypeScript SPA) and `server/` (FastAPI + Pydantic v2, uv-managed). In production a single container serves both the API and the built SPA from one origin (no CORS). Localhost, single user, no auth.
+
+## Development
+
+There are two ways to run the app. They serve different purposes; pick by what you are doing.
+
+### 1. Host two-process flow (the canonical dev loop)
+
+Use this for day-to-day development. It gives backend auto-reload and frontend HMR.
+
+```sh
+# shell 1: backend (auto-reloads on edit)
+cd server && uv run uvicorn app.main:app --reload --port 8000
+
+# shell 2: frontend (HMR)
+cd client && npm run dev
+```
+
+Vite serves the SPA and proxies `/api` to FastAPI (override the target with `PAPER_MATE_API_TARGET`).
+
+- Backend tests: `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`
+- Frontend tests: `cd client && npm test` ; typecheck: `npm run typecheck`
+
+### 2. Docker (single-command boot)
+
+Use this to run the whole app from one container. The backend hot-reloads on edits (the compose bind-mounts `./server/app` and runs `uvicorn --reload`); the frontend is the built static SPA from the image (no HMR).
+
+```sh
+# 1. Configure (optional): copy the env file and set your data dir / port / uid.
+cp .env.example .env        # then edit .env if you want non-defaults
+
+# 2. Pre-create the data dir as your host user, using the SAME value as
+#    PAPER_MATE_DATA. This sources .env so it respects a custom location.
+set -a; [ -f .env ] && . ./.env; set +a
+mkdir -p "${PAPER_MATE_DATA:-$HOME/.paper-mate}"
+
+# 3. Boot.
+docker compose up
+```
+
+- All configuration is env-driven via `.env` (auto-loaded by Compose); `.env.example` is the canonical list. Data dir: `PAPER_MATE_DATA` (default `~/.paper-mate`, mounted to `/data`). Host port: `PAPER_MATE_PORT` (default 8000).
+- The container runs as the host user (`PAPER_MATE_UID`/`PAPER_MATE_GID`, default 1000:1000) so files written under your data dir are host-owned and you can edit or delete them. Override the uid/gid in `.env` if `id -u` / `id -g` differ on your host.
+- Step 2 matters: the compose mount uses `create_host_path: false`, so if the data dir does not exist `docker compose up` fails with a clear error rather than letting Docker auto-create it as `root:root` (which the non-root container then cannot write). Pre-create it first.
+- If you have a `root:root` data dir from an older run, reclaim it once (use your configured dir/uid): `sudo chown -R "$(id -u)":"$(id -g)" "${PAPER_MATE_DATA:-$HOME/.paper-mate}"`.
+- Backend edits reload automatically. A change to dependencies or the frontend still needs a rebuild: `docker compose up --build`. For live frontend work use the host two-process flow above.
+- Pure prod-style run (baked code, no mounts, no reload) straight from the image: `docker build -t paper-mate . && docker run -p 8000:8000 -v "$HOME/.paper-mate:/data" paper-mate`.
+
+## Planning and architecture
+
+Canonical planning artifacts live under `.bmad/planning-artifacts/` (PRD, architecture spine, epics and stories, UX). Root `DESIGN.md` and `EXPERIENCE.md` are also inputs.
