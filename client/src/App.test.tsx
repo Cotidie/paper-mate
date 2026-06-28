@@ -23,6 +23,7 @@ vi.mock("./render", () => ({
   pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
   nextZoom: vi.fn((s: number, dir: number) => (dir >= 0 ? s * 2 : s / 2)),
   focalScroll: vi.fn((edge: number, size: number, frac: number, focal: number) => edge + frac * size - focal),
+  panScroll: vi.fn((start: number, delta: number) => start - delta),
   ZOOM_STEP: 1.25,
   ZOOM_WHEEL_STEP: 1.1,
 }));
@@ -144,6 +145,57 @@ describe("review hardening", () => {
 
     release(fakeDoc);
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+  });
+});
+
+describe("tool rail + tool keys (Story 1.8)", () => {
+  async function openReader() {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    render(<App />);
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+  }
+
+  it("arming hand in the flyout arms panning in the Reader (panArmed → data-pan)", async () => {
+    await openReader();
+    // Default: cursor — no pan armed.
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(false);
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    fireEvent.click(screen.getByTestId("tool-option-hand"));
+    // Rail shows hand armed AND the Reader is now pannable.
+    expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(true);
+  });
+
+  it("V and Escape return to cursor (un-arm pan)", async () => {
+    await openReader();
+    const armHand = () => {
+      fireEvent.click(screen.getByTestId("tool-cursor-button"));
+      fireEvent.click(screen.getByTestId("tool-option-hand"));
+    };
+    armHand();
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(true);
+    fireEvent.keyDown(document, { key: "v" });
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(false);
+
+    armHand();
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(false);
+  });
+
+  it("'[' toggles the rail collapsed / expanded", async () => {
+    await openReader();
+    // Expanded: the cursor button is present.
+    expect(screen.queryByTestId("tool-cursor-button")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "[" });
+    // Collapsed: minimal rail, no cursor button, expand affordance present.
+    expect(screen.queryByTestId("tool-cursor-button")).toBeNull();
+    expect(screen.getByTestId("tool-rail-collapse").getAttribute("aria-label")).toBe("Expand tools");
+    fireEvent.keyDown(document, { key: "[" });
+    expect(screen.queryByTestId("tool-cursor-button")).toBeTruthy();
   });
 });
 

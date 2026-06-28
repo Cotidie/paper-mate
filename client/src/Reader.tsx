@@ -18,6 +18,7 @@ import {
   pageNavTarget,
   nextZoom,
   focalScroll,
+  panScroll,
   ZOOM_STEP,
   ZOOM_WHEEL_STEP,
   type PageBox,
@@ -47,11 +48,15 @@ export interface ReaderHandle {
  */
 export default function Reader({
   doc,
+  panArmed,
   onVisiblePageChange,
   onZoomChange,
   ref,
 }: {
   doc: Doc;
+  /** When true, the hand tool is armed: a drag pans (Story 1.8). Hold-`Space`
+   * gives the same temp-pan regardless of this flag. */
+  panArmed?: boolean;
   /** Reports the 1-based page currently in view, for the top-bar indicator. */
   onVisiblePageChange?: (page: number) => void;
   /** Reports the live zoom percent (rounded) for the top-bar zoom control. */
@@ -65,6 +70,18 @@ export default function Reader({
   // Scale lives in state so Story 1.5 (zoom) can drive it later (don't hardcode).
   const [scale, setScale] = useState(1);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
+
+  // Pan (Story 1.8): the hand is armed by `panArmed`, OR `Space` is held for a
+  // temporary pan that falls back to the armed tool on release (AC-3). `dragging`
+  // drives the grab→grabbing cursor; the drag origin lives in a ref so a
+  // pointermove never re-renders. Pan moves ONLY scrollLeft/scrollTop — never the
+  // scale, card geometry, or page box (NFR-1) — and does no anchor math (AR-9).
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const canPan = (panArmed ?? false) || spaceHeld;
+  const dragOrigin = useRef<
+    { x: number; y: number; scrollLeft: number; scrollTop: number } | null
+  >(null);
 
   // Single IntersectionObserver (render/ hook): owns the card registry and drives
   // BOTH the page-in-view indicator (`currentPage`) and the per-card paint/release
@@ -295,6 +312,16 @@ export default function Reader({
   // so it never double-scrolls (AC-3). (Zoom keys are handled document-level
   // above, not here, so they work without canvas focus.)
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Hold-`Space` temp-pan (AC-2/AC-3): arm panning while held, suppressing the
+    // browser's page-scroll-on-Space. Ignore auto-repeat so a held key doesn't
+    // thrash. This lives on the focused .pdf-canvas (not document) so it never
+    // fights a focused button's Space-activate. On keyup `canPan` falls back to
+    // the armed tool (handleKeyUp).
+    if (e.key === " " && phase === "ready") {
+      if (!e.repeat) setSpaceHeld(true);
+      e.preventDefault();
+      return;
+    }
     // Ctrl ONLY (no Shift/Alt/Meta) so adjacent chords aren't swallowed — most
     // notably Ctrl+Shift+Arrow, the extend-text-selection chord over the page's
     // text layer. Matches the app's Ctrl-only keyboard map.
@@ -317,6 +344,52 @@ export default function Reader({
     });
   }
 
+  // Release the Space temp-pan: `canPan` falls back to `panArmed` (AC-3).
+  function handleKeyUp(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === " ") setSpaceHeld(false);
+  }
+
+  // Pointer-drag pan: only when pannable and with the primary button. Capture the
+  // pointer so a fast drag off the canvas keeps panning and still gets pointerup;
+  // preventDefault suppresses text selection / native image drag. The page follows
+  // the pointer via panScroll (grab-and-drag). Scroll-offset only (NFR-1).
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!canPan || e.button !== 0) return;
+    const container = scrollRef.current;
+    if (!container) return;
+    // Record the origin + arm the drag FIRST, so panning never depends on pointer
+    // capture succeeding. Capture is a best-effort enhancement (keeps a fast drag
+    // that leaves the canvas panning); wrap it so a refusal can't abort the drag.
+    dragOrigin.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+    };
+    setDragging(true);
+    e.preventDefault();
+    try {
+      container.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* no active pointer (e.g. synthetic event) — drag still works without capture */
+    }
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const origin = dragOrigin.current;
+    const container = scrollRef.current;
+    if (!origin || !container) return;
+    container.scrollLeft = panScroll(origin.scrollLeft, e.clientX - origin.x);
+    container.scrollTop = panScroll(origin.scrollTop, e.clientY - origin.y);
+  }
+
+  function endDrag(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragOrigin.current) return;
+    scrollRef.current?.releasePointerCapture?.(e.pointerId);
+    dragOrigin.current = null;
+    setDragging(false);
+  }
+
   return (
     <div
       ref={scrollRef}
@@ -324,7 +397,17 @@ export default function Reader({
       data-testid="reader-backdrop"
       aria-label="PDF canvas region"
       tabIndex={0}
+      // grab when pan is available, grabbing mid-drag; also suppresses text
+      // selection while pannable (CSS targets [data-pan]). Absent → normal cursor
+      // and the Story 1.3 selectable text layer is untouched.
+      data-pan={canPan ? (dragging ? "grabbing" : "") : undefined}
       onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onLostPointerCapture={endDrag}
     >
       {phase === "error" ? (
         <p className="pdf-canvas__message" role="status">

@@ -28,6 +28,7 @@ vi.mock("./render", () => {
     // Deterministic zoom math for the jsdom tests: ×2 in / ÷2 out.
     nextZoom: vi.fn((s: number, dir: number) => (dir >= 0 ? s * 2 : s / 2)),
     focalScroll: vi.fn((edge: number, size: number, frac: number, focal: number) => edge + frac * size - focal),
+    panScroll: vi.fn((start: number, delta: number) => start - delta),
     ZOOM_STEP: 1.25,
     ZOOM_WHEEL_STEP: 1.1,
   };
@@ -126,6 +127,48 @@ describe("Reader", () => {
     expect(pageNavTarget.mock.calls.at(-1)?.[1]).toBe(-1);
     fireEvent.keyDown(canvas, { key: "PageDown" });
     expect(pageNavTarget.mock.calls.at(-1)?.[1]).toBe(1);
+  });
+
+  it("hold-Space arms a temp pan: keydown is preventDefaulted + sets the grab cursor, keyup clears (AC-2/AC-3)", async () => {
+    render(<Reader doc={doc} />);
+    await screen.findAllByTestId("page-surface"); // phase === "ready" (Space is ready-gated)
+    const canvas = screen.getByTestId("reader-backdrop");
+    // Not pannable by default (cursor tool, no Space).
+    expect(canvas.hasAttribute("data-pan")).toBe(false);
+    // Space keydown suppresses the browser's page-scroll (returns false) and arms.
+    expect(fireEvent.keyDown(canvas, { key: " " })).toBe(false);
+    expect(canvas.hasAttribute("data-pan")).toBe(true);
+    // Release falls back to the armed tool (cursor here) → no longer pannable.
+    fireEvent.keyUp(canvas, { key: " " });
+    expect(canvas.hasAttribute("data-pan")).toBe(false);
+  });
+
+  it("does not swallow Space when no doc is ready / leaves nav keys intact", async () => {
+    render(<Reader doc={doc} />);
+    const canvas = await screen.findByTestId("reader-backdrop");
+    // PgUp/PgDn nav still preventDefaults (Space must not have broken the map).
+    expect(fireEvent.keyDown(canvas, { key: "PageDown" })).toBe(false);
+    expect(fireEvent.keyDown(canvas, { key: "ArrowDown", ctrlKey: true })).toBe(false);
+  });
+
+  it("pointer-drag with the hand armed sets the grabbing cursor and clears on pointerup (AC-2)", async () => {
+    render(<Reader doc={doc} panArmed />);
+    const canvas = await screen.findByTestId("reader-backdrop");
+    // Armed but idle → grab (empty data-pan).
+    expect(canvas.getAttribute("data-pan")).toBe("");
+    fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    expect(canvas.getAttribute("data-pan")).toBe("grabbing");
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 40, clientY: 30 });
+    fireEvent.pointerUp(canvas, { pointerId: 1 });
+    // Back to grab (still armed), no longer dragging.
+    expect(canvas.getAttribute("data-pan")).toBe("");
+  });
+
+  it("does not arm a pointer drag when nothing is pannable (cursor tool)", async () => {
+    render(<Reader doc={doc} />);
+    const canvas = await screen.findByTestId("reader-backdrop");
+    fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    expect(canvas.hasAttribute("data-pan")).toBe(false);
   });
 
   it("reports the live zoom percent up, defaulting to fit (100%) (AC-3)", async () => {

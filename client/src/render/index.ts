@@ -123,6 +123,19 @@ export function focalScroll(cardEdge: number, cardSize: number, frac: number, fo
   return cardEdge + frac * cardSize - focal;
 }
 
+/**
+ * Pure helper: the new scroll offset (one axis) for a hand-drag pan. `startScroll`
+ * = the container's scrollLeft/scrollTop captured at pointer-down, `pointerDelta`
+ * = how far the pointer has moved on that axis since (current - start). Subtracting
+ * makes the content follow the pointer (grab-and-drag a sheet of paper): dragging
+ * right → positive delta → smaller scrollLeft → content moves right. The browser
+ * clamps the assigned value to the valid scroll range. DOM-free, unit-tested.
+ * Plain scroll-offset arithmetic — no anchor/coordinate math (AR-9).
+ */
+export function panScroll(startScroll: number, pointerDelta: number): number {
+  return startScroll - pointerDelta;
+}
+
 /** A page card's vertical extent (top/bottom) in any single coordinate space. */
 export interface PageExtent {
   pageNumber: number;
