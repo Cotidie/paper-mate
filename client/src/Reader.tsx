@@ -134,12 +134,19 @@ export default function Reader({
     };
   }, [phase, boxes.length]);
 
-  // PgUp/PgDn: move one page. Scroll the target card's top to the canvas top and
-  // suppress the browser's native page-scroll so it never double-scrolls (AC-3).
+  // PgUp/PgDn (and Ctrl+Down/Ctrl+Up aliases): move one page. Scroll the target
+  // card's top to the canvas top and suppress the browser's native page-scroll
+  // so it never double-scrolls (AC-3).
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key !== "PageUp" && e.key !== "PageDown") return;
+    // Ctrl ONLY (no Shift/Alt/Meta) so adjacent chords aren't swallowed — most
+    // notably Ctrl+Shift+Arrow, the extend-text-selection chord over the page's
+    // text layer. Matches the app's Ctrl-only keyboard map.
+    const ctrlArrow = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey;
+    const forward = e.key === "PageDown" || (ctrlArrow && e.key === "ArrowDown");
+    const backward = e.key === "PageUp" || (ctrlArrow && e.key === "ArrowUp");
+    if (!forward && !backward) return;
     e.preventDefault();
-    const delta = e.key === "PageDown" ? 1 : -1;
+    const delta = forward ? 1 : -1;
     const target = pageNavTarget(currentPage, delta, doc.page_count);
     const card = cardEls.current.get(target);
     const container = scrollRef.current;
