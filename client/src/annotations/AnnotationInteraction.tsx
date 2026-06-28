@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { rectsFromSelection, type PageCardRef } from "../anchor";
 import { useAnnotationStore } from "../store";
+import { newId } from "../uuid";
 import { buildAnnotations } from "./create";
 import { clampToViewport } from "./position";
 import { initialOverlayState, overlayReducer, type AnnotationTool } from "./machine";
@@ -114,7 +115,7 @@ export default function AnnotationInteraction({
         // swatch pick (AC-2). The swatch row then recolors these exact ids.
         const created = buildAnnotations(pages, docId, {
           now: new Date().toISOString(),
-          newId: () => crypto.randomUUID(),
+          newId,
           type: "highlight",
           color: DEFAULT_COLOR,
         });
@@ -202,7 +203,7 @@ export default function AnnotationInteraction({
     if (!pending) return;
     const created = buildAnnotations(pending.selection, docId, {
       now: new Date().toISOString(),
-      newId: () => crypto.randomUUID(),
+      newId,
       type: "highlight",
       color: DEFAULT_COLOR,
     });

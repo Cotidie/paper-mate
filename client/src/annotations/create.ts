@@ -10,7 +10,8 @@ import type { AnnotationTool } from "./machine";
 export interface BuildOptions {
   /** ISO-8601 UTC timestamp for created_at/updated_at (`new Date().toISOString()`). */
   now: string;
-  /** UUID factory (`crypto.randomUUID`); injectable for deterministic tests. */
+  /** UUID factory (the `newId` util — `crypto.randomUUID` with an insecure-context
+   *  `getRandomValues` fallback); injectable for deterministic tests. */
   newId: () => string;
   /** The annotation type (Story 2.2 proof = "highlight"). */
   type: AnnotationTool;
