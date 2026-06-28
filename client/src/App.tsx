@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { ListBullets, Cards } from "@phosphor-icons/react";
 import "./App.css";
 import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
 import ToolRail, { type ToolMode } from "./ToolRail";
 import ZoomControl from "./ZoomControl";
+import TocPanel from "./TocPanel";
 import Toast from "./Toast";
 import { uploadDoc, type Doc } from "./api/client";
+import type { TocEntry } from "./render";
 
 /**
  * App shell. Holds the current-doc state and switches between:
@@ -28,6 +31,12 @@ export default function App() {
   // owns the actual pan gesture; App only tells it whether the hand is armed.
   const [mode, setMode] = useState<ToolMode>("cursor");
   const [railCollapsed, setRailCollapsed] = useState(false);
+  // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
+  // the document is ready). `null` until the Reader reports, so the panel shows
+  // a loading note instead of the no-outline empty state mid-load. Lightweight
+  // React state (see the header note).
+  const [tocOpen, setTocOpen] = useState(false);
+  const [toc, setToc] = useState<TocEntry[] | null>(null);
   // Imperative zoom handle into the Reader (it owns `scale` + the scroll
   // container needed for focal-point zoom); the top-bar control drives it.
   const readerRef = useRef<ReaderHandle>(null);
@@ -104,13 +113,27 @@ export default function App() {
             onZoomOut={() => readerRef.current?.zoomOut()}
             onReset={() => readerRef.current?.resetZoom()}
           />
-          {/* Focusable placeholders — behavior wired in later stories
-              (ToC 1.7, Bank 3.6). Present now so chrome shows the focus ring. */}
-          <button type="button" className="pill">
-            ToC
+          {/* ToC toggles the table-of-contents overlay (Story 1.9). Bank is
+              still a focusable placeholder — behavior arrives with Story 3.6.
+              Icon-only (Phosphor, matching the tool-rail idiom); the aria-label
+              is the accessible name and the title is the hover tooltip. */}
+          <button
+            type="button"
+            className="pill pill--icon"
+            aria-label="Table of contents"
+            title="Table of contents"
+            aria-pressed={tocOpen}
+            onClick={() => setTocOpen((o) => !o)}
+          >
+            <ListBullets aria-hidden />
           </button>
-          <button type="button" className="pill">
-            Bank
+          <button
+            type="button"
+            className="pill pill--icon"
+            aria-label="Annotation bank"
+            title="Annotation bank"
+          >
+            <Cards aria-hidden />
           </button>
         </div>
       </header>
@@ -122,12 +145,22 @@ export default function App() {
           panArmed={mode === "hand"}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
+          onOutline={setToc}
         />
         <ToolRail
           mode={mode}
           onMode={setMode}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
+        />
+        <TocPanel
+          open={tocOpen}
+          entries={toc}
+          onJump={(p) => {
+            readerRef.current?.jumpToPage(p);
+            setTocOpen(false);
+          }}
+          onClose={() => setTocOpen(false)}
         />
       </main>
       {toast}

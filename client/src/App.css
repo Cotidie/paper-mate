@@ -43,6 +43,9 @@
 }
 
 .pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-sans);
   font-size: var(--type-title-sm-size);
   color: var(--color-body);
@@ -51,6 +54,29 @@
   border-radius: var(--radius-pill);
   padding: var(--space-xxs) var(--space-sm);
   cursor: pointer;
+}
+
+/* Icon-only pill (ToC / Bank): square padding + a token-sized Phosphor glyph
+   painted in currentColor, matching the tool-rail buttons. */
+.pill--icon {
+  padding: var(--space-xxs) var(--space-xs);
+}
+
+.pill svg {
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  display: block;
+}
+
+.pill:hover {
+  background: var(--color-surface-strong);
+}
+
+/* The armed ToC toggle reads as pressed (aria-pressed) — tint it like an armed
+   tool so the open state is visible, not just announced. */
+.pill[aria-pressed="true"] {
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
 }
 
 /* stage holds the canvas zone; chrome floats over it and never reflows it. */
@@ -191,4 +217,106 @@
 
 .pdf-canvas[data-pan="grabbing"] {
   cursor: grabbing;
+}
+
+/* toc-panel: the table-of-contents overlay (Story 1.9). A right-edge floating
+   panel (mirrors the tool-rail overlay precedent) that lists the PDF outline.
+   Overlays the canvas and never reflows it (NFR-1); the list scrolls INSIDE the
+   panel so a long outline never grows past the viewport. z-index above the
+   canvas; the rail (z 4) is left-edge so they never collide. */
+.toc-panel {
+  position: absolute;
+  top: var(--toc-panel-offset);
+  right: var(--toc-panel-offset);
+  width: var(--toc-panel-width);
+  /* Never exceed the stage width less both insets, so the panel can't clip off
+     the left edge on a very narrow viewport (it shrinks instead). */
+  max-width: calc(100% - var(--toc-panel-offset) * 2);
+  max-height: var(--toc-panel-max-height);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  z-index: 5;
+  overflow: hidden;
+}
+
+.toc-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: var(--hairline-width) solid var(--color-hairline);
+}
+
+.toc-panel__title {
+  font-family: var(--font-sans);
+  font-size: var(--type-title-md-size);
+  font-weight: var(--type-title-md-weight);
+  line-height: var(--type-title-md-leading);
+  color: var(--color-ink);
+}
+
+.toc-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-body);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.toc-panel__close svg {
+  width: var(--toc-icon-size);
+  height: var(--toc-icon-size);
+  display: block;
+}
+
+.toc-panel__close:hover {
+  background: var(--color-surface-strong);
+}
+
+/* The scrollable section list; the panel scrolls, the canvas never moves. */
+.toc-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-xxs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--toc-row-gap);
+  overflow-y: auto;
+}
+
+.toc-panel__row {
+  width: 100%;
+  text-align: start;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) var(--space-xs);
+}
+
+.toc-panel__row:hover {
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+}
+
+.toc-panel__empty {
+  margin: 0;
+  padding: var(--space-sm);
+  color: var(--color-muted);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-leading);
 }

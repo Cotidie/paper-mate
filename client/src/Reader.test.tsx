@@ -12,6 +12,9 @@ vi.mock("./render", () => {
     loadDocument: vi.fn(async () => ({ getPage: vi.fn(async () => fakePage) })),
     destroyDocument: vi.fn(),
     getPageBox: vi.fn(() => ({ width: 600, height: 800 })),
+    // ToC outline read (Story 1.9): the Reader imports it, so the mocked barrel
+    // must export it or the outline effect throws. Default to no outline.
+    getOutline: vi.fn(async () => []),
     renderPage: vi.fn(() => ({ done: Promise.resolve(), cancel: vi.fn() })),
     fitToWidthScale: vi.fn(() => 1),
     currentPageInView: vi.fn(() => 1),
@@ -252,6 +255,49 @@ describe("Reader", () => {
     await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
     ref.current!.zoomOut();
     await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
+  });
+
+  it("reports the embedded outline up once the document is ready (Story 1.9)", async () => {
+    const entries = [{ title: "Intro", pageNumber: 1, depth: 0 }];
+    (renderLayer.getOutline as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(entries);
+    const onOutline = vi.fn();
+    render(<Reader doc={doc} onOutline={onOutline} />);
+    await screen.findAllByTestId("page-surface");
+    await waitFor(() => expect(onOutline).toHaveBeenCalledWith(entries));
+  });
+
+  it("exposes jumpToPage on the handle, scrolling the target card to the top (Story 1.9 AC-2)", async () => {
+    const ref = { current: null as null | import("./Reader").ReaderHandle };
+    render(<Reader ref={ref} doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop") as HTMLElement;
+    // jsdom has no real scrollTo; stub it to capture the jump (offsetTop is 0
+    // under jsdom — assert the call + smooth behavior, not pixels).
+    const scrollTo = vi.fn();
+    canvas.scrollTo = scrollTo as unknown as typeof canvas.scrollTo;
+    expect(typeof ref.current?.jumpToPage).toBe("function");
+    // Retry the call: the last page's card registers on a deferred effect under
+    // React 19 + jsdom, so a single immediate jump can race it (the PgUp/PgDn
+    // tests dodge this by asserting the delta, not the scroll).
+    await waitFor(() => {
+      ref.current!.jumpToPage(2);
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
+    });
+  });
+
+  it("clamps an out-of-range jumpToPage target into [1, page_count]", async () => {
+    const ref = { current: null as null | import("./Reader").ReaderHandle };
+    render(<Reader ref={ref} doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop") as HTMLElement;
+    const scrollTo = vi.fn();
+    canvas.scrollTo = scrollTo as unknown as typeof canvas.scrollTo;
+    // page_count = 3; page 99 clamps to a real card (3) so it still scrolls.
+    // Retry until the page-3 card has registered (see the note above).
+    await waitFor(() => {
+      ref.current!.jumpToPage(99);
+      expect(scrollTo).toHaveBeenCalled();
+    });
   });
 
   it("ignores plain wheel, and a Ctrl+wheel with deltaY===0 (no zoom-out) (AC-2 / LOW fix)", async () => {
