@@ -73,8 +73,15 @@ assume these exist until they appear above.
 | `GET /api/docs/{doc_id}/annotations` | Fetch the saved annotation set | Epic 3 |
 | `PUT /api/docs/{doc_id}/annotations` | Overwrite the full annotation set (atomic) | Epic 3 |
 
+> **Note (Story 2.2):** the `Annotation` model (AD-5) is now defined and present
+> in the OpenAPI `components.schemas` (so the client store consumes a generated
+> TS type, AD-3), but the two endpoints above that read/write it are still Epic
+> 3. Until then the client keeps annotations in memory only; nothing is
+> persisted to disk.
+
 ## Changelog
 
+- **2026-06-29 (Story 2.2):** added the `Annotation` entity (+ `Anchor` variants `TextAnchor`/`RectAnchor`/`PathAnchor`, `Rect`, `Point`, `Style`) to `components.schemas` for the generated client type. No endpoints added (the `/annotations` GET/PUT stay Epic 3).
 - **2026-06-29:** `HealthStatus` gains `version` (app version, single source `server/pyproject.toml`); surfaced for the top-bar version badge.
 - **2026-06-28 (Story 1.3):** added `GET /api/docs/{doc_id}/file` (stream stored PDF bytes).
 - **2026-06-28 (Story 1.2):** added `POST /api/docs` (PDF import) + `Doc`/`DocMeta` models.

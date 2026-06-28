@@ -79,6 +79,21 @@
   /* Hit-size for the −/+ buttons (keyboard + pointer target). */
   --zoom-control-button-size: 24px;
 
+  /* quick-box (floating annotation popup; DESIGN.md components.quick-box). The
+     surface (bg / radius / padding / border / shadow) reuses the shared card
+     tokens below; these are the action-button hit dims for the proof action. */
+  --quick-box-action-height: 28px;
+  --quick-box-action-padding-x: 8px;
+
+  /* color-swatch (recolor row; mostly Story 2.3 — shell dims land now;
+     DESIGN.md components.color-swatch) */
+  --color-swatch-size: 20px;
+  --color-swatch-border: 1px;
+
+  /* annotation-highlight: the default-color fill painted over a text run at
+     reduced opacity (DESIGN.md components.annotation-highlight). */
+  --annotation-highlight-opacity: 0.4;
+
   /* shared chrome */
   --hairline-width: 1px;
   --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);

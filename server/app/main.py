@@ -20,6 +20,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.models import Annotation
 from app.routes import api_router
 from app.version import get_version
 
@@ -63,6 +64,16 @@ def _custom_openapi() -> dict[str, Any]:
     # Drop the now-unreferenced default validation schemas.
     for name in ("HTTPValidationError", "ValidationError"):
         components.pop(name, None)
+    # Surface the Annotation entity (AD-5) into components.schemas WITHOUT any
+    # endpoint references — the GET/PUT /annotations endpoints are Epic 3
+    # (docs/API.md#Reserved). Until then the client store consumes a *generated*
+    # type for an in-memory working copy (AD-3, Story 2.2). model_json_schema
+    # emits Pydantic v2 $defs (Anchor variants, Rect, Point, Style); hoist them
+    # into components.schemas so the refs resolve. Epic 3 replaces this injection
+    # with real /annotations operation references.
+    ann = Annotation.model_json_schema(ref_template="#/components/schemas/{model}")
+    components.update(ann.pop("$defs", {}))
+    components["Annotation"] = ann
     app.openapi_schema = schema
     return schema
 

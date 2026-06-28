@@ -7,6 +7,19 @@ import type { components } from "./schema";
 export type HealthStatus = components["schemas"]["HealthStatus"];
 export type Doc = components["schemas"]["Doc"];
 
+// Annotation entity (AD-5), generated from the Pydantic model — the store and
+// overlay import the shape from here, never hand-author it (AD-3). `Anchor` is
+// the discriminated union (`anchor.kind`); the Annotated union has no named
+// OpenAPI component, so it is composed here from the variant schemas.
+export type Rect = components["schemas"]["Rect"];
+export type Point = components["schemas"]["Point"];
+export type Style = components["schemas"]["Style"];
+export type TextAnchor = components["schemas"]["TextAnchor"];
+export type RectAnchor = components["schemas"]["RectAnchor"];
+export type PathAnchor = components["schemas"]["PathAnchor"];
+export type Anchor = TextAnchor | RectAnchor | PathAnchor;
+export type Annotation = components["schemas"]["Annotation"];
+
 /** Surface the single `{ detail }` error envelope (FastAPI default) as an Error. */
 async function envelopeError(res: Response): Promise<Error> {
   const body = (await res.json().catch(() => ({}))) as { detail?: string };
