@@ -403,11 +403,23 @@ export default function Reader({
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === " ") setSpaceHeld(false);
     };
+    // Always clear the held flag when the window loses focus or visibility: if
+    // focus leaves mid-hold (alt-tab, OS shortcut, devtools), the `keyup` never
+    // arrives, so `spaceHeld` would stick true forever — `canPan` stays true,
+    // `.pdf-canvas` keeps the grab cursor, and every drag pans instead of
+    // selecting, which silently kills text highlighting. Reset on blur/hidden so
+    // a missed keyup can never strand the reader in pan mode (Epic-1 retro AP-1:
+    // the recurring focus-handler bug).
+    const releaseSpace = () => setSpaceHeld(false);
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", releaseSpace);
+    document.addEventListener("visibilitychange", releaseSpace);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", releaseSpace);
+      document.removeEventListener("visibilitychange", releaseSpace);
     };
   }, [phase]);
 
