@@ -19,3 +19,6 @@ server/openapi.json
 
 # OS
 .DS_Store
+
+# Playwright MCP scratch (screenshots/traces from browser-driven testing)
+.playwright-mcp/
