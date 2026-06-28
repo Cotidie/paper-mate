@@ -165,6 +165,36 @@ export function pageNavTarget(current: number, delta: number, pageCount: number)
 }
 
 /**
+ * Live-canvas window radius: the number of pages painted on EACH side of the
+ * page in view. `2*WINDOW_RADIUS + 1` bounds the simultaneously-painted hi-DPI
+ * canvases (cost scales with zoom²), so a long paper never accumulates them.
+ * A perf tuning constant — NOT a design dimension — so it lives here, not in the
+ * token layer (mirrors `ZOOM_*`).
+ */
+export const WINDOW_RADIUS = 2;
+
+/** An inclusive 1-based page range. `start > end` means the range is empty. */
+export interface PageWindow {
+  start: number;
+  end: number;
+}
+
+/**
+ * Pure helper: the inclusive 1-based page range `[current-radius, current+radius]`
+ * clamped to `[1, pageCount]` — the set of pages that should hold a painted
+ * canvas/text layer; pages outside it release their bitmaps. For an empty
+ * document the range is empty (`start > end`). DOM-free, unit-tested. Plain
+ * layout arithmetic — no anchor math (AD-9).
+ */
+export function pageWindow(current: number, radius: number, pageCount: number): PageWindow {
+  if (pageCount < 1) return { start: 1, end: 0 };
+  return {
+    start: Math.max(1, Math.min(pageCount, current - radius)),
+    end: Math.max(1, Math.min(pageCount, current + radius)),
+  };
+}
+
+/**
  * Paint a page into `canvas` (HiDPI-correct) and its selectable text into
  * `textLayerDiv`, both at `scale`. Returns a handle whose `cancel()` aborts the
  * in-flight work — call it on unmount / scale change to avoid "canvas already

@@ -15,16 +15,17 @@ import {
   getPageBox,
   renderPage,
   fitToWidthScale,
-  currentPageInView,
   pageNavTarget,
   nextZoom,
   focalScroll,
   ZOOM_STEP,
   ZOOM_WHEEL_STEP,
   type PageBox,
-  type PageExtent,
   type PageRender,
 } from "./render";
+// The single IntersectionObserver lives here (imported by sub-path, NOT the
+// `./render` barrel, so `vi.mock("./render")` in the tests leaves it real).
+import { usePageViewport } from "./render/usePageViewport";
 import "./Reader.css";
 
 /** Imperative zoom API the top-bar `ZoomControl` (owned by `App`) drives. */
@@ -59,22 +60,21 @@ export default function Reader({
   ref?: Ref<ReaderHandle>;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  // Live registry of mounted page cards (1-based) → DOM node, for the
-  // page-in-view tracker and PgUp/PgDn scroll targets. All cards mount up front
-  // (reserve-geometry), so this is fully populated once `boxes` is set.
-  const cardEls = useRef<Map<number, HTMLDivElement>>(new Map());
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [boxes, setBoxes] = useState<PageBox[]>([]);
   // Scale lives in state so Story 1.5 (zoom) can drive it later (don't hardcode).
   const [scale, setScale] = useState(1);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
-  // 1-based page in view; defaults to 1 so the indicator is stable from load.
-  const [currentPage, setCurrentPage] = useState(1);
 
-  const registerCard = useCallback((pageNumber: number, el: HTMLDivElement | null) => {
-    if (el) cardEls.current.set(pageNumber, el);
-    else cardEls.current.delete(pageNumber);
-  }, []);
+  // Single IntersectionObserver (render/ hook): owns the card registry and drives
+  // BOTH the page-in-view indicator (`currentPage`) and the per-card paint/release
+  // window (`isLive`). All cards mount up front (reserve-geometry), so `cards` is
+  // fully populated once `boxes` is set; the hook is the only observer (AR-9).
+  const { registerCard, cards, currentPage, isLive } = usePageViewport(
+    scrollRef,
+    doc.page_count,
+    phase === "ready",
+  );
 
   // Fit-to-width scale for the given page boxes against the LIVE canvas width
   // (read each call, so it refits after a resize). Shared by the initial load
@@ -113,7 +113,7 @@ export default function Reader({
     // Nearest card to the focal point (0 distance if it's inside one).
     let best: { page: number; rect: DOMRect } | null = null;
     let bestDist = Infinity;
-    for (const [page, el] of cardEls.current) {
+    for (const [page, el] of cards.current) {
       const rect = el.getBoundingClientRect();
       const dist = fy < rect.top ? rect.top - fy : fy > rect.bottom ? fy - rect.bottom : 0;
       if (dist < bestDist) {
@@ -177,7 +177,7 @@ export default function Reader({
     pendingAnchor.current = null;
     const container = scrollRef.current;
     if (!a || !container) return;
-    const el = cardEls.current.get(a.page);
+    const el = cards.current.get(a.page);
     if (!el) return;
     // Re-read the anchor card AFTER the re-layout (new size) and convert its
     // viewport rect to scroll-independent content coordinates, then scroll so the
@@ -231,40 +231,6 @@ export default function Reader({
   useEffect(() => {
     onVisiblePageChange?.(currentPage);
   }, [currentPage, onVisiblePageChange]);
-
-  // Track the page in view. Drive recomputation off IntersectionObserver (which
-  // fires only when a card crosses the viewport edge, off the scroll hot path)
-  // rather than a per-frame scroll listener (NFR-2). Each fire reads the live
-  // card rects and the pure `currentPageInView` picks the top-most visible page.
-  useEffect(() => {
-    if (phase !== "ready" || typeof IntersectionObserver === "undefined") return;
-    const container = scrollRef.current;
-    if (!container) return;
-
-    let frame = 0;
-    const recompute = () => {
-      frame = 0;
-      const view = container.getBoundingClientRect();
-      const extents: PageExtent[] = [];
-      for (const [pageNumber, el] of cardEls.current) {
-        const r = el.getBoundingClientRect();
-        extents.push({ pageNumber, top: r.top, bottom: r.bottom });
-      }
-      setCurrentPage(currentPageInView(extents, view.top, view.bottom));
-    };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(recompute);
-    };
-
-    const io = new IntersectionObserver(schedule, { root: container });
-    for (const el of cardEls.current.values()) io.observe(el);
-    schedule(); // establish the initial page once cards are laid out
-
-    return () => {
-      io.disconnect();
-      if (frame) cancelAnimationFrame(frame);
-    };
-  }, [phase, boxes.length]);
 
   // Ctrl+scroll (and trackpad pinch, which dispatches `wheel` with ctrlKey) zoom,
   // about the cursor, with the FINER wheel step. Bound at the DOCUMENT level
@@ -339,7 +305,7 @@ export default function Reader({
     e.preventDefault();
     const delta = forward ? 1 : -1;
     const target = pageNavTarget(currentPage, delta, doc.page_count);
-    const card = cardEls.current.get(target);
+    const card = cards.current.get(target);
     const container = scrollRef.current;
     if (!card || !container || typeof container.scrollTo !== "function") return;
     const reduceMotion =
@@ -373,6 +339,7 @@ export default function Reader({
               pageNumber={i + 1}
               box={box}
               scale={scale}
+              live={isLive(i + 1)}
               register={registerCard}
             />
           ))}
@@ -395,13 +362,6 @@ function readSpacePx(varName: string, fallback: number): number {
 }
 
 /**
- * Prefetch distance for lazy paint — a behavioral scroll constant (how early a
- * page paints before entering the viewport), not a design dimension, so it lives
- * here rather than in the token layer.
- */
-const PREFETCH_MARGIN = 200;
-
-/**
  * Idle delay before a zoomed page re-renders crisply (ms). During a continuous
  * `Ctrl+scroll` the CSS pre-scale gives instant feedback; the sharp re-render
  * fires once the gesture settles, so we render once per gesture, not per notch.
@@ -412,26 +372,29 @@ const REPAINT_DEBOUNCE = 150;
 /**
  * One reserved page slot. The card is sized to its final geometry immediately
  * (so scroll height is correct before paint); the canvas + text layer paint
- * lazily once the card scrolls into view (top→down streaming, NFR-2).
+ * lazily once the card enters the live window (`live`, driven by the single
+ * `usePageViewport` observer) and RELEASE their bitmaps once it leaves, so the
+ * painted hi-DPI canvas count stays bounded on a long paper (NFR-2). The card is
+ * purely presentational: it owns no observer and no window/visibility decision.
  */
 function PageCard({
   pdf,
   pageNumber,
   box,
   scale,
+  live,
   register,
 }: {
   pdf: PDFDocumentProxy | null;
   pageNumber: number;
   box: PageBox;
   scale: number;
+  live: boolean;
   register: (pageNumber: number, el: HTMLDivElement | null) => void;
 }) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textRef = useRef<HTMLDivElement | null>(null);
-  // No IntersectionObserver (e.g. jsdom) → paint eagerly.
-  const [visible, setVisible] = useState(() => typeof IntersectionObserver === "undefined");
   const [painted, setPainted] = useState(false);
   // The scale the canvas/text bitmap was last painted at (0 = never painted).
   // Drives the live CSS pre-scale below and lets a zoom re-paint debounce-and-
@@ -459,33 +422,33 @@ function PageCard({
     canvas.style.transform = scale === rs ? "" : `scale(${scale / rs})`;
   }, [scale]);
 
-  // Reveal when the card nears the viewport; render is gated on this (NFR-2).
+  // Release the painted bitmaps when the card leaves the live window (NFR-2:
+  // bounded live canvases). Zero the canvas to drop its hi-DPI backing store and
+  // clear the text-layer DOM; reset the rendered-scale so a re-entry repaints
+  // crisply from scratch. The reserved card geometry (width/height) is NOT
+  // touched, so layout never shifts on release or re-entry (NFR-1).
   useEffect(() => {
-    if (visible || typeof IntersectionObserver === "undefined") return;
-    const el = cardRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setVisible(true);
-          io.disconnect();
-        }
-      },
-      { rootMargin: `${PREFETCH_MARGIN}px` },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [visible]);
+    if (live) return;
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
+      canvas.style.transform = "";
+    }
+    textRef.current?.replaceChildren();
+    renderedScaleRef.current = 0;
+    setPainted(false);
+  }, [live]);
 
-  // Paint the page into the reserved card. The first paint (card newly visible)
-  // is immediate; a re-paint after a zoom is DEBOUNCED — the CSS pre-scale above
+  // Paint the page into the reserved card. The first paint (card newly live) is
+  // immediate; a re-paint after a zoom is DEBOUNCED — the CSS pre-scale above
   // already shows the new size, so this just swaps in the crisp bitmap once the
   // gesture settles (once per gesture, not once per wheel notch). renderPage
   // renders offscreen and swaps atomically, so the visible canvas never blanks
   // and `painted` never drops back to the skeleton on zoom. Cancels in-flight
-  // work on unmount / scale change / scroll-away.
+  // work on unmount / scale change / scroll-away (when `live` drops to false).
   useEffect(() => {
-    if (!visible || !pdf || !canvasRef.current || !textRef.current) return;
+    if (!live || !pdf || !canvasRef.current || !textRef.current) return;
     let cancelled = false;
     let handle: PageRender | null = null;
     const paint = async () => {
@@ -523,7 +486,7 @@ function PageCard({
       clearTimeout(id);
       handle?.cancel();
     };
-  }, [visible, pdf, pageNumber, scale]);
+  }, [live, pdf, pageNumber, scale]);
 
   const width = Math.floor(box.width * scale);
   const height = Math.floor(box.height * scale);
@@ -533,9 +496,13 @@ function PageCard({
       ref={cardRef}
       className="page-surface"
       data-testid="page-surface"
-      style={{ width, height }}
+      // `content-visibility: auto` (Reader.css) skips off-screen layout/paint;
+      // feed it the reserved geometry so a skipped card reserves the right size
+      // and never collapses (NFR-1). Computed inline like width/height so no raw
+      // px literal lands in the stylesheet (no-raw-values rule).
+      style={{ width, height, containIntrinsicSize: `${width}px ${height}px` }}
     >
-      {!painted && <div className="page-surface__skeleton" aria-hidden="true" />}
+      {!painted && live && <div className="page-surface__skeleton" aria-hidden="true" />}
       <canvas ref={canvasRef} className="page-surface__canvas" />
       <div ref={textRef} className="textLayer" />
     </div>

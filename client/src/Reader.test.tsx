@@ -15,6 +15,15 @@ vi.mock("./render", () => {
     renderPage: vi.fn(() => ({ done: Promise.resolve(), cancel: vi.fn() })),
     fitToWidthScale: vi.fn(() => 1),
     currentPageInView: vi.fn(() => 1),
+    // usePageViewport (imported via sub-path) is REAL in these tests; under jsdom
+    // it takes the no-IntersectionObserver path (all cards live, page 1), but its
+    // `useState` initializer still calls pageWindow at render, so the mocked
+    // barrel must export it (and WINDOW_RADIUS) or the hook throws.
+    pageWindow: vi.fn((c: number, r: number, n: number) => ({
+      start: Math.max(1, c - r),
+      end: Math.min(n, c + r),
+    })),
+    WINDOW_RADIUS: 2,
     pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
     // Deterministic zoom math for the jsdom tests: ×2 in / ÷2 out.
     nextZoom: vi.fn((s: number, dir: number) => (dir >= 0 ? s * 2 : s / 2)),
