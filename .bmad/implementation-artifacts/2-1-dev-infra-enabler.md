@@ -1,6 +1,10 @@
+---
+baseline_commit: 7851169033bbbbe1ed7683f582af0d478c0a4cae
+---
+
 # Story 2.1: Dev-infra enabler (local Docker dev loop)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -22,22 +26,22 @@ so that Epic 2's heavy iteration isn't blocked by stale containers or root-owned
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Host-owned `/data` via compose `user:` (AC: 1)**
-  - [ ] Add `user: "${PAPER_MATE_UID:-1000}:${PAPER_MATE_GID:-1000}"` to the `paper-mate` service in `docker-compose.yml`.
-  - [ ] Add `PAPER_MATE_UID` / `PAPER_MATE_GID` to `.env.example` with a comment (default 1000:1000; the typical single-user host uid/gid — override if `id -u` / `id -g` differ).
-  - [ ] Document the one-time host-dir pre-create in README: `mkdir -p "${PAPER_MATE_DATA:-$HOME/.paper-mate}"` **before** the first `docker compose up`, so the bind-mount target isn't auto-created `root:root` by the Docker daemon. Include the one-line recovery for already-root-owned dirs: `sudo chown -R "$USER":"$USER" ~/.paper-mate`.
-  - [ ] Verify the app still only writes under `/data` at runtime (it does — `storage/__init__.py` resolves `PAPER_MATE_DATA`; `main.py` reads static read-only). Running as a non-root uid is safe: the image's `/app/.venv` + `/app/static` are root-owned but world-readable, and bytecode is precompiled at build (`UV_COMPILE_BYTECODE=1`), so no runtime write to `/app` is needed.
+- [x] **Task 1 — Host-owned `/data` via compose `user:` (AC: 1)**
+  - [x] Add `user: "${PAPER_MATE_UID:-1000}:${PAPER_MATE_GID:-1000}"` to the `paper-mate` service in `docker-compose.yml`.
+  - [x] Add `PAPER_MATE_UID` / `PAPER_MATE_GID` to `.env.example` with a comment (default 1000:1000; the typical single-user host uid/gid — override if `id -u` / `id -g` differ).
+  - [x] Document the one-time host-dir pre-create in README: `mkdir -p "${PAPER_MATE_DATA:-$HOME/.paper-mate}"` **before** the first `docker compose up`, so the bind-mount target isn't auto-created `root:root` by the Docker daemon. Include the one-line recovery for already-root-owned dirs: `sudo chown -R "$USER":"$USER" ~/.paper-mate`.
+  - [x] Verify the app still only writes under `/data` at runtime (it does — `storage/__init__.py` resolves `PAPER_MATE_DATA`; `main.py` reads static read-only). Running as a non-root uid is safe: the image's `/app/.venv` + `/app/static` are root-owned but world-readable, and bytecode is precompiled at build (`UV_COMPILE_BYTECODE=1`), so no runtime write to `/app` is needed.
 
-- [ ] **Task 2 — Document the dev loop + add the optional in-container override (AC: 2)**
-  - [ ] In README (currently a stub) add a "Development" section: declare **host two-process flow** (`cd server && uv run uvicorn app.main:app --reload --port 8000` + `cd client && npm run dev`) as the canonical dev loop, and **`docker compose up`** as the prod-like single-command boot (built static SPA, no HMR, no `--reload`). State explicitly: a Docker container does NOT hot-reload backend changes — a backend edit requires `docker compose up --build`, and a forgotten rebuild silently serves stale code.
-  - [ ] Add `compose.dev.yaml` (a compose override) that, on top of the base service, bind-mounts `./server/app` → `/app/app` and overrides the command to `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`. Carry the same `user:` mapping (inherited from base; no need to redeclare). Document its use: `docker compose -f docker-compose.yml -f compose.dev.yaml up`.
-  - [ ] Note in CLAUDE.md's "Single-command boot" / Commands area that `compose.dev.yaml` is the optional in-container reload path and that host two-process is the default; keep it one line, consistent with the existing terse command list.
+- [x] **Task 2 — Document the dev loop + add the optional in-container override (AC: 2)**
+  - [x] In README (currently a stub) add a "Development" section: declare **host two-process flow** (`cd server && uv run uvicorn app.main:app --reload --port 8000` + `cd client && npm run dev`) as the canonical dev loop, and **`docker compose up`** as the prod-like single-command boot (built static SPA, no HMR, no `--reload`). State explicitly: a Docker container does NOT hot-reload backend changes — a backend edit requires `docker compose up --build`, and a forgotten rebuild silently serves stale code.
+  - [x] Add `compose.dev.yaml` (a compose override) that, on top of the base service, bind-mounts `./server/app` → `/app/app` and overrides the command to `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`. Carry the same `user:` mapping (inherited from base; no need to redeclare). Document its use: `docker compose -f docker-compose.yml -f compose.dev.yaml up`.
+  - [x] Note in CLAUDE.md's "Single-command boot" / Commands area that `compose.dev.yaml` is the optional in-container reload path and that host two-process is the default; keep it one line, consistent with the existing terse command list.
 
-- [ ] **Task 3 — Verify no regression, infra-only (AC: 3)**
-  - [ ] Pre-create the host data dir, run `docker compose up --build`, confirm the app serves at `http://127.0.0.1:8000` and the SPA + `/api/health` respond.
-  - [ ] From the host (not via sudo), create/import something that writes to `~/.paper-mate` (or `touch` inside via the running container) and confirm the resulting files are owned by the host user and are editable/deletable from the host file manager — not `root:root`.
-  - [ ] Run `docker compose -f docker-compose.yml -f compose.dev.yaml up`, edit a trivial line in a `server/app` file (e.g. a docstring), confirm uvicorn reloads in the container logs without a rebuild. Revert the trivial edit.
-  - [ ] Confirm no `client/src` or `server/app` logic changed (only an optional revertible probe edit). Run backend tests (`cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`) and frontend (`cd client && npm test`) — both green, unchanged from before.
+- [x] **Task 3 — Verify no regression, infra-only (AC: 3)**
+  - [x] Pre-create the host data dir, run `docker compose up --build`, confirm the app serves at `http://127.0.0.1:8000` and the SPA + `/api/health` respond.
+  - [x] From the host (not via sudo), create/import something that writes to `~/.paper-mate` (or `touch` inside via the running container) and confirm the resulting files are owned by the host user and are editable/deletable from the host file manager — not `root:root`.
+  - [x] Run `docker compose -f docker-compose.yml -f compose.dev.yaml up`, edit a trivial line in a `server/app` file (e.g. a docstring), confirm uvicorn reloads in the container logs without a rebuild. Revert the trivial edit.
+  - [x] Confirm no `client/src` or `server/app` logic changed (only an optional revertible probe edit). Run backend tests (`cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`) and frontend (`cd client && npm test`) — both green, unchanged from before.
 
 ## Dev Notes
 
@@ -119,10 +123,38 @@ Ultimate context engine analysis completed - comprehensive developer guide creat
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-opus-4-8 (Claude Code, bmad-dev-story)
 
 ### Debug Log References
 
+Live verification (Docker available: v29.6.0, compose v5.2.0; host uid/gid 1000:1000):
+
+- `docker compose config` / `... -f compose.dev.yaml config` both parse; `user:` resolves to `1000:1000`; dev override merges both bind mounts (`/data` + `./server/app:/app/app`) and the `--reload` command.
+- Prod-like boot (`docker compose up -d`): `/api/health` → 200 in 2s, SPA `/` → 200, container `id` = `uid=1000 gid=1000`.
+- Ownership (AC1): container wrote `/data/.ownership-probe` owned `1000:1000`; visible host-side as `cotidie:cotidie`; host user deleted it with no sudo.
+- Reload (AC2): dev override `/proc/1/cmdline` shows `uvicorn ... --reload`; editing bind-mounted `server/app/main.py` logged `WatchFiles detected changes in 'app/main.py'. Reloading...`; probe edit reverted via `git checkout` (working tree clean).
+- Regression (AC3): backend `pytest` 33 passed; frontend `vitest` 126 passed. No `client/src` or `server/app` logic changed.
+
 ### Completion Notes List
 
+- AC1 (writable `/data`): added compose `user: "${PAPER_MATE_UID:-1000}:${PAPER_MATE_GID:-1000}"`; `PAPER_MATE_UID`/`PAPER_MATE_GID` documented in `.env.example`; README documents the one-time `mkdir -p ~/.paper-mate` pre-create + the `sudo chown` recovery. Proven live: container-written files are host-owned and host-deletable.
+- AC2 (dev-loop decision recorded): adopted deferred-work recommendation **(a)+(b)**. README "Development" section declares the host two-process flow canonical and Docker prod-like (built static, no hot-reload); new `compose.dev.yaml` adds optional in-container `uvicorn --reload` via a `server/app` bind-mount; CLAUDE.md "Single-command boot" line updated. Reload proven live.
+- AC3 (infra-only, no regression): only infra/docs files changed (`docker-compose.yml`, `compose.dev.yaml`, `.env.example`, `README.md`, `CLAUDE.md`); no Dockerfile change needed (compose `user:` is the portable fix); both test suites green.
+- No Dockerfile change: the portable compose `user:` form was sufficient; baking a fixed-uid `USER` would mismatch other hosts.
+- Frontend in-container HMR intentionally out of scope (would require running Vite in the container = the host flow containerized); the override covers backend reload only.
+- Em-dash check: no em-dash introduced in any authored doc/comment (per project + global writing rule).
+- Follow-up for whoever runs `code-review`: mark the `deferred-work.md#local-Docker-dev-experience` entry resolved once this story is merged.
+
 ### File List
+
+- `docker-compose.yml` (modified) — added `user:` mapping + explanatory comment.
+- `compose.dev.yaml` (new) — optional dev override: bind-mount `server/app`, `uvicorn --reload`.
+- `.env.example` (modified) — added `PAPER_MATE_UID` / `PAPER_MATE_GID`.
+- `README.md` (modified) — added "Development" section (host two-process canonical, Docker prod-like boot, data-dir pre-create, ownership, optional in-container reload).
+- `CLAUDE.md` (modified) — updated "Single-command boot" line (host-user run, pre-create, no-hot-reload caveat, dev override).
+- `.bmad/implementation-artifacts/2-1-dev-infra-enabler.md` (modified) — story tracking (frontmatter, checkboxes, Dev Agent Record, Change Log, Status).
+- `.bmad/implementation-artifacts/sprint-status.yaml` (modified) — story status transitions.
+
+## Change Log
+
+- 2026-06-29 — Implemented dev-infra enabler: compose `user:` mapping for host-owned `/data`, `PAPER_MATE_UID/GID` env, README Development section + `compose.dev.yaml` optional in-container reload, CLAUDE.md boot-line update. Verified live (ownership + reload) and regression-clean (backend 33, frontend 126). Status → review.

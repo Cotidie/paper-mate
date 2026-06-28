@@ -6,6 +6,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Run as the host user so files written to the bind-mounted /data land
+    # host-owned (not root:root), so the host user can edit/delete library
+    # files. Defaults to 1000:1000 (typical single-user host); override via
+    # PAPER_MATE_UID / PAPER_MATE_GID if "id -u" / "id -g" differ. The image's
+    # venv/static are root-owned but world-readable, and the app only writes
+    # /data at runtime, so an arbitrary uid is fine (AD-8, AD-10).
+    user: "${PAPER_MATE_UID:-1000}:${PAPER_MATE_GID:-1000}"
     # Storage root inside the container = the mounted volume (AD-8).
     environment:
       PAPER_MATE_DATA: /data
