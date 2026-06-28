@@ -4,7 +4,7 @@ baseline_commit: 39755cc1d01912a354333fe6a4d81f9d58a61673
 
 # Story 1.9: Table of contents
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
