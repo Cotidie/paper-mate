@@ -111,6 +111,11 @@ graph TD
 - **Prevents:** CORS surface; multi-process ops overhead
 - **Rule:** a single container (docker-compose) where FastAPI/uvicorn serves both the API and the built Vite SPA static assets (same-origin → no CORS). Compose volume-mounts host `~/.paper-mate` → `/data` and maps the port; host path + port via env. Dev: Vite dev server (HMR) proxies `/api` to FastAPI. Prod: FastAPI serves `dist/`. No auth (localhost, single user).
 
+### AD-11 — Tool-state model
+- **Binds:** the active tool across pointer (cursor/hand/box) and annotation (highlight/underline/pen/memo/comment) tools
+- **Prevents:** two tools active at once (e.g., the pan handler eating an annotation drag); divergent per-feature arming state
+- **Rule:** a single `activeTool` finite-state model is the one source of truth; tools are mutually exclusive by construction (arming any tool disarms the previous). `render/`'s pan derives from it (`hand`); the `annotations/` transient overlay machine (`armed/annotating/pending/empty`) is driven by the same model, not a parallel one (Epic-1 retro PREP-3). Hotkeys + the tool rail set it; bound at the document level, phase-gated, editable/buttons exempt. *(Added 2026-06-29 via correct-course after the Story 2.3 live smoke; see `sprint-change-proposal-2026-06-29-tool-fsm.md`.)*
+
 ## Consistency Conventions
 
 | Concern | Convention |

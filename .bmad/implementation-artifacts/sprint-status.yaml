@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: 2026-06-29 (story 2-3 done; live-smoke regressions fixed; #2/#4 to correct-course)
+last_updated: 2026-06-29 (correct-course: inserted 2-4 tool-FSM + 2-5 arm-color-pick; renumbered 2-4..2-9 to 2-6..2-11)
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -73,12 +73,18 @@ development_status:
   2-1-dev-infra-enabler: done
   2-2-annotation-foundation: done
   2-3-highlight-text-via-drag: done
-  2-4-underline-text: backlog
-  2-5-pen-freehand: backlog
-  2-6-textbox-memo: backlog
-  2-7-comment-highlight-pin-bubble: backlog
-  2-8-box-select-a-region: backlog
-  2-9-drag-to-change-tool-quick-box: backlog
+  # 2026-06-29 correct-course (sprint-change-proposal-2026-06-29-tool-fsm.md):
+  # Story 2.3 live smoke surfaced two design changes. Inserted a tool-state FSM
+  # refactor (2-4) + arm-time color pick (2-5) ahead of the remaining tool
+  # features, renumbering the old 2-4..2-9 to 2-6..2-11 (number = exec order).
+  2-4-unify-tool-state-fsm: backlog
+  2-5-arm-time-color-pick: backlog
+  2-6-underline-text: backlog
+  2-7-pen-freehand: backlog
+  2-8-textbox-memo: backlog
+  2-9-comment-highlight-pin-bubble: backlog
+  2-10-box-select-a-region: backlog
+  2-11-drag-to-change-tool-quick-box: backlog
   epic-2-retrospective: optional
 
   # Epic 3: Edit, persist & review

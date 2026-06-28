@@ -85,7 +85,7 @@ Loading and rendering must **never** shift final page geometry — reserve the l
 
 | ID | Primitive | Behavior |
 |---|---|---|
-| IP-1 | Tool select | Click rail icon (or hotkey) arms tool; stays armed. |
+| IP-1 | Tool select | Click rail icon (or hotkey) arms tool; stays armed. **Exactly one tool is active at a time: arming any tool (pointer or annotation) disarms the previous (mutual exclusion, AD-11).** |
 | IP-2 | Drag-to-annotate | Drag over text/region creates a mark in the armed tool. |
 | IP-3 | Contextual quick-box | On drag-release, a mode-specific `{component.quick-box}` pops (table below). |
 | IP-4 | Pan | Hand tool drag, or hold `Space` + drag. |
@@ -108,6 +108,8 @@ Loading and rendering must **never** shift final page geometry — reserve the l
 | Textbox memo | inline `{component.text-input}` + color/size |
 | Comment | `{component.comment-bubble}` opens directly |
 | Box-select | region tool-type picker (highlight / comment; snapshot reserved for Phase 2) |
+
+**Arm-time color pick:** arming a color tool (highlight / underline / pen) also pops the `{component.color-swatch}` row to set the **default** color before drawing. This is distinct from the post-drag row above, which recolors the just-made mark; both read/write the same active-color state.
 
 ### Keyboard map
 

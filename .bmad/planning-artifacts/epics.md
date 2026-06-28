@@ -371,6 +371,8 @@ Mark up the page with all six tools via drag-to-annotate and the contextual quic
 
 > Restructured 2026-06-29 (correct-course, see `sprint-change-proposal-2026-06-29.md`): added a dev-infra enabler (Story 2.1) and split the foundation out of the original Story 2.1 into a dedicated Annotation-foundation story (Story 2.2), renumbering the six tool stories to 2.3–2.9 so number = execution order. Rationale: the original 2.1 bundled five net-new architectural pillars (`anchor/` service, `Annotation` entity, Zustand `store/`, `annotations/` overlay, quick-box shell) with the highlight feature — the foundation is the highest-leverage decision of the epic (Epic 1 retro PREP-1) and earns its own story. Standing principle applied across the anchor stories: **adopt stable primitives, don't reinvent wheels** (Epic 1 retro AP-4).
 
+> Restructured again 2026-06-29 (correct-course, see `sprint-change-proposal-2026-06-29-tool-fsm.md`): the Story 2.3 live smoke found two design changes — tool state was two orthogonal fields (pan could eat an annotation drag) and there was no arm-time color pick. Inserted Story 2.4 (unify tool state into one `activeTool` FSM, AD-11) and Story 2.5 (arm-time color quick-pick) ahead of the remaining tool features, renumbering the old 2.4–2.9 to 2.6–2.11 so number = execution order. The FSM (PREP-3) lands first so the later tool stories build on one mutually-exclusive model.
+
 ### Story 2.1: Dev-infra enabler (local Docker dev loop)
 
 As a developer,
@@ -452,7 +454,53 @@ So that I mark passages and the page never moves.
 **Given** I zoom after creating
 **Then** the highlight re-renders on the exact text run across all zoom levels (NFR-3 proven)
 
-### Story 2.4: Underline text
+### Story 2.4: Unify tool state (single activeTool FSM)
+
+> Added 2026-06-29 via correct-course (`sprint-change-proposal-2026-06-29-tool-fsm.md`). Story 2.3 live smoke found that `mode` (cursor/hand/box) and `armedTool` (highlight) being two orthogonal states let pan and highlight both arm at once, so pan ate the highlight drag ("no reaction"). 2.3 shipped a surgical mutual-exclusion patch; this story replaces it with one finite-state model. Sequenced first so the remaining tool stories (2.6–2.11) build on it (Epic-1 retro PREP-3: design the overlay state machine once).
+
+As a reader,
+I want exactly one tool active at a time,
+So that arming a tool never lets another (pan) swallow my gesture and the rail always shows one active tool.
+
+**Acceptance Criteria:**
+
+**Given** the reader
+**Then** a single `activeTool` model (`cursor|hand|box|highlight|underline|pen|memo|comment`) is the one source of truth, mutually exclusive by construction, replacing App's `mode` + `armedTool` and reconciling the Story 2.2 overlay machine; the 2.3 surgical mutual-exclusion patch is removed in favor of the FSM with behavior preserved (AD-11)
+
+**Given** any tool armed
+**When** another is armed (rail or hotkey `V`/`Esc`/`H`/`U`/`D`/`T`/`C`/`M`)
+**Then** the previous disarms; exactly one rail button reads active (cursor active in plain cursor mode, per the 2.3 #3 fix), via document-level handlers, phase-gated, editable/buttons exempt (AP-1)
+
+**Given** the overlay
+**Then** the transient quick-box machine (`armed/annotating/pending/empty`) is driven by the same model, not a parallel one (PREP-3)
+
+**Given** existing behavior
+**Then** highlight-on-drag (2.3), pan (`activeTool==="hand"`), zoom/scroll, and all current tests still pass; FSM transition unit tests added; no anchor/store/contract change (AD-9)
+
+### Story 2.5: Arm-time color quick-pick
+
+> Added 2026-06-29 via correct-course. Story 2.3's swatch row only recolors a mark *after* it is created; users expect to pick a color when arming the tool. Sequenced before the color tools (underline/pen) so they inherit it.
+
+As a reader,
+I want to pick the highlight color when I arm the tool,
+So that new marks land in my chosen color without a recolor step.
+
+**Acceptance Criteria:**
+
+**Given** a color tool armed (highlight; later underline/pen)
+**Then** the `{component.color-swatch}` row pops as an on-arm picker to set the **default** color for subsequent marks, distinct from the post-create recolor row (EXPERIENCE.md IP-1/IP-3, UX-DR5/DR6)
+
+**Given** a chosen default
+**When** I then drag a mark
+**Then** it is created in that color (the create path reads the active color, not a hardcoded `annotation-default`); the default persists for the armed session
+
+**Given** the post-create recolor row (2.3)
+**Then** it still works; both read/write the same active-color state
+
+**Given** the on-arm picker
+**Then** it is keyboard-reachable, `Esc`-dismissable, and never shifts the canvas (NFR-1, UX-DR17); no anchor/contract change
+
+### Story 2.6: Underline text
 
 As a reader,
 I want to underline text,
@@ -470,7 +518,7 @@ So that I emphasize lines without the page moving.
 **Given** zoom
 **Then** the underline stays anchored across zoom levels (NFR-3)
 
-### Story 2.5: Pen / freehand
+### Story 2.7: Pen / freehand
 
 As a reader,
 I want to draw freehand on the page,
@@ -488,7 +536,7 @@ So that I can sketch marks beside the text.
 **Given** zoom
 **Then** the stroke re-renders at correct scale and position (NFR-3)
 
-### Story 2.6: Textbox memo
+### Story 2.8: Textbox memo
 
 As a reader,
 I want a free-floating memo,
@@ -509,7 +557,7 @@ So that I type a note onto the page without displacing the text.
 **Given** zoom
 **Then** the memo box stays anchored (NFR-3)
 
-### Story 2.7: Comment (highlight + pin + bubble)
+### Story 2.9: Comment (highlight + pin + bubble)
 
 As a reader,
 I want a comment anchored to a spot,
@@ -531,7 +579,7 @@ So that I attach a note that opens on click.
 **Given** zoom
 **Then** the highlight and pin stay anchored (NFR-3)
 
-### Story 2.8: Box-select a region
+### Story 2.10: Box-select a region
 
 As a reader,
 I want to box-select an area,
@@ -549,7 +597,7 @@ So that I can mark a region, not just text.
 **Given** the region
 **Then** the overlay never reflows the page (NFR-1)
 
-### Story 2.9: Drag-to-change-tool quick-box
+### Story 2.11: Drag-to-change-tool quick-box
 
 As a reader,
 I want a tool picker on drag in cursor mode,
