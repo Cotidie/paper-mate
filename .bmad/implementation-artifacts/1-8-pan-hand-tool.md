@@ -4,7 +4,7 @@ baseline_commit: 6d851a7ad9a5da4a40ba147915bffa1ae743dc01
 
 # Story 1.8: Pan / hand tool
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
