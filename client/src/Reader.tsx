@@ -29,6 +29,12 @@ import {
 // The single IntersectionObserver lives here (imported by sub-path, NOT the
 // `./render` barrel, so `vi.mock("./render")` in the tests leaves it real).
 import { usePageViewport } from "./render/usePageViewport";
+// Annotation overlay (Epic 2). Reader is the composition root that wires the
+// overlay to the live page-card geometry + scale; the overlay lives in
+// annotations/ and consumes anchor/ + store/ — render/ stays annotation-free
+// (AD-9). Importing the view here does NOT make render/ annotation-aware.
+import { AnnotationLayer, AnnotationInteraction } from "./annotations";
+import type { PageCardRef } from "./anchor";
 import "./Reader.css";
 
 /** Imperative API the top-bar chrome (owned by `App`) drives: zoom buttons +
@@ -484,6 +490,19 @@ export default function Reader({
     setDragging(false);
   }
 
+  // The live page cards for the annotation overlay: element + scale-1.0 box +
+  // 0-based index. Read from the card registry at call time so the overlay's
+  // selection mapping always sees the current geometry. The render layer owns
+  // the box; the overlay normalizes against it (AD-4/AD-9).
+  const getPages = useCallback((): PageCardRef[] => {
+    const out: PageCardRef[] = [];
+    for (const [pageNumber, el] of cards.current) {
+      const box = boxes[pageNumber - 1];
+      if (box) out.push({ pageIndex: pageNumber - 1, cardEl: el, box });
+    }
+    return out;
+  }, [boxes, cards]);
+
   return (
     <div
       ref={scrollRef}
@@ -511,6 +530,7 @@ export default function Reader({
           {boxes.map((box, i) => (
             <PageCard
               key={i}
+              docId={doc.doc_id}
               pdf={pdf}
               pageNumber={i + 1}
               box={box}
@@ -520,6 +540,17 @@ export default function Reader({
             />
           ))}
         </div>
+      )}
+      {/* Annotation overlay interaction layer (quick-box + state machine). Renders
+          null until a selection pops the quick-box; phase-gated like the other
+          document-level handlers. */}
+      {phase === "ready" && (
+        <AnnotationInteraction
+          docId={doc.doc_id}
+          getPages={getPages}
+          scale={scale}
+          enabled={phase === "ready"}
+        />
       )}
     </div>
   );
@@ -554,6 +585,7 @@ const REPAINT_DEBOUNCE = 150;
  * purely presentational: it owns no observer and no window/visibility decision.
  */
 function PageCard({
+  docId,
   pdf,
   pageNumber,
   box,
@@ -561,6 +593,7 @@ function PageCard({
   live,
   register,
 }: {
+  docId: string;
   pdf: PDFDocumentProxy | null;
   pageNumber: number;
   box: PageBox;
@@ -681,6 +714,9 @@ function PageCard({
       {!painted && live && <div className="page-surface__skeleton" aria-hidden="true" />}
       <canvas ref={canvasRef} className="page-surface__canvas" />
       <div ref={textRef} className="textLayer" />
+      {/* Annotation marks for this page, positioned card-local via the anchor
+          service against this card's box + scale (re-derives on every zoom). */}
+      <AnnotationLayer docId={docId} pageIndex={pageNumber - 1} box={box} scale={scale} />
     </div>
   );
 }

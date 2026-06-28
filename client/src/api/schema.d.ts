@@ -119,6 +119,127 @@ export interface components {
             /** Detail */
             detail: string;
         };
+        /**
+         * PathAnchor
+         * @description Anchor over a freehand pen stroke (Story 2.5).
+         */
+        PathAnchor: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "path";
+            /** Page Index */
+            page_index: number;
+            /** Points */
+            points: components["schemas"]["Point"][];
+        };
+        /**
+         * Point
+         * @description A normalized point on a page (``[0,1]`` fractions), for pen paths.
+         */
+        Point: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /**
+         * Rect
+         * @description A normalized rect on a page: ``[0,1]`` fractions of the scale-1.0 page
+         *     box, canonical (``x0<=x1, y0<=y1``), top-left origin, y-down.
+         */
+        Rect: {
+            /** X0 */
+            x0: number;
+            /** Y0 */
+            y0: number;
+            /** X1 */
+            x1: number;
+            /** Y1 */
+            y1: number;
+        };
+        /**
+         * RectAnchor
+         * @description Anchor over a single rectangular region (box-select, memo).
+         */
+        RectAnchor: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "rect";
+            /** Page Index */
+            page_index: number;
+            rect: components["schemas"]["Rect"];
+        };
+        /**
+         * Style
+         * @description Visual style. ``color`` is a token-name or hex resolved by the client;
+         *     ``stroke_width`` is pen-only (``None`` for text/region marks).
+         */
+        Style: {
+            /** Color */
+            color: string;
+            /**
+             * Stroke Width
+             * @default null
+             */
+            stroke_width: number | null;
+        };
+        /**
+         * TextAnchor
+         * @description Anchor over runs of selected text (highlight / underline / comment). The
+         *     ``rects`` are the per-line boxes from the native Selection API.
+         */
+        TextAnchor: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "text";
+            /** Page Index */
+            page_index: number;
+            /** Rects */
+            rects: components["schemas"]["Rect"][];
+            /** Text */
+            text: string;
+        };
+        /**
+         * Annotation
+         * @description One annotation (AD-5). Stored keyed by ``id`` in the client store and,
+         *     in Epic 3, persisted to ``annotations.json``. ``group_id`` ties the split
+         *     halves of a two-page selection together (``None`` for a single-page mark).
+         *     ``body`` is non-null only for memo/comment.
+         */
+        Annotation: {
+            /** Id */
+            id: string;
+            /** Doc Id */
+            doc_id: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "highlight" | "underline" | "pen" | "memo" | "comment";
+            /**
+             * Group Id
+             * @default null
+             */
+            group_id: string | null;
+            /** Anchor */
+            anchor: components["schemas"]["TextAnchor"] | components["schemas"]["RectAnchor"] | components["schemas"]["PathAnchor"];
+            style: components["schemas"]["Style"];
+            /**
+             * Body
+             * @default null
+             */
+            body: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
     };
     responses: never;
     parameters: never;

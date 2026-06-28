@@ -1,0 +1,53 @@
+/* annotations/ overlay styles: the per-page highlight marks + the quick-box
+   shell. Token-layer rule: reference DESIGN.md tokens (theme vars), never inline
+   hex/px. The mark layer is a pointer-transparent sheet over each page card, so
+   it never blocks text selection and never reflows the canvas (NFR-1). */
+
+.annotation-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Above the canvas + selectable text layer; the sheet is pointer-transparent
+     so the text underneath stays selectable. */
+  z-index: 1;
+}
+
+.annotation-highlight {
+  position: absolute;
+  opacity: var(--annotation-highlight-opacity);
+  border-radius: var(--radius-xs);
+  pointer-events: none;
+}
+
+/* quick-box: floating popup at the drag-release point. position:fixed keeps it
+   off the canvas layout, so it never shifts the page (AC-4). */
+.quick-box {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  gap: var(--space-xxs);
+  padding: var(--space-xxs);
+  background-color: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.quick-box__action {
+  height: var(--quick-box-action-height);
+  padding: 0 var(--quick-box-action-padding-x);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.quick-box__action:hover {
+  background-color: var(--color-hairline-soft);
+}
+
+.quick-box__action:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+}
