@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
+import ToolRail, { type ToolMode } from "./ToolRail";
 import ZoomControl from "./ZoomControl";
 import Toast from "./Toast";
 import { uploadDoc, type Doc } from "./api/client";
@@ -22,9 +23,42 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   // Live zoom percent, reported by the Reader for the top-bar zoom control.
   const [zoomPercent, setZoomPercent] = useState(100);
+  // Active pointer tool + tool-rail collapse. Lightweight React state (see the
+  // header note) — the Zustand tool system formalizes in Epic 2. The Reader
+  // owns the actual pan gesture; App only tells it whether the hand is armed.
+  const [mode, setMode] = useState<ToolMode>("cursor");
+  const [railCollapsed, setRailCollapsed] = useState(false);
   // Imperative zoom handle into the Reader (it owns `scale` + the scroll
   // container needed for focal-point zoom); the top-bar control drives it.
   const readerRef = useRef<ReaderHandle>(null);
+
+  // Document-level tool keys (UX-DR15), mirroring the Reader's zoom-key effect:
+  // `V`/`Esc` → cursor, `[` → toggle the rail. Only active while a doc is open.
+  // `Space` is deliberately NOT handled here — it is a Reader-internal temp-pan
+  // (a document-level Space handler would fight the scroll container). Ctrl/Alt/
+  // Meta chords and editable targets are ignored so adjacent shortcuts pass.
+  const docOpen = doc !== null;
+  useEffect(() => {
+    if (!docOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)
+      )
+        return;
+      if (e.key === "v" || e.key === "V" || e.key === "Escape") {
+        e.preventDefault();
+        setMode("cursor");
+      } else if (e.key === "[") {
+        e.preventDefault();
+        setRailCollapsed((c) => !c);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [docOpen]);
 
   async function handleFile(file: File) {
     // Single-flight: ignore a new pick while an upload is in flight, so an
@@ -85,12 +119,16 @@ export default function App() {
         <Reader
           ref={readerRef}
           doc={doc}
+          panArmed={mode === "hand"}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
         />
-        <aside className="tool-rail" data-testid="tool-rail" aria-label="Tools (collapsed)">
-          {/* Collapsed placeholder. Tool buttons arrive in Epic 2. */}
-        </aside>
+        <ToolRail
+          mode={mode}
+          onMode={setMode}
+          collapsed={railCollapsed}
+          onToggleCollapse={() => setRailCollapsed((c) => !c)}
+        />
       </main>
       {toast}
     </div>

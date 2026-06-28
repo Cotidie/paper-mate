@@ -18,6 +18,7 @@ import {
   pageNavTarget,
   nextZoom,
   focalScroll,
+  panScroll,
   ZOOM_STEP,
   ZOOM_WHEEL_STEP,
   type PageBox,
@@ -47,11 +48,15 @@ export interface ReaderHandle {
  */
 export default function Reader({
   doc,
+  panArmed,
   onVisiblePageChange,
   onZoomChange,
   ref,
 }: {
   doc: Doc;
+  /** When true, the hand tool is armed: a drag pans (Story 1.8). Hold-`Space`
+   * gives the same temp-pan regardless of this flag. */
+  panArmed?: boolean;
   /** Reports the 1-based page currently in view, for the top-bar indicator. */
   onVisiblePageChange?: (page: number) => void;
   /** Reports the live zoom percent (rounded) for the top-bar zoom control. */
@@ -65,6 +70,21 @@ export default function Reader({
   // Scale lives in state so Story 1.5 (zoom) can drive it later (don't hardcode).
   const [scale, setScale] = useState(1);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
+
+  // Pan (Story 1.8): the hand is armed by `panArmed`, OR `Space` is held for a
+  // temporary pan that falls back to the armed tool on release (AC-3). `dragging`
+  // drives the grab→grabbing cursor; the drag origin lives in a ref so a
+  // pointermove never re-renders. Pan moves ONLY scrollLeft/scrollTop — never the
+  // scale, card geometry, or page box (NFR-1) — and does no anchor math (AR-9).
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const canPan = (panArmed ?? false) || spaceHeld;
+  const dragOrigin = useRef<
+    { x: number; y: number; scrollLeft: number; scrollTop: number } | null
+  >(null);
+  // The captured pointer for the active drag, so an interrupted pan (e.g. Space
+  // released mid-drag → no longer pannable) can release capture + stop.
+  const dragPointerId = useRef<number | null>(null);
 
   // Single IntersectionObserver (render/ hook): owns the card registry and drives
   // BOTH the page-in-view indicator (`currentPage`) and the per-card paint/release
@@ -290,6 +310,62 @@ export default function Reader({
     return () => document.removeEventListener("keydown", onKey);
   }, [phase, zoomIn, zoomOut, resetZoom]);
 
+  // Hold-`Space` temp-pan (AC-2/AC-3), bound at the DOCUMENT level (guarded
+  // `phase === "ready"`) so it arms regardless of which reader element has focus —
+  // mirroring the zoom-key effect. Skip editable fields and buttons so Space still
+  // activates a focused control (and the rail/flyout buttons keep working). Ignore
+  // auto-repeat so a held key doesn't thrash. keydown suppresses the browser's
+  // page-scroll-on-Space; keyup drops `spaceHeld` so `canPan` falls back to the
+  // armed tool (the active-drag teardown below stops any pan already in flight).
+  useEffect(() => {
+    if (phase !== "ready") return;
+    const isExempt = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el || !el.tagName) return false;
+      const tag = el.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        tag === "BUTTON" ||
+        el.isContentEditable
+      );
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== " " || isExempt(e.target)) return;
+      if (!e.repeat) setSpaceHeld(true);
+      e.preventDefault();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === " ") setSpaceHeld(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup", onKeyUp);
+    };
+  }, [phase]);
+
+  // Stop an in-flight pan the moment it stops being pannable — e.g. `Space` is
+  // released mid-drag while the armed tool is cursor (AC-3: control returns to the
+  // previous tool). With the hand armed, `canPan` stays true so the drag continues
+  // until pointerup. Releases any captured pointer so a later move can't resume it.
+  useEffect(() => {
+    if (canPan || !dragOrigin.current) return;
+    const container = scrollRef.current;
+    if (container && dragPointerId.current !== null) {
+      try {
+        container.releasePointerCapture?.(dragPointerId.current);
+      } catch {
+        /* capture already gone */
+      }
+    }
+    dragOrigin.current = null;
+    dragPointerId.current = null;
+    setDragging(false);
+  }, [canPan]);
+
   // PgUp/PgDn (and Ctrl+Down/Ctrl+Up aliases): move one page. Scroll the target
   // card's top to the canvas top and suppress the browser's native page-scroll
   // so it never double-scrolls (AC-3). (Zoom keys are handled document-level
@@ -317,6 +393,53 @@ export default function Reader({
     });
   }
 
+  // Pointer-drag pan: only when pannable and with the primary button. Capture the
+  // pointer so a fast drag off the canvas keeps panning and still gets pointerup;
+  // preventDefault suppresses text selection / native image drag. The page follows
+  // the pointer via panScroll (grab-and-drag). Scroll-offset only (NFR-1).
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!canPan || e.button !== 0) return;
+    const container = scrollRef.current;
+    if (!container) return;
+    // Record the origin + arm the drag FIRST, so panning never depends on pointer
+    // capture succeeding. Capture is a best-effort enhancement (keeps a fast drag
+    // that leaves the canvas panning); wrap it so a refusal can't abort the drag.
+    dragOrigin.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+    };
+    dragPointerId.current = e.pointerId;
+    setDragging(true);
+    e.preventDefault();
+    try {
+      container.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* no active pointer (e.g. synthetic event) — drag still works without capture */
+    }
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    // Re-check `canPan`: if the gesture stopped being pannable mid-drag (Space
+    // released while cursor is the armed tool), don't keep panning (AC-3). The
+    // canPan effect above also tears the drag down, but gating here is immediate.
+    if (!canPan) return;
+    const origin = dragOrigin.current;
+    const container = scrollRef.current;
+    if (!origin || !container) return;
+    container.scrollLeft = panScroll(origin.scrollLeft, e.clientX - origin.x);
+    container.scrollTop = panScroll(origin.scrollTop, e.clientY - origin.y);
+  }
+
+  function endDrag(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragOrigin.current) return;
+    scrollRef.current?.releasePointerCapture?.(e.pointerId);
+    dragOrigin.current = null;
+    dragPointerId.current = null;
+    setDragging(false);
+  }
+
   return (
     <div
       ref={scrollRef}
@@ -324,7 +447,16 @@ export default function Reader({
       data-testid="reader-backdrop"
       aria-label="PDF canvas region"
       tabIndex={0}
+      // grab when pan is available, grabbing mid-drag; also suppresses text
+      // selection while pannable (CSS targets [data-pan]). Absent → normal cursor
+      // and the Story 1.3 selectable text layer is untouched.
+      data-pan={canPan ? (dragging ? "grabbing" : "") : undefined}
       onKeyDown={handleKeyDown}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onLostPointerCapture={endDrag}
     >
       {phase === "error" ? (
         <p className="pdf-canvas__message" role="status">

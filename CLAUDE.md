@@ -54,6 +54,7 @@ The two architectural through-lines that cut across phases:
 `DESIGN.md` is the design-token contract. Rules that matter when writing UI:
 
 - **Reference tokens, never inline hex/px.** Use `{colors.*}`, `{typography.*}`, `{spacing.*}`, `{rounded.*}` as defined in `DESIGN.md`.
+- **No em-dash (—) in user-facing text.** Tooltips/`title`, labels, aria-labels, copy, toasts, etc. must never contain an em-dash; use a colon, comma, parentheses, or period instead. Code comments are exempt. Grep new UI strings for `—` before committing.
 - Type: **Inter** for all text (display 600, body 400), **JetBrains Mono** for code surfaces.
 - The overriding UI principle is **immersive, non-distracting reading** — minimal Obsidian-style chrome. UI must recede behind the PDF content; default to hairlines and restraint over heavy surfaces.
 - Caveat: `DESIGN.md` frontmatter is currently `name: Expo-design-analysis` — token *scales* are the convention, but the component catalog (hero, pricing, device-mockup, etc.) is from an Expo marketing site and does not map to this app. Retarget the component layer to Paper Mate's reader UI rather than treating those component entries as a spec.
