@@ -32,11 +32,38 @@ async def upload_doc(file: UploadFile = File(...)) -> Doc:
     return Doc(doc_id=doc_id, **meta.model_dump())
 
 
-@router.get("/docs/{doc_id}/file")
+@router.get(
+    "/docs/{doc_id}/file",
+    response_class=FileResponse,
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "The stored PDF bytes.",
+        },
+        404: {
+            "description": "No document with this id.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+        500: {
+            "description": "The stored document is unreadable.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+    },
+)
 async def get_doc_file(doc_id: str) -> FileResponse:
-    """Stream a stored document's PDF bytes. Storage owns the path (AR-9)."""
+    """Stream a stored document's PDF bytes. Storage owns the path (AR-9).
+
+    Unknown/unresolvable id → 404; a corrupt on-disk record → 500. Both use the
+    single ``{ "detail" }`` envelope (AR-11).
+    """
     try:
         path = storage.source_path(doc_id)
     except storage.DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Document not found") from exc
+    except storage.StorageError as exc:
+        raise HTTPException(status_code=500, detail="Could not read document") from exc
     return FileResponse(path, media_type="application/pdf")

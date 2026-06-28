@@ -8,6 +8,10 @@
   position: absolute;
   inset: 0;
   overflow: auto;
+  /* Reserve the vertical scrollbar gutter up front so the fit-to-width measure
+     (clientWidth at load) already excludes it — otherwise the scrollbar appears
+     only after pages stack and steals width, forcing a horizontal scrollbar. */
+  scrollbar-gutter: stable;
   background: var(--color-reader-backdrop);
 }
 
@@ -34,6 +38,9 @@
 .page-surface {
   position: relative;
   flex: 0 0 auto;
+  /* Fold the hairline border into the reserved width so the fit-to-width card
+     never overflows the canvas (no stray horizontal scrollbar). */
+  box-sizing: border-box;
   background: var(--color-canvas);
   border: var(--hairline-width) solid var(--color-hairline);
   border-radius: var(--radius-xs);

@@ -76,3 +76,29 @@ def test_get_file_unknown_doc_returns_404_detail(data_root):
     resp = client.get(f"/api/docs/{'0' * 64}/file")
     assert resp.status_code == 404
     assert isinstance(resp.json()["detail"], str)
+
+
+def test_get_file_missing_meta_returns_404(data_root):
+    """A stray source.pdf with no meta.json is not an imported document → 404."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id = client.post(
+        "/api/docs", files={"file": ("m.pdf", raw, "application/pdf")}
+    ).json()["doc_id"]
+    (data_root / "library" / doc_id / "meta.json").unlink()
+
+    resp = client.get(f"/api/docs/{doc_id}/file")
+    assert resp.status_code == 404
+    assert isinstance(resp.json()["detail"], str)
+
+
+def test_get_file_corrupt_meta_returns_500(data_root):
+    """A corrupt on-disk record is a server fault, not a 404 — still { detail }."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id = client.post(
+        "/api/docs", files={"file": ("c.pdf", raw, "application/pdf")}
+    ).json()["doc_id"]
+    (data_root / "library" / doc_id / "meta.json").write_text("{ corrupt")
+
+    resp = client.get(f"/api/docs/{doc_id}/file")
+    assert resp.status_code == 500
+    assert isinstance(resp.json()["detail"], str)

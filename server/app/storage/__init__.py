@@ -154,10 +154,21 @@ def source_path(doc_id: str) -> Path:
     """Resolve a document's stored ``source.pdf`` path (AD-9: storage owns the root).
 
     Reuses ``_doc_dir`` for the same library-root containment guarantee. Raises
-    ``DocumentNotFoundError`` when the document directory or its ``source.pdf``
-    is absent, so routes never have to touch the filesystem themselves.
+    ``DocumentNotFoundError`` when the id is unresolvable, the document has no
+    valid ``meta.json`` record, or its ``source.pdf`` is absent — so routes never
+    touch the filesystem and a stray ``source.pdf`` with no metadata is not
+    served as if it were an imported document. A *corrupt* on-disk record still
+    surfaces as its specific ``StorageError`` (not a 404).
     """
-    source = _doc_dir(doc_id) / "source.pdf"
+    try:
+        doc_dir = _doc_dir(doc_id)
+    except StorageError as exc:
+        # An id that can't resolve inside the library root (e.g. a traversal
+        # attempt) is, to the caller, simply not a known document.
+        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
+    if _read_meta(doc_dir) is None:
+        raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
+    source = doc_dir / "source.pdf"
     if not source.is_file():
         raise DocumentNotFoundError(f"no source.pdf for doc_id {doc_id!r}")
     return source

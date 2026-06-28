@@ -37,7 +37,13 @@ export default function Reader({ doc }: { doc: Doc }) {
     (async () => {
       try {
         loaded = await loadDocument(doc.doc_id);
-        if (cancelled) return;
+        // If the effect was cleaned up while the load was in flight, the cleanup
+        // already ran with loaded === null — destroy here so the worker/network
+        // for this now-orphaned document is not leaked.
+        if (cancelled) {
+          destroyDocument(loaded);
+          return;
+        }
         // Reserve geometry: read every page's scale-1.0 box up front (NFR-1).
         const nextBoxes: PageBox[] = [];
         for (let i = 1; i <= doc.page_count; i++) {
@@ -48,8 +54,11 @@ export default function Reader({ doc }: { doc: Doc }) {
         // Fit-to-width once, from the canvas width and the widest page.
         const widest = nextBoxes.reduce((m, b) => Math.max(m, b.width), 0);
         const canvasWidth = scrollRef.current?.clientWidth ?? 0;
-        // Leave room for the column's horizontal padding on both sides.
-        const usable = canvasWidth - GUTTER * 2;
+        // Subtract the column's horizontal padding (= `--space-lg` each side, the
+        // same token the column CSS uses) so the gutter isn't a duplicated magic
+        // number that can drift from the stylesheet.
+        const gutter = readSpacePx("--space-lg", 24);
+        const usable = canvasWidth - gutter * 2;
         setPdf(loaded);
         setBoxes(nextBoxes);
         setScale(fitToWidthScale(widest, usable));
@@ -87,10 +96,23 @@ export default function Reader({ doc }: { doc: Doc }) {
   );
 }
 
-/** Horizontal breathing room around the centered page column (CSS px). */
-const GUTTER = 24;
+/**
+ * Read a spacing token (e.g. `--space-lg`) from the theme layer as a number of
+ * CSS px, so layout math derives from the design tokens rather than hardcoding
+ * dimensions in component code. Falls back if the var is unset (e.g. jsdom).
+ */
+function readSpacePx(varName: string, fallback: number): number {
+  if (typeof getComputedStyle === "undefined") return fallback;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(varName);
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
 
-/** Prefetch margin (CSS px): start painting a page just before it scrolls in. */
+/**
+ * Prefetch distance for lazy paint — a behavioral scroll constant (how early a
+ * page paints before entering the viewport), not a design dimension, so it lives
+ * here rather than in the token layer.
+ */
 const PREFETCH_MARGIN = 200;
 
 /**
@@ -141,19 +163,20 @@ function PageCard({
     let handle: PageRender | null = null;
     setPainted(false);
     (async () => {
-      const page = await pdf.getPage(pageNumber);
-      if (cancelled || !canvasRef.current || !textRef.current) return;
-      textRef.current.replaceChildren();
-      handle = renderPage(page, {
-        scale,
-        canvas: canvasRef.current,
-        textLayerDiv: textRef.current,
-      });
       try {
+        const page = await pdf.getPage(pageNumber);
+        if (cancelled || !canvasRef.current || !textRef.current) return;
+        textRef.current.replaceChildren();
+        handle = renderPage(page, {
+          scale,
+          canvas: canvasRef.current,
+          textLayerDiv: textRef.current,
+        });
         await handle.done;
         if (!cancelled) setPainted(true);
       } catch {
-        /* cancelled or failed render — leave the skeleton in place */
+        // getPage rejection, render-setup throw, or a cancelled render — leave
+        // the skeleton in place; never surface an unhandled promise rejection.
       }
     })();
     return () => {

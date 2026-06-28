@@ -57,6 +57,16 @@ so that I can read the whole paper without layout shifts.
   - [x] Full suites green: backend `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`; frontend `cd client && npm test`; `npm run typecheck`; `npm run build` (confirm the pdf worker asset bundles).
   - [x] Live: `npm run dev` (or `docker compose up --build`), upload a multi-page PDF, confirm pages render with selectable text, scroll is smooth, and the canvas does not reflow as pages stream in.
 
+### Review Findings
+
+- [x] [Review][Patch] Medium - Destroy pdf.js document when load resolves after cleanup [client/src/Reader.tsx:39]
+- [x] [Review][Patch] Medium - Catch page-load/render setup failures before awaiting the render handle [client/src/Reader.tsx:143]
+- [x] [Review][Patch] Medium - Declare `/api/docs/{doc_id}/file` as `application/pdf` with documented `{ detail }` errors in OpenAPI [server/app/routes/docs.py:35]
+- [x] [Review][Patch] Medium - Convert malformed or path-escaping `doc_id` storage failures into the documented 404 `{ detail }` envelope [server/app/routes/docs.py:38]
+- [x] [Review][Patch] Medium - Require a valid stored document metadata record before serving `source.pdf` [server/app/storage/__init__.py:153]
+- [x] [Review][Patch] Medium - Reserve the actual page-card geometry, including border and stable scrollbar gutter, so fit-to-width cannot introduce overflow after pages stack [client/src/Reader.tsx:165]
+- [x] [Review][Patch] Low - Move component-authored sizing constants such as gutter and prefetch margin into the token/theme layer instead of raw CSS-px numbers in Reader code [client/src/Reader.tsx:90]
+
 ## Dev Notes
 
 ### Architecture patterns & constraints (binding)
@@ -163,6 +173,17 @@ claude-opus-4-8 (BMad dev-story workflow)
 - **Contract (AC-5):** `api.docFileUrl` is the sole owner of the file path; regenerated `schema.d.ts`; `docs/API.md` updated.
 - **Live smoke:** 3-page text PDF over `docker-equivalent` same-origin uvicorn (DPR 1.25) — page boxes reserved identically (978×1265), pages 1 & 3 painted on demand at HiDPI (1222×1582), selectable text present, **page geometry stable across scroll (no shift)**.
 
+#### Code-review resolutions (all 7 findings addressed)
+
+- ✅ Resolved [Med]: destroy the pdf.js document when `loadDocument` resolves **after** the effect cleanup (no orphaned worker on fast unmount) — `Reader.tsx` load effect.
+- ✅ Resolved [Med]: wrap the whole page-paint async (`getPage` + render setup) in try/catch so a setup failure can't become an unhandled rejection — `Reader.tsx` `PageCard`.
+- ✅ Resolved [Med]: `/api/docs/{doc_id}/file` now declares `200 application/pdf` + `404`/`500` `ErrorEnvelope` in OpenAPI (regenerated `schema.d.ts`) — `routes/docs.py`.
+- ✅ Resolved [Med]: unresolvable/escaping `doc_id` → 404 (route catches `DocumentNotFoundError`); other `StorageError` → 500 — `routes/docs.py` + `storage.source_path`.
+- ✅ Resolved [Med]: `source_path` requires a valid `meta.json` record before serving `source.pdf` (a stray PDF with no metadata is not served); corrupt meta stays a 500 — `storage/__init__.py`.
+- ✅ Resolved [Med]: fit-to-width overflow eliminated — `.page-surface` `box-sizing: border-box` + `.pdf-canvas` `scrollbar-gutter: stable`; re-smoked, `scrollWidth === clientWidth` (zero horizontal overflow) — `Reader.css`.
+- ✅ Resolved [Low]: the column gutter now reads the `--space-lg` theme token at runtime (no duplicated magic px); `PREFETCH_MARGIN` kept as a documented behavioral scroll constant (not a design dimension) — `Reader.tsx`.
+- Added tests: backend `GET /file` missing-meta → 404 and corrupt-meta → 500; `storage.source_path` missing/corrupt-meta. Suites: backend **33**, frontend **30**, typecheck clean.
+
 ### File List
 
 **Added**
@@ -190,3 +211,4 @@ claude-opus-4-8 (BMad dev-story workflow)
 ## Change Log
 
 - **2026-06-28:** Story 1.3 implemented — backend PDF-file route + render layer + Reader (reserve-geometry, top→down streaming, text layer). Backend 29 tests, frontend 30 tests, typecheck, and prod build (pdf worker asset bundles) all green; live browser smoke confirmed all 5 ACs. Status → review.
+- **2026-06-28:** Addressed code-review findings — 6 Medium + 1 Low resolved (worker-leak race, unhandled paint rejection, OpenAPI media/error declaration, 404/500 storage mapping, meta-required serving, fit-to-width overflow, gutter-from-token). Backend 33 / frontend 30 tests green. Status → review.
