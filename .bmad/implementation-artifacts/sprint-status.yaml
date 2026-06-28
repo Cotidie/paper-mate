@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: 2026-06-29 (correct-course restructured Epic 2 to 9 stories; 3 retro action items codified)
+last_updated: 2026-06-29 (story 2-1 dev-infra-enabler created -> ready-for-dev; epic-2 in-progress)
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -69,8 +69,8 @@ development_status:
   # 2026-06-29 correct-course (sprint-change-proposal-2026-06-29.md): added a
   # dev-infra enabler (2-1) + split the foundation out of the old 2-1 into 2-2,
   # renumbering the six tool stories to 2-3..2-9 so number = exec order.
-  epic-2: backlog
-  2-1-dev-infra-enabler: backlog
+  epic-2: in-progress
+  2-1-dev-infra-enabler: ready-for-dev
   2-2-annotation-foundation: backlog
   2-3-highlight-text-via-drag: backlog
   2-4-underline-text: backlog
