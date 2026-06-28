@@ -110,7 +110,7 @@ describe("upload → S1 transition (AC-6)", () => {
     const banner = screen.getByRole("banner");
     const zoom = screen.getByTestId("zoom-control");
     expect(banner.contains(zoom)).toBe(true);
-    const toc = screen.getByRole("button", { name: "ToC" });
+    const toc = screen.getByRole("button", { name: "Table of contents" });
     // DOCUMENT_POSITION_FOLLOWING (4): toc comes after zoom in document order.
     expect(zoom.compareDocumentPosition(toc) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -137,10 +137,20 @@ describe("table of contents (Story 1.9)", () => {
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
   }
 
+  it("renders ToC + Bank as icon buttons with accessible names (no visible text)", async () => {
+    await openedApp([]);
+    const toc = screen.getByRole("button", { name: "Table of contents" });
+    const bank = screen.getByRole("button", { name: "Annotation bank" });
+    // Icon-only: an svg glyph, no text label.
+    expect(toc.querySelector("svg")).toBeTruthy();
+    expect(bank.querySelector("svg")).toBeTruthy();
+    expect(toc.textContent).toBe("");
+  });
+
   it("toggles the ToC panel open and closed from the top-bar button (AC-1)", async () => {
     await openedApp([{ title: "Intro", pageNumber: 1, depth: 0 }]);
     expect(screen.queryByTestId("toc-panel")).toBeNull();
-    const toc = screen.getByRole("button", { name: "ToC" });
+    const toc = screen.getByRole("button", { name: "Table of contents" });
     fireEvent.click(toc);
     await waitFor(() => expect(screen.getByTestId("toc-panel")).toBeTruthy());
     expect(toc.getAttribute("aria-pressed")).toBe("true");
@@ -150,13 +160,13 @@ describe("table of contents (Story 1.9)", () => {
 
   it("shows the empty state for a PDF with no outline (AC-3)", async () => {
     await openedApp([]);
-    fireEvent.click(screen.getByRole("button", { name: "ToC" }));
+    fireEvent.click(screen.getByRole("button", { name: "Table of contents" }));
     await waitFor(() => expect(screen.getByTestId("toc-empty")).toBeTruthy());
   });
 
   it("clicking a row jumps the reader and closes the panel (AC-2)", async () => {
     await openedApp([{ title: "Methods", pageNumber: 2, depth: 0 }]);
-    fireEvent.click(screen.getByRole("button", { name: "ToC" }));
+    fireEvent.click(screen.getByRole("button", { name: "Table of contents" }));
     const row = await screen.findByTestId("toc-row-0");
     // jsdom has no scrollTo on the canvas; the jump no-ops there, but the panel
     // must still close (the click reached App's onJump).

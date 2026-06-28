@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ListBullets, Cards } from "@phosphor-icons/react";
 import "./App.css";
 import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
@@ -113,17 +114,26 @@ export default function App() {
             onReset={() => readerRef.current?.resetZoom()}
           />
           {/* ToC toggles the table-of-contents overlay (Story 1.9). Bank is
-              still a focusable placeholder — behavior arrives with Story 3.6. */}
+              still a focusable placeholder — behavior arrives with Story 3.6.
+              Icon-only (Phosphor, matching the tool-rail idiom); the aria-label
+              is the accessible name and the title is the hover tooltip. */}
           <button
             type="button"
-            className="pill"
+            className="pill pill--icon"
+            aria-label="Table of contents"
+            title="Table of contents"
             aria-pressed={tocOpen}
             onClick={() => setTocOpen((o) => !o)}
           >
-            ToC
+            <ListBullets aria-hidden />
           </button>
-          <button type="button" className="pill">
-            Bank
+          <button
+            type="button"
+            className="pill pill--icon"
+            aria-label="Annotation bank"
+            title="Annotation bank"
+          >
+            <Cards aria-hidden />
           </button>
         </div>
       </header>

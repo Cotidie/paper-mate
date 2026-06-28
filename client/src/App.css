@@ -43,6 +43,9 @@
 }
 
 .pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-sans);
   font-size: var(--type-title-sm-size);
   color: var(--color-body);
@@ -51,6 +54,29 @@
   border-radius: var(--radius-pill);
   padding: var(--space-xxs) var(--space-sm);
   cursor: pointer;
+}
+
+/* Icon-only pill (ToC / Bank): square padding + a token-sized Phosphor glyph
+   painted in currentColor, matching the tool-rail buttons. */
+.pill--icon {
+  padding: var(--space-xxs) var(--space-xs);
+}
+
+.pill svg {
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  display: block;
+}
+
+.pill:hover {
+  background: var(--color-surface-strong);
+}
+
+/* The armed ToC toggle reads as pressed (aria-pressed) — tint it like an armed
+   tool so the open state is visible, not just announced. */
+.pill[aria-pressed="true"] {
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
 }
 
 /* stage holds the canvas zone; chrome floats over it and never reflows it. */

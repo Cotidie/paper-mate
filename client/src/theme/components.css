@@ -55,6 +55,9 @@
   /* Gap between the rail and the flyout that opens beside it. */
   --tool-flyout-offset: 8px;
 
+  /* top-bar pill icon glyph size (ToC / Bank), matching the rail icon idiom. */
+  --pill-icon-size: 18px;
+
   /* toc-panel (table-of-contents overlay; DESIGN.md components.toc-panel) */
   --toc-panel-width: 280px;
   /* Inset from the stage top/right edge (matches the rail's 16px feel). */
