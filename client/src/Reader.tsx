@@ -33,7 +33,7 @@ import { usePageViewport } from "./render/usePageViewport";
 // overlay to the live page-card geometry + scale; the overlay lives in
 // annotations/ and consumes anchor/ + store/ — render/ stays annotation-free
 // (AD-9). Importing the view here does NOT make render/ annotation-aware.
-import { AnnotationLayer, AnnotationInteraction } from "./annotations";
+import { AnnotationLayer, AnnotationInteraction, type AnnotationTool } from "./annotations";
 import type { PageCardRef } from "./anchor";
 import "./Reader.css";
 
@@ -61,6 +61,7 @@ export interface ReaderHandle {
 export default function Reader({
   doc,
   panArmed,
+  armedTool,
   onVisiblePageChange,
   onZoomChange,
   onOutline,
@@ -70,6 +71,9 @@ export default function Reader({
   /** When true, the hand tool is armed: a drag pans (Story 1.8). Hold-`Space`
    * gives the same temp-pan regardless of this flag. */
   panArmed?: boolean;
+  /** The armed annotation tool (App owns it; null = cursor). Passed straight to
+   * the overlay interaction; the Reader itself does no annotation logic (AD-9). */
+  armedTool?: AnnotationTool | null;
   /** Reports the 1-based page currently in view, for the top-bar indicator. */
   onVisiblePageChange?: (page: number) => void;
   /** Reports the live zoom percent (rounded) for the top-bar zoom control. */
@@ -550,6 +554,7 @@ export default function Reader({
           getPages={getPages}
           scale={scale}
           enabled={phase === "ready"}
+          armedTool={armedTool ?? null}
         />
       )}
     </div>

@@ -61,6 +61,41 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-option-hand").getAttribute("title")).toMatch(/pan/i);
   });
 
+  it("arms highlight from the Highlight button (Story 2.3)", () => {
+    const onArmTool = vi.fn();
+    render(
+      <ToolRail
+        mode="cursor"
+        onMode={vi.fn()}
+        armedTool={null}
+        onArmTool={onArmTool}
+        collapsed={false}
+        onToggleCollapse={vi.fn()}
+      />,
+    );
+    const btn = screen.getByTestId("tool-highlight-button");
+    expect(btn.className).not.toContain("tool-button--armed");
+    expect(btn.getAttribute("title")).toBe("Highlight (H)");
+    fireEvent.click(btn);
+    expect(onArmTool).toHaveBeenCalledWith("highlight");
+  });
+
+  it("shows the Highlight button armed when armedTool is highlight (Story 2.3)", () => {
+    render(
+      <ToolRail
+        mode="cursor"
+        onMode={vi.fn()}
+        armedTool="highlight"
+        onArmTool={vi.fn()}
+        collapsed={false}
+        onToggleCollapse={vi.fn()}
+      />,
+    );
+    const btn = screen.getByTestId("tool-highlight-button");
+    expect(btn.className).toContain("tool-button--armed");
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("calls onToggleCollapse from the collapse affordance", () => {
     const onToggleCollapse = vi.fn();
     render(

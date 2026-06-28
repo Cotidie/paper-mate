@@ -260,6 +260,34 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(false);
   });
 
+  it("'H' arms the highlight tool; 'V'/'Escape' disarm it (Story 2.3)", async () => {
+    await openReader();
+    const hi = () => screen.getByTestId("tool-highlight-button");
+    // Default: not armed.
+    expect(hi().className).not.toContain("tool-button--armed");
+    // H arms highlight.
+    fireEvent.keyDown(document, { key: "h" });
+    expect(hi().className).toContain("tool-button--armed");
+    // V disarms.
+    fireEvent.keyDown(document, { key: "v" });
+    expect(hi().className).not.toContain("tool-button--armed");
+    // Re-arm, Escape disarms.
+    fireEvent.keyDown(document, { key: "H" });
+    expect(hi().className).toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).not.toContain("tool-button--armed");
+  });
+
+  it("clicking the Highlight rail button toggles it armed (Story 2.3)", async () => {
+    await openReader();
+    const btn = screen.getByTestId("tool-highlight-button");
+    fireEvent.click(btn);
+    expect(btn.className).toContain("tool-button--armed");
+    // Clicking again disarms (toggle).
+    fireEvent.click(btn);
+    expect(btn.className).not.toContain("tool-button--armed");
+  });
+
   it("'[' toggles the rail collapsed / expanded", async () => {
     await openReader();
     // Expanded: the cursor button is present.

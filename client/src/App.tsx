@@ -4,6 +4,7 @@ import "./App.css";
 import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
 import ToolRail, { type ToolMode } from "./ToolRail";
+import type { AnnotationTool } from "./annotations";
 import ZoomControl from "./ZoomControl";
 import TocPanel from "./TocPanel";
 import Toast from "./Toast";
@@ -30,6 +31,13 @@ export default function App() {
   // header note) — the Zustand tool system formalizes in Epic 2. The Reader
   // owns the actual pan gesture; App only tells it whether the hand is armed.
   const [mode, setMode] = useState<ToolMode>("cursor");
+  // The armed annotation tool (single source; Story 2.3 adds highlight). This is
+  // ORTHOGONAL to `mode` (cursor/hand/box drives pan): `armedTool` decides which
+  // mark a text-drag lands. Lifted here so the rail (armed styling + arm) and the
+  // overlay interaction (behavior) share one source. Sticky until V/Esc/another
+  // tool. Lives in App state, mirroring how `mode` is wired (not in the store,
+  // which is the annotation working copy, AD-9).
+  const [armedTool, setArmedTool] = useState<AnnotationTool | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
@@ -75,6 +83,11 @@ export default function App() {
       if (e.key === "v" || e.key === "V" || e.key === "Escape") {
         e.preventDefault();
         setMode("cursor");
+        // V/Esc deselect: also disarm the annotation tool (back to plain cursor).
+        setArmedTool(null);
+      } else if (e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        setArmedTool("highlight");
       } else if (e.key === "[") {
         e.preventDefault();
         setRailCollapsed((c) => !c);
@@ -163,6 +176,7 @@ export default function App() {
           ref={readerRef}
           doc={doc}
           panArmed={mode === "hand"}
+          armedTool={armedTool}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
           onOutline={setToc}
@@ -170,6 +184,8 @@ export default function App() {
         <ToolRail
           mode={mode}
           onMode={setMode}
+          armedTool={armedTool}
+          onArmTool={(t) => setArmedTool((cur) => (cur === t ? null : t))}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
         />
