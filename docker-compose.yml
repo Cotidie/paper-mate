@@ -1,6 +1,14 @@
-# Single container: FastAPI/uvicorn serves API + built SPA same-origin (AD-10).
-# Host ~/.paper-mate is volume-mounted to /data (the storage root, AD-8).
-# Host path + port are env-driven. No auth (localhost, single user).
+# Single container: FastAPI/uvicorn serves the API + built SPA same-origin
+# (AD-10). Localhost, single user, no auth (AD-1). Host path/port/uid are
+# env-driven (see .env.example).
+#
+# This compose is local-first: it bind-mounts the live ./server/app over the
+# baked copy and runs uvicorn with --reload, so backend edits hot-reload with no
+# rebuild. The frontend is the built static SPA from the image (no HMR); for
+# live frontend work use the host flow (`cd client && npm run dev`), the
+# canonical dev loop (see README "Development"). A pure prod-style run (baked
+# code, no mounts, no reload) is still available straight from the image:
+# `docker build -t paper-mate . && docker run -p 8000:8000 paper-mate`.
 services:
   paper-mate:
     build:
@@ -16,17 +24,23 @@ services:
     # Storage root inside the container = the mounted volume (AD-8).
     environment:
       PAPER_MATE_DATA: /data
-    # Bind to loopback only — no-auth, single-user, localhost deployment (AD-1/AD-10).
+    # Bind to loopback only: no-auth, single-user, localhost deployment (AD-1/AD-10).
     ports:
       - "127.0.0.1:${PAPER_MATE_PORT:-8000}:8000"
     volumes:
-      # Long syntax with create_host_path:false: if the host data dir does NOT
-      # exist, fail loudly at `up` instead of letting the daemon auto-create it
-      # as root:root (which the non-root `user:` above then can't write; see
-      # README "Development"). Pre-create the dir as the host user first.
+      # Live backend source over the baked copy → uvicorn --reload picks up edits.
+      - "./server/app:/app/app"
+      # Library storage. Long syntax with create_host_path:false: if the host
+      # data dir does NOT exist, fail loudly at `up` instead of letting the
+      # daemon auto-create it as root:root (which the non-root `user:` above then
+      # can't write; see README "Development"). Pre-create the dir as the host
+      # user first.
       - type: bind
         source: "${PAPER_MATE_DATA:-${HOME}/.paper-mate}"
         target: /data
         bind:
           create_host_path: false
+    # Hot-reload the backend on source edits (watchfiles ships with uvicorn[standard]).
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     restart: unless-stopped

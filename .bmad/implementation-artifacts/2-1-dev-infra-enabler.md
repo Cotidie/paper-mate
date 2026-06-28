@@ -20,7 +20,8 @@ so that Epic 2's heavy iteration isn't blocked by stale containers or root-owned
 
 1. **Writable `/data` (host-owned files).** Given `docker compose up`, when the container writes to the mounted `/data`, then new files are owned by the host user (not `root:root`), so the host user can edit/delete library files from the file manager. Achieved via a compose `user:` mapping plus a documented host-dir pre-create step. [Source: epics.md#Story-2.1; deferred-work.md#local-Docker-dev-experience; ARCHITECTURE-SPINE.md#AD-8, #AD-10]
 
-2. **Backend dev-loop decision recorded.** Given a backend code change, then the dev loop is documented so a stale container is never mistaken for a bug: **(a)** local dev = the host two-process flow (`uvicorn --reload` + `vite dev`) is declared the canonical default with Docker as the prod-like single-command boot, **AND (b)** an optional dev compose override bind-mounts `server/app` and runs `uvicorn --reload` for anyone iterating in-container. The decision lives in the dev docs (CLAUDE.md and/or README). [Source: epics.md#Story-2.1; deferred-work.md#local-Docker-dev-experience; CLAUDE.md#Commands]
+2. **Backend dev-loop decision recorded.** Given a backend code change, then the dev loop is documented so a stale container is never mistaken for a bug: **(a)** the host two-process flow (`uvicorn --reload` + `vite dev`) is the canonical day-to-day dev loop (frontend HMR), **AND (b)** the single `docker compose up` is local-first: it bind-mounts `./server/app` and runs `uvicorn --reload` so the backend hot-reloads with no override file (the frontend stays the built static SPA; a dependency/frontend change needs `--build`). The decision lives in the dev docs (CLAUDE.md + README). [Source: epics.md#Story-2.1; deferred-work.md#local-Docker-dev-experience; CLAUDE.md#Commands]
+   > Simplified 2026-06-29 (post-review, per user): the earlier two-file `compose.dev.yaml` override was folded into `docker-compose.yml` as the default and the override file removed, so `docker compose up` needs no extra flags. A pure prod-style run remains available straight from the image (`docker build` + `docker run`, no mounts/reload).
 
 3. **No behavior change, infra-only.** Given the enabler, then it changes no product behavior and touches no annotation code — Dockerfile / docker-compose / dev docs / env files only. Existing `docker compose up` prod-like boot (same-origin API + SPA) still works; backend + frontend test suites still pass unchanged. [Source: epics.md#Story-2.1]
 
@@ -147,8 +148,7 @@ Live verification (Docker available: v29.6.0, compose v5.2.0; host uid/gid 1000:
 
 ### File List
 
-- `docker-compose.yml` (modified) — added `user:` mapping + explanatory comment.
-- `compose.dev.yaml` (new) — optional dev override: bind-mount `server/app`, `uvicorn --reload`.
+- `docker-compose.yml` (modified) — `user:` mapping, long `/data` bind with `create_host_path:false`, and (folded in post-review) the `./server/app` bind-mount + `uvicorn --reload` command as the default.
 - `.env.example` (modified) — added `PAPER_MATE_UID` / `PAPER_MATE_GID`.
 - `README.md` (modified) — added "Development" section (host two-process canonical, Docker prod-like boot, data-dir pre-create, ownership, optional in-container reload).
 - `CLAUDE.md` (modified) — updated "Single-command boot" line (host-user run, pre-create, no-hot-reload caveat, dev override).
@@ -158,4 +158,5 @@ Live verification (Docker available: v29.6.0, compose v5.2.0; host uid/gid 1000:
 ## Change Log
 
 - 2026-06-29 — Implemented dev-infra enabler: compose `user:` mapping for host-owned `/data`, `PAPER_MATE_UID/GID` env, README Development section + `compose.dev.yaml` optional in-container reload, CLAUDE.md boot-line update. Verified live (ownership + reload) and regression-clean (backend 33, frontend 126). Status → review.
+- 2026-06-29 — Simplification (post-review, per user): folded the `compose.dev.yaml` override into `docker-compose.yml` as the default (bind-mount `./server/app` + `uvicorn --reload`) and deleted the override file, so plain `docker compose up` gives a live backend with no two-file incantation. README/CLAUDE updated; pure prod-style run documented via `docker build`/`docker run`. Verified live (reload + ownership + fail-loud).
 - 2026-06-29 — Cross-model code review (codex) fixes: closed the AC1 gap where a missing host data dir was auto-created `root:root` (the non-root container then can't write). Switched the `/data` mount to long bind syntax with `create_host_path: false` (fails loudly if the dir is absent); made the README/CLAUDE pre-create + chown-recovery env-aware (source `.env`, use configured dir/uid); rewrote `.env.example` as the canonical env file with the data dir documented as user-defined; qualified the compose "writes only /data" comment to "persistent writes". Verified live: missing dir → `bind source path does not exist` error; existing dir → boots, files owned 1000, host-deletable.
