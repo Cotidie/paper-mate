@@ -102,4 +102,12 @@
 
   /* focus ring (DESIGN.md input focus; EXPERIENCE.md line 129) */
   --focus-ring-width: 2px;
+
+  /* Live text-selection tint over the PDF text layer. pdf.js's pdf_viewer.css
+     forces `.textLayer ::selection { background: transparent }` (it paints its
+     own selection, which we do not use — AD-2 raw textLayer + custom overlay),
+     so without this the drag selection is invisible. Soft accent blue so the
+     in-progress selection reads clearly without competing with the yellow
+     highlight it becomes (EXPERIENCE.md: Annotating = live preview). */
+  --color-text-selection: rgba(13, 116, 206, 0.25);
 }

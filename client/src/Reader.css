@@ -2,6 +2,18 @@
    Text-layer span positioning comes from the vendor pdf_viewer.css imported in
    render/index.ts (not authored here). */
 
+/* Visible live selection over the pdf.js text layer. The vendor pdf_viewer.css
+   sets `.textLayer ::selection { background: transparent }` (pdf.js paints its
+   own selection; we use the raw text layer, AD-2), so the drag selection would
+   be invisible. Re-show it with a token tint. Scoped under `.pdf-canvas` to win
+   on specificity over the vendor rule regardless of stylesheet order. */
+.pdf-canvas .textLayer ::selection {
+  background: var(--color-text-selection);
+}
+.pdf-canvas .textLayer ::-moz-selection {
+  background: var(--color-text-selection);
+}
+
 /* pdf-canvas: the scroll region on the reader-backdrop floor. Pixel-stable —
    chrome overlays it and never reflows its box (NFR-1). */
 .pdf-canvas {

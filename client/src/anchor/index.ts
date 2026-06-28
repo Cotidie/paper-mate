@@ -104,6 +104,35 @@ export function denormalizeRect(rect: Rect, box: PageBox, scale: number): Screen
   };
 }
 
+/**
+ * Merge per-line text rects so each line is ONE band (NFR-1, anti-stacking).
+ * `Range.getClientRects()` can return several overlapping fragments for the same
+ * line (mixed fonts/italics, sub-pixel duplicates ~1-2px apart) — painted at the
+ * highlight's reduced opacity they compound into a darker, thicker band. Cluster
+ * rects into rows by vertical overlap (>50% of the smaller height, so genuinely
+ * separate lines — which only touch by a few px — stay separate) and union each
+ * row into a single rect. Operates on canonical normalized rects.
+ */
+export function mergeRects(rects: Rect[]): Rect[] {
+  const rows: Rect[] = [];
+  for (const r of rects) {
+    const h = r.y1 - r.y0;
+    const row = rows.find((x) => {
+      const overlap = Math.max(0, Math.min(x.y1, r.y1) - Math.max(x.y0, r.y0));
+      return overlap > 0.5 * Math.min(x.y1 - x.y0, h);
+    });
+    if (row) {
+      row.x0 = Math.min(row.x0, r.x0);
+      row.y0 = Math.min(row.y0, r.y0);
+      row.x1 = Math.max(row.x1, r.x1);
+      row.y1 = Math.max(row.y1, r.y1);
+    } else {
+      rows.push({ ...r });
+    }
+  }
+  return rows;
+}
+
 /** A client-rect-shaped box (CSS px in viewport space). Mirrors the fields of
  *  `DOMRect` we read, so the page-pick logic is unit-testable with plain data. */
 export interface ClientBox {
@@ -194,7 +223,10 @@ export function rectsFromSelection(
   const out: PageSelection[] = [];
   for (const page of pages) {
     const rects = byPage.get(page.pageIndex);
-    if (rects && rects.length > 0) out.push({ page_index: page.pageIndex, rects, text });
+    // Merge per-line so each line is one band (no compounding overlap, AC #3).
+    if (rects && rects.length > 0) {
+      out.push({ page_index: page.pageIndex, rects: mergeRects(rects), text });
+    }
   }
   return out;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canonicalize, normalizeRect, denormalizeRect, pickPage, type PageBox } from "./index";
+import { canonicalize, normalizeRect, denormalizeRect, pickPage, mergeRects, type PageBox } from "./index";
 
 const box: PageBox = { width: 600, height: 800 };
 
@@ -68,6 +68,36 @@ describe("normalize ↔ denormalize round-trip (AC-6 anchor fidelity)", () => {
     const at2 = denormalizeRect(norm, box, 2);
     // Position + size scale exactly with zoom — the anchor stays put in PDF space.
     expect(at2).toEqual({ left: at1.left * 2, top: at1.top * 2, width: at1.width * 2, height: at1.height * 2 });
+  });
+});
+
+describe("mergeRects (per-line merge, anti-stacking #3)", () => {
+  it("merges near-duplicate rects on the same line into one band", () => {
+    // Two ~sub-pixel-apart rects for one line (the getClientRects doubling).
+    const merged = mergeRects([
+      { x0: 0.1, y0: 0.20, x1: 0.8, y1: 0.23 },
+      { x0: 0.1, y0: 0.202, x1: 0.8, y1: 0.232 },
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual({ x0: 0.1, y0: 0.2, x1: 0.8, y1: 0.232 });
+  });
+
+  it("keeps genuinely separate lines separate (small touch, not >50% overlap)", () => {
+    // Adjacent lines whose bands touch by a sliver must NOT fuse.
+    const merged = mergeRects([
+      { x0: 0.1, y0: 0.20, x1: 0.8, y1: 0.23 },
+      { x0: 0.1, y0: 0.229, x1: 0.8, y1: 0.259 },
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("unions the horizontal extent of same-line fragments", () => {
+    const merged = mergeRects([
+      { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.23 },
+      { x0: 0.35, y0: 0.2, x1: 0.9, y1: 0.23 },
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual({ x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.23 });
   });
 });
 

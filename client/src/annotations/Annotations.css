@@ -12,9 +12,20 @@
   z-index: 1;
 }
 
+/* The highlight opacity group: one composite pass for all highlight marks on a
+   page, so overlapping/stacked marks do not compound into a darker band (AC #3).
+   `isolation: isolate` confines the group's compositing. */
+.annotation-highlights {
+  position: absolute;
+  inset: 0;
+  opacity: var(--annotation-highlight-opacity);
+  isolation: isolate;
+}
+
 .annotation-highlight {
   position: absolute;
-  opacity: var(--annotation-highlight-opacity);
+  /* Opaque: the .annotation-highlights group carries the opacity, so overlaps
+     don't deepen and the most recent (topmost) wins on shared text. */
   border-radius: var(--radius-xs);
   pointer-events: none;
 }
