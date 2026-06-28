@@ -10,8 +10,8 @@ services:
     # host-owned (not root:root), so the host user can edit/delete library
     # files. Defaults to 1000:1000 (typical single-user host); override via
     # PAPER_MATE_UID / PAPER_MATE_GID if "id -u" / "id -g" differ. The image's
-    # venv/static are root-owned but world-readable, and the app only writes
-    # /data at runtime, so an arbitrary uid is fine (AD-8, AD-10).
+    # venv/static are root-owned but world-readable, and the app's persistent
+    # writes all land under /data, so an arbitrary uid is fine (AD-8, AD-10).
     user: "${PAPER_MATE_UID:-1000}:${PAPER_MATE_GID:-1000}"
     # Storage root inside the container = the mounted volume (AD-8).
     environment:
@@ -20,5 +20,13 @@ services:
     ports:
       - "127.0.0.1:${PAPER_MATE_PORT:-8000}:8000"
     volumes:
-      - "${PAPER_MATE_DATA:-${HOME}/.paper-mate}:/data"
+      # Long syntax with create_host_path:false: if the host data dir does NOT
+      # exist, fail loudly at `up` instead of letting the daemon auto-create it
+      # as root:root (which the non-root `user:` above then can't write; see
+      # README "Development"). Pre-create the dir as the host user first.
+      - type: bind
+        source: "${PAPER_MATE_DATA:-${HOME}/.paper-mate}"
+        target: /data
+        bind:
+          create_host_path: false
     restart: unless-stopped

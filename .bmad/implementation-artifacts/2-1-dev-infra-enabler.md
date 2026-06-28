@@ -117,7 +117,7 @@ Recent commits are planning/retro chores (`3b7ef4d` correct-course Epic 2, `5785
 
 ## Story Completion Status
 
-Ultimate context engine analysis completed - comprehensive developer guide created. Status: ready-for-dev.
+Implemented and verified live; cross-model code review (codex) applied. Status: review.
 
 ## Dev Agent Record
 
@@ -158,3 +158,4 @@ Live verification (Docker available: v29.6.0, compose v5.2.0; host uid/gid 1000:
 ## Change Log
 
 - 2026-06-29 — Implemented dev-infra enabler: compose `user:` mapping for host-owned `/data`, `PAPER_MATE_UID/GID` env, README Development section + `compose.dev.yaml` optional in-container reload, CLAUDE.md boot-line update. Verified live (ownership + reload) and regression-clean (backend 33, frontend 126). Status → review.
+- 2026-06-29 — Cross-model code review (codex) fixes: closed the AC1 gap where a missing host data dir was auto-created `root:root` (the non-root container then can't write). Switched the `/data` mount to long bind syntax with `create_host_path: false` (fails loudly if the dir is absent); made the README/CLAUDE pre-create + chown-recovery env-aware (source `.env`, use configured dir/uid); rewrote `.env.example` as the canonical env file with the data dir documented as user-defined; qualified the compose "writes only /data" comment to "persistent writes". Verified live: missing dir → `bind source path does not exist` error; existing dir → boots, files owned 1000, host-deletable.
