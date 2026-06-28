@@ -82,21 +82,37 @@ export function fitToWidthScale(
 
 /**
  * Zoom interaction constants (behavioral, not design dims — so they live here,
- * not in the token layer). `nextZoom` clamps to `[ZOOM_MIN, ZOOM_MAX]`; each
- * keyboard/wheel/button step multiplies or divides by `ZOOM_STEP`.
+ * not in the token layer). `nextZoom` clamps to `[ZOOM_MIN, ZOOM_MAX]`. The
+ * keyboard/button step is the coarse `ZOOM_STEP`; the wheel uses the finer
+ * `ZOOM_WHEEL_STEP` (~10%/notch) so `Ctrl+scroll` doesn't jump (250%→315%).
  */
 export const ZOOM_MIN = 0.25;
 export const ZOOM_MAX = 4;
 export const ZOOM_STEP = 1.25;
+export const ZOOM_WHEEL_STEP = 1.1;
 
 /**
  * Pure helper: the scale one step `direction` (+1 in / -1 out) from `current`,
- * multiplicative by `ZOOM_STEP` and clamped to `[ZOOM_MIN, ZOOM_MAX]`. DOM-free,
+ * multiplicative by `step` and clamped to `[ZOOM_MIN, ZOOM_MAX]`. DOM-free,
  * unit-tested. Plain interaction arithmetic — no anchor/coordinate math (AD-9).
  */
-export function nextZoom(current: number, direction: number): number {
-  const raw = direction >= 0 ? current * ZOOM_STEP : current / ZOOM_STEP;
+export function nextZoom(current: number, direction: number, step: number = ZOOM_STEP): number {
+  const raw = direction >= 0 ? current * step : current / step;
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, raw));
+}
+
+/**
+ * Pure helper: the scroll offset (one axis) that keeps a focal point fixed
+ * across a zoom. `scroll` = current scrollLeft/scrollTop, `focal` = the focal
+ * point's offset from the scroll-container edge (cursor for wheel, half the
+ * viewport for keyboard/buttons), `factor` = newScale / oldScale. Derivation:
+ * the content coord under the focal point is `scroll + focal`; after scaling it
+ * becomes `(scroll + focal) * factor`, so to keep the focal point fixed the new
+ * scroll is `that - focal`. The browser clamps the assigned value to range.
+ * DOM-free, unit-tested. Layout arithmetic, not anchor math (AD-9).
+ */
+export function focalScrollOffset(scroll: number, focal: number, factor: number): number {
+  return (scroll + focal) * factor - focal;
 }
 
 /** A page card's vertical extent (top/bottom) in any single coordinate space. */

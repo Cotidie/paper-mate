@@ -18,6 +18,9 @@ vi.mock("./render", () => {
     pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
     // Deterministic zoom math for the jsdom tests: ×2 in / ÷2 out.
     nextZoom: vi.fn((s: number, dir: number) => (dir >= 0 ? s * 2 : s / 2)),
+    focalScrollOffset: vi.fn((scroll: number, focal: number, factor: number) => (scroll + focal) * factor - focal),
+    ZOOM_STEP: 1.25,
+    ZOOM_WHEEL_STEP: 1.1,
   };
 });
 
@@ -116,53 +119,64 @@ describe("Reader", () => {
     expect(pageNavTarget.mock.calls.at(-1)?.[1]).toBe(1);
   });
 
-  it("renders the zoom-control pill with the live percent (fit = 100%) (AC-3)", async () => {
-    render(<Reader doc={doc} />);
+  it("reports the live zoom percent up, defaulting to fit (100%) (AC-3)", async () => {
+    const onZoomChange = vi.fn();
+    render(<Reader doc={doc} onZoomChange={onZoomChange} />);
     await screen.findAllByTestId("page-surface");
     // fitToWidthScale mock = 1 → 100%.
-    expect(screen.getByLabelText("Fit to width").textContent).toBe("100%");
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
   });
 
-  it("zooms in/out via Ctrl +/- and refits via Ctrl 0, updating the percent (AC-1)", async () => {
-    render(<Reader doc={doc} />);
-    const canvas = await screen.findByTestId("reader-backdrop");
-    const percent = () => screen.getByLabelText("Fit to width").textContent;
-
-    // Ctrl + (== "+") → nextZoom ×2 → 200%; preventDefault blocks browser zoom.
-    expect(fireEvent.keyDown(canvas, { key: "+", ctrlKey: true })).toBe(false);
-    expect(percent()).toBe("200%");
-    // Ctrl - → ÷2 → back to 100%.
-    expect(fireEvent.keyDown(canvas, { key: "-", ctrlKey: true })).toBe(false);
-    expect(percent()).toBe("100%");
-    // "=" (the unshifted "+" key) also zooms in.
-    expect(fireEvent.keyDown(canvas, { key: "=", ctrlKey: true })).toBe(false);
-    expect(percent()).toBe("200%");
-    // Ctrl 0 → recompute fit (mock 1) → 100%.
-    expect(fireEvent.keyDown(canvas, { key: "0", ctrlKey: true })).toBe(false);
-    expect(percent()).toBe("100%");
-  });
-
-  it("zooms the pill buttons (AC-3)", async () => {
-    render(<Reader doc={doc} />);
+  it("zooms via Ctrl +/-/0 from the DOCUMENT, not only the focused canvas (AC-1, HIGH fix)", async () => {
+    const onZoomChange = vi.fn();
+    render(<Reader doc={doc} onZoomChange={onZoomChange} />);
     await screen.findAllByTestId("page-surface");
-    fireEvent.click(screen.getByLabelText("Zoom in"));
-    expect(screen.getByLabelText("Fit to width").textContent).toBe("200%");
-    fireEvent.click(screen.getByLabelText("Zoom out"));
-    expect(screen.getByLabelText("Fit to width").textContent).toBe("100%");
+    onZoomChange.mockClear();
+
+    // Keydown on document.body (NOT the canvas) — shortcuts are focus-independent.
+    // nextZoom mock = ×2 in / ÷2 out; preventDefault blocks the browser's zoom.
+    const press = (key: string) => {
+      const e = new KeyboardEvent("keydown", { key, ctrlKey: true, cancelable: true, bubbles: true });
+      document.body.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    expect(press("+")).toBe(true);
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
+    expect(press("-")).toBe(true);
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
+    expect(press("=")).toBe(true); // unshifted "+" key
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
+    expect(press("0")).toBe(true); // fit → mock 1 → 100%
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
   });
 
-  it("zooms on Ctrl+wheel and ignores plain wheel (AC-2)", async () => {
-    render(<Reader doc={doc} />);
+  it("exposes an imperative zoom handle for the top-bar control (AC-3)", async () => {
+    const ref = { current: null as null | import("./Reader").ReaderHandle };
+    const onZoomChange = vi.fn();
+    render(<Reader ref={ref} doc={doc} onZoomChange={onZoomChange} />);
+    await screen.findAllByTestId("page-surface");
+    onZoomChange.mockClear();
+    expect(typeof ref.current?.zoomIn).toBe("function");
+    ref.current!.zoomIn();
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
+    ref.current!.zoomOut();
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
+  });
+
+  it("zooms on Ctrl+wheel, ignores plain wheel and deltaY===0 (AC-2)", async () => {
+    const onZoomChange = vi.fn();
+    render(<Reader doc={doc} onZoomChange={onZoomChange} />);
     const canvas = await screen.findByTestId("reader-backdrop");
-    const percent = () => screen.getByLabelText("Fit to width").textContent;
+    onZoomChange.mockClear();
+
     // Plain wheel: no zoom.
     fireEvent.wheel(canvas, { deltaY: -1 });
-    expect(percent()).toBe("100%");
-    // Ctrl+wheel up → zoom in (×2).
+    // Ctrl+wheel with deltaY === 0 (horizontal): ignored, not zoom-out (LOW fix).
+    fireEvent.wheel(canvas, { deltaY: 0, ctrlKey: true });
+    expect(onZoomChange).not.toHaveBeenCalled();
+
+    // Ctrl+wheel up → zoom in (mock ×2).
     fireEvent.wheel(canvas, { deltaY: -1, ctrlKey: true });
-    expect(percent()).toBe("200%");
-    // Ctrl+wheel down → zoom out (÷2).
-    fireEvent.wheel(canvas, { deltaY: 1, ctrlKey: true });
-    expect(percent()).toBe("100%");
+    await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
   });
 });

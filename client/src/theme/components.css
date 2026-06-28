@@ -42,12 +42,13 @@
   --tool-rail-border: 1px;
   --tool-rail-offset: 16px;
 
-  /* zoom-control (bottom-right pill; DESIGN.md components.zoom-control) */
-  --zoom-control-offset: 24px;
+  /* zoom-control (top-bar pill, left of ToC; DESIGN.md components.zoom-control) */
   --zoom-control-gap: 4px;
   /* Reserve room for the widest % readout ("400%") so the pill doesn't jitter
      in width as the zoom level changes. */
   --zoom-control-percent-min: 44px;
+  /* Hit-size for the −/+ buttons (keyboard + pointer target). */
+  --zoom-control-button-size: 24px;
 
   /* shared chrome */
   --hairline-width: 1px;

@@ -14,6 +14,10 @@ vi.mock("./render", () => ({
   fitToWidthScale: vi.fn(() => 1),
   currentPageInView: vi.fn(() => 1),
   pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
+  nextZoom: vi.fn((s: number, dir: number) => (dir >= 0 ? s * 2 : s / 2)),
+  focalScrollOffset: vi.fn((scroll: number, focal: number, factor: number) => (scroll + focal) * factor - focal),
+  ZOOM_STEP: 1.25,
+  ZOOM_WHEEL_STEP: 1.1,
 }));
 
 afterEach(cleanup);
@@ -80,6 +84,30 @@ describe("upload → S1 transition (AC-6)", () => {
 
     // Reader (mocked render) reports page 1; M = doc.page_count (3).
     await waitFor(() => expect(screen.getByText("Page 1 of 3")).toBeTruthy());
+  });
+
+  it("shows the zoom control in the top bar, left of ToC, driving the Reader (AC-3)", async () => {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    render(<App />);
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+
+    // Zoom control lives in the top bar (banner), before the ToC button.
+    const banner = screen.getByRole("banner");
+    const zoom = screen.getByTestId("zoom-control");
+    expect(banner.contains(zoom)).toBe(true);
+    const toc = screen.getByRole("button", { name: "ToC" });
+    // DOCUMENT_POSITION_FOLLOWING (4): toc comes after zoom in document order.
+    expect(zoom.compareDocumentPosition(toc) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Buttons drive the Reader's imperative zoom handle (nextZoom mock ×2 / ÷2).
+    expect(screen.getByTestId("zoom-percent").textContent).toBe("100%");
+    fireEvent.click(screen.getByLabelText("Zoom in"));
+    await waitFor(() => expect(screen.getByTestId("zoom-percent").textContent).toBe("200%"));
+    fireEvent.click(screen.getByLabelText("Zoom out"));
+    await waitFor(() => expect(screen.getByTestId("zoom-percent").textContent).toBe("100%"));
   });
 });
 

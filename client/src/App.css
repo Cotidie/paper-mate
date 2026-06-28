@@ -60,22 +60,17 @@
   min-height: 0;
 }
 
-/* zoom-control: floating bottom-right pill, overlays the canvas (never reflows
-   it — NFR-1). −/%/+ in caption type on a surface-card pill. */
+/* zoom-control: top-bar pill (left of ToC). −/%/+ in caption type. Inline chrome
+   in the top bar, so it consumes no canvas width and never reflows it (NFR-1). */
 .zoom-control {
-  position: absolute;
-  right: var(--zoom-control-offset);
-  bottom: var(--zoom-control-offset);
-  z-index: 4;
   display: flex;
   align-items: center;
   gap: var(--zoom-control-gap);
-  background: var(--color-surface-card);
+  background: var(--color-canvas);
   color: var(--color-ink);
   border: var(--hairline-width) solid var(--color-hairline);
   border-radius: var(--radius-pill);
-  padding: var(--space-xxs) var(--space-sm);
-  box-shadow: var(--shadow-card);
+  padding: var(--space-xxs) var(--space-xs);
   font-family: var(--font-sans);
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);
@@ -90,6 +85,15 @@
   border: none;
   padding: 0;
   cursor: pointer;
+}
+
+/* −/+ get a real hit target (UX-DR17 keyboard/pointer reachability). */
+.zoom-control__button {
+  min-width: var(--zoom-control-button-size);
+  min-height: var(--zoom-control-button-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .zoom-control__percent {

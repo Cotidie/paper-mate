@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { Doc } from "./api/client";
 import {
@@ -10,12 +18,21 @@ import {
   currentPageInView,
   pageNavTarget,
   nextZoom,
+  focalScrollOffset,
+  ZOOM_STEP,
+  ZOOM_WHEEL_STEP,
   type PageBox,
   type PageExtent,
   type PageRender,
 } from "./render";
-import ZoomControl from "./ZoomControl";
 import "./Reader.css";
+
+/** Imperative zoom API the top-bar `ZoomControl` (owned by `App`) drives. */
+export interface ReaderHandle {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetZoom: () => void;
+}
 
 /**
  * S1 reader: streams every page of a loaded PDF as stable `page-surface` cards
@@ -30,10 +47,16 @@ import "./Reader.css";
 export default function Reader({
   doc,
   onVisiblePageChange,
+  onZoomChange,
+  ref,
 }: {
   doc: Doc;
   /** Reports the 1-based page currently in view, for the top-bar indicator. */
   onVisiblePageChange?: (page: number) => void;
+  /** Reports the live zoom percent (rounded) for the top-bar zoom control. */
+  onZoomChange?: (percent: number) => void;
+  /** Imperative zoom handle for the top-bar control (React 19 ref-as-prop). */
+  ref?: Ref<ReaderHandle>;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // Live registry of mounted page cards (1-based) → DOM node, for the
@@ -66,6 +89,59 @@ export default function Reader({
     const gutter = readSpacePx("--space-lg", 24);
     return fitToWidthScale(widest, canvasWidth - gutter * 2);
   }, []);
+
+  // Mirror of `scale` readable synchronously from event handlers (avoids stale
+  // closures when the wheel/key listeners bind once). A pending focal point is
+  // stashed here when a zoom is triggered, then consumed by the layout effect
+  // below once the cards have re-laid-out at the new scale.
+  const scaleRef = useRef(1);
+  const pendingFocal = useRef<{ factor: number; x: number; y: number } | null>(null);
+
+  // Apply a target scale while keeping `focal` (offset from the scroll-container
+  // edge) fixed on screen. Records old→new factor for the post-layout scroll fix.
+  const applyScale = useCallback((target: number, focal: { x: number; y: number }) => {
+    const old = scaleRef.current;
+    if (!Number.isFinite(target) || target <= 0 || target === old) return;
+    pendingFocal.current = { factor: target / old, x: focal.x, y: focal.y };
+    setScale(target);
+  }, []);
+
+  // The viewport centre (focal point for keyboard + button zoom, which have no
+  // cursor). Falls back to the origin before the container exists.
+  const centerFocal = useCallback(() => {
+    const c = scrollRef.current;
+    return c ? { x: c.clientWidth / 2, y: c.clientHeight / 2 } : { x: 0, y: 0 };
+  }, []);
+
+  const zoomIn = useCallback(
+    () => applyScale(nextZoom(scaleRef.current, +1, ZOOM_STEP), centerFocal()),
+    [applyScale, centerFocal],
+  );
+  const zoomOut = useCallback(
+    () => applyScale(nextZoom(scaleRef.current, -1, ZOOM_STEP), centerFocal()),
+    [applyScale, centerFocal],
+  );
+  const resetZoom = useCallback(
+    () => applyScale(computeFitScale(boxes), centerFocal()),
+    [applyScale, centerFocal, computeFitScale, boxes],
+  );
+
+  // Expose the zoom commands to the top-bar control owned by App.
+  useImperativeHandle(ref, () => ({ zoomIn, zoomOut, resetZoom }), [zoomIn, zoomOut, resetZoom]);
+
+  // Keep scaleRef in sync AND apply focal-point scroll compensation after the
+  // DOM has re-laid-out at the new scale (useLayoutEffect → before paint, no
+  // flicker). The browser clamps the assigned scrollLeft/Top to the valid range.
+  useLayoutEffect(() => {
+    scaleRef.current = scale;
+    onZoomChange?.(Math.round(scale * 100));
+    const p = pendingFocal.current;
+    pendingFocal.current = null;
+    const c = scrollRef.current;
+    if (!p || !c) return;
+    c.scrollLeft = focalScrollOffset(c.scrollLeft, p.x, p.factor);
+    c.scrollTop = focalScrollOffset(c.scrollTop, p.y, p.factor);
+  }, [scale, onZoomChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,49 +219,58 @@ export default function Reader({
     };
   }, [phase, boxes.length]);
 
-  // Ctrl+scroll (and trackpad pinch, which dispatches `wheel` with ctrlKey) zoom.
-  // MUST be a native listener with { passive: false } — React's onWheel is
-  // passive in React 19, so preventDefault there is a no-op and the browser's
-  // own Ctrl+wheel page zoom would still fire. Plain (no-Ctrl) scroll is left
-  // untouched so normal scrolling still works (AC-2). The `.pdf-canvas` div is
-  // always mounted, so this binds once.
+  // Ctrl+scroll (and trackpad pinch, which dispatches `wheel` with ctrlKey) zoom,
+  // about the cursor (focal point), with the FINER wheel step. MUST be a native
+  // listener with { passive: false } — React's onWheel is passive in React 19, so
+  // preventDefault there is a no-op and the browser's own Ctrl+wheel page zoom
+  // would still fire. Plain (no-Ctrl) scroll is left untouched (AC-2). A purely
+  // horizontal Ctrl-wheel (`deltaY === 0`) is ignored, not treated as zoom-out.
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
-      setScale((s) => nextZoom(s, e.deltaY < 0 ? +1 : -1));
+      if (e.deltaY === 0) return;
+      const rect = container.getBoundingClientRect();
+      const focal = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      applyScale(nextZoom(scaleRef.current, e.deltaY < 0 ? +1 : -1, ZOOM_WHEEL_STEP), focal);
     };
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [applyScale]);
+
+  // Keyboard zoom: Ctrl +/- zoom, Ctrl 0 fit/reset (UX-DR15), at the DOCUMENT
+  // level so the shortcuts fire regardless of which reader control has focus —
+  // the canvas, the top-bar zoom buttons, anywhere (the High review finding: a
+  // canvas-only handler was bypassed once a zoom button took focus). Guarded to
+  // when a document is open. Allow Shift for `+` (US layout `+` is `Shift+=`, and
+  // `e.key` already resolves to "+"; numpad reports the bare glyph). No Alt/Meta
+  // so adjacent chords pass. preventDefault blocks the browser's own page zoom.
+  useEffect(() => {
+    if (phase !== "ready") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        zoomIn();
+      } else if (e.key === "-") {
+        e.preventDefault();
+        zoomOut();
+      } else if (e.key === "0") {
+        e.preventDefault();
+        resetZoom();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [phase, zoomIn, zoomOut, resetZoom]);
 
   // PgUp/PgDn (and Ctrl+Down/Ctrl+Up aliases): move one page. Scroll the target
   // card's top to the canvas top and suppress the browser's native page-scroll
-  // so it never double-scrolls (AC-3).
+  // so it never double-scrolls (AC-3). (Zoom keys are handled document-level
+  // above, not here, so they work without canvas focus.)
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    // Zoom: Ctrl +/- to zoom, Ctrl 0 to fit/reset (UX-DR15). Allow Shift for the
-    // `+` key — on a US layout `+` is `Shift+=`, and `e.key` already resolves to
-    // "+" (numpad `+`/`-`/`0` also report the bare glyph). preventDefault blocks
-    // the BROWSER's own Ctrl+/-/0 page zoom. (No Alt/Meta so other chords pass.)
-    if (e.ctrlKey && !e.altKey && !e.metaKey) {
-      if (e.key === "+" || e.key === "=") {
-        e.preventDefault();
-        setScale((s) => nextZoom(s, +1));
-        return;
-      }
-      if (e.key === "-") {
-        e.preventDefault();
-        setScale((s) => nextZoom(s, -1));
-        return;
-      }
-      if (e.key === "0") {
-        e.preventDefault();
-        setScale(computeFitScale(boxes));
-        return;
-      }
-    }
     // Ctrl ONLY (no Shift/Alt/Meta) so adjacent chords aren't swallowed — most
     // notably Ctrl+Shift+Arrow, the extend-text-selection chord over the page's
     // text layer. Matches the app's Ctrl-only keyboard map.
@@ -209,44 +294,33 @@ export default function Reader({
   }
 
   return (
-    <>
-      <div
-        ref={scrollRef}
-        className="pdf-canvas"
-        data-testid="reader-backdrop"
-        aria-label="PDF canvas region"
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-      >
-        {phase === "error" ? (
-          <p className="pdf-canvas__message" role="status">
-            Couldn't render this PDF.
-          </p>
-        ) : (
-          <div className="pdf-canvas__column">
-            {boxes.map((box, i) => (
-              <PageCard
-                key={i}
-                pdf={pdf}
-                pageNumber={i + 1}
-                box={box}
-                scale={scale}
-                register={registerCard}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-      {/* Overlay pill — absolute over the stage, never reflows the canvas (NFR-1). */}
-      {phase !== "error" && (
-        <ZoomControl
-          percent={Math.round(scale * 100)}
-          onZoomIn={() => setScale((s) => nextZoom(s, +1))}
-          onZoomOut={() => setScale((s) => nextZoom(s, -1))}
-          onReset={() => setScale(computeFitScale(boxes))}
-        />
+    <div
+      ref={scrollRef}
+      className="pdf-canvas"
+      data-testid="reader-backdrop"
+      aria-label="PDF canvas region"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
+      {phase === "error" ? (
+        <p className="pdf-canvas__message" role="status">
+          Couldn't render this PDF.
+        </p>
+      ) : (
+        <div className="pdf-canvas__column">
+          {boxes.map((box, i) => (
+            <PageCard
+              key={i}
+              pdf={pdf}
+              pageNumber={i + 1}
+              box={box}
+              scale={scale}
+              register={registerCard}
+            />
+          ))}
+        </div>
       )}
-    </>
+    </div>
   );
 }
 

@@ -4,7 +4,7 @@ baseline_commit: a855fff53700334b9ced3dc39bb4952c4eaa896b
 
 # Story 1.5: Zoom
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -62,22 +62,22 @@ so that I can size the page to read comfortably.
 
 ### Review Findings
 
-- [ ] [Review][Patch][HIGH] Keyboard/wheel interception misses the zoom-control overlay focus path [client/src/Reader.tsx:160, client/src/Reader.tsx:219, client/src/Reader.tsx:241]
-- [ ] [Review][Patch][LOW] Zoom-control buttons lack the specified hit-size token/rules [client/src/theme/components.css:45, client/src/App.css:85]
-- [ ] [Review][Patch][LOW] Ctrl+wheel with `deltaY === 0` zooms out unexpectedly [client/src/Reader.tsx:158]
-- [ ] [Review][Patch][LOW] Current zoom percent is hidden from assistive tech by the reset button label [client/src/ZoomControl.tsx:34]
+- [x] [Review][Patch][HIGH] Keyboard/wheel interception misses the zoom-control overlay focus path [client/src/Reader.tsx:160, client/src/Reader.tsx:219, client/src/Reader.tsx:241]
+- [x] [Review][Patch][LOW] Zoom-control buttons lack the specified hit-size token/rules [client/src/theme/components.css:45, client/src/App.css:85]
+- [x] [Review][Patch][LOW] Ctrl+wheel with `deltaY === 0` zooms out unexpectedly [client/src/Reader.tsx:158]
+- [x] [Review][Patch][LOW] Current zoom percent is hidden from assistive tech by the reset button label [client/src/ZoomControl.tsx:34]
 
 ### Review Follow-ups (AI) — Correct-Course 2026-06-28
 
 Sprint change (see `.bmad/planning-artifacts/sprint-change-proposal-2026-06-28.md`). Implement alongside the Review Findings above; several overlap.
 
-- [ ] [AI-Review][HIGH] Make zoom shortcuts focus-independent (AC-1/AC-2). Lift the key handler off `.pdf-canvas` to a stage-/document-level owner (guarded to when a doc is open); ensure `Ctrl +/-/0` and `Ctrl+wheel` fire no matter which reader control has focus. Resolves the HIGH Review Finding. [client/src/Reader.tsx, client/src/App.tsx]
-- [ ] [AI-Review][MED] Relocate the zoom control into the **top bar, left of the ToC button** (AC-3, overrides UX-DR10). Lift `scale`/zoom commands to `App` (or portal the control); restyle `ZoomControl` as top-bar chrome (drop the floating-card `--zoom-control-*` offset/shadow; keep `−`/`%`/`+`). [client/src/App.tsx, client/src/ZoomControl.tsx, client/src/App.css, client/src/theme/components.css]
-- [ ] [AI-Review][MED] Finer wheel step (AC-2). Add `ZOOM_WHEEL_STEP ≈ 1.1` in `render/index.ts`; the wheel uses it, keyboard/buttons keep `ZOOM_STEP = 1.25`. Guard `deltaY === 0` (no zoom). Resolves the LOW deltaY Review Finding. [client/src/render/index.ts, client/src/Reader.tsx]
-- [ ] [AI-Review][MED] Focal-point preservation (AC-5). After a zoom step, compensate the scroll position so the point under the cursor (wheel) / viewport center (keyboard+buttons) stays fixed. Extract the pure math into a tested `render/` helper (e.g. `focalScrollOffset`). Single `scale` only — no second scale/offset. [client/src/render/index.ts, client/src/Reader.tsx]
-- [ ] [AI-Review][LOW] Button hit-size token + rules (AC-3). Resolves the LOW hit-size Review Finding. [client/src/theme/components.css, client/src/App.css]
-- [ ] [AI-Review][LOW] Expose the live `%` to assistive tech (AC-3). Remove the overriding `aria-label`; use visible text + `aria-live`/`role="status"`. Resolves the LOW aria Review Finding. [client/src/ZoomControl.tsx]
-- [ ] [AI-Review][LOW] Tests: shortcuts dispatched from the control (not only `reader-backdrop`); hit-size assertions; focal-point math unit test; AT-percent test. Update render-mock with `ZOOM_WHEEL_STEP`/new helper. [client/src/Reader.test.tsx, client/src/ZoomControl.test.tsx, client/src/render/*.test.ts]
+- [x] [AI-Review][HIGH] Make zoom shortcuts focus-independent (AC-1/AC-2). Lift the key handler off `.pdf-canvas` to a stage-/document-level owner (guarded to when a doc is open); ensure `Ctrl +/-/0` and `Ctrl+wheel` fire no matter which reader control has focus. Resolves the HIGH Review Finding. [client/src/Reader.tsx, client/src/App.tsx]
+- [x] [AI-Review][MED] Relocate the zoom control into the **top bar, left of the ToC button** (AC-3, overrides UX-DR10). Lift `scale`/zoom commands to `App` (or portal the control); restyle `ZoomControl` as top-bar chrome (drop the floating-card `--zoom-control-*` offset/shadow; keep `−`/`%`/`+`). [client/src/App.tsx, client/src/ZoomControl.tsx, client/src/App.css, client/src/theme/components.css]
+- [x] [AI-Review][MED] Finer wheel step (AC-2). Add `ZOOM_WHEEL_STEP ≈ 1.1` in `render/index.ts`; the wheel uses it, keyboard/buttons keep `ZOOM_STEP = 1.25`. Guard `deltaY === 0` (no zoom). Resolves the LOW deltaY Review Finding. [client/src/render/index.ts, client/src/Reader.tsx]
+- [x] [AI-Review][MED] Focal-point preservation (AC-5). After a zoom step, compensate the scroll position so the point under the cursor (wheel) / viewport center (keyboard+buttons) stays fixed. Extract the pure math into a tested `render/` helper (e.g. `focalScrollOffset`). Single `scale` only — no second scale/offset. [client/src/render/index.ts, client/src/Reader.tsx]
+- [x] [AI-Review][LOW] Button hit-size token + rules (AC-3). Resolves the LOW hit-size Review Finding. [client/src/theme/components.css, client/src/App.css]
+- [x] [AI-Review][LOW] Expose the live `%` to assistive tech (AC-3). Remove the overriding `aria-label`; use visible text + `aria-live`/`role="status"`. Resolves the LOW aria Review Finding. [client/src/ZoomControl.tsx]
+- [x] [AI-Review][LOW] Tests: shortcuts dispatched from the control (not only `reader-backdrop`); hit-size assertions; focal-point math unit test; AT-percent test. Update render-mock with `ZOOM_WHEEL_STEP`/new helper. [client/src/Reader.test.tsx, client/src/ZoomControl.test.tsx, client/src/render/*.test.ts]
 
 ## Dev Notes
 
@@ -166,6 +166,17 @@ claude-opus-4-8 (BMad dev-story workflow)
 - **Tests (Task 7):** `render/zoom.test.ts` (6), `ZoomControl.test.tsx` (4), `Reader.test.tsx` extended (+4: pill percent, `Ctrl +/-/=/0`, pill buttons, `Ctrl+wheel` vs plain wheel). Full suite **59 pass**, typecheck clean, prod build bundles the pdf worker. `no-raw-values` + `focus-ring` green. No backend/contract/`docs/API.md` change.
 - **Live browser smoke (Task 8, Chrome via Playwright, 12-page PDF):** fit-on-load `157%`; pill `+` `157→197%`; `.pdf-canvas` box **pixel-stable** at `1026×724` across zoom (page content grows, canvas box unchanged — NFR-1); `Ctrl 0` → `157%`; `Ctrl +`/`Ctrl -` `157↔197`; `Ctrl+wheel` zooms and `defaultPrevented === true` (browser zoom blocked), plain wheel does **not** zoom; `PgDn` after zoom still advances `Page 1 → 2 of 12` (1.4 coexistence). Only console error is a benign favicon 404.
 
+### Completion Notes — Review-continuation (correct-course, 2026-06-28)
+
+Resolved all 4 code-review findings + 3 user follow-ups in one pass (see `sprint-change-proposal-2026-06-28.md`). The control moved off the canvas into the top bar; zoom state stays in `Reader` (it owns the scroll container needed for focal point) and is driven from `App` via an imperative handle.
+
+- ✅ **[HIGH] Focus-independent shortcuts (AC-1).** Moved the `Ctrl +/-/0` handler off `.pdf-canvas` to a **document-level** `keydown` listener (guarded `phase === "ready"`), so the shortcuts fire no matter which control has focus. Verified live: `Ctrl 0` reset while the **Zoom-in button held focus** (the exact bypass the reviewer flagged). The canvas `handleKeyDown` keeps only PgUp/PgDn + Ctrl+Arrow.
+- ✅ **[user #1] Top-bar relocation (AC-3).** `ZoomControl` now renders in `App`'s top bar, left of ToC (`role="group" aria-label="Zoom"`). `scale` lifted via `useImperativeHandle` (`ReaderHandle = { zoomIn, zoomOut, resetZoom }`, React-19 ref-as-prop); `Reader` reports the live percent up via `onZoomChange`. `.zoom-control` restyled as top-bar chrome (no absolute/shadow). Overrides UX-DR10 (patched in epics.md/EXPERIENCE.md).
+- ✅ **[user #2 / LOW] Finer wheel step (AC-2).** Added `ZOOM_WHEEL_STEP = 1.1`; the wheel uses it, keyboard/buttons keep `ZOOM_STEP = 1.25`. `nextZoom` gained a `step` param. Live: `Ctrl+wheel` 157→173 (×1.10, +16pts vs the old +39). `deltaY === 0` now no-ops (was zoom-out).
+- ✅ **[user #3] Focal-point preservation (AC-5).** New pure `focalScrollOffset(scroll, focal, factor)`; `Reader` stashes `{factor, focal}` on each zoom and compensates `scrollLeft/Top` in a `useLayoutEffect` keyed on `scale` (cursor for wheel, viewport center for keyboard/buttons). Live: zoomed about a point at scrollTop 800 → expected 912 vs actual 910 (within 2px). Single `scale` only — AC-4 invariant intact.
+- ✅ **[LOW] Hit-size + AT percent (AC-3).** `--zoom-control-button-size: 24px` min hit target on the `−`/`+` buttons. Removed the overriding `aria-label="Fit to width"`; the visible `%` is now the reset button's accessible name + a polite live region (`aria-live="polite"`).
+- ✅ **Tests.** `render/zoom.test.ts` +wheel-step + `focalScrollOffset`; `ZoomControl.test.tsx` rewritten for AT percent; `Reader.test.tsx` now asserts **document-level** keyboard zoom, the imperative handle, and `deltaY===0`; `App.test.tsx` asserts the control sits left of ToC and drives the Reader. Full suite **66 pass**, typecheck + build green.
+
 ### File List
 
 **Added**
@@ -174,12 +185,16 @@ claude-opus-4-8 (BMad dev-story workflow)
 - `client/src/render/zoom.test.ts`
 
 **Modified**
-- `client/src/render/index.ts` (add `nextZoom` + `ZOOM_MIN`/`ZOOM_MAX`/`ZOOM_STEP`)
-- `client/src/Reader.tsx` (`computeFitScale`, keyboard `Ctrl +/-/0`, native `wheel` zoom effect, render `<ZoomControl>` overlay)
-- `client/src/Reader.test.tsx` (render-mock `nextZoom`; zoom keyboard/wheel/pill tests)
-- `client/src/theme/components.css` (`--zoom-control-*` tokens)
-- `client/src/App.css` (`.zoom-control` overlay rules)
-- `.bmad/implementation-artifacts/sprint-status.yaml` (1-5 → in-progress → review)
+- `client/src/render/index.ts` (`nextZoom` + `step` param, `ZOOM_MIN/MAX/STEP`, `ZOOM_WHEEL_STEP`, `focalScrollOffset`)
+- `client/src/Reader.tsx` (`computeFitScale`; `ReaderHandle` + `useImperativeHandle`; `applyScale` + focal `useLayoutEffect`; document-level keyboard zoom; cursor-focal `wheel` zoom w/ finer step + `deltaY===0` guard; `onZoomChange`; control no longer rendered here)
+- `client/src/App.tsx` (`ReaderHandle` ref, `zoomPercent`, top-bar `<ZoomControl>` left of ToC, pass `ref`/`onZoomChange` to `Reader`)
+- `client/src/ZoomControl.tsx` (top-bar chrome; `role="group"`; AT-exposed percent)
+- `client/src/Reader.test.tsx` (document-level keyboard, imperative handle, wheel `deltaY===0`; mock `focalScrollOffset`/`ZOOM_WHEEL_STEP`)
+- `client/src/App.test.tsx` (top-bar zoom-control placement + drive tests; mock zoom exports)
+- `client/src/theme/components.css` (`--zoom-control-*`: drop offset, add `--zoom-control-button-size`)
+- `client/src/App.css` (`.zoom-control` restyled as top-bar pill + button hit-size)
+- `.bmad/planning-artifacts/epics.md`, `EXPERIENCE.md` (UX-DR10 → top bar)
+- `.bmad/implementation-artifacts/sprint-status.yaml` (1-5 status transitions)
 
 ## Senior Developer Review (AI)
 
@@ -206,10 +221,10 @@ Changes Requested
 
 ### Action Items
 
-- [ ] [HIGH] Fix keyboard and wheel interception for the overlay focus path. `ZoomControl` is rendered as a sibling of `.pdf-canvas` (`Reader.tsx:241`), while keyboard and native wheel handlers are attached only to `.pdf-canvas` (`Reader.tsx:160`, `Reader.tsx:219`). After clicking or tabbing to a zoom-control button, `Ctrl +/-/0` no longer reaches `handleKeyDown`; `Ctrl+wheel` over the pill no longer reaches the non-passive wheel listener. This violates AC-1/AC-2's native browser zoom suppression requirement. A scoped fix is to put the relevant handlers on a common positioned stage-level owner or make the overlay delegate/prevent the same shortcuts without adding a global/window listener.
-- [ ] [LOW] Add and use a zoom-control button hit-size token. Task 6 explicitly calls for a `--zoom-control-*` button hit size, but `components.css:45-50` defines only offset/gap/percent width, and `App.css:85-92` gives the buttons `padding: 0` with no min inline/block size.
-- [ ] [LOW] Ignore zero vertical wheel delta instead of treating it as zoom-out. `Reader.tsx:158` maps every non-negative `deltaY` to zoom-out, so a Ctrl+horizontal wheel event with `deltaY === 0` can unexpectedly zoom out while preventing default.
-- [ ] [LOW] Preserve the visible percent in the accessible name or an aria-live/status path. `ZoomControl.tsx:34` sets `aria-label="Fit to width"` on the percent button, overriding the visible `184%`-style text for assistive tech.
+- [x] [HIGH] Fix keyboard and wheel interception for the overlay focus path. `ZoomControl` is rendered as a sibling of `.pdf-canvas` (`Reader.tsx:241`), while keyboard and native wheel handlers are attached only to `.pdf-canvas` (`Reader.tsx:160`, `Reader.tsx:219`). After clicking or tabbing to a zoom-control button, `Ctrl +/-/0` no longer reaches `handleKeyDown`; `Ctrl+wheel` over the pill no longer reaches the non-passive wheel listener. This violates AC-1/AC-2's native browser zoom suppression requirement. A scoped fix is to put the relevant handlers on a common positioned stage-level owner or make the overlay delegate/prevent the same shortcuts without adding a global/window listener.
+- [x] [LOW] Add and use a zoom-control button hit-size token. Task 6 explicitly calls for a `--zoom-control-*` button hit size, but `components.css:45-50` defines only offset/gap/percent width, and `App.css:85-92` gives the buttons `padding: 0` with no min inline/block size.
+- [x] [LOW] Ignore zero vertical wheel delta instead of treating it as zoom-out. `Reader.tsx:158` maps every non-negative `deltaY` to zoom-out, so a Ctrl+horizontal wheel event with `deltaY === 0` can unexpectedly zoom out while preventing default.
+- [x] [LOW] Preserve the visible percent in the accessible name or an aria-live/status path. `ZoomControl.tsx:34` sets `aria-label="Fit to width"` on the percent button, overriding the visible `184%`-style text for assistive tech.
 
 ### Review Follow-ups (AI)
 
@@ -229,3 +244,4 @@ Changes Requested
 - **2026-06-28:** Story 1.5 implemented (dev-story) — `nextZoom` pure helper, reusable `computeFitScale`, keyboard `Ctrl +/-/0`, non-passive `Ctrl+scroll`/pinch zoom, and the `ZoomControl` overlay pill. Frontend 59 tests, typecheck, prod build green; live Chrome smoke on a 12-page PDF confirmed all 4 ACs (keyboard + wheel + pill zoom, live %, browser-zoom suppression, pixel-stable canvas, page-nav coexistence). Status → review.
 - **2026-06-28:** Senior code review (AI) completed — Changes Requested. Added four unresolved review action items; status → in-progress.
 - **2026-06-28:** Correct-course sprint change (`sprint-change-proposal-2026-06-28.md`) — bundled the 4 review findings with 3 user follow-ups: top-bar relocation of the zoom control (overrides UX-DR10), finer ≈10% wheel step, focus-independent shortcuts, and focal-point preservation (new AC-5). Revised AC-1/AC-2/AC-3, scope guard, and added Review Follow-ups (AI) tasks. Status stays in-progress for dev-story review-continuation.
+- **2026-06-28:** Review-continuation (dev-story) — implemented all 7 follow-ups: document-level focus-independent shortcuts (HIGH), zoom control relocated to the top bar via a Reader imperative handle (overrides UX-DR10), `ZOOM_WHEEL_STEP = 1.1` finer wheel + `deltaY===0` guard, focal-point-preserving scroll compensation (AC-5, `focalScrollOffset`), button hit-size token, and AT-exposed live percent. All review action items + follow-up tasks resolved. Frontend **66 tests**, typecheck, build green; live Chrome smoke confirmed focus-independent `Ctrl 0` (button focused), ~10% wheel step (157→173), and focal point preserved within 2px. Status → review.
