@@ -9,10 +9,12 @@ import {
   fitToWidthScale,
   currentPageInView,
   pageNavTarget,
+  nextZoom,
   type PageBox,
   type PageExtent,
   type PageRender,
 } from "./render";
+import ZoomControl from "./ZoomControl";
 import "./Reader.css";
 
 /**
@@ -51,6 +53,20 @@ export default function Reader({
     else cardEls.current.delete(pageNumber);
   }, []);
 
+  // Fit-to-width scale for the given page boxes against the LIVE canvas width
+  // (read each call, so it refits after a resize). Shared by the initial load
+  // and `Ctrl 0` / the zoom-control reset (DRY). Stable identity (no reactive
+  // deps): the boxes are passed in, the gutter token + canvas width are read at
+  // call time. Subtract the column's horizontal padding (= `--space-lg` each
+  // side) so the gutter mirrors the stylesheet rather than a duplicated magic
+  // number.
+  const computeFitScale = useCallback((measured: PageBox[]): number => {
+    const widest = measured.reduce((m, b) => Math.max(m, b.width), 0);
+    const canvasWidth = scrollRef.current?.clientWidth ?? 0;
+    const gutter = readSpacePx("--space-lg", 24);
+    return fitToWidthScale(widest, canvasWidth - gutter * 2);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     let loaded: PDFDocumentProxy | null = null;
@@ -72,17 +88,10 @@ export default function Reader({
           if (cancelled) return;
           nextBoxes.push(getPageBox(page));
         }
-        // Fit-to-width once, from the canvas width and the widest page.
-        const widest = nextBoxes.reduce((m, b) => Math.max(m, b.width), 0);
-        const canvasWidth = scrollRef.current?.clientWidth ?? 0;
-        // Subtract the column's horizontal padding (= `--space-lg` each side, the
-        // same token the column CSS uses) so the gutter isn't a duplicated magic
-        // number that can drift from the stylesheet.
-        const gutter = readSpacePx("--space-lg", 24);
-        const usable = canvasWidth - gutter * 2;
+        // Fit-to-width once, from the live canvas width and the widest page.
         setPdf(loaded);
         setBoxes(nextBoxes);
-        setScale(fitToWidthScale(widest, usable));
+        setScale(computeFitScale(nextBoxes));
         setPhase("ready");
       } catch {
         if (!cancelled) setPhase("error");
@@ -93,7 +102,7 @@ export default function Reader({
       cancelled = true;
       if (loaded) destroyDocument(loaded);
     };
-  }, [doc.doc_id, doc.page_count]);
+  }, [doc.doc_id, doc.page_count, computeFitScale]);
 
   // Report the page in view upward (top-bar indicator) whenever it changes.
   useEffect(() => {
@@ -134,10 +143,49 @@ export default function Reader({
     };
   }, [phase, boxes.length]);
 
+  // Ctrl+scroll (and trackpad pinch, which dispatches `wheel` with ctrlKey) zoom.
+  // MUST be a native listener with { passive: false } — React's onWheel is
+  // passive in React 19, so preventDefault there is a no-op and the browser's
+  // own Ctrl+wheel page zoom would still fire. Plain (no-Ctrl) scroll is left
+  // untouched so normal scrolling still works (AC-2). The `.pdf-canvas` div is
+  // always mounted, so this binds once.
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setScale((s) => nextZoom(s, e.deltaY < 0 ? +1 : -1));
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, []);
+
   // PgUp/PgDn (and Ctrl+Down/Ctrl+Up aliases): move one page. Scroll the target
   // card's top to the canvas top and suppress the browser's native page-scroll
   // so it never double-scrolls (AC-3).
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Zoom: Ctrl +/- to zoom, Ctrl 0 to fit/reset (UX-DR15). Allow Shift for the
+    // `+` key — on a US layout `+` is `Shift+=`, and `e.key` already resolves to
+    // "+" (numpad `+`/`-`/`0` also report the bare glyph). preventDefault blocks
+    // the BROWSER's own Ctrl+/-/0 page zoom. (No Alt/Meta so other chords pass.)
+    if (e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        setScale((s) => nextZoom(s, +1));
+        return;
+      }
+      if (e.key === "-") {
+        e.preventDefault();
+        setScale((s) => nextZoom(s, -1));
+        return;
+      }
+      if (e.key === "0") {
+        e.preventDefault();
+        setScale(computeFitScale(boxes));
+        return;
+      }
+    }
     // Ctrl ONLY (no Shift/Alt/Meta) so adjacent chords aren't swallowed — most
     // notably Ctrl+Shift+Arrow, the extend-text-selection chord over the page's
     // text layer. Matches the app's Ctrl-only keyboard map.
@@ -161,33 +209,44 @@ export default function Reader({
   }
 
   return (
-    <div
-      ref={scrollRef}
-      className="pdf-canvas"
-      data-testid="reader-backdrop"
-      aria-label="PDF canvas region"
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
-    >
-      {phase === "error" ? (
-        <p className="pdf-canvas__message" role="status">
-          Couldn't render this PDF.
-        </p>
-      ) : (
-        <div className="pdf-canvas__column">
-          {boxes.map((box, i) => (
-            <PageCard
-              key={i}
-              pdf={pdf}
-              pageNumber={i + 1}
-              box={box}
-              scale={scale}
-              register={registerCard}
-            />
-          ))}
-        </div>
+    <>
+      <div
+        ref={scrollRef}
+        className="pdf-canvas"
+        data-testid="reader-backdrop"
+        aria-label="PDF canvas region"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+      >
+        {phase === "error" ? (
+          <p className="pdf-canvas__message" role="status">
+            Couldn't render this PDF.
+          </p>
+        ) : (
+          <div className="pdf-canvas__column">
+            {boxes.map((box, i) => (
+              <PageCard
+                key={i}
+                pdf={pdf}
+                pageNumber={i + 1}
+                box={box}
+                scale={scale}
+                register={registerCard}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      {/* Overlay pill — absolute over the stage, never reflows the canvas (NFR-1). */}
+      {phase !== "error" && (
+        <ZoomControl
+          percent={Math.round(scale * 100)}
+          onZoomIn={() => setScale((s) => nextZoom(s, +1))}
+          onZoomOut={() => setScale((s) => nextZoom(s, -1))}
+          onReset={() => setScale(computeFitScale(boxes))}
+        />
       )}
-    </div>
+    </>
   );
 }
 

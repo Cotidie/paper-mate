@@ -60,6 +60,43 @@
   min-height: 0;
 }
 
+/* zoom-control: floating bottom-right pill, overlays the canvas (never reflows
+   it — NFR-1). −/%/+ in caption type on a surface-card pill. */
+.zoom-control {
+  position: absolute;
+  right: var(--zoom-control-offset);
+  bottom: var(--zoom-control-offset);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--zoom-control-gap);
+  background: var(--color-surface-card);
+  color: var(--color-ink);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-pill);
+  padding: var(--space-xxs) var(--space-sm);
+  box-shadow: var(--shadow-card);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+}
+
+.zoom-control__button,
+.zoom-control__percent {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.zoom-control__percent {
+  min-width: var(--zoom-control-percent-min);
+  text-align: center;
+}
+
 /* tool-rail: collapsed placeholder, floats over the canvas (overlay). */
 .tool-rail {
   position: absolute;

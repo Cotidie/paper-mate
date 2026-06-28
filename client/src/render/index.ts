@@ -80,6 +80,25 @@ export function fitToWidthScale(
   return Math.min(cap, canvasWidth / boxWidth);
 }
 
+/**
+ * Zoom interaction constants (behavioral, not design dims — so they live here,
+ * not in the token layer). `nextZoom` clamps to `[ZOOM_MIN, ZOOM_MAX]`; each
+ * keyboard/wheel/button step multiplies or divides by `ZOOM_STEP`.
+ */
+export const ZOOM_MIN = 0.25;
+export const ZOOM_MAX = 4;
+export const ZOOM_STEP = 1.25;
+
+/**
+ * Pure helper: the scale one step `direction` (+1 in / -1 out) from `current`,
+ * multiplicative by `ZOOM_STEP` and clamped to `[ZOOM_MIN, ZOOM_MAX]`. DOM-free,
+ * unit-tested. Plain interaction arithmetic — no anchor/coordinate math (AD-9).
+ */
+export function nextZoom(current: number, direction: number): number {
+  const raw = direction >= 0 ? current * ZOOM_STEP : current / ZOOM_STEP;
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, raw));
+}
+
 /** A page card's vertical extent (top/bottom) in any single coordinate space. */
 export interface PageExtent {
   pageNumber: number;
