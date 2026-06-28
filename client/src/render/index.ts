@@ -103,16 +103,19 @@ export function nextZoom(current: number, direction: number, step: number = ZOOM
 
 /**
  * Pure helper: the scroll offset (one axis) that keeps a focal point fixed
- * across a zoom. `scroll` = current scrollLeft/scrollTop, `focal` = the focal
- * point's offset from the scroll-container edge (cursor for wheel, half the
- * viewport for keyboard/buttons), `factor` = newScale / oldScale. Derivation:
- * the content coord under the focal point is `scroll + focal`; after scaling it
- * becomes `(scroll + focal) * factor`, so to keep the focal point fixed the new
- * scroll is `that - focal`. The browser clamps the assigned value to range.
- * DOM-free, unit-tested. Layout arithmetic, not anchor math (AD-9).
+ * across a zoom, anchored to the page card under it. `cardEdge` = the anchor
+ * card's top/left in CONTENT coordinates (scroll-independent) AFTER the zoom
+ * re-layout, `cardSize` = that card's new height/width, `frac` = where in the
+ * card the focal point sat (0..1, captured before the zoom), `focal` = the focal
+ * point's offset from the scroll-container edge. The content coord to pin under
+ * the focal point is `cardEdge + frac * cardSize`, so the new scroll is
+ * `that - focal`. Anchoring to the card (not a uniform `factor`) keeps it correct
+ * even though fixed chrome — column padding, inter-card gaps — does NOT scale.
+ * The browser clamps the assigned value to range. DOM-free, unit-tested. Layout
+ * arithmetic, not anchor math (AD-9).
  */
-export function focalScrollOffset(scroll: number, focal: number, factor: number): number {
-  return (scroll + focal) * factor - focal;
+export function focalScroll(cardEdge: number, cardSize: number, frac: number, focal: number): number {
+  return cardEdge + frac * cardSize - focal;
 }
 
 /** A page card's vertical extent (top/bottom) in any single coordinate space. */
@@ -213,9 +216,14 @@ export function renderPage(
     canvas.style.height = Math.floor(viewport.height) + "px";
     const ctx = canvas.getContext("2d");
     if (ctx) ctx.drawImage(offscreen, 0, 0);
-    // ...and move the new text nodes in, carrying the container's inline style
-    // (pdf.js sets `--scale-factor` etc there, which the spans position against).
+    // ...and move the new text nodes in, carrying the container's inline style,
+    // then explicitly (re)assert the scale factors the `.textLayer` CSS positions
+    // spans against — pdf.js sets these on the container it renders into, so they
+    // must be carried over to the live node on the swap or the selection layer
+    // drifts out of alignment with the canvas.
     textLayerDiv.style.cssText = offText.style.cssText;
+    textLayerDiv.style.setProperty("--scale-factor", String(scale));
+    textLayerDiv.style.setProperty("--total-scale-factor", String(scale * outputScale));
     textLayerDiv.replaceChildren(...offText.childNodes);
   })();
   // Swallow the cancel rejection so an aborted render never surfaces as an

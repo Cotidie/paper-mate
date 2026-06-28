@@ -8,7 +8,7 @@ vi.mock("pdfjs-dist/web/pdf_viewer.css", () => ({}));
 
 import {
   nextZoom,
-  focalScrollOffset,
+  focalScroll,
   ZOOM_MIN,
   ZOOM_MAX,
   ZOOM_STEP,
@@ -56,25 +56,23 @@ describe("nextZoom", () => {
   });
 });
 
-describe("focalScrollOffset", () => {
-  // factor = newScale / oldScale.
-  it("keeps the focal point fixed when zooming in (factor > 1)", () => {
-    // scroll 0, focal 100, 2× zoom → the content at the focal point doubles its
-    // distance from the origin (0+100)*2 = 200, so scroll moves to 200-100 = 100.
-    expect(focalScrollOffset(0, 100, 2)).toBe(100);
+describe("focalScroll", () => {
+  // focalScroll(cardEdge, cardSize, frac, focal) = cardEdge + frac*cardSize - focal.
+  // It pins the captured fraction of the anchor card back under the focal point.
+  it("scrolls so the captured fraction of the card sits under the focal point", () => {
+    // Card now spans content [1000, 1000+800]; focal sat 25% into it; focal point
+    // is 300px down the viewport → scroll = 1000 + 0.25*800 - 300 = 900.
+    expect(focalScroll(1000, 800, 0.25, 300)).toBe(900);
   });
 
-  it("keeps the focal point fixed when zooming out (factor < 1)", () => {
-    // (200 + 100) * 0.5 - 100 = 50.
-    expect(focalScrollOffset(200, 100, 0.5)).toBe(50);
+  it("keeps the card top pinned when the focal point is the card top (frac 0)", () => {
+    // frac 0 → content target = cardEdge; scroll = cardEdge - focal.
+    expect(focalScroll(500, 800, 0, 200)).toBe(300);
   });
 
-  it("is a no-op at factor 1", () => {
-    expect(focalScrollOffset(123, 50, 1)).toBe(123);
-  });
-
-  it("accounts for the existing scroll offset", () => {
-    // scroll 100, focal 50, 2× → (100+50)*2 - 50 = 250.
-    expect(focalScrollOffset(100, 50, 2)).toBe(250);
+  it("scales the within-card offset by the NEW card size, not a uniform factor", () => {
+    // Same fraction against a larger (zoomed-in) card lands further down.
+    expect(focalScroll(0, 1000, 0.5, 0)).toBe(500);
+    expect(focalScroll(0, 2000, 0.5, 0)).toBe(1000);
   });
 });

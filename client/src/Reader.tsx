@@ -18,7 +18,7 @@ import {
   currentPageInView,
   pageNavTarget,
   nextZoom,
-  focalScrollOffset,
+  focalScroll,
   ZOOM_STEP,
   ZOOM_WHEEL_STEP,
   type PageBox,
@@ -91,20 +91,58 @@ export default function Reader({
   }, []);
 
   // Mirror of `scale` readable synchronously from event handlers (avoids stale
-  // closures when the wheel/key listeners bind once). A pending focal point is
-  // stashed here when a zoom is triggered, then consumed by the layout effect
-  // below once the cards have re-laid-out at the new scale.
+  // closures when the wheel/key listeners bind once). A pending focal ANCHOR is
+  // stashed when a zoom is triggered, then consumed by the layout effect below
+  // once the cards have re-laid-out at the new scale. The anchor is the page card
+  // under the focal point + the fraction into it — NOT a uniform scale factor —
+  // so fixed chrome (column padding, inter-card gaps) that does not scale can't
+  // make the focal point drift on lower pages.
   const scaleRef = useRef(1);
-  const pendingFocal = useRef<{ factor: number; x: number; y: number } | null>(null);
+  const pendingAnchor = useRef<
+    { page: number; fracX: number; fracY: number; focalX: number; focalY: number } | null
+  >(null);
 
-  // Apply a target scale while keeping `focal` (offset from the scroll-container
-  // edge) fixed on screen. Records old→new factor for the post-layout scroll fix.
-  const applyScale = useCallback((target: number, focal: { x: number; y: number }) => {
-    const old = scaleRef.current;
-    if (!Number.isFinite(target) || target <= 0 || target === old) return;
-    pendingFocal.current = { factor: target / old, x: focal.x, y: focal.y };
-    setScale(target);
+  // Capture the card under `focal` (offset from the scroll-container edge) and
+  // where in it the focal point sits, at the CURRENT (pre-zoom) layout.
+  const captureAnchor = useCallback((focal: { x: number; y: number }) => {
+    const container = scrollRef.current;
+    if (!container) return null;
+    const crect = container.getBoundingClientRect();
+    const fx = crect.left + focal.x;
+    const fy = crect.top + focal.y;
+    // Nearest card to the focal point (0 distance if it's inside one).
+    let best: { page: number; rect: DOMRect } | null = null;
+    let bestDist = Infinity;
+    for (const [page, el] of cardEls.current) {
+      const rect = el.getBoundingClientRect();
+      const dist = fy < rect.top ? rect.top - fy : fy > rect.bottom ? fy - rect.bottom : 0;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { page, rect };
+      }
+    }
+    if (!best) return null;
+    const { rect } = best;
+    return {
+      page: best.page,
+      fracX: rect.width > 0 ? (fx - rect.left) / rect.width : 0,
+      fracY: rect.height > 0 ? (fy - rect.top) / rect.height : 0,
+      focalX: focal.x,
+      focalY: focal.y,
+    };
   }, []);
+
+  // Apply a target scale while keeping `focal` fixed on screen. Records the
+  // anchor card+fraction for the post-layout scroll fix in the layout effect.
+  const applyScale = useCallback(
+    (target: number, focal: { x: number; y: number }) => {
+      const old = scaleRef.current;
+      if (!Number.isFinite(target) || target <= 0 || target === old) return;
+      pendingAnchor.current = captureAnchor(focal);
+      setScale(target);
+    },
+    [captureAnchor],
+  );
 
   // The viewport centre (focal point for keyboard + button zoom, which have no
   // cursor). Falls back to the origin before the container exists.
@@ -135,12 +173,21 @@ export default function Reader({
   useLayoutEffect(() => {
     scaleRef.current = scale;
     onZoomChange?.(Math.round(scale * 100));
-    const p = pendingFocal.current;
-    pendingFocal.current = null;
-    const c = scrollRef.current;
-    if (!p || !c) return;
-    c.scrollLeft = focalScrollOffset(c.scrollLeft, p.x, p.factor);
-    c.scrollTop = focalScrollOffset(c.scrollTop, p.y, p.factor);
+    const a = pendingAnchor.current;
+    pendingAnchor.current = null;
+    const container = scrollRef.current;
+    if (!a || !container) return;
+    const el = cardEls.current.get(a.page);
+    if (!el) return;
+    // Re-read the anchor card AFTER the re-layout (new size) and convert its
+    // viewport rect to scroll-independent content coordinates, then scroll so the
+    // captured fraction sits back under the focal point.
+    const crect = container.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    const contentTop = rect.top - crect.top + container.scrollTop;
+    const contentLeft = rect.left - crect.left + container.scrollLeft;
+    container.scrollTop = focalScroll(contentTop, rect.height, a.fracY, a.focalY);
+    container.scrollLeft = focalScroll(contentLeft, rect.width, a.fracX, a.focalX);
   }, [scale, onZoomChange]);
 
   useEffect(() => {
@@ -220,25 +267,36 @@ export default function Reader({
   }, [phase, boxes.length]);
 
   // Ctrl+scroll (and trackpad pinch, which dispatches `wheel` with ctrlKey) zoom,
-  // about the cursor (focal point), with the FINER wheel step. MUST be a native
-  // listener with { passive: false } — React's onWheel is passive in React 19, so
-  // preventDefault there is a no-op and the browser's own Ctrl+wheel page zoom
-  // would still fire. Plain (no-Ctrl) scroll is left untouched (AC-2). A purely
-  // horizontal Ctrl-wheel (`deltaY === 0`) is ignored, not treated as zoom-out.
+  // about the cursor, with the FINER wheel step. Bound at the DOCUMENT level
+  // (guarded `phase === "ready"`) so a Ctrl-wheel anywhere over the reader — incl.
+  // over the top-bar zoom control, which sits OUTSIDE `.pdf-canvas` — is caught
+  // and the browser's native zoom suppressed (the canvas-only listener missed the
+  // control). MUST be `{ passive: false }` — React's onWheel is passive in React
+  // 19, so preventDefault there is a no-op. Plain (no-Ctrl) scroll is untouched
+  // (AC-2); a purely horizontal Ctrl-wheel (`deltaY === 0`) is ignored. Focal
+  // point = the cursor when it's over the canvas, else the viewport centre.
   useEffect(() => {
-    const container = scrollRef.current;
-    if (!container) return;
+    if (phase !== "ready") return;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
       if (e.deltaY === 0) return;
+      const container = scrollRef.current;
+      if (!container) return;
       const rect = container.getBoundingClientRect();
-      const focal = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const overCanvas =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+      const focal = overCanvas
+        ? { x: e.clientX - rect.left, y: e.clientY - rect.top }
+        : centerFocal();
       applyScale(nextZoom(scaleRef.current, e.deltaY < 0 ? +1 : -1, ZOOM_WHEEL_STEP), focal);
     };
-    container.addEventListener("wheel", onWheel, { passive: false });
-    return () => container.removeEventListener("wheel", onWheel);
-  }, [applyScale]);
+    document.addEventListener("wheel", onWheel, { passive: false });
+    return () => document.removeEventListener("wheel", onWheel);
+  }, [phase, applyScale, centerFocal]);
 
   // Keyboard zoom: Ctrl +/- zoom, Ctrl 0 fit/reset (UX-DR15), at the DOCUMENT
   // level so the shortcuts fire regardless of which reader control has focus —

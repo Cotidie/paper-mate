@@ -15,7 +15,7 @@ vi.mock("./render", () => ({
   currentPageInView: vi.fn(() => 1),
   pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
   nextZoom: vi.fn((s: number, dir: number) => (dir >= 0 ? s * 2 : s / 2)),
-  focalScrollOffset: vi.fn((scroll: number, focal: number, factor: number) => (scroll + focal) * factor - focal),
+  focalScroll: vi.fn((edge: number, size: number, frac: number, focal: number) => edge + frac * size - focal),
   ZOOM_STEP: 1.25,
   ZOOM_WHEEL_STEP: 1.1,
 }));

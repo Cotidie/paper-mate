@@ -18,7 +18,7 @@ vi.mock("./render", () => {
     pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
     // Deterministic zoom math for the jsdom tests: ×2 in / ÷2 out.
     nextZoom: vi.fn((s: number, dir: number) => (dir >= 0 ? s * 2 : s / 2)),
-    focalScrollOffset: vi.fn((scroll: number, focal: number, factor: number) => (scroll + focal) * factor - focal),
+    focalScroll: vi.fn((edge: number, size: number, frac: number, focal: number) => edge + frac * size - focal),
     ZOOM_STEP: 1.25,
     ZOOM_WHEEL_STEP: 1.1,
   };
@@ -163,20 +163,36 @@ describe("Reader", () => {
     await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(100));
   });
 
-  it("zooms on Ctrl+wheel, ignores plain wheel and deltaY===0 (AC-2)", async () => {
+  it("ignores plain wheel, and a Ctrl+wheel with deltaY===0 (no zoom-out) (AC-2 / LOW fix)", async () => {
     const onZoomChange = vi.fn();
     render(<Reader doc={doc} onZoomChange={onZoomChange} />);
-    const canvas = await screen.findByTestId("reader-backdrop");
+    await screen.findAllByTestId("page-surface");
     onZoomChange.mockClear();
+    const wheel = (init: WheelEventInit) => {
+      const e = new WheelEvent("wheel", { bubbles: true, cancelable: true, ...init });
+      document.body.dispatchEvent(e);
+      return e;
+    };
 
-    // Plain wheel: no zoom.
-    fireEvent.wheel(canvas, { deltaY: -1 });
-    // Ctrl+wheel with deltaY === 0 (horizontal): ignored, not zoom-out (LOW fix).
-    fireEvent.wheel(canvas, { deltaY: 0, ctrlKey: true });
+    // Plain wheel (no Ctrl): not zoom, and not preventDefaulted (normal scroll).
+    expect(wheel({ deltaY: -1 }).defaultPrevented).toBe(false);
+    // Ctrl+wheel with deltaY === 0 (horizontal): browser zoom still blocked, but
+    // it must NOT be treated as zoom-out.
+    expect(wheel({ deltaY: 0, ctrlKey: true }).defaultPrevented).toBe(true);
+    await Promise.resolve();
     expect(onZoomChange).not.toHaveBeenCalled();
+  });
 
-    // Ctrl+wheel up → zoom in (mock ×2).
-    fireEvent.wheel(canvas, { deltaY: -1, ctrlKey: true });
+  it("zooms on Ctrl+wheel even when the pointer is off the canvas (over top-bar control) — HIGH fix", async () => {
+    const onZoomChange = vi.fn();
+    render(<Reader doc={doc} onZoomChange={onZoomChange} />);
+    await screen.findAllByTestId("page-surface");
+    onZoomChange.mockClear();
+    // Listener is document-level, so a Ctrl+wheel dispatched OUTSIDE .pdf-canvas
+    // (e.g. over the relocated top-bar zoom control) is still caught + prevented.
+    const e = new WheelEvent("wheel", { deltaY: -1, ctrlKey: true, cancelable: true, bubbles: true });
+    document.body.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
     await waitFor(() => expect(onZoomChange).toHaveBeenLastCalledWith(200));
   });
 

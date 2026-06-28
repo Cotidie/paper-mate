@@ -67,6 +67,13 @@ so that I can size the page to read comfortably.
 - [x] [Review][Patch][LOW] Ctrl+wheel with `deltaY === 0` zooms out unexpectedly [client/src/Reader.tsx:158]
 - [x] [Review][Patch][LOW] Current zoom percent is hidden from assistive tech by the reset button label [client/src/ZoomControl.tsx:34]
 
+### Review Findings — Re-Review 2026-06-28
+
+- [x] [Review][Patch][HIGH] `Ctrl+wheel` over the top-bar zoom control still bypasses the non-passive listener [client/src/Reader.tsx:228]
+- [x] [Review][Patch][MED] Focal-point compensation scales fixed reader padding/gaps as though they were PDF content, so later pages drift [client/src/render/index.ts:114]
+- [x] [Review][Defer] Text layer still lacks pdf.js scale CSS variables outside the `.pdfViewer .page` wrapper [client/src/render/index.ts:218] — deferred, pre-existing
+- [x] [Review][Defer] Page renders are not cancelled when a once-visible card scrolls away [client/src/Reader.tsx:409] — deferred, pre-existing
+
 ### Review Follow-ups (AI) — Correct-Course 2026-06-28
 
 Sprint change (see `.bmad/planning-artifacts/sprint-change-proposal-2026-06-28.md`). Implement alongside the Review Findings above; several overlap.
@@ -79,6 +86,11 @@ Sprint change (see `.bmad/planning-artifacts/sprint-change-proposal-2026-06-28.m
 - [x] [AI-Review][LOW] Expose the live `%` to assistive tech (AC-3). Remove the overriding `aria-label`; use visible text + `aria-live`/`role="status"`. Resolves the LOW aria Review Finding. [client/src/ZoomControl.tsx]
 - [x] [AI-Review][LOW] Tests: shortcuts dispatched from the control (not only `reader-backdrop`); hit-size assertions; focal-point math unit test; AT-percent test. Update render-mock with `ZOOM_WHEEL_STEP`/new helper. [client/src/Reader.test.tsx, client/src/ZoomControl.test.tsx, client/src/render/*.test.ts]
 - [x] [AI-Review][MED] Smooth, flicker-free zoom re-render (user follow-up #4 — page/text strobed on each zoom). Render offscreen + atomic swap so the canvas never blanks; keep the skeleton for first paint only (never re-flash on zoom); live CSS pre-scale the canvas for instant feedback + debounce the crisp re-render during continuous wheel. [client/src/render/index.ts, client/src/Reader.tsx, client/src/Reader.css]
+
+### Review Follow-ups (AI) — Re-Review 2026-06-28
+
+- [x] [AI-Review][HIGH] Intercept `Ctrl+wheel` over the top-bar zoom control as well as `.pdf-canvas`; prevent browser zoom and drive the same reader zoom path, with a regression test that dispatches `Ctrl+wheel` on/focused over `ZoomControl`. [client/src/App.tsx, client/src/Reader.tsx, client/src/App.test.tsx or Reader.test.tsx]
+- [x] [AI-Review][MED] Rework focal-point scroll compensation against the real page layout, not the whole scroll coordinate. Fixed `.pdf-canvas__column` padding/gaps and centering must not be multiplied as PDF content; add a test or browser smoke that zooming on a lower page preserves the same PDF point, not just the pure formula. [client/src/Reader.tsx, client/src/render/index.ts, client/src/render/zoom.test.ts]
 
 ## Dev Notes
 
@@ -187,12 +199,12 @@ Resolved all 4 code-review findings + 3 user follow-ups in one pass (see `sprint
 - `client/src/render/zoom.test.ts`
 
 **Modified**
-- `client/src/render/index.ts` (`nextZoom` + `step` param, `ZOOM_MIN/MAX/STEP`, `ZOOM_WHEEL_STEP`, `focalScrollOffset`; `renderPage` offscreen-render + atomic canvas/text swap)
-- `client/src/Reader.tsx` (`computeFitScale`; `ReaderHandle` + `useImperativeHandle`; `applyScale` + focal `useLayoutEffect`; document-level keyboard zoom; cursor-focal `wheel` zoom w/ finer step + `deltaY===0` guard; `onZoomChange`; control no longer rendered here; `PageCard` flicker-free re-render — CSS pre-scale + `REPAINT_DEBOUNCE`, skeleton on first paint only)
+- `client/src/render/index.ts` (`nextZoom` + `step` param, `ZOOM_MIN/MAX/STEP`, `ZOOM_WHEEL_STEP`, card-geometry `focalScroll`; `renderPage` offscreen-render + atomic canvas/text swap + explicit `--scale-factor`/`--total-scale-factor`)
+- `client/src/Reader.tsx` (`computeFitScale`; `ReaderHandle` + `useImperativeHandle`; `captureAnchor`/`applyScale` + card-anchored focal `useLayoutEffect`; document-level keyboard zoom; **document-level** cursor/centre `wheel` zoom w/ finer step + `deltaY===0` guard; `onZoomChange`; control no longer rendered here; `PageCard` flicker-free re-render — CSS pre-scale + `REPAINT_DEBOUNCE`, skeleton on first paint only)
 - `client/src/Reader.css` (`.page-surface__canvas` `transform-origin: 0 0` for the zoom pre-scale)
 - `client/src/App.tsx` (`ReaderHandle` ref, `zoomPercent`, top-bar `<ZoomControl>` left of ToC, pass `ref`/`onZoomChange` to `Reader`)
 - `client/src/ZoomControl.tsx` (top-bar chrome; `role="group"`; AT-exposed percent)
-- `client/src/Reader.test.tsx` (document-level keyboard, imperative handle, wheel `deltaY===0`; mock `focalScrollOffset`/`ZOOM_WHEEL_STEP`)
+- `client/src/Reader.test.tsx` (document-level keyboard + off-canvas wheel, imperative handle, wheel `deltaY===0`, flicker pre-scale guard; mock `focalScroll`/`ZOOM_WHEEL_STEP`)
 - `client/src/App.test.tsx` (top-bar zoom-control placement + drive tests; mock zoom exports)
 - `client/src/theme/components.css` (`--zoom-control-*`: drop offset, add `--zoom-control-button-size`)
 - `client/src/App.css` (`.zoom-control` restyled as top-bar pill + button hit-size)
@@ -241,6 +253,44 @@ Changes Requested
 - Dismissed: `computeFitScale([])` is guarded by `fitToWidthScale`; zero width returns `1`, not `Infinity`/`NaN`.
 - Dismissed: the zoom-control absolute positioning is not detached from the reader; it is correctly positioned against `.stage`, which is `position: relative`.
 
+### Re-Review Outcome
+
+Changes Requested
+
+### Re-Review Date
+
+2026-06-28 16:56 KST
+
+### Re-Review Acceptance Criteria Assessment
+
+- AC-1 Keyboard zoom + fit/reset: **Satisfied by inspection and tests.** The keyboard shortcuts moved to a document-level listener guarded by `phase === "ready"`; `Ctrl +/-/0` now works outside canvas focus and cleans up on effect teardown.
+- AC-2 Ctrl+scroll zoom: **Not fully satisfied.** The wheel listener remains attached only to `.pdf-canvas`; after the control moved to the top bar, `Ctrl+wheel` over `ZoomControl` no longer reaches the non-passive listener.
+- AC-3 Top-bar zoom control mirrors keyboard: **Satisfied by inspection and tests.** The control is left of ToC, drives the Reader imperative handle, exposes the live percent, and uses tokenized hit-size rules.
+- AC-4 Pixel-stable canvas, single scale invariant: **Satisfied by inspection.** The implementation still mutates one `scale` value and leaves the scale-1.0 page box immutable; CSS pre-scale is transient presentation over the current canvas bitmap, not a second source of zoom state.
+- AC-5 Zoom preserves the focal point: **Not fully satisfied.** The pure formula is correct for uniformly-scaled content, but the actual scroll content includes fixed column padding/gaps and centering, so the current compensation drifts on lower pages.
+
+### Re-Review Verification
+
+- `cd client && npm test` — passed, 8 files / 67 tests.
+- `cd client && npm run typecheck` — passed.
+- `cd client && npm run build` — passed; Vite reported only the large-chunk warning.
+
+### Re-Review Action Items
+
+- [x] [HIGH] Fix `Ctrl+wheel` over the top-bar zoom control. `ZoomControl` is rendered in the header (`App.tsx:65-72`), outside the `.pdf-canvas` scroll container, while the only non-passive wheel listener is attached to `scrollRef.current` (`Reader.tsx:228-240`). This leaves the prior HIGH only partially closed: keyboard focus bypass is fixed, but the wheel overlay/control path can still fall through to browser zoom. Add coverage that dispatches `Ctrl+wheel` on the top-bar zoom control, not only on `reader-backdrop`.
+- [x] [MED] Fix focal-point preservation against real reader layout. `focalScrollOffset(scroll, focal, factor)` (`render/index.ts:114`) multiplies the whole scroll coordinate, but `.pdf-canvas__column` has fixed padding/gaps (`Reader.css:20-26`) and only page cards scale (`Reader.tsx:470-471`). On later pages, the accumulated fixed gaps are incorrectly scaled, so the PDF point under the cursor/viewport center drifts. Use page/card geometry or otherwise subtract fixed layout offsets before applying the scale factor.
+
+### Re-Review Deferred
+
+- [x] [DEFER] Text layer scale variables are still missing outside pdf.js's `.pdfViewer .page` wrapper. The new offscreen swap copies the same inline styles the old live render received, so this is pre-existing, but local `pdfjs-dist` shows `.textLayer` CSS depends on `--total-scale-factor` while `TextLayer` itself only sets `--min-font-size` and dimensions.
+- [x] [DEFER] Page renders still do not cancel on scroll-away. `PageCard` marks a page visible once and disconnects the observer, so render cleanup happens on unmount or scale change, not viewport exit. This predates Story 1.5 and should be considered when broader virtualization/lazy-rendering work arrives.
+
+### Re-Review Triage Notes
+
+- Blind Hunter failed because the workflow requires inline diff only and the full unified diff could not be passed without truncation; Edge Case Hunter and Acceptance Auditor completed.
+- Dismissed: `renderPage` offscreen canvas allocation itself is not a persistent leak; unreferenced detached canvases/text containers are released after render/cancel settles.
+- Dismissed: `renderedScaleRef` / transform clear ordering looks correct on successful repaint: CSS pre-scale applies before the debounced render, then the committed crisp frame records the new scale and clears the transform.
+
 ## Change Log
 
 - **2026-06-28:** Story 1.5 drafted (create-story) — zoom via `Ctrl +/-`, `Ctrl 0` fit/reset, `Ctrl+scroll`/pinch, and the bottom-right `{component.zoom-control}` pill with live `%`, all driving the existing `scale` state. Status → ready-for-dev.
@@ -249,3 +299,4 @@ Changes Requested
 - **2026-06-28:** Correct-course sprint change (`sprint-change-proposal-2026-06-28.md`) — bundled the 4 review findings with 3 user follow-ups: top-bar relocation of the zoom control (overrides UX-DR10), finer ≈10% wheel step, focus-independent shortcuts, and focal-point preservation (new AC-5). Revised AC-1/AC-2/AC-3, scope guard, and added Review Follow-ups (AI) tasks. Status stays in-progress for dev-story review-continuation.
 - **2026-06-28:** Review-continuation (dev-story) — implemented all 7 follow-ups: document-level focus-independent shortcuts (HIGH), zoom control relocated to the top bar via a Reader imperative handle (overrides UX-DR10), `ZOOM_WHEEL_STEP = 1.1` finer wheel + `deltaY===0` guard, focal-point-preserving scroll compensation (AC-5, `focalScrollOffset`), button hit-size token, and AT-exposed live percent. All review action items + follow-up tasks resolved. Frontend **66 tests**, typecheck, build green; live Chrome smoke confirmed focus-independent `Ctrl 0` (button focused), ~10% wheel step (157→173), and focal point preserved within 2px. Status → review.
 - **2026-06-28:** Flicker-free zoom (user follow-up #4) — `renderPage` renders offscreen and swaps the canvas + text atomically (no blank); `PageCard` shows the skeleton on first paint only, CSS pre-scales the canvas for instant feedback, and debounces the crisp re-render (`REPAINT_DEBOUNCE = 150ms`). **67 tests** (added a jsdom pre-scale/no-skeleton guard), typecheck + build green; live Chrome smoke confirmed mid-gesture `scale(0.8)` with no skeleton, settling crisp.
+- **2026-06-28:** Second code review (AI) — Changes Requested (prior HIGH only partly closed). Addressed: (HIGH) moved the `Ctrl+wheel` listener to the **document level** so it's caught over the top-bar control too (browser zoom blocked everywhere; focal = cursor over canvas, else centre); (MED) reworked focal preservation to **anchor to the page card under the focal point** (`focalScroll(cardEdge, cardSize, frac, focal)`) instead of a uniform factor, so fixed column padding/gaps no longer drift lower pages; (text) explicitly set `--scale-factor`/`--total-scale-factor` on the swapped text layer. **67 tests** (new `focalScroll` + off-canvas-wheel + `deltaY===0` guards), typecheck + build green; live Chrome smoke: ctrl+wheel over the pill blocked browser zoom and zoomed (157→173), lower-page focal drift **0px**, text scale vars set. Deferred (pre-existing, out of scope): render-cancel on scroll-away. Status remains review.
