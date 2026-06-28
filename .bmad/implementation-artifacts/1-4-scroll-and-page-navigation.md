@@ -143,7 +143,7 @@ claude-opus-4-8 (BMad dev-story workflow)
 
 ## Senior Developer Review (AI)
 
-**Outcome:** Approve  
+**Outcome:** Approve
 **Date:** 2026-06-28
 
 ### Action Items
