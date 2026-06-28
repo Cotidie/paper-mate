@@ -43,6 +43,10 @@ class CorruptMetadataError(StorageError):
     """An on-disk ``meta.json`` is unreadable or has an invalid shape."""
 
 
+class DocumentNotFoundError(StorageError):
+    """No imported document (or its ``source.pdf``) exists for the given ``doc_id``."""
+
+
 def _data_root() -> Path:
     """Resolve the storage root: ``PAPER_MATE_DATA`` env, default ``~/.paper-mate``.
 
@@ -144,6 +148,19 @@ def _read_meta(doc_dir: Path) -> DocMeta | None:
 
 def _write_meta(doc_dir: Path, meta: DocMeta) -> None:
     _atomic_write(doc_dir / "meta.json", meta.model_dump_json(indent=2).encode("utf-8"))
+
+
+def source_path(doc_id: str) -> Path:
+    """Resolve a document's stored ``source.pdf`` path (AD-9: storage owns the root).
+
+    Reuses ``_doc_dir`` for the same library-root containment guarantee. Raises
+    ``DocumentNotFoundError`` when the document directory or its ``source.pdf``
+    is absent, so routes never have to touch the filesystem themselves.
+    """
+    source = _doc_dir(doc_id) / "source.pdf"
+    if not source.is_file():
+        raise DocumentNotFoundError(f"no source.pdf for doc_id {doc_id!r}")
+    return source
 
 
 def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:

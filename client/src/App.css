@@ -51,12 +51,6 @@
   min-height: 0;
 }
 
-.reader-backdrop {
-  position: absolute;
-  inset: 0;
-  background: var(--color-reader-backdrop);
-}
-
 /* tool-rail: collapsed placeholder, floats over the canvas (overlay). */
 .tool-rail {
   position: absolute;

@@ -1,14 +1,15 @@
 import { useState } from "react";
 import "./App.css";
 import EmptyDropzone from "./EmptyDropzone";
+import Reader from "./Reader";
 import Toast from "./Toast";
 import { uploadDoc, type Doc } from "./api/client";
 
 /**
  * App shell. Holds the current-doc state and switches between:
  *  - S0 (no PDF): `{component.empty-dropzone}` to drop/browse a PDF.
- *  - S1 (loaded): the reader frame (top-bar filename + reader-backdrop canvas +
- *    collapsed tool-rail) — pages render in Story 1.3.
+ *  - S1 (loaded): the reader frame (top-bar filename + the Reader's pdf-canvas +
+ *    collapsed tool-rail). The Reader streams the PDF pages (Story 1.3).
  * Lightweight React state only; the Zustand annotation store arrives with
  * annotations (Epic 2/3). Chrome is overlay-laid so it never reflows (NFR-1).
  */
@@ -63,7 +64,7 @@ export default function App() {
       </header>
 
       <main className="stage" role="main">
-        <div className="reader-backdrop" data-testid="reader-backdrop" aria-label="PDF canvas region" />
+        <Reader doc={doc} />
         <aside className="tool-rail" data-testid="tool-rail" aria-label="Tools (collapsed)">
           {/* Collapsed placeholder. Tool buttons arrive in Epic 2. */}
         </aside>

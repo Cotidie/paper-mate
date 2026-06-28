@@ -20,6 +20,15 @@ export async function fetchHealth(): Promise<HealthStatus> {
   return (await res.json()) as HealthStatus;
 }
 
+/**
+ * URL of a stored document's PDF bytes (`GET /api/docs/{doc_id}/file`). The
+ * `api/` module is the single owner of backend routes — the render layer takes
+ * this URL and never hardcodes the path (AD-9).
+ */
+export function docFileUrl(docId: string): string {
+  return `/api/docs/${encodeURIComponent(docId)}/file`;
+}
+
 /** Import a PDF from disk. The backend hashes, stores, and returns its `Doc`. */
 export async function uploadDoc(file: File): Promise<Doc> {
   const form = new FormData();

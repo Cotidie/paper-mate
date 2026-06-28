@@ -2,12 +2,13 @@
 
 ``POST /api/docs`` imports a PDF by delegating to the storage module and
 returns the ``Doc`` contract. A bad PDF becomes the single error envelope
-``{ "detail": string }``. Reserved (not built here): ``GET /api/docs``,
-``GET /api/docs/{doc_id}``, ``GET /api/docs/{doc_id}/file``,
+``{ "detail": string }``. ``GET /api/docs/{doc_id}/file`` streams the stored
+bytes. Reserved (not built here): ``GET /api/docs``, ``GET /api/docs/{doc_id}``,
 ``/api/docs/{doc_id}/annotations``.
 """
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app import storage
 from app.models import Doc
@@ -29,3 +30,13 @@ async def upload_doc(file: UploadFile = File(...)) -> Doc:
         # still answer with the single { detail } envelope, never a bare 500.
         raise HTTPException(status_code=500, detail="Could not store document") from exc
     return Doc(doc_id=doc_id, **meta.model_dump())
+
+
+@router.get("/docs/{doc_id}/file")
+async def get_doc_file(doc_id: str) -> FileResponse:
+    """Stream a stored document's PDF bytes. Storage owns the path (AR-9)."""
+    try:
+        path = storage.source_path(doc_id)
+    except storage.DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Document not found") from exc
+    return FileResponse(path, media_type="application/pdf")
