@@ -85,10 +85,12 @@
   --quick-box-action-height: 28px;
   --quick-box-action-padding-x: 8px;
 
-  /* color-swatch (recolor row; mostly Story 2.3 — shell dims land now;
-     DESIGN.md components.color-swatch) */
+  /* color-swatch (recolor row; DESIGN.md components.color-swatch). The pill +
+     the 2px ink ring on the armed (current) color. */
   --color-swatch-size: 20px;
   --color-swatch-border: 1px;
+  --color-swatch-ring-width: 2px;
+  --color-swatch-ring-offset: 1px;
 
   /* annotation-highlight: the default-color fill painted over a text run at
      reduced opacity (DESIGN.md components.annotation-highlight). */
@@ -100,4 +102,12 @@
 
   /* focus ring (DESIGN.md input focus; EXPERIENCE.md line 129) */
   --focus-ring-width: 2px;
+
+  /* Live text-selection tint over the PDF text layer. pdf.js's pdf_viewer.css
+     forces `.textLayer ::selection { background: transparent }` (it paints its
+     own selection, which we do not use — AD-2 raw textLayer + custom overlay),
+     so without this the drag selection is invisible. Soft accent blue so the
+     in-progress selection reads clearly without competing with the yellow
+     highlight it becomes (EXPERIENCE.md: Annotating = live preview). */
+  --color-text-selection: rgba(13, 116, 206, 0.25);
 }

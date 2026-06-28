@@ -260,6 +260,68 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(false);
   });
 
+  it("'H' arms the highlight tool; 'V'/'Escape' disarm it (Story 2.3)", async () => {
+    await openReader();
+    const hi = () => screen.getByTestId("tool-highlight-button");
+    // Default: not armed.
+    expect(hi().className).not.toContain("tool-button--armed");
+    // H arms highlight.
+    fireEvent.keyDown(document, { key: "h" });
+    expect(hi().className).toContain("tool-button--armed");
+    // V disarms.
+    fireEvent.keyDown(document, { key: "v" });
+    expect(hi().className).not.toContain("tool-button--armed");
+    // Re-arm, Escape disarms.
+    fireEvent.keyDown(document, { key: "H" });
+    expect(hi().className).toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).not.toContain("tool-button--armed");
+  });
+
+  it("'H' over a focused button/select does NOT arm (handler exempts controls)", async () => {
+    await openReader();
+    const btn = screen.getByTestId("tool-highlight-button");
+    // Key event whose target is a BUTTON must be ignored by the document handler.
+    fireEvent.keyDown(btn, { key: "h" });
+    expect(btn.className).not.toContain("tool-button--armed");
+  });
+
+  it("clicking the Highlight rail button toggles it armed (Story 2.3)", async () => {
+    await openReader();
+    const btn = screen.getByTestId("tool-highlight-button");
+    fireEvent.click(btn);
+    expect(btn.className).toContain("tool-button--armed");
+    // Clicking again disarms (toggle).
+    fireEvent.click(btn);
+    expect(btn.className).not.toContain("tool-button--armed");
+  });
+
+  it("arming highlight releases the hand pan so the drag is not eaten (#5/#2 mutual exclusion)", async () => {
+    await openReader();
+    // Arm hand → pannable.
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    fireEvent.click(screen.getByTestId("tool-option-hand"));
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(true);
+    // Press H: highlight arms AND pan is released (mode back to cursor), so a
+    // text drag selects instead of panning.
+    fireEvent.keyDown(document, { key: "h" });
+    expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(false);
+    // Exactly one tool active: the pointer button is no longer armed.
+    expect(screen.getByTestId("tool-cursor-button").className).not.toContain("tool-button--armed");
+  });
+
+  it("picking a pointer tool (hand) disarms the highlight tool (mutual exclusion)", async () => {
+    await openReader();
+    fireEvent.keyDown(document, { key: "h" });
+    expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
+    // Pick hand from the flyout → highlight disarms.
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    fireEvent.click(screen.getByTestId("tool-option-hand"));
+    expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(true);
+  });
+
   it("'[' toggles the rail collapsed / expanded", async () => {
     await openReader();
     // Expanded: the cursor button is present.

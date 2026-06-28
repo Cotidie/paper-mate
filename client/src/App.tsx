@@ -4,6 +4,7 @@ import "./App.css";
 import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
 import ToolRail, { type ToolMode } from "./ToolRail";
+import type { AnnotationTool } from "./annotations";
 import ZoomControl from "./ZoomControl";
 import TocPanel from "./TocPanel";
 import Toast from "./Toast";
@@ -30,6 +31,13 @@ export default function App() {
   // header note) — the Zustand tool system formalizes in Epic 2. The Reader
   // owns the actual pan gesture; App only tells it whether the hand is armed.
   const [mode, setMode] = useState<ToolMode>("cursor");
+  // The armed annotation tool (single source; Story 2.3 adds highlight). This is
+  // ORTHOGONAL to `mode` (cursor/hand/box drives pan): `armedTool` decides which
+  // mark a text-drag lands. Lifted here so the rail (armed styling + arm) and the
+  // overlay interaction (behavior) share one source. Sticky until V/Esc/another
+  // tool. Lives in App state, mirroring how `mode` is wired (not in the store,
+  // which is the annotation working copy, AD-9).
+  const [armedTool, setArmedTool] = useState<AnnotationTool | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
@@ -66,14 +74,29 @@ export default function App() {
     if (!docOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.altKey || e.metaKey) return;
+      // Exempt editable fields AND controls (SELECT/BUTTON) so a focused control
+      // keeps its own keys — matches the annotations-layer `isExempt` convention
+      // and AC1's document-level handler requirement (Epic-1 retro AP-1).
       const t = e.target as HTMLElement | null;
       if (
         t &&
-        (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.tagName === "BUTTON" ||
+          t.isContentEditable)
       )
         return;
       if (e.key === "v" || e.key === "V" || e.key === "Escape") {
         e.preventDefault();
+        setMode("cursor");
+        // V/Esc deselect: also disarm the annotation tool (back to plain cursor).
+        setArmedTool(null);
+      } else if (e.key === "h" || e.key === "H") {
+        e.preventDefault();
+        // Exclusive: arming an annotation tool returns the pointer to cursor so a
+        // still-armed hand/box pan can't eat the highlight drag (one tool active).
+        setArmedTool("highlight");
         setMode("cursor");
       } else if (e.key === "[") {
         e.preventDefault();
@@ -163,13 +186,26 @@ export default function App() {
           ref={readerRef}
           doc={doc}
           panArmed={mode === "hand"}
+          armedTool={armedTool}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
           onOutline={setToc}
         />
         <ToolRail
           mode={mode}
-          onMode={setMode}
+          // Picking a pointer sub-mode (cursor/hand/box) disarms any annotation
+          // tool: exactly one tool is active at a time (mutual exclusion).
+          onMode={(m) => {
+            setMode(m);
+            setArmedTool(null);
+          }}
+          armedTool={armedTool}
+          // Arming/toggling an annotation tool returns the pointer to cursor so a
+          // still-armed hand pan can't swallow the drag (the #5 bug).
+          onArmTool={(t) => {
+            setArmedTool((cur) => (cur === t ? null : t));
+            setMode("cursor");
+          }}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
         />

@@ -3,10 +3,12 @@ import {
   Cursor,
   Hand,
   Selection,
+  Highlighter,
   CaretDoubleLeft,
   CaretDoubleRight,
   type Icon,
 } from "@phosphor-icons/react";
+import type { AnnotationTool } from "./annotations";
 
 /**
  * The active pointer tool. Shared by `App` (owner), `Reader` (reads `hand` to
@@ -42,11 +44,19 @@ const OPTIONS: { value: ToolMode; label: string; hint: string; Icon: Icon }[] = 
 export default function ToolRail({
   mode,
   onMode,
+  armedTool = null,
+  onArmTool,
   collapsed,
   onToggleCollapse,
 }: {
   mode: ToolMode;
   onMode: (m: ToolMode) => void;
+  /** The armed annotation tool (App owns it; null = none). Story 2.3 adds the
+   *  Highlight button; later tool stories add their buttons the same way. */
+  armedTool?: AnnotationTool | null;
+  /** Toggle an annotation tool armed/disarmed. Optional so the Story 1.8 tests
+   *  that render the rail without it keep passing. */
+  onArmTool?: (tool: AnnotationTool) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
@@ -71,11 +81,14 @@ export default function ToolRail({
     };
   }, [open]);
 
-  // The icon shown on the rail button reflects the armed sub-mode.
+  // The icon shown on the rail button reflects the active pointer sub-mode.
   const active = OPTIONS.find((o) => o.value === mode) ?? OPTIONS[0];
   const ActiveIcon = active.Icon;
-  // A non-default tool (hand / box-select) shows the armed state on the button.
-  const armed = mode !== "cursor";
+  // The pointer tool is the ACTIVE tool whenever no annotation tool is armed —
+  // including plain cursor mode, which must show an active indicator too (#3).
+  // When an annotation tool (highlight) is armed, this button is not armed; that
+  // button is. Exactly one tool reads as active (mutual exclusion).
+  const armed = armedTool == null;
 
   if (collapsed) {
     // Minimal rail: a single affordance to expand again (`[` or click round-trips).
@@ -132,6 +145,23 @@ export default function ToolRail({
           ))}
         </div>
       )}
+
+      {/* Annotation tools (Story 2.3 adds Highlight; 2.4-2.8 add the rest below
+          it in DESIGN.md#tool-rail order). Arming is independent of the cursor
+          flyout's pointer `mode`. */}
+      <button
+        type="button"
+        className={
+          armedTool === "highlight" ? "tool-button tool-button--armed" : "tool-button"
+        }
+        aria-label="Highlight"
+        title="Highlight (H)"
+        aria-pressed={armedTool === "highlight"}
+        data-testid="tool-highlight-button"
+        onClick={() => onArmTool?.("highlight")}
+      >
+        <Highlighter aria-hidden />
+      </button>
 
       <button
         type="button"

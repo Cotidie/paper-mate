@@ -12,9 +12,20 @@
   z-index: 1;
 }
 
+/* The highlight opacity group: one composite pass for all highlight marks on a
+   page, so overlapping/stacked marks do not compound into a darker band (AC #3).
+   `isolation: isolate` confines the group's compositing. */
+.annotation-highlights {
+  position: absolute;
+  inset: 0;
+  opacity: var(--annotation-highlight-opacity);
+  isolation: isolate;
+}
+
 .annotation-highlight {
   position: absolute;
-  opacity: var(--annotation-highlight-opacity);
+  /* Opaque: the .annotation-highlights group carries the opacity, so overlaps
+     don't deepen and the most recent (topmost) wins on shared text. */
   border-radius: var(--radius-xs);
   pointer-events: none;
 }
@@ -50,4 +61,31 @@
 
 .quick-box__action:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-ink);
+}
+
+/* color-swatch row: the highlight recolor pills inside the quick-box (Story 2.3;
+   DESIGN.md#color-swatch). 20px accent pills; the armed (current) color and a
+   keyboard-focused swatch both get a 2px ink ring. */
+.color-swatch-row {
+  display: flex;
+  gap: var(--space-xxs);
+}
+
+.color-swatch {
+  width: var(--color-swatch-size);
+  height: var(--color-swatch-size);
+  padding: 0;
+  border: var(--color-swatch-border) solid var(--color-hairline-strong);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.color-swatch--armed {
+  outline: var(--color-swatch-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.color-swatch:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
 }

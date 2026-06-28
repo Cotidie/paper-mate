@@ -146,6 +146,30 @@ describe("Reader", () => {
     expect(canvas.hasAttribute("data-pan")).toBe(false);
   });
 
+  it("releases a stuck Space-pan on window blur (missed keyup → not stranded in pan mode)", async () => {
+    render(<Reader doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop");
+    // Hold Space (keydown, no keyup) → pannable.
+    fireEvent.keyDown(canvas, { key: " " });
+    expect(canvas.hasAttribute("data-pan")).toBe(true);
+    // Window loses focus before the keyup arrives (alt-tab / OS shortcut): the
+    // held flag must reset so the reader is not stranded in pan mode (which would
+    // keep the grab cursor and kill text selection / highlighting).
+    fireEvent.blur(window);
+    await waitFor(() => expect(canvas.hasAttribute("data-pan")).toBe(false));
+  });
+
+  it("releases a stuck Space-pan on document visibilitychange (tab hidden)", async () => {
+    render(<Reader doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop");
+    fireEvent.keyDown(canvas, { key: " " });
+    expect(canvas.hasAttribute("data-pan")).toBe(true);
+    fireEvent(document, new Event("visibilitychange"));
+    await waitFor(() => expect(canvas.hasAttribute("data-pan")).toBe(false));
+  });
+
   it("arms hold-Space from the document, regardless of which element has focus (focus-independent)", async () => {
     render(<Reader doc={doc} />);
     await screen.findAllByTestId("page-surface");

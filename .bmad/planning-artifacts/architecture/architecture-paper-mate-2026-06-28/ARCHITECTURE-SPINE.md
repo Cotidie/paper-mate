@@ -111,6 +111,16 @@ graph TD
 - **Prevents:** CORS surface; multi-process ops overhead
 - **Rule:** a single container (docker-compose) where FastAPI/uvicorn serves both the API and the built Vite SPA static assets (same-origin → no CORS). Compose volume-mounts host `~/.paper-mate` → `/data` and maps the port; host path + port via env. Dev: Vite dev server (HMR) proxies `/api` to FastAPI. Prod: FastAPI serves `dist/`. No auth (localhost, single user).
 
+### AD-11 — Tool-state model
+- **Binds:** the active tool across pointer (cursor/hand/box) and annotation (highlight/underline/pen/memo/comment) tools
+- **Prevents:** two tools active at once (e.g., the pan handler eating an annotation drag); divergent per-feature arming state
+- **Rule:** a single `activeTool` finite-state model is the one source of truth; tools are mutually exclusive by construction (arming any tool disarms the previous). `render/`'s pan derives from it (`hand`); the `annotations/` transient overlay machine (`armed/annotating/pending/empty`) is driven by the same model, not a parallel one (Epic-1 retro PREP-3). A rail click switches `activeTool` in a single click; a tool's quick-box opens only when that tool is already active or on drag-release, never in place of the switch. Hotkeys + the tool rail set it; bound at the document level, phase-gated, editable/buttons exempt. *(Added 2026-06-29 via correct-course after the Story 2.3 live smoke; see `sprint-change-proposal-2026-06-29-tool-fsm.md`. Single-click-switch rule added 2026-06-29 via `sprint-change-proposal-2026-06-29-select-highlight.md`.)*
+
+### AD-12 — Annotation selection model
+- **Binds:** which annotation is currently selected for inspection/edit, and how a screen click resolves to a mark
+- **Prevents:** each tool/edit story inventing its own hit-test + selected flag; selection logic leaking into the Epic-3 command stack before it exists
+- **Rule:** a single nullable `selectedId` in the Zustand `store/` is the source of truth for selection. Hit-testing maps a pointer location to an annotation by testing its page-normalized rects via the anchor service (AD-4); the topmost (recent-wins) mark under the point wins. Click-select works in cursor mode and while an annotation tool is active — on an active tool, pointerdown on an existing mark selects, pointerdown on empty content starts a create (driven by the AD-11 `activeTool` model). Selection is decoupled from the Epic-3 command stack (AR-7): select/clear is plain store state, while mutating a selected mark (recolor/delete now in Story 2.5; move/resize/retext later in 3.1) routes through the command path once it lands. The `annotations/` layer renders the selected affordance; `render/` never knows about selection (AD-9). *(Added 2026-06-29 via correct-course; see `sprint-change-proposal-2026-06-29-select-highlight.md`.)*
+
 ## Consistency Conventions
 
 | Concern | Convention |

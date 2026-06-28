@@ -85,12 +85,12 @@ Loading and rendering must **never** shift final page geometry — reserve the l
 
 | ID | Primitive | Behavior |
 |---|---|---|
-| IP-1 | Tool select | Click rail icon (or hotkey) arms tool; stays armed. |
+| IP-1 | Tool select | Click rail icon (or hotkey) arms tool; stays armed. **Exactly one tool is active at a time: arming any tool (pointer or annotation) disarms the previous (mutual exclusion, AD-11).** |
 | IP-2 | Drag-to-annotate | Drag over text/region creates a mark in the armed tool. |
 | IP-3 | Contextual quick-box | On drag-release, a mode-specific `{component.quick-box}` pops (table below). |
 | IP-4 | Pan | Hand tool drag, or hold `Space` + drag. |
 | IP-5 | Zoom | `Ctrl +/-`, `Ctrl 0` reset/fit, `Ctrl+scroll`, bottom-right buttons; live %. |
-| IP-6 | Edit | Click selects; drag handles move/resize; re-open quick-box to restyle; double-click text annotations to re-edit. |
+| IP-6 | Edit | Click selects a mark (cursor mode or while an annotation tool is active; single selection, AD-12). On a selected mark: re-open the quick-box to restyle/recolor, and delete (lightweight, Story 2.5). Drag-handle move/resize and double-click-to-re-edit text are heavier edits (Epic 3, Story 3.1). |
 | IP-7 | Undo / redo | `Ctrl Z` / `Ctrl Shift Z`. |
 | IP-8 | Delete | `Del` / `Backspace` on selected annotation. |
 | IP-9 | Freehand | Pen drag draws a vector stroke; quick-box sets color + width. |
@@ -108,6 +108,8 @@ Loading and rendering must **never** shift final page geometry — reserve the l
 | Textbox memo | inline `{component.text-input}` + color/size |
 | Comment | `{component.comment-bubble}` opens directly |
 | Box-select | region tool-type picker (highlight / comment; snapshot reserved for Phase 2) |
+
+**Arm-time color pick:** arming a color tool (highlight / underline / pen) also pops the `{component.color-swatch}` row to set the **default** color before drawing. This is distinct from the post-drag row above, which recolors the just-made mark; both read/write the same active-color state.
 
 ### Keyboard map
 

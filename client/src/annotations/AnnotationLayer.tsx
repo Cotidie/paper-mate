@@ -35,28 +35,35 @@ export default function AnnotationLayer({
 
   return (
     <div className="annotation-layer" aria-hidden="true" data-testid={`annotation-layer-${pageIndex}`}>
-      {marks.map((a) => {
-        // Render off the anchor KIND, not the annotation type. Story 2.2 paints
-        // the `text` kind (highlight proof); rect/path kinds arrive in 2.4–2.8.
-        if (a.anchor.kind !== "text") return null;
-        return a.anchor.rects.map((r, i) => {
-          const pos = denormalizeRect(r, box, scale);
-          return (
-            <div
-              key={`${a.id}-${i}`}
-              className="annotation-highlight"
-              data-testid={`annotation-mark-${a.id}`}
-              style={{
-                left: pos.left,
-                top: pos.top,
-                width: pos.width,
-                height: pos.height,
-                backgroundColor: `var(--color-${a.style.color})`,
-              }}
-            />
-          );
-        });
-      })}
+      {/* Highlights share ONE opacity group: marks paint opaque and the group is
+          composited once at the highlight opacity, so overlapping marks never
+          compound into a darker/thicker band and the most recent (last in DOM)
+          wins on shared text (AC #3). `isolation` keeps the group's blending
+          self-contained. */}
+      <div className="annotation-highlights">
+        {marks.map((a) => {
+          // Render off the anchor KIND, not the annotation type. Story 2.2 paints
+          // the `text` kind (highlight); rect/path kinds arrive in 2.6–2.10.
+          if (a.anchor.kind !== "text") return null;
+          return a.anchor.rects.map((r, i) => {
+            const pos = denormalizeRect(r, box, scale);
+            return (
+              <div
+                key={`${a.id}-${i}`}
+                className="annotation-highlight"
+                data-testid={`annotation-mark-${a.id}`}
+                style={{
+                  left: pos.left,
+                  top: pos.top,
+                  width: pos.width,
+                  height: pos.height,
+                  backgroundColor: `var(--color-${a.style.color})`,
+                }}
+              />
+            );
+          });
+        })}
+      </div>
     </div>
   );
 }
