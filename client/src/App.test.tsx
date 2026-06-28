@@ -311,11 +311,27 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(screen.getByTestId("tool-cursor-button").className).not.toContain("tool-button--armed");
   });
 
-  it("picking a pointer tool (hand) disarms the highlight tool (mutual exclusion)", async () => {
+  it("clicking the pointer button while Highlight is armed switches to cursor in ONE click (AC4)", async () => {
     await openReader();
     fireEvent.keyDown(document, { key: "h" });
     expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
-    // Pick hand from the flyout → highlight disarms.
+    // Single click on the pointer button commits to cursor — no flyout opens in
+    // place of the switch, and highlight is disarmed (mutual exclusion).
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    expect(screen.queryByTestId("tool-flyout")).toBeNull();
+    expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
+    expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
+    // Cursor (not hand), so pan is not armed.
+    expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(false);
+  });
+
+  it("switching back to hand disarms the highlight tool (mutual exclusion)", async () => {
+    await openReader();
+    fireEvent.keyDown(document, { key: "h" });
+    expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
+    // One click switches Highlight → cursor; cursor is now active, so a second
+    // click opens the flyout, from which hand can be picked → pan arms.
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
     fireEvent.click(screen.getByTestId("tool-option-hand"));
     expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");

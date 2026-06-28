@@ -6,14 +6,14 @@ afterEach(cleanup);
 
 describe("ToolRail", () => {
   it("renders the rail shell (data-testid kept stable for App.test)", () => {
-    render(<ToolRail mode="cursor" onMode={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+    render(<ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
     expect(screen.getByTestId("tool-rail")).toBeTruthy();
     // Flyout is closed until the cursor button is clicked.
     expect(screen.queryByTestId("tool-flyout")).toBeNull();
   });
 
-  it("opens the flyout with cursor / hand / box-select on the cursor button", () => {
-    render(<ToolRail mode="cursor" onMode={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+  it("opens the flyout with cursor / hand / box on the cursor button when a pointer tool is active", () => {
+    render(<ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
     const btn = screen.getByTestId("tool-cursor-button");
     expect(btn.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(btn);
@@ -21,51 +21,63 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-flyout")).toBeTruthy();
     expect(screen.getByTestId("tool-option-cursor")).toBeTruthy();
     expect(screen.getByTestId("tool-option-hand")).toBeTruthy();
-    expect(screen.getByTestId("tool-option-box-select")).toBeTruthy();
+    expect(screen.getByTestId("tool-option-box")).toBeTruthy();
   });
 
-  it("calls onMode('hand') and closes the flyout when hand is picked", () => {
-    const onMode = vi.fn();
-    render(<ToolRail mode="cursor" onMode={onMode} collapsed={false} onToggleCollapse={vi.fn()} />);
+  it("calls onSelectTool('hand') and closes the flyout when hand is picked", () => {
+    const onSelectTool = vi.fn();
+    render(<ToolRail activeTool="cursor" onSelectTool={onSelectTool} collapsed={false} onToggleCollapse={vi.fn()} />);
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
     fireEvent.click(screen.getByTestId("tool-option-hand"));
-    expect(onMode).toHaveBeenCalledWith("hand");
+    expect(onSelectTool).toHaveBeenCalledWith("hand");
     expect(screen.queryByTestId("tool-flyout")).toBeNull();
   });
 
-  it("reflects the armed mode (aria-pressed on the option, armed class on the button)", () => {
-    render(<ToolRail mode="hand" onMode={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
-    // The rail button shows the armed state for a non-default tool.
+  it("reflects the active pointer tool (aria-pressed on the option, armed class on the button)", () => {
+    render(<ToolRail activeTool="hand" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+    // The rail button shows the armed state for a non-default pointer tool.
     expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
     expect(screen.getByTestId("tool-option-hand").getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByTestId("tool-option-cursor").getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("shows the pointer button active in plain cursor mode when no tool armed (#3)", () => {
+  it("shows the pointer button active in plain cursor mode (#3)", () => {
     render(
-      <ToolRail mode="cursor" onMode={vi.fn()} armedTool={null} onArmTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
+      <ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
     );
     // The selection tool IS the active tool in cursor mode — it must read active.
     expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
   });
 
-  it("pointer button is NOT active when an annotation tool is armed (mutual exclusion)", () => {
+  it("pointer button is NOT active when an annotation tool is active (mutual exclusion)", () => {
     render(
-      <ToolRail mode="cursor" onMode={vi.fn()} armedTool="highlight" onArmTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
+      <ToolRail activeTool="highlight" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
     );
     expect(screen.getByTestId("tool-cursor-button").className).not.toContain("tool-button--armed");
     expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
   });
 
+  it("single-click switch (AC4): with Highlight active, one click on the pointer button commits to cursor and opens no flyout", () => {
+    const onSelectTool = vi.fn();
+    render(
+      <ToolRail activeTool="highlight" onSelectTool={onSelectTool} collapsed={false} onToggleCollapse={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    // One click commits the switch...
+    expect(onSelectTool).toHaveBeenCalledWith("cursor");
+    // ...and never opens a sub-toolbox in its place.
+    expect(screen.queryByTestId("tool-flyout")).toBeNull();
+  });
+
   it("gives every tool a hover tooltip (native title) describing it + its shortcut", () => {
-    render(<ToolRail mode="cursor" onMode={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+    render(<ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
     // Rail button + collapse have tooltips.
     expect(screen.getByTestId("tool-cursor-button").getAttribute("title")).toBeTruthy();
     expect(screen.getByTestId("tool-rail-collapse").getAttribute("title")).toBeTruthy();
     // Each flyout option has a descriptive tooltip.
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
-    for (const v of ["cursor", "hand", "box-select"]) {
+    for (const v of ["cursor", "hand", "box"]) {
       expect(screen.getByTestId(`tool-option-${v}`).getAttribute("title")).toBeTruthy();
     }
     // The hand tooltip mentions panning + the Space shortcut.
@@ -73,34 +85,29 @@ describe("ToolRail", () => {
   });
 
   it("arms highlight from the Highlight button (Story 2.3)", () => {
-    const onArmTool = vi.fn();
+    const onSelectTool = vi.fn();
     render(
-      <ToolRail
-        mode="cursor"
-        onMode={vi.fn()}
-        armedTool={null}
-        onArmTool={onArmTool}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-      />,
+      <ToolRail activeTool="cursor" onSelectTool={onSelectTool} collapsed={false} onToggleCollapse={vi.fn()} />,
     );
     const btn = screen.getByTestId("tool-highlight-button");
     expect(btn.className).not.toContain("tool-button--armed");
     expect(btn.getAttribute("title")).toBe("Highlight (H)");
     fireEvent.click(btn);
-    expect(onArmTool).toHaveBeenCalledWith("highlight");
+    expect(onSelectTool).toHaveBeenCalledWith("highlight");
   });
 
-  it("shows the Highlight button armed when armedTool is highlight (Story 2.3)", () => {
+  it("toggles Highlight off back to cursor on a second click (Story 2.3 toggle-off feel)", () => {
+    const onSelectTool = vi.fn();
     render(
-      <ToolRail
-        mode="cursor"
-        onMode={vi.fn()}
-        armedTool="highlight"
-        onArmTool={vi.fn()}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-      />,
+      <ToolRail activeTool="highlight" onSelectTool={onSelectTool} collapsed={false} onToggleCollapse={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByTestId("tool-highlight-button"));
+    expect(onSelectTool).toHaveBeenCalledWith("cursor");
+  });
+
+  it("shows the Highlight button armed when activeTool is highlight (Story 2.3)", () => {
+    render(
+      <ToolRail activeTool="highlight" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
     );
     const btn = screen.getByTestId("tool-highlight-button");
     expect(btn.className).toContain("tool-button--armed");
@@ -110,7 +117,7 @@ describe("ToolRail", () => {
   it("calls onToggleCollapse from the collapse affordance", () => {
     const onToggleCollapse = vi.fn();
     render(
-      <ToolRail mode="cursor" onMode={vi.fn()} collapsed={false} onToggleCollapse={onToggleCollapse} />,
+      <ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={onToggleCollapse} />,
     );
     fireEvent.click(screen.getByTestId("tool-rail-collapse"));
     expect(onToggleCollapse).toHaveBeenCalledTimes(1);
@@ -119,7 +126,7 @@ describe("ToolRail", () => {
   it("when collapsed, renders the minimal rail with an expand affordance", () => {
     const onToggleCollapse = vi.fn();
     render(
-      <ToolRail mode="cursor" onMode={vi.fn()} collapsed={true} onToggleCollapse={onToggleCollapse} />,
+      <ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={true} onToggleCollapse={onToggleCollapse} />,
     );
     expect(screen.getByTestId("tool-rail")).toBeTruthy();
     // No cursor button / flyout while collapsed.

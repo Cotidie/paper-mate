@@ -3,8 +3,8 @@ import { ListBullets, Cards } from "@phosphor-icons/react";
 import "./App.css";
 import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
-import ToolRail, { type ToolMode } from "./ToolRail";
-import type { AnnotationTool } from "./annotations";
+import ToolRail from "./ToolRail";
+import { type ActiveTool, isAnnotationTool } from "./tools";
 import ZoomControl from "./ZoomControl";
 import TocPanel from "./TocPanel";
 import Toast from "./Toast";
@@ -27,17 +27,15 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   // Live zoom percent, reported by the Reader for the top-bar zoom control.
   const [zoomPercent, setZoomPercent] = useState(100);
-  // Active pointer tool + tool-rail collapse. Lightweight React state (see the
-  // header note) — the Zustand tool system formalizes in Epic 2. The Reader
-  // owns the actual pan gesture; App only tells it whether the hand is armed.
-  const [mode, setMode] = useState<ToolMode>("cursor");
-  // The armed annotation tool (single source; Story 2.3 adds highlight). This is
-  // ORTHOGONAL to `mode` (cursor/hand/box drives pan): `armedTool` decides which
-  // mark a text-drag lands. Lifted here so the rail (armed styling + arm) and the
-  // overlay interaction (behavior) share one source. Sticky until V/Esc/another
-  // tool. Lives in App state, mirroring how `mode` is wired (not in the store,
-  // which is the annotation working copy, AD-9).
-  const [armedTool, setArmedTool] = useState<AnnotationTool | null>(null);
+  // The single active tool (AD-11): ONE field that is the source of truth across
+  // both the pointer tools (cursor/hand/box, which drive pan) and the annotation
+  // tools (highlight/…, which drive marks). Because there is one field, mutual
+  // exclusion is by construction — setting it disarms the previous, so a still-
+  // armed hand can never eat an annotation drag (the Story 2.3 bug, now removed
+  // at the cause). `panArmed` and the overlay's `armedTool` are pure derivations
+  // of this (below), never stored siblings. Lives in App state (not the store,
+  // which is the annotation working copy, AD-9). Sticky until V/Esc/another tool.
+  const [activeTool, setActiveTool] = useState<ActiveTool>("cursor");
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
@@ -89,15 +87,14 @@ export default function App() {
         return;
       if (e.key === "v" || e.key === "V" || e.key === "Escape") {
         e.preventDefault();
-        setMode("cursor");
-        // V/Esc deselect: also disarm the annotation tool (back to plain cursor).
-        setArmedTool(null);
+        // V/Esc → plain cursor. One setter; no second field to clear.
+        setActiveTool("cursor");
       } else if (e.key === "h" || e.key === "H") {
         e.preventDefault();
-        // Exclusive: arming an annotation tool returns the pointer to cursor so a
-        // still-armed hand/box pan can't eat the highlight drag (one tool active).
-        setArmedTool("highlight");
-        setMode("cursor");
+        // Arm highlight. Mutual exclusion is automatic: setting `activeTool`
+        // disarms whatever pointer/annotation tool was active (one tool active),
+        // so a still-armed hand/box pan can't eat the highlight drag.
+        setActiveTool("highlight");
       } else if (e.key === "[") {
         e.preventDefault();
         setRailCollapsed((c) => !c);
@@ -185,27 +182,19 @@ export default function App() {
         <Reader
           ref={readerRef}
           doc={doc}
-          panArmed={mode === "hand"}
-          armedTool={armedTool}
+          // Pan and the overlay's armed tool are pure derivations of the single
+          // `activeTool` (AD-11) — no stored siblings to keep in sync.
+          panArmed={activeTool === "hand"}
+          armedTool={isAnnotationTool(activeTool) ? activeTool : null}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
           onOutline={setToc}
         />
         <ToolRail
-          mode={mode}
-          // Picking a pointer sub-mode (cursor/hand/box) disarms any annotation
-          // tool: exactly one tool is active at a time (mutual exclusion).
-          onMode={(m) => {
-            setMode(m);
-            setArmedTool(null);
-          }}
-          armedTool={armedTool}
-          // Arming/toggling an annotation tool returns the pointer to cursor so a
-          // still-armed hand pan can't swallow the drag (the #5 bug).
-          onArmTool={(t) => {
-            setArmedTool((cur) => (cur === t ? null : t));
-            setMode("cursor");
-          }}
+          activeTool={activeTool}
+          // One setter; the rail commits a tool in a single click. Mutual
+          // exclusion is intrinsic to `activeTool`, so no cross-setting closures.
+          onSelectTool={setActiveTool}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
         />
