@@ -24,6 +24,8 @@ Items surfaced during review that are real but intentionally not actioned now.
 
 ## Deferred from: local Docker dev experience (2026-06-29)
 
+> **PROMOTED 2026-06-29 → Story 2.1 (Dev-infra enabler)** via correct-course (`sprint-change-proposal-2026-06-29.md`): both items below are now the AC of Epic 2 Story 2.1, sequenced first so Epic 2's heavy iteration isn't blocked by the dev-experience friction. Kept here for the root-cause detail.
+
 > Surfaced while running `docker compose up` for local testing. Both are dev-environment/infra, not product behavior — but they block comfortable local iteration as the backend grows. Coupled (both stem from how the container runs), so fix them together; a single dev-compose override can address both.
 
 - **Bind-mounted `/data` is root-owned; the host user can't edit/delete it** [Dockerfile, docker-compose.yml] — the runtime image has no `USER`, so the container runs as **root (uid 0)**. Everything it writes to the bind-mounted `/data` (host `~/.paper-mate`, AD-8 storage root) lands `root:root` — the host user (uid 1000) can read (dirs are 0755) but not write or delete (the lock badges in the file manager). It **re-occurs on every `docker compose up`**, not a one-time glitch.

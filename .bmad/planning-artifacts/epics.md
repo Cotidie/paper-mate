@@ -369,7 +369,63 @@ So that I can jump to a section without scroll-hunting.
 
 Mark up the page with all six tools via drag-to-annotate and the contextual quick-box. Marks land anchored to exact PDF coordinates and the page never moves. This epic proves the spatial-anchor model holds across zoom (NFR-3) and defines the Annotation entity (AR-5).
 
-### Story 2.1: Highlight text via drag
+> Restructured 2026-06-29 (correct-course, see `sprint-change-proposal-2026-06-29.md`): added a dev-infra enabler (Story 2.1) and split the foundation out of the original Story 2.1 into a dedicated Annotation-foundation story (Story 2.2), renumbering the six tool stories to 2.3–2.9 so number = execution order. Rationale: the original 2.1 bundled five net-new architectural pillars (`anchor/` service, `Annotation` entity, Zustand `store/`, `annotations/` overlay, quick-box shell) with the highlight feature — the foundation is the highest-leverage decision of the epic (Epic 1 retro PREP-1) and earns its own story. Standing principle applied across the anchor stories: **adopt stable primitives, don't reinvent wheels** (Epic 1 retro AP-4).
+
+### Story 2.1: Dev-infra enabler (local Docker dev loop)
+
+As a developer,
+I want the local Docker dev loop usable (writable data dir, live backend),
+So that Epic 2's heavy iteration isn't blocked by stale containers or root-owned files.
+
+> Enabler, not a product feature. Sequenced first so the rest of Epic 2 develops without the dev-experience friction surfaced in Epic 1 (`deferred-work.md`, 2026-06-29). No annotation code.
+
+**Acceptance Criteria:**
+
+**Given** `docker compose up`
+**When** the container writes to the mounted `/data`
+**Then** new files are owned by the host user (compose `user:` set, host dir pre-created), so the host user can edit/delete library files — not root-owned (AD-10; `deferred-work.md`)
+
+**Given** a backend code change
+**Then** the dev loop is documented: either (a) local dev = the host two-process flow (`uvicorn --reload` + `vite dev`) with Docker as the prod-like single-command boot, OR (b) a dev compose override bind-mounts `server/app` and runs `uvicorn --reload`; the decision is recorded in the dev docs (CLAUDE.md/README) so a stale container is never mistaken for a bug
+
+**Given** the enabler
+**Then** it changes no product behavior and touches no annotation code (Dockerfile / docker-compose / dev docs only)
+
+### Story 2.2: Annotation foundation (anchor service + store + overlay)
+
+As a reader,
+I want a single mark to land anchored to exact PDF coordinates and survive zoom,
+So that every annotation tool is built on one proven spatial foundation.
+
+> The architectural through-line of the epic (AR-4/AD-4). Stands up `anchor/`, the `Annotation` entity, the Zustand `store/`, the `annotations/` overlay, and the quick-box shell — proven end-to-end by the simplest mark — so Stories 2.3–2.9 are thin features on top. Adopt stable primitives (Epic 1 retro AP-4/PREP-1).
+
+**Acceptance Criteria:**
+
+**Given** the rendered page box (AD-4)
+**Then** the `anchor/` service provides normalized↔screen projection built on pdf.js `viewport.convertToPdfPoint` / `convertToViewportPoint` (adopt the stable primitive, do NOT hand-roll); `anchor/` is the ONLY home of that math (AD-9, NFR-3)
+
+**Given** a text selection
+**Then** text-run rects come from the native Selection API + `Range.getClientRects()` over the pdf.js text layer (stable primitive), normalized to canonical `{x0,y0,x1,y1}` with `x0≤x1, y0≤y1`, top-left origin, against the page box; screen position is derived, never persisted (AR-4, AR-9)
+
+**Given** a created mark
+**Then** it stores as `Annotation {id(uuidv4), doc_id, type, group_id, anchor(kind), style, body, created_at, updated_at}` keyed by `id` in the Zustand `store/` (AD-5, AD-7); rendering keys off `anchor.kind`, never `type`
+
+**Given** the annotations overlay
+**Then** it renders in the `annotations/` layer as an overlay that never reflows the canvas (NFR-1), and the `{component.quick-box}` shell exists (pops on drag-release; dismiss on pick, outside-click, or `Esc`) for every tool story to reuse (UX-DR5, UX-DR6, UX-DR16)
+
+**Given** a selection spanning two pages
+**Then** it splits into one annotation per page sharing a `group_id` (AR-4)
+
+**Given** I zoom after creating the mark
+**Then** it re-renders on the exact location across all zoom levels (NFR-3 proven on the simplest mark)
+
+**Given** the tool-arm keys and overlay interactions
+**Then** they follow the document-level handler convention (phase-gated, editable/buttons exempt) and distinguish armed/active/empty states with proper focus return (Epic 1 retro AP-1, PREP-3)
+
+### Story 2.3: Highlight text via drag
+
+> Builds on the Story 2.2 foundation: the anchor service, `Annotation` entity, store, and quick-box shell already exist; this story is the highlight feature on top.
+
 
 As a reader,
 I want to drag across text and drop a highlight,
@@ -396,7 +452,7 @@ So that I mark passages and the page never moves.
 **Given** I zoom after creating
 **Then** the highlight re-renders on the exact text run across all zoom levels (NFR-3 proven)
 
-### Story 2.2: Underline text
+### Story 2.4: Underline text
 
 As a reader,
 I want to underline text,
@@ -414,7 +470,7 @@ So that I emphasize lines without the page moving.
 **Given** zoom
 **Then** the underline stays anchored across zoom levels (NFR-3)
 
-### Story 2.3: Pen / freehand
+### Story 2.5: Pen / freehand
 
 As a reader,
 I want to draw freehand on the page,
@@ -432,7 +488,7 @@ So that I can sketch marks beside the text.
 **Given** zoom
 **Then** the stroke re-renders at correct scale and position (NFR-3)
 
-### Story 2.4: Textbox memo
+### Story 2.6: Textbox memo
 
 As a reader,
 I want a free-floating memo,
@@ -453,7 +509,7 @@ So that I type a note onto the page without displacing the text.
 **Given** zoom
 **Then** the memo box stays anchored (NFR-3)
 
-### Story 2.5: Comment (highlight + pin + bubble)
+### Story 2.7: Comment (highlight + pin + bubble)
 
 As a reader,
 I want a comment anchored to a spot,
@@ -475,7 +531,7 @@ So that I attach a note that opens on click.
 **Given** zoom
 **Then** the highlight and pin stay anchored (NFR-3)
 
-### Story 2.6: Box-select a region
+### Story 2.8: Box-select a region
 
 As a reader,
 I want to box-select an area,
@@ -493,7 +549,7 @@ So that I can mark a region, not just text.
 **Given** the region
 **Then** the overlay never reflows the page (NFR-1)
 
-### Story 2.7: Drag-to-change-tool quick-box
+### Story 2.9: Drag-to-change-tool quick-box
 
 As a reader,
 I want a tool picker on drag in cursor mode,

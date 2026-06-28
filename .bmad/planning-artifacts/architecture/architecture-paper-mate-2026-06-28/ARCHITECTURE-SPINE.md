@@ -74,6 +74,7 @@ graph TD
   - **Rect form is canonical** `{x0, y0, x1, y1}` with `x0 ≤ x1`, `y0 ≤ y1` — canonicalized on create (negative drags normalized). All rects (text quads, memo box, box-select) use this one shape.
   - **`anchor.kind` is the geometry discriminator, not `type`** (see AD-5): `kind=text` → `{rects: Rect[], text: string}`; `kind=rect` → `{rect: Rect}`; `kind=path` → `{points: {x,y}[]}`.
   - **One anchor = one page** (`page_index`). A selection spanning pages is split into one annotation per page sharing a `group_id`.
+  - **Adopt stable primitives, don't reinvent wheels** (standing principle, Epic 1 retro 2026-06-29). The anchor service's normalize↔screen math is built on pdf.js `viewport.convertToPdfPoint` / `convertToViewportPoint`, and text-run rects come from the native Selection API + `Range.getClientRects()` over the pdf.js text layer — not a hand-rolled projection or glyph hit-test. This applies to the primitives *under* the custom overlay; it does not override deliberate from-scratch choices like AD-2 (raw pdf.js + custom overlay, rejecting pdf.js's built-in annotation layer).
 
 ### AD-5 — Annotation entity
 - **Binds:** FR-7..FR-22

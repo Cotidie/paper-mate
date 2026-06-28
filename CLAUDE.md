@@ -59,6 +59,14 @@ The two architectural through-lines that cut across phases:
 - The overriding UI principle is **immersive, non-distracting reading** — minimal Obsidian-style chrome. UI must recede behind the PDF content; default to hairlines and restraint over heavy surfaces.
 - Caveat: `DESIGN.md` frontmatter is currently `name: Expo-design-analysis` — token *scales* are the convention, but the component catalog (hero, pricing, device-mockup, etc.) is from an Expo marketing site and does not map to this app. Retarget the component layer to Paper Mate's reader UI rather than treating those component entries as a spec.
 
+## Engineering principles
+
+Standing conventions from the Epic 1 retrospective (2026-06-29):
+
+- **Don't reinvent wheels — adopt stable solutions.** When a proven library or built-in primitive exists, use it over a from-scratch build. Concretely: the Epic 2 `anchor/` layer uses pdf.js `viewport.convertToPdfPoint`/`convertToViewportPoint` + native Selection `Range.getClientRects()` (not hand-rolled math), and perfect-freehand for the pen. Caveat: this does not override deliberate architectural choices like AD-2 (raw pdf.js + custom overlay) — apply it to the primitives *underneath* such choices. Surface the build-vs-adopt tradeoff when it comes up.
+- **Bind interaction handlers at the document level.** Key/pointer handlers go on `document` (gated by phase, e.g. `phase === "ready"`), exempting editable fields + buttons — NOT bound to `.pdf-canvas`. A canvas-bound handler is bypassed or lost when focus moves; this exact bug recurred in three Epic 1 stories (zoom keys 1-5, hold-Space 1-8, focus-after-jump 1-9).
+- **Keep the `render/` test mocks in sync.** Any new `render/index.ts` export must be added to BOTH `vi.mock("./render")` barrels (`App.test.tsx`, `Reader.test.tsx`) in the same change, or every Reader/App test breaks.
+
 ## BMad workflow
 
 BMad Method v6.9.0 is installed (project-scoped). Treat it as the planning/dev pipeline, not noise:
