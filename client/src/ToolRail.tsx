@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  Cursor,
+  Hand,
+  Selection,
+  CaretDoubleLeft,
+  CaretDoubleRight,
+  type Icon,
+} from "@phosphor-icons/react";
 
 /**
  * The active pointer tool. Shared by `App` (owner), `Reader` (reads `hand` to
@@ -9,14 +17,15 @@ import { useEffect, useRef, useState } from "react";
 export type ToolMode = "cursor" | "hand" | "box-select";
 
 /**
- * The cursor-family options, in flyout order. `glyph` is the icon shown on the
- * button; `hint` is the hover tooltip (native `title`) describing the tool + its
- * shortcut. `label` stays the accessible name (aria-label).
+ * The cursor-family options, in flyout order. `Icon` is the Phosphor (regular)
+ * monochrome glyph — it paints with `currentColor`, so it inherits the button's
+ * token color (body, or ink when armed). `hint` is the hover tooltip (native
+ * `title`); `label` is the accessible name (aria-label).
  */
-const OPTIONS: { value: ToolMode; label: string; glyph: string; hint: string }[] = [
-  { value: "cursor", label: "Cursor", glyph: "🖱️", hint: "Cursor — select & read text (V)" },
-  { value: "hand", label: "Hand", glyph: "✋", hint: "Hand — drag to pan, or hold Space" },
-  { value: "box-select", label: "Box select", glyph: "🔲", hint: "Box select" },
+const OPTIONS: { value: ToolMode; label: string; hint: string; Icon: Icon }[] = [
+  { value: "cursor", label: "Cursor", hint: "Cursor — select & read text (V)", Icon: Cursor },
+  { value: "hand", label: "Hand", hint: "Hand — drag to pan, or hold Space", Icon: Hand },
+  { value: "box-select", label: "Box select", hint: "Box select", Icon: Selection },
 ];
 
 /**
@@ -62,8 +71,9 @@ export default function ToolRail({
     };
   }, [open]);
 
-  // The glyph shown on the rail button reflects the armed sub-mode.
+  // The icon shown on the rail button reflects the armed sub-mode.
   const active = OPTIONS.find((o) => o.value === mode) ?? OPTIONS[0];
+  const ActiveIcon = active.Icon;
   // A non-default tool (hand / box-select) shows the armed state on the button.
   const armed = mode !== "cursor";
 
@@ -79,7 +89,7 @@ export default function ToolRail({
           data-testid="tool-rail-collapse"
           onClick={onToggleCollapse}
         >
-          {"»"}
+          <CaretDoubleRight aria-hidden />
         </button>
       </aside>
     );
@@ -97,7 +107,7 @@ export default function ToolRail({
         data-testid="tool-cursor-button"
         onClick={() => setOpen((o) => !o)}
       >
-        {active.glyph}
+        <ActiveIcon aria-hidden />
       </button>
 
       {open && (
@@ -117,7 +127,7 @@ export default function ToolRail({
                 setOpen(false);
               }}
             >
-              {o.glyph}
+              <o.Icon aria-hidden />
             </button>
           ))}
         </div>
@@ -131,7 +141,7 @@ export default function ToolRail({
         data-testid="tool-rail-collapse"
         onClick={onToggleCollapse}
       >
-        {"«"}
+        <CaretDoubleLeft aria-hidden />
       </button>
     </aside>
   );

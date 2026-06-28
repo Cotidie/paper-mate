@@ -45,6 +45,8 @@
 
   /* tool-button / tool-flyout (DESIGN.md components.tool-button / tool-flyout) */
   --tool-button-size: 36px;
+  /* Phosphor glyph size inside the 36px button. */
+  --tool-icon-size: 20px;
   /* Gap between the rail and the flyout that opens beside it. */
   --tool-flyout-offset: 8px;
 

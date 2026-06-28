@@ -144,6 +144,14 @@
   cursor: pointer;
 }
 
+/* Phosphor icons paint with currentColor (inherit the button's token color) and
+   are sized by the token rather than their default 1em. */
+.tool-button svg {
+  width: var(--tool-icon-size);
+  height: var(--tool-icon-size);
+  display: block;
+}
+
 .tool-button:hover {
   background: var(--color-surface-strong);
 }
