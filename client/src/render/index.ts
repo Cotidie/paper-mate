@@ -80,6 +80,47 @@ export function fitToWidthScale(
   return Math.min(cap, canvasWidth / boxWidth);
 }
 
+/** A page card's vertical extent (top/bottom) in any single coordinate space. */
+export interface PageExtent {
+  pageNumber: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Pure helper: the page currently "in view" = the TOP-MOST card whose vertical
+ * extent intersects the viewport band [viewportTop, viewportBottom]. `top`/
+ * `bottom` and the viewport must share one coordinate space (e.g. client px).
+ * Defaults to page 1 when nothing intersects or the list is empty. DOM-free so
+ * it is unit-testable without layout (jsdom reports zeroed rects). No anchor
+ * math — plain layout arithmetic.
+ */
+export function currentPageInView(
+  pages: PageExtent[],
+  viewportTop: number,
+  viewportBottom: number,
+): number {
+  let best = pages.length ? pages[0].pageNumber : 1;
+  let bestTop = Infinity;
+  for (const p of pages) {
+    const intersects = p.bottom > viewportTop && p.top < viewportBottom;
+    if (intersects && p.top < bestTop) {
+      bestTop = p.top;
+      best = p.pageNumber;
+    }
+  }
+  return best;
+}
+
+/**
+ * Pure helper: the page number `delta` pages away from `current`, clamped to
+ * `[1, pageCount]` (and to 1 for an empty document). Used by `PgUp`/`PgDn` nav.
+ */
+export function pageNavTarget(current: number, delta: number, pageCount: number): number {
+  if (pageCount < 1) return 1;
+  return Math.min(pageCount, Math.max(1, current + delta));
+}
+
 /**
  * Paint a page into `canvas` (HiDPI-correct) and its selectable text into
  * `textLayerDiv`, both at `scale`. Returns a handle whose `cancel()` aborts the

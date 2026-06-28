@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { Doc } from "./api/client";
 import {
@@ -7,7 +7,10 @@ import {
   getPageBox,
   renderPage,
   fitToWidthScale,
+  currentPageInView,
+  pageNavTarget,
   type PageBox,
+  type PageExtent,
   type PageRender,
 } from "./render";
 import "./Reader.css";
@@ -22,13 +25,31 @@ import "./Reader.css";
  * before any paint) so streaming pages never shift layout; pages paint lazily
  * as they scroll into view.
  */
-export default function Reader({ doc }: { doc: Doc }) {
+export default function Reader({
+  doc,
+  onVisiblePageChange,
+}: {
+  doc: Doc;
+  /** Reports the 1-based page currently in view, for the top-bar indicator. */
+  onVisiblePageChange?: (page: number) => void;
+}) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Live registry of mounted page cards (1-based) → DOM node, for the
+  // page-in-view tracker and PgUp/PgDn scroll targets. All cards mount up front
+  // (reserve-geometry), so this is fully populated once `boxes` is set.
+  const cardEls = useRef<Map<number, HTMLDivElement>>(new Map());
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [boxes, setBoxes] = useState<PageBox[]>([]);
   // Scale lives in state so Story 1.5 (zoom) can drive it later (don't hardcode).
   const [scale, setScale] = useState(1);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
+  // 1-based page in view; defaults to 1 so the indicator is stable from load.
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const registerCard = useCallback((pageNumber: number, el: HTMLDivElement | null) => {
+    if (el) cardEls.current.set(pageNumber, el);
+    else cardEls.current.delete(pageNumber);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,12 +95,79 @@ export default function Reader({ doc }: { doc: Doc }) {
     };
   }, [doc.doc_id, doc.page_count]);
 
+  // Report the page in view upward (top-bar indicator) whenever it changes.
+  useEffect(() => {
+    onVisiblePageChange?.(currentPage);
+  }, [currentPage, onVisiblePageChange]);
+
+  // Track the page in view. Drive recomputation off IntersectionObserver (which
+  // fires only when a card crosses the viewport edge, off the scroll hot path)
+  // rather than a per-frame scroll listener (NFR-2). Each fire reads the live
+  // card rects and the pure `currentPageInView` picks the top-most visible page.
+  useEffect(() => {
+    if (phase !== "ready" || typeof IntersectionObserver === "undefined") return;
+    const container = scrollRef.current;
+    if (!container) return;
+
+    let frame = 0;
+    const recompute = () => {
+      frame = 0;
+      const view = container.getBoundingClientRect();
+      const extents: PageExtent[] = [];
+      for (const [pageNumber, el] of cardEls.current) {
+        const r = el.getBoundingClientRect();
+        extents.push({ pageNumber, top: r.top, bottom: r.bottom });
+      }
+      setCurrentPage(currentPageInView(extents, view.top, view.bottom));
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(recompute);
+    };
+
+    const io = new IntersectionObserver(schedule, { root: container });
+    for (const el of cardEls.current.values()) io.observe(el);
+    schedule(); // establish the initial page once cards are laid out
+
+    return () => {
+      io.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [phase, boxes.length]);
+
+  // PgUp/PgDn (and Ctrl+Down/Ctrl+Up aliases): move one page. Scroll the target
+  // card's top to the canvas top and suppress the browser's native page-scroll
+  // so it never double-scrolls (AC-3).
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Ctrl ONLY (no Shift/Alt/Meta) so adjacent chords aren't swallowed — most
+    // notably Ctrl+Shift+Arrow, the extend-text-selection chord over the page's
+    // text layer. Matches the app's Ctrl-only keyboard map.
+    const ctrlArrow = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey;
+    const forward = e.key === "PageDown" || (ctrlArrow && e.key === "ArrowDown");
+    const backward = e.key === "PageUp" || (ctrlArrow && e.key === "ArrowUp");
+    if (!forward && !backward) return;
+    e.preventDefault();
+    const delta = forward ? 1 : -1;
+    const target = pageNavTarget(currentPage, delta, doc.page_count);
+    const card = cardEls.current.get(target);
+    const container = scrollRef.current;
+    if (!card || !container || typeof container.scrollTo !== "function") return;
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    container.scrollTo({
+      top: card.offsetTop,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }
+
   return (
     <div
       ref={scrollRef}
       className="pdf-canvas"
       data-testid="reader-backdrop"
       aria-label="PDF canvas region"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
     >
       {phase === "error" ? (
         <p className="pdf-canvas__message" role="status">
@@ -88,7 +176,14 @@ export default function Reader({ doc }: { doc: Doc }) {
       ) : (
         <div className="pdf-canvas__column">
           {boxes.map((box, i) => (
-            <PageCard key={i} pdf={pdf} pageNumber={i + 1} box={box} scale={scale} />
+            <PageCard
+              key={i}
+              pdf={pdf}
+              pageNumber={i + 1}
+              box={box}
+              scale={scale}
+              register={registerCard}
+            />
           ))}
         </div>
       )}
@@ -125,11 +220,13 @@ function PageCard({
   pageNumber,
   box,
   scale,
+  register,
 }: {
   pdf: PDFDocumentProxy | null;
   pageNumber: number;
   box: PageBox;
   scale: number;
+  register: (pageNumber: number, el: HTMLDivElement | null) => void;
 }) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -137,6 +234,13 @@ function PageCard({
   // No IntersectionObserver (e.g. jsdom) → paint eagerly.
   const [visible, setVisible] = useState(() => typeof IntersectionObserver === "undefined");
   const [painted, setPainted] = useState(false);
+
+  // Register this card's node so the Reader can track the page in view and
+  // resolve PgUp/PgDn scroll targets; deregister on unmount.
+  useEffect(() => {
+    register(pageNumber, cardRef.current);
+    return () => register(pageNumber, null);
+  }, [pageNumber, register]);
 
   // Reveal when the card nears the viewport; render is gated on this (NFR-2).
   useEffect(() => {

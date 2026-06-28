@@ -27,6 +27,15 @@
   color: var(--color-ink);
 }
 
+/* page-status: quiet caption ("Page N of M"), styled like the save-indicator. */
+.top-bar__page-status {
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+  color: var(--color-muted);
+}
+
 .top-bar__actions {
   margin-left: auto;
   display: flex;

@@ -119,7 +119,7 @@ Loading and rendering must **never** shift final page geometry — reserve the l
 | `U` | underline | `Ctrl 0` | fit / reset zoom |
 | `D` | pen / draw | `Ctrl B` | toggle Annotation Bank |
 | `T` | text memo | `[` | toggle tool rail |
-| `C` | comment | `PgUp` / `PgDn` | page nav |
+| `C` | comment | `PgUp` / `PgDn` (or `Ctrl ↑` / `Ctrl ↓`) | page nav |
 | `M` | box-select | | |
 
 ## Accessibility Floor

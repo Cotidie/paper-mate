@@ -17,6 +17,8 @@ export default function App() {
   const [doc, setDoc] = useState<Doc | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 1-based page in view, reported by the Reader for the top-bar indicator.
+  const [currentPage, setCurrentPage] = useState(1);
 
   async function handleFile(file: File) {
     // Single-flight: ignore a new pick while an upload is in flight, so an
@@ -51,6 +53,9 @@ export default function App() {
     <div className="app">
       <header className="top-bar" role="banner">
         <span className="top-bar__title">{doc.filename}</span>
+        <span className="top-bar__page-status" role="status" aria-live="polite">
+          Page {currentPage} of {doc.page_count}
+        </span>
         <div className="top-bar__actions">
           {/* Focusable placeholders — behavior wired in later stories
               (ToC 1.7, Bank 3.6). Present now so chrome shows the focus ring. */}
@@ -64,7 +69,7 @@ export default function App() {
       </header>
 
       <main className="stage" role="main">
-        <Reader doc={doc} />
+        <Reader doc={doc} onVisiblePageChange={setCurrentPage} />
         <aside className="tool-rail" data-testid="tool-rail" aria-label="Tools (collapsed)">
           {/* Collapsed placeholder. Tool buttons arrive in Epic 2. */}
         </aside>

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import Reader from "./Reader";
 import type { Doc } from "./api/client";
 import * as renderLayer from "./render";
@@ -14,6 +14,8 @@ vi.mock("./render", () => {
     getPageBox: vi.fn(() => ({ width: 600, height: 800 })),
     renderPage: vi.fn(() => ({ done: Promise.resolve(), cancel: vi.fn() })),
     fitToWidthScale: vi.fn(() => 1),
+    currentPageInView: vi.fn(() => 1),
+    pageNavTarget: vi.fn((c: number, d: number, n: number) => Math.min(n, Math.max(1, c + d))),
   };
 });
 
@@ -65,5 +67,50 @@ describe("Reader", () => {
   it("exposes the pdf-canvas scroll region (reader-backdrop)", async () => {
     render(<Reader doc={doc} />);
     expect(screen.getByTestId("reader-backdrop")).toBeTruthy();
+  });
+
+  it("makes the canvas keyboard-focusable for page nav (AC-3/UX-DR17)", async () => {
+    render(<Reader doc={doc} />);
+    const canvas = screen.getByTestId("reader-backdrop");
+    expect((canvas as HTMLElement).tabIndex).toBe(0);
+  });
+
+  it("reports the page in view to the parent, defaulting to page 1 (AC-2)", async () => {
+    const onVisiblePageChange = vi.fn();
+    render(<Reader doc={doc} onVisiblePageChange={onVisiblePageChange} />);
+    await screen.findAllByTestId("page-surface");
+    await waitFor(() => expect(onVisiblePageChange).toHaveBeenCalledWith(1));
+  });
+
+  it("intercepts PgUp/PgDn and the Ctrl-only Arrow aliases, but not bare or extra-modifier arrows", async () => {
+    render(<Reader doc={doc} />);
+    const canvas = await screen.findByTestId("reader-backdrop");
+    // fireEvent.keyDown returns false when the handler called preventDefault.
+    expect(fireEvent.keyDown(canvas, { key: "PageDown" })).toBe(false);
+    expect(fireEvent.keyDown(canvas, { key: "PageUp" })).toBe(false);
+    expect(fireEvent.keyDown(canvas, { key: "ArrowDown", ctrlKey: true })).toBe(false);
+    expect(fireEvent.keyDown(canvas, { key: "ArrowUp", ctrlKey: true })).toBe(false);
+    // A bare arrow (no Ctrl) is left to the browser — not a page-nav alias.
+    expect(fireEvent.keyDown(canvas, { key: "ArrowDown" })).toBe(true);
+    // Ctrl ONLY: adjacent chords must pass through (Ctrl+Shift+Arrow extends the
+    // text selection; Meta+Arrow is not in our keyboard map).
+    expect(fireEvent.keyDown(canvas, { key: "ArrowDown", ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(fireEvent.keyDown(canvas, { key: "ArrowDown", ctrlKey: true, altKey: true })).toBe(true);
+    expect(fireEvent.keyDown(canvas, { key: "ArrowDown", metaKey: true })).toBe(true);
+  });
+
+  it("maps forward/backward nav keys to the right direction delta", async () => {
+    const { pageNavTarget } = renderLayer as unknown as { pageNavTarget: ReturnType<typeof vi.fn> };
+    render(<Reader doc={doc} />);
+    const canvas = await screen.findByTestId("reader-backdrop");
+    // pageNavTarget(current, delta, pageCount) — assert the delta, not the scroll
+    // (jsdom has no real layout/scrollTo). Down → +1, Up → -1.
+    pageNavTarget.mockClear();
+    fireEvent.keyDown(canvas, { key: "ArrowDown", ctrlKey: true });
+    expect(pageNavTarget.mock.calls.at(-1)?.[1]).toBe(1);
+    fireEvent.keyDown(canvas, { key: "ArrowUp", ctrlKey: true });
+    expect(pageNavTarget.mock.calls.at(-1)?.[1]).toBe(-1);
+    fireEvent.keyDown(canvas, { key: "PageDown" });
+    expect(pageNavTarget.mock.calls.at(-1)?.[1]).toBe(1);
   });
 });

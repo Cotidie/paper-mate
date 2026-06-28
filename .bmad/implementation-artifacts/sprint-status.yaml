@@ -1,5 +1,5 @@
 # generated: 2026-06-28
-# last_updated: 2026-06-28 (1-3 done, PR #3 merged)
+# last_updated: 2026-06-28 (1-4 done)
 # project: Paper Mate
 # project_key: NOKEY
 # tracking_system: file-system
@@ -54,7 +54,7 @@ development_status:
   1-1-walking-skeleton-app-shell: done
   1-2-open-a-pdf-from-disk: done
   1-3-render-pages: done
-  1-4-scroll-and-page-navigation: backlog
+  1-4-scroll-and-page-navigation: done
   1-5-zoom: backlog
   1-6-pan-hand-tool: backlog
   1-7-table-of-contents: backlog
