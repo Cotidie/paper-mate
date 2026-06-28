@@ -4,7 +4,7 @@ baseline_commit: 7851169033bbbbe1ed7683f582af0d478c0a4cae
 
 # Story 2.1: Dev-infra enabler (local Docker dev loop)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
