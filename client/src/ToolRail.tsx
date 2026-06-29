@@ -61,8 +61,8 @@ export default function ToolRail({
 }) {
   const [open, setOpen] = useState(false);
   // Story 2.6: the Highlight tool's color sub-toolbox — the twin of the pointer
-  // flyout. Opens as a SECONDARY gesture (a click on the already-active Highlight
-  // button), never on the arming switch itself (AC4 / pointer-button symmetry).
+  // flyout. Opens AUTOMATICALLY when highlight becomes active (the effect below);
+  // a click on the already-active Highlight button toggles it.
   const [colorOpen, setColorOpen] = useState(false);
   const rootRef = useRef<HTMLElement | null>(null);
 

@@ -52,9 +52,11 @@ Highlight color sub-toolbox and this overlay's recolor row both update it; App
 subscribes only to pass it into the rail, and the create path reads it directly
 from the store instead of a hardcoded `annotation-default`. The Highlight button
 still arms in one click; once highlight becomes active, its color sub-toolbox opens
-with the same `ColorSwatchRow`, and clicking the already-active Highlight button
-toggles that sub-toolbox. The post-create recolor row still recolors the selected
-mark and now also updates the session default. The accent palette was trimmed to
+with the same `ColorSwatchRow` (swatches stacked vertically, like the pointer
+flyout), and clicking the already-active Highlight button toggles that sub-toolbox.
+The post-create recolor row still recolors the selected mark and now also updates
+the session default, so the active color is whatever was chosen LAST by EITHER path
+(sub-toolbox or recolor). The accent palette was trimmed to
 five colors (yellow default / green / pink / blue / purple), edited in `DESIGN.md`
 (the token source) and regenerated into `tokens.css`.
 
