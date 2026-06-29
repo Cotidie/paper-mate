@@ -12,7 +12,10 @@ export { default as ColorSwatchRow } from "./ColorSwatchRow";
 // The pen stroke-width steps (Story 2.8), the width twin of ColorSwatchRow.
 // Reused by the rail's Pen sub-toolbox AND the pen selection quick-box.
 export { default as StrokeWidthRow } from "./StrokeWidthRow";
-export { buildAnnotations, buildPenAnnotation } from "./create";
+// The memo box-size picker (Story 2.9), the collapsible size twin of the swatch/
+// width rows. Reused by the rail's Memo sub-toolbox AND the memo selection quick-box.
+export { default as SizeRow } from "./SizeRow";
+export { buildAnnotations, buildPenAnnotation, buildMemoAnnotation } from "./create";
 export { clampToViewport } from "./position";
 export {
   overlayReducer,

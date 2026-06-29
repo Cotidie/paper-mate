@@ -109,6 +109,16 @@
      around the filled path, since the rect outline ring does not fit a stroke). */
   --annotation-pen-selected-width: 1.5px;
 
+  /* annotation-memo (DESIGN.md components.annotation-memo): the on-page text box.
+     Its WIDTH/HEIGHT are the size preset baked into the rect (inline, scaled by
+     zoom) — these tokens are the chrome: the inner text padding and the SizeRow
+     preview-box widths (the boxes share a 5:3 aspect, so only the width is a
+     token). The three previews mirror MEMO_SIZES (small/medium/large). */
+  --annotation-memo-padding: 6px;
+  --memo-size-preview-small: 14px;
+  --memo-size-preview-medium: 18px;
+  --memo-size-preview-large: 22px;
+
   /* shared chrome */
   --hairline-width: 1px;
   --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);

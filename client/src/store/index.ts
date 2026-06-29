@@ -10,6 +10,28 @@
 import { create } from "zustand";
 import type { Annotation } from "../api/client";
 
+/** A memo box-size preset (Story 2.9). The box dimensions ARE the memo's size:
+ *  the rect the placement bakes (and `resizeMemoAnnotation` rewrites) carries
+ *  them, so there is NO contract field for size (AD-5). `width`/`height` are
+ *  scale-1.0 CSS px; `key` identifies the armed step in `SizeRow`. */
+export interface MemoSize {
+  key: "small" | "medium" | "large";
+  width: number;
+  height: number;
+}
+
+/** The three memo box sizes the `SizeRow` offers, in scale-1.0 CSS px. Shared by
+ *  the placement gesture (bakes the rect), the rail/quick-box `SizeRow`, and the
+ *  store default — the single list so the steps and the actual box stay in step. */
+export const MEMO_SIZES: MemoSize[] = [
+  { key: "small", width: 160, height: 64 },
+  { key: "medium", width: 220, height: 88 },
+  { key: "large", width: 300, height: 120 },
+];
+
+/** The default memo size new memos land in (`activeMemoSize` seed) = medium. */
+export const DEFAULT_MEMO_SIZE: MemoSize = MEMO_SIZES[1];
+
 export interface AnnotationStore {
   /** All annotations, keyed by `id` (AD-7). */
   annotations: Map<string, Annotation>;
@@ -41,6 +63,15 @@ export interface AnnotationStore {
   activeStrokeWidth: number;
   /** Set the active/default pen stroke width (remembers the last choice). */
   setActiveStrokeWidth: (width: number) => void;
+  /** The active memo box size (Story 2.9): the DEFAULT new memos land in, in
+   *  scale-1.0 CSS px. The size twin of `activeStrokeWidth` — set by the Memo
+   *  tool's size sub-toolbox OR by resizing an existing memo from the selection
+   *  quick-box (last-choice-wins). Page-independent (px, not a fraction); the
+   *  placement gesture converts it to a normalized rect against the target page.
+   *  Client-only, not persisted. */
+  activeMemoSize: MemoSize;
+  /** Set the active/default memo size (remembers the last choice). */
+  setActiveMemoSize: (size: MemoSize) => void;
   /** Select an annotation by id, or clear with `null`. */
   select: (id: string | null) => void;
   /** Clear the selection (sugar for `select(null)`). */
@@ -65,6 +96,19 @@ export interface AnnotationStore {
    *  selection quick-box's stroke-width row. Width is scale-1.0 CSS px. Same
    *  creation-time-edit rationale: no command stack yet (Epic 3 folds it in). */
   restrokeAnnotation: (ids: string[], width: number, now: string) => void;
+  /** Set a memo's `body` text and bump `updated_at` — the body twin of
+   *  `recolorAnnotation`, called as the user types into the memo's textarea. This
+   *  is CREATION-time editing (the memo was just placed in the same gesture), so
+   *  no command stack yet (Epic 3 folds it in). A no-op for an unknown id. */
+  retextAnnotation: (id: string, body: string, now: string) => void;
+  /** Resize one or more memos (by id) to a new box size and bump `updated_at` —
+   *  the size twin of `restrokeAnnotation`, from the memo selection quick-box's
+   *  `SizeRow`. `size` is the new normalized width/height FRACTION of the page box
+   *  (the caller converts the px preset against the memo's page); the top-left
+   *  anchor is kept and the rect is regrown. Guarded to `kind=rect`+`type=memo`
+   *  so a stale text/path id is never mutated (AR-5). Creation-time edit; no
+   *  command stack yet. */
+  resizeMemoAnnotation: (ids: string[], size: { w: number; h: number }, now: string) => void;
   /** Every annotation, ordered by `created_at` ascending — the Bank order (AR-12). */
   all: () => Annotation[];
 }
@@ -78,6 +122,9 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
   // Default pen width = the medium step (scale-1.0 px); matches --pen-stroke-medium.
   activeStrokeWidth: 4,
   setActiveStrokeWidth: (width) => set({ activeStrokeWidth: width }),
+  // Default memo size = the medium preset (scale-1.0 px); see MEMO_SIZES.
+  activeMemoSize: DEFAULT_MEMO_SIZE,
+  setActiveMemoSize: (size) => set({ activeMemoSize: size }),
   select: (id) => set({ selectedId: id }),
   clearSelection: () => set({ selectedId: null }),
   setHovered: (id) => set({ hoveredId: id }),
@@ -123,6 +170,29 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
         // mark, even if a stale id is passed (Codex MED).
         if (a && a.anchor.kind === "path") {
           next.set(id, { ...a, style: { ...a.style, stroke_width: width }, updated_at: now });
+        }
+      }
+      return { annotations: next };
+    }),
+  retextAnnotation: (id, body, now) =>
+    set((state) => {
+      const a = state.annotations.get(id);
+      if (!a) return state;
+      const next = new Map(state.annotations);
+      next.set(id, { ...a, body, updated_at: now });
+      return { annotations: next };
+    }),
+  resizeMemoAnnotation: (ids, size, now) =>
+    set((state) => {
+      const next = new Map(state.annotations);
+      for (const id of ids) {
+        const a = next.get(id);
+        // Size is memo-only geometry (AR-5): only a rect-anchored memo has a box
+        // to regrow, even if a stale text/path id is passed.
+        if (a && a.anchor.kind === "rect" && a.type === "memo") {
+          const { x0, y0 } = a.anchor.rect;
+          const rect = { x0, y0, x1: Math.min(1, x0 + size.w), y1: Math.min(1, y0 + size.h) };
+          next.set(id, { ...a, anchor: { ...a.anchor, rect }, updated_at: now });
         }
       }
       return { annotations: next };

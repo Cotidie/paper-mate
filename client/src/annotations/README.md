@@ -150,6 +150,42 @@ gesture-capture path + a new `anchor.kind`), not just a paint variant:
   is type-aware: a selected pen mark also shows the `StrokeWidthRow` (restroke via
   `store.restrokeAnnotation`), and its box anchors below the stroke's bounding box.
 
-Still later stories: memo/comment tools + box-select drag (2.9-2.11),
+Story 2.9 (memo tool) is the FIRST `kind=rect` tool AND the first mark with a
+`body`, so it adds an INTERACTIVE on-page control, not a paint mark:
+
+- A memo is placed by a CLICK, not a drag or a text selection. `AnnotationInteraction`
+  has a SEPARATE document-level path, active only while `armedTool === "memo"`: a
+  primary-button `pointerdown` on a `.page-surface` (excluding chrome, the quick-box,
+  and an existing `.annotation-memo`) resolves the page (`pickPage`), builds a
+  default-size rect at the click point from the `activeMemoSize` preset (scale-1.0
+  px), normalizes it (`anchor/normalizeRect`), and stores ONE `type=memo`/`kind=rect`
+  mark with `body:""` via `buildMemoAnnotation`, then selects it so the layer
+  autofocuses its textarea. `preventDefault` stops the click starting a selection.
+- A memo RENDERS as an interactive `<textarea>` (not a pointer-transparent paint
+  sheet). `AnnotationLayer` branches on `anchor.kind === "rect"` + `type === "memo"`
+  and renders the box in a NEW, NOT aria-hidden `.annotation-memos` group (a
+  focusable control can't live in an aria-hidden subtree), positioned via
+  `denormalizeRect` (left/top/width + a min-height) so it rides zoom (NFR-3) and
+  never reflows the page (absolute overlay). `value = body`; every edit writes
+  through `retextAnnotation` (the body twin of `recolorAnnotation`). The accent
+  (border) color is `style.color`; the body text stays ink. The box is the 2.5
+  selection hit surface (`.annotation-memo`, added to both `.closest()` hit-tests).
+- An EMPTY memo is not persisted (Decision 5): when `selectedId` moves off a memo
+  whose `body` is still blank, it is deleted (keyed on DESELECT, not a raw textarea
+  blur, so clicking a quick-box swatch mid-edit doesn't nuke it). A memo with text
+  stays.
+- Memo "size" IS the rect (no contract field, AD-5): the `SizeRow` preset picks a
+  scale-1.0 px box; placement bakes it into the rect, and `resizeMemoAnnotation`
+  rewrites the rect's width/height (normalized against the page, keeping the
+  top-left) — guarded to `kind=rect`+`type=memo`. `activeMemoSize` is the client
+  default (the size twin of `activeColor`/`activeStrokeWidth`).
+- The rail has a Memo button (below Pen) whose sub-toolbox carries a `ColorSwatchRow`
+  AND `SizeRow` (a COLLAPSIBLE single control, not a step row — the pen
+  `StrokeWidthRow` row-widening is being converted to match separately); `T` arms it.
+  The selection quick-box is type-aware: a selected memo shows `ColorSwatchRow` +
+  `SizeRow` + delete, anchored below the box. The memo's own textarea is the inline
+  text-input the AC names; color/size are the quick-box rows.
+
+Still later stories: comment tool + box-select drag (2.10-2.11),
 the cursor-mode drag-to-change-tool picker (2.12), and editing/undo/persistence
 (Epic 3).

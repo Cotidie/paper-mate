@@ -6,12 +6,14 @@ import {
   Highlighter,
   TextUnderline,
   PencilSimple,
+  TextT,
   CaretDoubleLeft,
   CaretDoubleRight,
   type Icon,
 } from "@phosphor-icons/react";
 import { type ActiveTool, type PointerTool, isPointerTool } from "./tools";
-import { ColorSwatchRow, StrokeWidthRow } from "./annotations";
+import { type MemoSize } from "./store";
+import { ColorSwatchRow, StrokeWidthRow, SizeRow } from "./annotations";
 import ToolFlyout from "./ToolFlyout";
 
 /**
@@ -47,6 +49,8 @@ export default function ToolRail({
   onPickColor,
   activeStrokeWidth,
   onPickStrokeWidth,
+  activeMemoSize,
+  onPickMemoSize,
   collapsed,
   onToggleCollapse,
 }: {
@@ -66,6 +70,11 @@ export default function ToolRail({
   activeStrokeWidth: number;
   /** Set the active pen stroke width (the default new strokes land in). */
   onPickStrokeWidth: (width: number) => void;
+  /** The active memo box size (store-backed; Story 2.9). The Memo tool's
+   *  sub-toolbox shows this armed and sets it via `onPickMemoSize`. */
+  activeMemoSize: MemoSize;
+  /** Set the active memo size (the default new memos land in). */
+  onPickMemoSize: (size: MemoSize) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
@@ -79,6 +88,7 @@ export default function ToolRail({
   const highlightActive = activeTool === "highlight";
   const underlineActive = activeTool === "underline";
   const penActive = activeTool === "pen";
+  const memoActive = activeTool === "memo";
 
   // ONE consistent mechanism (Story 2.6 refinement): switching to ANY tool opens
   // that tool's sub-toolbar by default. Detect a real CHANGE of `activeTool`
@@ -302,6 +312,48 @@ export default function ToolRail({
               value={activeStrokeWidth}
               onPick={(width) => {
                 onPickStrokeWidth(width);
+                setFlyoutOpen(false);
+              }}
+            />
+          </ToolFlyout>
+        )}
+      </div>
+
+      {/* Memo — a click-to-place kind=rect text box (Story 2.9), below Pen in the
+          DESIGN.md#tool-rail order. Same arm-in-one-click model; its sub-toolbox
+          carries a color row (the box accent) AND the collapsible size row. Color
+          is the shared activeColor; size is the shared activeMemoSize. */}
+      <div className="tool-rail__item">
+        <button
+          type="button"
+          className={activeTool === "memo" ? "tool-button tool-button--armed" : "tool-button"}
+          aria-label="Memo"
+          title="Memo (T)"
+          aria-pressed={activeTool === "memo"}
+          aria-haspopup="menu"
+          aria-expanded={memoActive && flyoutOpen}
+          data-testid="tool-memo-button"
+          onClick={() => {
+            if (memoActive) setFlyoutOpen((o) => !o);
+            else onSelectTool("memo");
+          }}
+        >
+          <TextT aria-hidden />
+        </button>
+
+        {memoActive && flyoutOpen && (
+          <ToolFlyout testId="memo-flyout">
+            <ColorSwatchRow
+              value={activeColor}
+              onPick={(token) => {
+                onPickColor(token);
+                setFlyoutOpen(false);
+              }}
+            />
+            <SizeRow
+              value={activeMemoSize}
+              onPick={(size) => {
+                onPickMemoSize(size);
                 setFlyoutOpen(false);
               }}
             />

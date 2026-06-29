@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useAnnotationStore } from "./index";
+import { useAnnotationStore, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "./index";
 import type { Annotation } from "../api/client";
 
 function mark(id: string, color: string, createdAt: string, groupId: string | null = null): Annotation {
@@ -23,8 +23,28 @@ beforeEach(() =>
     hoveredId: null,
     activeColor: "annotation-default",
     activeStrokeWidth: 4,
+    activeMemoSize: DEFAULT_MEMO_SIZE,
   }),
 );
+
+function memoMark(
+  id: string,
+  rect: { x0: number; y0: number; x1: number; y1: number },
+  createdAt: string,
+  body = "",
+): Annotation {
+  return {
+    id,
+    doc_id: "doc-1",
+    type: "memo",
+    group_id: null,
+    anchor: { kind: "rect", page_index: 0, rect },
+    style: { color: "annotation-default", stroke_width: null },
+    body,
+    created_at: createdAt,
+    updated_at: createdAt,
+  };
+}
 
 describe("annotation store (Story 2.2 + 2.3)", () => {
   it("addAnnotation keys by id; all() orders by created_at ascending", () => {
@@ -164,5 +184,64 @@ describe("pen stroke width + restroke (Story 2.8)", () => {
   it("restrokeAnnotation ignores unknown ids without throwing", () => {
     useAnnotationStore.getState().restrokeAnnotation(["missing"], 8, "2026-06-29T12:00:00Z");
     expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
+});
+
+describe("memo size, retext + resize (Story 2.9)", () => {
+  const rect = { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 };
+
+  it("defaults activeMemoSize to the medium preset and remembers the last choice", () => {
+    expect(useAnnotationStore.getState().activeMemoSize).toBe(DEFAULT_MEMO_SIZE);
+    expect(DEFAULT_MEMO_SIZE.key).toBe("medium");
+    const large = MEMO_SIZES.find((s) => s.key === "large")!;
+    useAnnotationStore.getState().setActiveMemoSize(large);
+    expect(useAnnotationStore.getState().activeMemoSize).toBe(large);
+  });
+
+  it("retextAnnotation sets body + bumps updated_at, keyed by id", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().retextAnnotation("m", "a note", "2026-06-29T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.body).toBe("a note");
+    expect(m.updated_at).toBe("2026-06-29T12:00:00Z");
+    expect(m.created_at).toBe("2026-06-29T00:00:01Z");
+  });
+
+  it("retextAnnotation ignores an unknown id without throwing", () => {
+    useAnnotationStore.getState().retextAnnotation("missing", "x", "2026-06-29T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
+
+  it("resizeMemoAnnotation rewrites the rect width/height keeping the top-left", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().resizeMemoAnnotation(["m"], { w: 0.5, h: 0.25 }, "2026-06-29T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.anchor.kind).toBe("rect");
+    if (m.anchor.kind === "rect") {
+      expect(m.anchor.rect).toEqual({ x0: 0.1, y0: 0.2, x1: 0.6, y1: 0.45 });
+    }
+    expect(m.updated_at).toBe("2026-06-29T12:00:00Z");
+  });
+
+  it("resizeMemoAnnotation clamps the regrown rect to the page (<=1)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", { x0: 0.8, y0: 0.9, x1: 0.85, y1: 0.95 }, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().resizeMemoAnnotation(["m"], { w: 0.5, h: 0.5 }, "2026-06-29T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    if (m.anchor.kind === "rect") {
+      expect(m.anchor.rect.x1).toBe(1);
+      expect(m.anchor.rect.y1).toBe(1);
+    }
+  });
+
+  it("resizeMemoAnnotation guards non-memo marks (a stale text/path id is untouched)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("h", "annotation-default", "2026-06-29T00:00:01Z")); // a text highlight
+    useAnnotationStore.getState().resizeMemoAnnotation(["h"], { w: 0.5, h: 0.5 }, "2026-06-29T12:00:00Z");
+    const h = useAnnotationStore.getState().annotations.get("h")!;
+    expect(h.anchor.kind).toBe("text");
+    expect(h.updated_at).toBe("2026-06-29T00:00:01Z"); // not bumped
   });
 });

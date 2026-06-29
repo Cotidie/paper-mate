@@ -28,11 +28,82 @@
 // `hoveredId`/`selectedId` and lights any mark that matches by id OR shares a
 // non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
 
+import { useLayoutEffect, useRef } from "react";
 import type { Annotation } from "../api/client";
 import { useAnnotationStore } from "../store";
-import { denormalizeRect, denormalizePoint, type PageBox } from "../anchor";
+import { denormalizeRect, denormalizePoint, type PageBox, type ScreenRect } from "../anchor";
 import { strokeOutline, svgPathFromOutline } from "./pen";
 import "./Annotations.css";
+
+/** One on-page memo box (Story 2.9): an interactive `<textarea>` positioned via
+ *  the denormalized rect. Extracted so each box owns a ref + a layout effect that
+ *  re-fits its height to the content — auto-grow must re-run on body/scale change
+ *  (zoom, remount), not only on the user's keystroke (`onInput`), or long notes
+ *  clip after a re-render (Codex MED). Height is DERIVED, never persisted (NFR-3). */
+function MemoBox({
+  anno,
+  pos,
+  cls,
+  selected,
+  onRetext,
+  onSelect,
+  onHover,
+  onClearSelection,
+}: {
+  anno: Annotation;
+  pos: ScreenRect;
+  cls: string;
+  selected: boolean;
+  onRetext: (id: string, body: string) => void;
+  onSelect: (id: string) => void;
+  onHover: (id: string | null) => void;
+  onClearSelection: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const body = anno.body ?? "";
+  // Re-fit height to content whenever the text OR the box geometry changes (the
+  // min-height/width ride the scale, so a zoom re-wraps the text). jsdom has no
+  // layout (scrollHeight = 0) → the guard keeps it a no-op there.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
+  }, [body, pos.width, pos.height]);
+  return (
+    <textarea
+      ref={ref}
+      className={cls}
+      data-testid={`annotation-mark-${anno.id}`}
+      aria-label="Memo"
+      value={body}
+      autoFocus={selected}
+      onChange={(e) => onRetext(anno.id, e.target.value)}
+      onKeyDown={(e) => {
+        // Esc blurs + deselects the memo from INSIDE the textarea (it is exempt
+        // from the document-level tool/selection keys, so Esc would otherwise be
+        // swallowed and leave the memo focused — Codex MED). A non-empty memo
+        // survives; an empty one is removed by the deselect cleanup.
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.blur();
+          onClearSelection();
+        }
+      }}
+      onPointerEnter={() => onHover(anno.id)}
+      onPointerLeave={() => onHover(null)}
+      onClick={() => onSelect(anno.id)}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        minHeight: pos.height,
+        borderColor: `var(--color-${anno.style.color})`,
+      }}
+    />
+  );
+}
 
 /** Is `a` part of the active set named by `activeId`? True when it IS that mark,
  *  or shares a non-null `group_id` with it — so a two-page highlight's sibling on
@@ -69,7 +140,9 @@ export default function AnnotationLayer({
   const selectedId = useAnnotationStore((s) => s.selectedId);
   const hoveredId = useAnnotationStore((s) => s.hoveredId);
   const select = useAnnotationStore((s) => s.select);
+  const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const setHovered = useAnnotationStore((s) => s.setHovered);
+  const retextAnnotation = useAnnotationStore((s) => s.retextAnnotation);
   const marks = [...annotations.values()]
     .filter((a) => a.doc_id === docId && a.anchor.page_index === pageIndex)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -81,6 +154,11 @@ export default function AnnotationLayer({
   const highlightMarks = textMarks.filter((a) => a.type !== "underline");
   const underlineMarks = textMarks.filter((a) => a.type === "underline");
   const penMarks = marks.filter((a) => a.anchor.kind === "path");
+  // Memo (Story 2.9): the only kind=rect mark. Rendered as an interactive
+  // <textarea>, not a paint sheet — so it lives in its OWN group, OUTSIDE the
+  // decorative aria-hidden layer (a focusable control must not sit in an
+  // aria-hidden subtree). Keyed off kind=rect + type=memo (AD-5).
+  const memoMarks = marks.filter((a) => a.anchor.kind === "rect" && a.type === "memo");
 
   // Render one annotation's rects as positioned mark divs. `underline` swaps the
   // accent fill for a transparent box with a 2px accent bottom-border (the line
@@ -145,13 +223,47 @@ export default function AnnotationLayer({
     );
   };
 
+  // Render one memo as an interactive <textarea> positioned via denormalizeRect
+  // (geometry-on-kind = rect). The box rides the normalized rect (left/top/width
+  // and a min-height) so it stays glued + scales on zoom (NFR-3); typing grows it
+  // downward without reflowing the page (absolute overlay). The accent (border)
+  // color comes from style.color (inline); the body text stays ink. The box is
+  // the selection hit surface (Story 2.5 seam): pointer-events + select/hover.
+  // value = a.body, every edit writes through retextAnnotation. Autofocus when it
+  // is the selected memo so a just-placed box is ready to type into.
+  const renderMemo = (a: Annotation) => {
+    if (a.anchor.kind !== "rect") return null;
+    const hovered = inActiveGroup(a, hoveredId, annotations);
+    const selected = inActiveGroup(a, selectedId, annotations);
+    const cls =
+      "annotation-memo" +
+      (hovered ? " annotation-memo--hovered" : "") +
+      (selected ? " annotation-memo--selected" : "");
+    return (
+      <MemoBox
+        key={a.id}
+        anno={a}
+        pos={denormalizeRect(a.anchor.rect, box, scale)}
+        cls={cls}
+        selected={selected}
+        onRetext={(id, body) => retextAnnotation(id, body, new Date().toISOString())}
+        onSelect={select}
+        onHover={setHovered}
+        onClearSelection={clearSelection}
+      />
+    );
+  };
+
   return (
-    // The layer sheet stays decorative (aria-hidden): the marks duplicate the
-    // selectable text underneath and exposing every rect fragment as a control
-    // would be noisier than helpful. Selection is a pointer affordance for now;
-    // Del/Esc work once selected (document-level keys), and a keyboard-reachable
-    // list comes with the Epic-3 Annotation Bank. (Choice noted in the story.)
-    <div className="annotation-layer" aria-hidden="true" data-testid={`annotation-layer-${pageIndex}`}>
+    <>
+      {/* The mark sheet stays decorative (aria-hidden): the highlight/underline/pen
+          marks duplicate the selectable text underneath and exposing every rect
+          fragment as a control would be noisier than helpful. Selection is a
+          pointer affordance for now; Del/Esc work once selected (document-level
+          keys), and a keyboard-reachable list comes with the Epic-3 Annotation
+          Bank. Memos are EXCLUDED from this group (below): they are real typed
+          content, not decoration, so they must stay accessible. */}
+      <div className="annotation-layer" aria-hidden="true" data-testid={`annotation-layer-${pageIndex}`}>
       {/* Highlights share ONE opacity group: marks paint opaque and the group is
           composited once at the highlight opacity, so overlapping marks never
           compound into a darker/thicker band and the most recent (last in DOM)
@@ -169,6 +281,17 @@ export default function AnnotationLayer({
           {penMarks.map((a) => renderPen(a))}
         </svg>
       )}
-    </div>
+      </div>
+      {/* Memos (kind=rect): interactive <textarea> boxes in their OWN, NOT
+          aria-hidden, group — they are typed content, not decoration, and a
+          focusable control cannot live in an aria-hidden subtree. The group is
+          pointer-transparent so page text between memos stays selectable (NFR-1);
+          each box opts back in. */}
+      {memoMarks.length > 0 && (
+        <div className="annotation-memos" data-testid={`annotation-memos-${pageIndex}`}>
+          {memoMarks.map((a) => renderMemo(a))}
+        </div>
+      )}
+    </>
   );
 }

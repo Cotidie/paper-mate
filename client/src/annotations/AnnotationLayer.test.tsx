@@ -62,6 +62,27 @@ function penMark(
   };
 }
 
+/** A memo mark (kind=rect, type=memo) on the given page. */
+function memoMark(
+  id: string,
+  pageIndex: number,
+  body = "",
+  docId = "doc-1",
+  createdAt = "2026-06-29T00:00:00+00:00",
+): Annotation {
+  return {
+    id,
+    doc_id: docId,
+    type: "memo",
+    group_id: null,
+    anchor: { kind: "rect", page_index: pageIndex, rect: { x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.4 } },
+    style: { color: "annotation-pink", stroke_width: null },
+    body,
+    created_at: createdAt,
+    updated_at: createdAt,
+  };
+}
+
 beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
 afterEach(cleanup);
 
@@ -238,6 +259,66 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     useAnnotationStore.getState().addAnnotation(textMark("h1", 0));
     const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     expect(container.querySelector(".annotation-pens")).toBeNull();
+  });
+
+  it("renders a type=memo mark as a <textarea> in the memos group, not the highlight/pen groups (Story 2.9)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const mark = screen.getByTestId("annotation-mark-m1");
+    expect(mark.tagName.toLowerCase()).toBe("textarea");
+    // value reflects body; accent (border) from style.color.
+    expect((mark as HTMLTextAreaElement).value).toBe("a note");
+    expect(mark.style.borderColor).toBe("var(--color-annotation-pink)");
+    // denormalize at scale 1: left=0.1*600=60, top=0.2*800=160, w=0.4*600=240, minHeight=0.2*800=160.
+    expect(mark.style.left).toBe("60px");
+    expect(mark.style.top).toBe("160px");
+    expect(mark.style.width).toBe("240px");
+    expect(mark.style.minHeight).toBe("160px");
+    // Lives in the memos group, outside the decorative aria-hidden mark groups.
+    expect(container.querySelector(".annotation-memos")!.contains(mark)).toBe(true);
+    expect(container.querySelector(".annotation-highlights")!.contains(mark)).toBe(false);
+  });
+
+  it("a memo re-derives position on zoom (NFR-3)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    const { rerender } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.getByTestId("annotation-mark-m1").style.left).toBe("60px");
+    rerender(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={2} />);
+    const mark = screen.getByTestId("annotation-mark-m1");
+    expect(mark.style.left).toBe("120px");
+    expect(mark.style.width).toBe("480px");
+  });
+
+  it("a memo is the 2.5 hit surface: click selects, typing writes through retext, selected class applies", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const mark = screen.getByTestId("annotation-mark-m1");
+    fireEvent.click(mark);
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+    fireEvent.change(mark, { target: { value: "typed" } });
+    expect(useAnnotationStore.getState().annotations.get("m1")!.body).toBe("typed");
+    act(() => useAnnotationStore.getState().select("m1"));
+    expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--selected");
+    fireEvent.pointerEnter(screen.getByTestId("annotation-mark-m1"));
+    expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--hovered");
+  });
+
+  it("Esc inside the memo textarea blurs + clears the selection (Codex MED)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    const mark = screen.getByTestId("annotation-mark-m1") as HTMLTextAreaElement;
+    mark.focus();
+    fireEvent.keyDown(mark, { key: "Escape" });
+    // Selection cleared; the (non-empty) memo survives.
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
+  });
+
+  it("does not render the memos group when there are no memo marks", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("h1", 0));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(container.querySelector(".annotation-memos")).toBeNull();
   });
 
   it("renders marks sorted by created_at (newest last in DOM, recent-wins)", () => {
