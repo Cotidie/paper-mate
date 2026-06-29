@@ -690,6 +690,8 @@ So that I can refine annotations after creating them.
 **When** I drag a handle
 **Then** it moves/resizes and the new geometry re-normalizes against the page box via the anchor service (FR-15, AR-4)
 
+> Move/resize MUST cover EVERY mark geometry, not just text rects: a `kind=path` pen stroke (Story 2.8) moves by TRANSLATING all its normalized `points` (resize = scaling them); `kind=rect` marks move/resize the rect; `kind=text` marks per the run. (User feature request 2026-06-29 "pen movable when selected" → routed here, kept in 3.1 so move goes through the one command path + undo, AR-7, rather than a one-off pen mover.)
+
 **Given** a selected annotation
 **When** I re-open its quick-box
 **Then** I can restyle the color; double-clicking a text/memo/comment annotation re-edits its text (FR-15, IP-6)
