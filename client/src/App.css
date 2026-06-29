@@ -223,16 +223,26 @@
   z-index: 6;
 }
 
-/* The highlight color sub-toolbox is laid out to MATCH the pointer flyout (same
-   box width, gap, and centered alignment) so the two sub-toolbars are visually
-   unified — a vertical column the width of a tool button, swatches centered, with
-   the rail's standard item gap. Scoped to the rail flyout so the overlay's
-   selection recolor row stays horizontal/compact. */
+/* Inside the shared sub-toolrail (`ToolFlyout`), the color swatches lay out
+   exactly like the pointer options: a vertical column of uniform tool-button-
+   sized CELLS at the rail gap. Each cell is the 36px tool-button footprint, with
+   the 20px colored dot centered inside (matching a 20px glyph in a 36px button),
+   and the same hover wash — so the two sub-toolrails are pixel-consistent. Scoped
+   to the rail flyout; the overlay recolor row keeps its compact horizontal pills. */
 .tool-flyout .color-swatch-row {
   flex-direction: column;
   align-items: center;
   gap: var(--tool-rail-gap);
+}
+
+.tool-flyout .color-swatch {
   width: var(--tool-button-size);
+  height: var(--tool-button-size);
+  border-radius: var(--radius-md);
+}
+
+.tool-flyout .color-swatch:hover {
+  background: var(--color-surface-strong);
 }
 
 /* Pan cursor + selection suppression while the hand is armed or Space is held

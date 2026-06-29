@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { type ActiveTool, type PointerTool, isPointerTool } from "./tools";
 import { ColorSwatchRow } from "./annotations";
+import ToolFlyout from "./ToolFlyout";
 
 /**
  * The cursor-family (pointer) options, in flyout order. `Icon` is the Phosphor
@@ -130,54 +131,58 @@ export default function ToolRail({
 
   return (
     <aside className="tool-rail" data-testid="tool-rail" aria-label="Tools" ref={rootRef}>
-      <button
-        type="button"
-        className={pointerActive ? "tool-button tool-button--armed" : "tool-button"}
-        aria-label={`Pointer tool: ${active.label}`}
-        title={active.hint}
-        aria-haspopup="menu"
-        aria-expanded={pointerActive && flyoutOpen}
-        data-testid="tool-cursor-button"
-        // When the pointer tool is already active, the click toggles its flyout.
-        // Otherwise it switches to the pointer tool; the activeTool-change effect
-        // then opens that flyout by default (one consistent mechanism).
-        onClick={() => {
-          if (pointerActive) setFlyoutOpen((o) => !o);
-          else onSelectTool(pointerMode);
-        }}
-      >
-        <ActiveIcon aria-hidden />
-      </button>
+      {/* Every tool sits in a `.tool-rail__item` wrapper so its `ToolFlyout`
+          sub-toolrail anchors to ITS button identically (same horizontal origin,
+          same vertical alignment) — the one shared shell for all tools. */}
+      <div className="tool-rail__item">
+        <button
+          type="button"
+          className={pointerActive ? "tool-button tool-button--armed" : "tool-button"}
+          aria-label={`Pointer tool: ${active.label}`}
+          title={active.hint}
+          aria-haspopup="menu"
+          aria-expanded={pointerActive && flyoutOpen}
+          data-testid="tool-cursor-button"
+          // When the pointer tool is already active, the click toggles its flyout.
+          // Otherwise it switches to the pointer tool; the activeTool-change effect
+          // then opens that flyout by default (one consistent mechanism).
+          onClick={() => {
+            if (pointerActive) setFlyoutOpen((o) => !o);
+            else onSelectTool(pointerMode);
+          }}
+        >
+          <ActiveIcon aria-hidden />
+        </button>
 
-      {pointerActive && flyoutOpen && (
-        <div className="tool-flyout" role="menu" data-testid="tool-flyout">
-          {OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              role="menuitemradio"
-              className={activeTool === o.value ? "tool-button tool-button--armed" : "tool-button"}
-              aria-label={o.label}
-              title={o.hint}
-              aria-pressed={activeTool === o.value}
-              data-testid={`tool-option-${o.value}`}
-              // Picking a sub-mode switches the tool; the change-effect keeps the
-              // flyout open showing the new armed sub-mode (consistent mechanism).
-              onClick={() => onSelectTool(o.value)}
-            >
-              <o.Icon aria-hidden />
-            </button>
-          ))}
-        </div>
-      )}
+        {pointerActive && flyoutOpen && (
+          <ToolFlyout testId="tool-flyout">
+            {OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="menuitemradio"
+                className={activeTool === o.value ? "tool-button tool-button--armed" : "tool-button"}
+                aria-label={o.label}
+                title={o.hint}
+                aria-pressed={activeTool === o.value}
+                data-testid={`tool-option-${o.value}`}
+                // Picking a sub-mode switches the tool; the change-effect keeps the
+                // flyout open showing the new armed sub-mode (consistent mechanism).
+                onClick={() => onSelectTool(o.value)}
+              >
+                <o.Icon aria-hidden />
+              </button>
+            ))}
+          </ToolFlyout>
+        )}
+      </div>
 
       {/* Annotation tools (Story 2.3 adds Highlight; later stories add the rest
           below it in DESIGN.md#tool-rail order). Same model as the pointer button:
           switching TO Highlight opens its color sub-toolbar by default (the
           activeTool-change effect); a click on the ALREADY-active button toggles
           it. Re-clicking an active tool never disarms it. To leave Highlight, pick
-          another tool or press V/Esc. The relative wrapper anchors the flyout to
-          this button (not the rail top like the pointer flyout). */}
+          another tool or press V/Esc. */}
       <div className="tool-rail__item">
         <button
           type="button"
@@ -199,11 +204,11 @@ export default function ToolRail({
         </button>
 
         {highlightActive && flyoutOpen && (
-          <div className="tool-flyout" role="menu" data-testid="highlight-color-flyout">
-            {/* Reuse the shared swatch row (DESIGN.md#color-swatch): the armed
-                swatch (= activeColor) shows the 2px ink ring. Picking sets the
-                default color for new marks and closes the flyout (pick-is-dismiss;
-                color is not a tool change, so the open-on-switch effect won't reopen). */}
+          <ToolFlyout testId="highlight-color-flyout">
+            {/* The shared swatch row (DESIGN.md#color-swatch): the armed swatch
+                (= activeColor) shows the 2px ink ring. Picking sets the default
+                color for new marks and closes the flyout (pick-is-dismiss; color is
+                not a tool change, so the open-on-switch effect won't reopen). */}
             <ColorSwatchRow
               value={activeColor}
               onPick={(token) => {
@@ -211,7 +216,7 @@ export default function ToolRail({
                 setFlyoutOpen(false);
               }}
             />
-          </div>
+          </ToolFlyout>
         )}
       </div>
 

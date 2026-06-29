@@ -49,9 +49,13 @@ export default function ColorSwatchRow({
             aria-checked={armed}
             title={s.label}
             data-testid={`color-swatch-${s.token}`}
-            style={{ backgroundColor: `var(--color-${s.token})` }}
             onClick={() => onPick(s.token)}
-          />
+          >
+            {/* The colored disc lives on an inner span so the clickable CELL can
+                grow (e.g. to the 36px tool-button footprint inside the rail
+                flyout) while the disc stays a fixed-size pill, centered. */}
+            <span className="color-swatch__dot" style={{ backgroundColor: `var(--color-${s.token})` }} />
+          </button>
         );
       })}
     </div>

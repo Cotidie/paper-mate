@@ -359,3 +359,19 @@ Post-review: client 254 tests pass, typecheck clean, contract byte-identical,
   (port 5174, per the new CLAUDE.md rule): vertical column confirmed; single click on
   Highlight auto-opens the picker; recoloring a mark to purple then re-arming Highlight
   shows purple armed (default remembered). Capture: `docs/images/story-2-6-vertical-autoopen-flyout.png`.
+- 2026-06-29: Shared sub-toolrail component + test trimming.
+  (a) Extracted `ToolFlyout` — the ONE sub-toolrail shell (position/box/column) every
+  tool renders its controls inside. Both rail buttons now sit in `.tool-rail__item`
+  wrappers so the pointer flyout and the highlight color flyout anchor IDENTICALLY (the
+  pointer flyout previously anchored to the rail, the color flyout to its button → ~5px
+  horizontal mismatch). (b) `ColorSwatchRow` now renders a cell button wrapping an inner
+  `color-swatch__dot`, so the rail flyout sizes each swatch to the 36px tool-button cell
+  (20px colored dot centered) — matching the pointer options' 36px cell / 20px glyph
+  exactly. Overlay recolor row stays compact (cell hugs the 20px dot). Live-measured:
+  both flyouts left=66, width=46, cell 36×36, inner element 20×20 (only `top` differs,
+  each anchoring to its own button). Capture: `docs/images/story-2-6-shared-subtoolrail.png`.
+  (c) Test trimming (per user request): removed the stale "single-click switch opens no
+  flyout (AC4)" unit test (rule superseded; one-click switch covered in App.test), the
+  redundant "requests the switch in one click" test, and a no-op `toBeDefined` assertion;
+  converted a verbose inline-rerender test to the `update()` helper (less brittle to prop
+  changes). Client 257 pass, typecheck clean, contract byte-identical.

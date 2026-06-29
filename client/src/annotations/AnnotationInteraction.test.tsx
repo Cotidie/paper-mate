@@ -493,7 +493,7 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
   });
 
   it("with a mark selected, an empty-space drag still CREATES a highlight (2.3 path unbroken)", async () => {
-    const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     useAnnotationStore.getState().addAnnotation(textMark("m1"));
     render(
@@ -508,6 +508,5 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().all().length).toBe(2);
     // The create swatch row pops (selection box is gone), proving create still works.
     await screen.findByTestId("color-swatch-annotation-default");
-    expect(removeAllRanges).toBeDefined();
   });
 });

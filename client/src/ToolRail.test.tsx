@@ -95,31 +95,17 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
   });
 
-  it("single-click switch (AC4): with Highlight active, one click on the pointer button commits to cursor and opens no flyout", () => {
-    const { onSelectTool } = renderRail({ activeTool: "highlight" });
-    fireEvent.click(screen.getByTestId("tool-cursor-button"));
-    // One click commits the switch...
-    expect(onSelectTool).toHaveBeenCalledWith("cursor");
-    // ...and never opens a sub-toolbox in its place.
-    expect(screen.queryByTestId("tool-flyout")).toBeNull();
-  });
+  // (Removed the old "single-click switch opens no flyout (AC4)" unit test: that
+  // rule is superseded — switching to a tool now opens its sub-toolbar. The
+  // one-click switch itself is covered end-to-end in App.test.)
 
-  it("closes an open pointer flyout when the active tool switches to an annotation tool (AC4, review MED)", () => {
-    // Open the flyout in cursor mode, then re-render as if `H`/Highlight switched
-    // activeTool to highlight: the stale pointer sub-toolbox must not remain.
-    const { rerender } = renderRail({ activeTool: "cursor" });
+  it("closes an open pointer flyout when the active tool switches to an annotation tool", () => {
+    // Open the flyout in cursor mode, then switch to highlight: the stale pointer
+    // sub-toolbar must not remain (the highlight color flyout replaces it).
+    const r = renderRail({ activeTool: "cursor" });
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
     expect(screen.getByTestId("tool-flyout")).toBeTruthy();
-    rerender(
-      <ToolRail
-        activeTool="highlight"
-        onSelectTool={vi.fn()}
-        activeColor="annotation-default"
-        onPickColor={vi.fn()}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-      />,
-    );
+    r.update({ activeTool: "highlight" });
     expect(screen.queryByTestId("tool-flyout")).toBeNull();
   });
 
@@ -144,16 +130,6 @@ describe("ToolRail", () => {
     expect(btn.getAttribute("title")).toBe("Highlight (H)");
     fireEvent.click(btn);
     expect(onSelectTool).toHaveBeenCalledWith("highlight");
-  });
-
-  // ── Story 2.6: arm = one-click switch; active transition opens the picker ───
-  it("arming highlight from another tool requests the switch in one click", () => {
-    const { onSelectTool } = renderRail({ activeTool: "cursor" });
-    fireEvent.click(screen.getByTestId("tool-highlight-button"));
-    expect(onSelectTool).toHaveBeenCalledWith("highlight");
-    // The parent owns activeTool; this click only requests the switch. The flyout
-    // opens after the parent rerenders with activeTool="highlight".
-    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
   });
 
   it("the highlight color flyout opens when highlight becomes active", () => {
