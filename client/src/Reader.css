@@ -14,6 +14,17 @@
   background: var(--color-text-selection);
 }
 
+/* pdf.js positions the glyph spans `position:absolute`, but the per-line `<br>`
+   line-break elements stay in normal flow at the text layer's TOP-LEFT origin.
+   A multi-line drag selection includes those brs, and the browser paints each
+   one's selection as a caret-height sliver stacked at top-left — a stray
+   vertical strip in the left margin. The brs carry no glyphs (text lives in the
+   spans), so excluding them from selection drops the strip with no visible loss
+   (copy joins lines into a paragraph, which suits prose reading anyway). */
+.pdf-canvas .textLayer br {
+  user-select: none;
+}
+
 /* pdf-canvas: the scroll region on the reader-backdrop floor. Pixel-stable —
    chrome overlays it and never reflows its box (NFR-1). */
 .pdf-canvas {

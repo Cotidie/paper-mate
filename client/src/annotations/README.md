@@ -29,10 +29,12 @@ Story 2.3 (highlight tool) adds the first real tool on this foundation:
   `AnnotationInteraction` consumes it via `armedTool`. Sticky until
   `V`/`Esc`/another tool.
 - With highlight armed, a text drag-release LANDS a default-color highlight
-  immediately (create-on-release), then the quick-box shows `ColorSwatchRow` (the
-  6 accent colors) to recolor the just-made mark (`store.recolorAnnotation`).
-  Cursor-mode drag keeps the 2.2 single-action proof (the cursor tool-type picker
-  is Story 2.12).
+  immediately (create-on-release). Since Story 2.5 the just-made mark is then
+  SELECTED, so the unified selection quick-box (recolor + delete) takes over —
+  there is no separate create quick-box (one affordance for "act on a mark",
+  whether just-created or clicked later). Cursor-mode drag keeps the 2.2
+  single-action proof button, which also selects the mark after it creates (the
+  cursor tool-type picker is Story 2.12).
 - `ColorSwatchRow`: the highlight/underline recolor row; later color tools reuse
   it (Story 2.6's arm-time picker, Story 2.5's selection recolor).
 
@@ -43,6 +45,43 @@ single click — a per-tool quick-box only opens on drag-release or when the too
 is already active, never in place of a switch. That is what lets Story 2.6 add an
 arm-time color picker and Story 2.5 add click-to-select safely on this one model.
 
+Story 2.5 adds the selection seam (AD-12) — the first way to act on an EXISTING
+mark, decoupled from the create machine and the Epic-3 command stack:
+
+- One `selectedId: string | null` in the store is the single source of truth for
+  selection (`select`/`clearSelection`), plus a group-aware `deleteAnnotation`
+  (removes the id AND its `group_id` siblings, so a two-page highlight deletes
+  both pages; clears `selectedId` if it was in the set). Client-only — no
+  persistence/undo yet (that is the seed Story 3.3 reuses).
+- The highlight marks are now pointer-interactive (Decision A): each mark rect IS
+  the page-normalized anchor rect (`denormalizeRect`), so `pointer-events:auto` +
+  `cursor:pointer` make it the hit surface. Hovering outlines the WHOLE annotation
+  and shows the pointer cursor (NOT the text I-beam) — so you cannot start a new
+  highlight over an existing one. Clicking selects it (a `--selected` ring,
+  stronger than the hover outline). Recent-wins: marks render sorted by
+  `created_at` ascending (newest on top wins overlap). The rest of the layer sheet
+  stays `pointer-events:none`, so non-highlighted text stays selectable (trade-off:
+  you cannot text-select over a highlight).
+- Hover AND selection are GROUP-AWARE and both live in the store (`hoveredId` +
+  `selectedId`). A two-page highlight is two annotations in two per-page layers, so
+  each layer reads the shared ids and lights any mark that matches by id OR shares
+  a non-null `group_id` (`inActiveGroup`) — both pages outline on hover and ring on
+  select as one. Hover is store state (not per-layer `useState`) precisely so the
+  sibling on the other page's layer sees it.
+- The selection quick-box is a SEPARATE render path off `selectedId` (Decision B,
+  NOT `machine.ts`): it reuses `ColorSwatchRow` (armed to the mark's current
+  color → `store.recolorAnnotation`, reused from 2.3) + a Delete action, reusing
+  the `.quick-box` shell + `clampToViewport`. A pick dismisses the box but keeps
+  the mark selected/ringed; clicking a mark again reopens its box. `Del`/
+  `Backspace` delete; `Esc` or a pointerdown on empty page content clears the
+  selection (document-level, phase-gated, editable/buttons/chrome exempt so the
+  toolbar/zoom keep it). Scroll (including zoom recenters) only CLOSES the
+  floating box — the ring rides the denormalized rect and stays glued (NFR-3). Selection works in cursor mode AND while a highlight
+  tool is active (a pointerdown on a mark selects; empty text falls through to the
+  2.3 create path). a11y: the layer stays decorative (`aria-hidden`); selection is
+  a pointer affordance with document-level Del/Esc — a keyboard-reachable list
+  comes with the Epic-3 Annotation Bank.
+
 Still later stories: underline/pen/memo/comment tools + box-select drag (2.6-2.11),
-select-a-highlight (2.5), the cursor-mode drag-to-change-tool picker (2.12), and
-editing/undo/persistence (Epic 3).
+the cursor-mode drag-to-change-tool picker (2.12), and editing/undo/persistence
+(Epic 3).

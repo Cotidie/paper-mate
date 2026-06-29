@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import AnnotationLayer from "./AnnotationLayer";
 import { useAnnotationStore } from "../store";
 import type { Annotation } from "../api/client";
@@ -7,21 +7,34 @@ import type { PageBox } from "../anchor";
 
 const box: PageBox = { width: 600, height: 800 };
 
-function textMark(id: string, pageIndex: number, docId = "doc-1"): Annotation {
+function textMark(
+  id: string,
+  pageIndex: number,
+  docId = "doc-1",
+  createdAt = "2026-06-29T00:00:00+00:00",
+  rects = [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }],
+): Annotation {
   return {
     id,
     doc_id: docId,
     type: "highlight",
     group_id: null,
-    anchor: { kind: "text", page_index: pageIndex, rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }], text: "x" },
+    anchor: { kind: "text", page_index: pageIndex, rects, text: "x" },
     style: { color: "annotation-default", stroke_width: null },
     body: null,
-    created_at: "2026-06-29T00:00:00+00:00",
-    updated_at: "2026-06-29T00:00:00+00:00",
+    created_at: createdAt,
+    updated_at: createdAt,
   };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map() }));
+/** A text mark on page 0 carrying a shared `group_id` (a two-page highlight's
+ *  per-page slice; both slices render on this layer in tests to assert grouping). */
+function groupMark(id: string, groupId: string, createdAt = "2026-06-29T00:00:00+00:00"): Annotation {
+  const m = textMark(id, 0, "doc-1", createdAt);
+  return { ...m, group_id: groupId };
+}
+
+beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
 afterEach(cleanup);
 
 describe("AnnotationLayer (AC-3, AC-4, AC-6)", () => {
@@ -62,5 +75,84 @@ describe("AnnotationLayer (AC-3, AC-4, AC-6)", () => {
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     expect(screen.queryByTestId("annotation-mark-mine")).toBeTruthy();
     expect(screen.queryByTestId("annotation-mark-other")).toBeNull();
+  });
+});
+
+describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () => {
+  it("clicking a mark sets it as the selected annotation (select via store)", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("a1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    fireEvent.click(screen.getByTestId("annotation-mark-a1"));
+    expect(useAnnotationStore.getState().selectedId).toBe("a1");
+  });
+
+  it("pointer enter/leave toggles the --hovered class on every rect of that annotation", () => {
+    // Two rects on one annotation (a multi-line mark) so we prove the WHOLE
+    // annotation outlines as one.
+    useAnnotationStore.getState().addAnnotation(
+      textMark("a1", 0, "doc-1", "2026-06-29T00:00:00+00:00", [
+        { x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 },
+        { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.3 },
+      ]),
+    );
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const rects = () => container.querySelectorAll('[data-testid="annotation-mark-a1"]');
+    expect(rects()).toHaveLength(2);
+    fireEvent.pointerEnter(rects()[0]);
+    rects().forEach((r) => expect(r.className).toContain("annotation-highlight--hovered"));
+    fireEvent.pointerLeave(rects()[0]);
+    rects().forEach((r) => expect(r.className).not.toContain("annotation-highlight--hovered"));
+  });
+
+  it("hover is group-aware: hovering one mark outlines its group sibling too (two-page highlight)", () => {
+    // Two annotations sharing a group_id (a two-page highlight). On the page this
+    // layer renders, BOTH must outline when the store's hoveredId names either —
+    // proving the layer reads the shared store hover + matches by group, so the
+    // sibling on another page's layer lights together.
+    useAnnotationStore.getState().addAnnotation(
+      groupMark("g-a", "grp1"),
+    );
+    useAnnotationStore.getState().addAnnotation(
+      groupMark("g-b", "grp1", "2026-06-29T00:00:01+00:00"),
+    );
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setHovered("g-a"));
+    expect(screen.getByTestId("annotation-mark-g-a").className).toContain("annotation-highlight--hovered");
+    expect(screen.getByTestId("annotation-mark-g-b").className).toContain("annotation-highlight--hovered");
+    act(() => useAnnotationStore.getState().setHovered(null));
+    expect(screen.getByTestId("annotation-mark-g-a").className).not.toContain("annotation-highlight--hovered");
+  });
+
+  it("selection is group-aware: the selected mark's group sibling also gets --selected", () => {
+    useAnnotationStore.getState().addAnnotation(groupMark("g-a", "grp1"));
+    useAnnotationStore.getState().addAnnotation(groupMark("g-b", "grp1", "2026-06-29T00:00:01+00:00"));
+    // A non-grouped mark must NOT light up.
+    useAnnotationStore.getState().addAnnotation(textMark("solo", 0, "doc-1", "2026-06-29T00:00:02+00:00"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("g-a"));
+    expect(screen.getByTestId("annotation-mark-g-a").className).toContain("annotation-highlight--selected");
+    expect(screen.getByTestId("annotation-mark-g-b").className).toContain("annotation-highlight--selected");
+    expect(screen.getByTestId("annotation-mark-solo").className).not.toContain("annotation-highlight--selected");
+  });
+
+  it("the selectedId annotation's rects get --selected; others do not; clearing removes it", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("a1", 0));
+    useAnnotationStore.getState().addAnnotation(textMark("a2", 0, "doc-1", "2026-06-29T00:00:01+00:00"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("a1"));
+    expect(screen.getByTestId("annotation-mark-a1").className).toContain("annotation-highlight--selected");
+    expect(screen.getByTestId("annotation-mark-a2").className).not.toContain("annotation-highlight--selected");
+    act(() => useAnnotationStore.getState().clearSelection());
+    expect(screen.getByTestId("annotation-mark-a1").className).not.toContain("annotation-highlight--selected");
+  });
+
+  it("renders marks sorted by created_at (newest last in DOM, recent-wins)", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("late", 0, "doc-1", "2026-06-29T00:00:09+00:00"));
+    useAnnotationStore.getState().addAnnotation(textMark("early", 0, "doc-1", "2026-06-29T00:00:01+00:00"));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const ids = [...container.querySelectorAll("[data-testid^='annotation-mark-']")].map(
+      (el) => el.getAttribute("data-testid"),
+    );
+    expect(ids).toEqual(["annotation-mark-early", "annotation-mark-late"]);
   });
 });

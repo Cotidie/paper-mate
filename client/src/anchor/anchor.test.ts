@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { canonicalize, normalizeRect, denormalizeRect, pickPage, mergeRects, type PageBox } from "./index";
+import {
+  canonicalize,
+  normalizeRect,
+  denormalizeRect,
+  pickPage,
+  mergeRects,
+  collectTextRects,
+  type PageBox,
+} from "./index";
 
 const box: PageBox = { width: 600, height: 800 };
 
@@ -120,5 +128,62 @@ describe("pickPage (two-page split logic, AC-5)", () => {
     ];
     const assigned = rects.map((r) => pickPage(r, cards));
     expect(assigned).toEqual([0, 1]);
+  });
+});
+
+describe("collectTextRects (cross-page selection bug — Range.getClientRects leaks element boxes)", () => {
+  const LINE = { width: 40, height: 16, left: 0, top: 0, right: 40, bottom: 16, x: 0, y: 0 } as DOMRect;
+  const PAGE = { width: 960, height: 1240, left: 0, top: 0, right: 960, bottom: 1240, x: 0, y: 0 } as DOMRect;
+
+  // Inject the rect reader (no global Range mutation): mimic the browser where a
+  // single-text-node sub-range yields one line rect, while a MULTI-node range
+  // (the whole cross-page selection) ALSO yields the enclosed element's
+  // full-page border box — the exact source of the cross-page bug.
+  const rectsOf = (r: Range): DOMRect[] => {
+    const single = r.startContainer === r.endContainer && r.startContainer.nodeType === Node.TEXT_NODE;
+    return single ? [LINE] : [LINE, PAGE];
+  };
+
+  // A fully-enclosed element (page card / canvas / text layer) contributes its
+  // border box to a whole-range getClientRects(); a cross-page selection
+  // encloses such elements, so those FULL-PAGE rects must NOT become highlight
+  // rects. collectTextRects measures TEXT NODES only, so they never enter.
+  it("returns only text-line rects, never the enclosed element border box", () => {
+    const container = document.createElement("div");
+    const s1 = document.createElement("span");
+    s1.appendChild(document.createTextNode("hello"));
+    const s2 = document.createElement("span");
+    s2.appendChild(document.createTextNode("world"));
+    container.append(s1, s2);
+    document.body.appendChild(container);
+
+    const range = document.createRange();
+    range.setStart(s1.firstChild as Text, 0);
+    range.setEnd(s2.firstChild as Text, 5);
+
+    // The OLD whole-range approach would include the full-page box (documents the bug).
+    expect(rectsOf(range).some((r) => r.height > 100)).toBe(true);
+
+    // collectTextRects decomposes into per-text-node sub-ranges → text lines only.
+    const rects = collectTextRects(range, rectsOf);
+    expect(rects.length).toBe(2);
+    expect(rects.every((r) => r.height <= 16)).toBe(true);
+    expect(rects.some((r) => r.height > 100)).toBe(false);
+
+    document.body.removeChild(container);
+  });
+
+  it("returns [] (never the whole-range rects) when the range exposes no text nodes", () => {
+    // A range whose content is an element with no text node → no text to measure.
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const range = document.createRange();
+    range.selectNode(el);
+    // Even if the (whole-range) reader would report a box, collectTextRects must
+    // NOT use it — the cross-page leak is exactly the whole-range rects.
+    const wholeRangeReader = () => [PAGE];
+    const rects = collectTextRects(range, wholeRangeReader);
+    expect(rects).toHaveLength(0);
+    document.body.removeChild(el);
   });
 });
