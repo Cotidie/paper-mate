@@ -4,7 +4,7 @@ baseline_commit: 1fb83b9195ee7f68b97a88ae7d9382eeada21424
 
 # Story 2.10: Comment (highlight + pin + bubble)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -71,37 +71,37 @@ Both land, select, and open the bubble for immediate typing. The discriminator i
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — buildAnnotations body param + buildCommentPin (AC: 1, 3)**
-  - [ ] `client/src/annotations/create.ts`: add optional `body?: string` to `BuildOptions` (default `null`); set `body: body ?? null` on each built annotation. Highlight/underline callers unchanged (omit it → `null`); the comment drag passes `""`. Update the doc comment (no longer "Story 2.2 proof = highlight" only).
-  - [ ] `client/src/annotations/create.ts`: add `buildCommentPin({page_index, rect}, docId, {now, newId, color})` → one `type:"comment"`, `kind:"rect"`, `group_id:null`, `style:{color, stroke_width:null}`, `body:""` (the click-placed pin; twin of `buildMemoAnnotation` with `type="comment"`). Export from `annotations/index.ts`.
-  - [ ] `create.test.ts`: `buildAnnotations` with `type:"comment"`, `body:""` → `body === ""`; without `body` → `body === null` (highlight/underline regression); `buildCommentPin` shape (`type:"comment"`, `kind:"rect"`, `body:""`, null group, color, null stroke).
+- [x] **Task 1 — buildAnnotations body param + buildCommentPin (AC: 1, 3)**
+  - [x] `client/src/annotations/create.ts`: add optional `body?: string` to `BuildOptions` (default `null`); set `body: body ?? null` on each built annotation. Highlight/underline callers unchanged (omit it → `null`); the comment drag passes `""`. Update the doc comment (no longer "Story 2.2 proof = highlight" only).
+  - [x] `client/src/annotations/create.ts`: add `buildCommentPin({page_index, rect}, docId, {now, newId, color})` → one `type:"comment"`, `kind:"rect"`, `group_id:null`, `style:{color, stroke_width:null}`, `body:""` (the click-placed pin; twin of `buildMemoAnnotation` with `type="comment"`). Export from `annotations/index.ts`.
+  - [x] `create.test.ts`: `buildAnnotations` with `type:"comment"`, `body:""` → `body === ""`; without `body` → `body === null` (highlight/underline regression); `buildCommentPin` shape (`type:"comment"`, `kind:"rect"`, `body:""`, null group, color, null stroke).
 
-- [ ] **Task 2 — Comment create gestures: drag (text) + click (rect pin) (AC: 1, 3)**
-  - [ ] `client/src/annotations/AnnotationInteraction.tsx`: in the `pointerup` handler, add `comment`. If `rectsFromSelection` returned pages → text-anchor create branch (`type: "comment"`, `body: ""`, the `buildAnnotations` path shared with highlight/underline). If it returned ZERO and the release target is a `.page-surface` (not `.quick-box`/`.annotation-comment-pin`) → resolve the page via `pickPage`, build a small anchor rect at the click point (`normalizeRect`), `buildCommentPin`, add. Confirm comment is NOT caught by the `pen`/`memo` early-return. After create, `select(created.id)` (opens the bubble).
-  - [ ] Gate `showSelectionBox` to exclude `type === "comment"`; add `.annotation-comment-pin` to BOTH `.closest(...)` hit-tests (open/reopen + empty-space-deselect) and the on-mark check.
+- [x] **Task 2 — Comment create gestures: drag (text) + click (rect pin) (AC: 1, 3)**
+  - [x] `client/src/annotations/AnnotationInteraction.tsx`: in the `pointerup` handler, add `comment`. If `rectsFromSelection` returned pages → text-anchor create branch (`type: "comment"`, `body: ""`, the `buildAnnotations` path shared with highlight/underline). If it returned ZERO and the release target is a `.page-surface` (not `.quick-box`/`.annotation-comment-pin`) → resolve the page via `pickPage`, build a small anchor rect at the click point (`normalizeRect`), `buildCommentPin`, add. Confirm comment is NOT caught by the `pen`/`memo` early-return. After create, `select(created.id)` (opens the bubble).
+  - [x] Gate `showSelectionBox` to exclude `type === "comment"`; add `.annotation-comment-pin` to BOTH `.closest(...)` hit-tests (open/reopen + empty-space-deselect) and the on-mark check.
 
-- [ ] **Task 3 — Comment pin + bubble render, both kinds (AC: 1, 2, 4, 6)**
-  - [ ] `client/src/annotations/AnnotationLayer.tsx`: a `type=comment` render path. The FILL stays in `.annotation-highlights` (a `kind=text` comment is already in `highlightMarks` — verify, do not double-paint; a `kind=rect` comment has no fill). Add a NEW, NOT aria-hidden `.annotation-comments` group rendering, per comment mark: a round pin `<button>` at the denormalized first-rect start (`kind=text`) OR rect top-left (`kind=rect`) (`data-testid="annotation-comment-pin-${a.id}"`, accent fill, `onClick` → `select`), and when selected, a `CommentBubble`.
-  - [ ] `CommentBubble` component (NEW, extracted like `MemoBox`): a `<textarea>` (`value=body`, `onChange`→`retextAnnotation`, autofocus when selected, local `Esc` → blur + `clearSelection`), a `ColorSwatchRow` (recolor → `recolorAnnotation` + set default), a delete button; anchored below the pin via the denormalized first rect (`kind=text`) or rect (`kind=rect`); height re-fits on body/scale change (the `MemoBox` layout-effect pattern). Owns its ref.
-  - [ ] `client/src/annotations/Annotations.css`: `.annotation-comments` group (pointer-transparent, the pin/bubble opt back in) + `.annotation-comment-pin` (rounded.full, ~20px, accent fill, focus ring) + `.comment-bubble` (surface-card, rounded.md, hairline-strong, body-sm, soft drop). Tokens only (sizes in `src/theme/**`).
+- [x] **Task 3 — Comment pin + bubble render, both kinds (AC: 1, 2, 4, 6)**
+  - [x] `client/src/annotations/AnnotationLayer.tsx`: a `type=comment` render path. The FILL stays in `.annotation-highlights` (a `kind=text` comment is already in `highlightMarks` — verify, do not double-paint; a `kind=rect` comment has no fill). Add a NEW, NOT aria-hidden `.annotation-comments` group rendering, per comment mark: a round pin `<button>` at the denormalized first-rect start (`kind=text`) OR rect top-left (`kind=rect`) (`data-testid="annotation-comment-pin-${a.id}"`, accent fill, `onClick` → `select`), and when selected, a `CommentBubble`.
+  - [x] `CommentBubble` component (NEW, extracted like `MemoBox`): a `<textarea>` (`value=body`, `onChange`→`retextAnnotation`, autofocus when selected, local `Esc` → blur + `clearSelection`), a `ColorSwatchRow` (recolor → `recolorAnnotation` + set default), a delete button; anchored below the pin via the denormalized first rect (`kind=text`) or rect (`kind=rect`); height re-fits on body/scale change (the `MemoBox` layout-effect pattern). Owns its ref.
+  - [x] `client/src/annotations/Annotations.css`: `.annotation-comments` group (pointer-transparent, the pin/bubble opt back in) + `.annotation-comment-pin` (rounded.full, ~20px, accent fill, focus ring) + `.comment-bubble` (surface-card, rounded.md, hairline-strong, body-sm, soft drop). Tokens only (sizes in `src/theme/**`).
 
-- [ ] **Task 4 — Comment rail button + C hotkey (AC: 5)**
-  - [ ] `client/src/ToolRail.tsx`: a Comment `.tool-rail__item` below Memo — armed class, `aria-label="Comment"`, `title="Comment (C)"`, `aria-haspopup`/`aria-expanded`, `data-testid="tool-comment-button"`, toggle-on-active, `ToolFlyout testId="comment-flyout"` with a `<ColorSwatchRow>` (color only; no width/size). Phosphor `ChatCircle`. `commentActive` derive + flyout wiring (twin of underline).
-  - [ ] `client/src/App.tsx`: `C`/`c` → `setActiveTool("comment")` next to `T` in the document-level keydown.
+- [x] **Task 4 — Comment rail button + C hotkey (AC: 5)**
+  - [x] `client/src/ToolRail.tsx`: a Comment `.tool-rail__item` below Memo — armed class, `aria-label="Comment"`, `title="Comment (C)"`, `aria-haspopup`/`aria-expanded`, `data-testid="tool-comment-button"`, toggle-on-active, `ToolFlyout testId="comment-flyout"` with a `<ColorSwatchRow>` (color only; no width/size). Phosphor `ChatCircle`. `commentActive` derive + flyout wiring (twin of underline).
+  - [x] `client/src/App.tsx`: `C`/`c` → `setActiveTool("comment")` next to `T` in the document-level keydown.
 
-- [ ] **Task 5 — Tests + regression bar (AC: all)**
-  - [ ] `create.test.ts`: body param + `buildCommentPin` shape (Task 1).
-  - [ ] `AnnotationInteraction.test.tsx`: comment DRAG creates `type=comment`/`kind=text`/`body=""`, selects it; comment CLICK (no selection) on a page surface creates `type=comment`/`kind=rect`/`body=""` via `buildCommentPin`, selects it; comment NOT in the pen/memo early-return; selecting a comment (either kind) does NOT open the generic selection quick-box (`showSelectionBox` excludes comment); clicking the pin does not clear selection; clicking the quick-box/an existing pin does NOT drop a second pin. Highlight/underline/pen/memo/cursor paths still pass.
-  - [ ] `AnnotationLayer.test.tsx`: a `kind=text` comment paints a fill in `.annotation-highlights` AND a pin in `.annotation-comments` (not aria-hidden); a `kind=rect` comment paints ONLY a pin (no fill); the pin is a button with the testid; selecting it renders `CommentBubble` with `value=body`; typing fires `retextAnnotation`; recolor fires `recolorAnnotation`; delete fires `deleteAnnotation`; re-derives on zoom; empty comment (either kind) is NOT auto-removed.
-  - [ ] `ToolRail.test.tsx`: Comment arms in one click; `comment-flyout` shows the swatch row (no width/size row); pick color fires + closes; toggle/Esc/switch-away close it.
-  - [ ] `App.test.tsx`: `C` arms `"comment"`; `V`/`Esc` return to cursor (no new `render/` export → both `vi.mock("./render")` barrels untouched, confirm).
-  - [ ] Full regression: client suite + `typecheck` clean; server `pytest`. Contract byte-identical (`git diff --stat client/src/api/schema.d.ts` empty). `no-raw-values` green.
-  - [ ] **Live smoke** (own fresh `uvicorn` + `vite dev` on alternate ports, a real PDF, DPR=2): (a) arm Comment from cursor (one click) → flyout opens with color; (b) `C` arms comment; (c) DRAG across text → run highlighted ~0.4 + a round pin at the start; (d) CLICK a blank spot → a round pin only, NO highlight (kind=rect); (e) click a pin → bubble opens focused, type a note (body persists), `Esc` dismisses + focus returns; (f) re-click the pin → bubble re-opens with the saved note; (g) recolor from the bubble → fill + pin retint; (h) delete from the bubble removes the comment; (i) zoom 200→250% → fill + pin glued for BOTH a dragged and a clicked comment (record fracLeft/fracW invariants); (j) an empty comment (drag OR click, no typing, deselect) STAYS; (k) highlight/underline/pen/memo still create + select; (l) CROSS-PAGE comment drag at DPR>1 (the highest-risk selection path — fill must not leak full-page; pin renders on the start). Screenshot to `.bmad/implementation-artifacts/2-10-comment-smoke.png`.
+- [x] **Task 5 — Tests + regression bar (AC: all)**
+  - [x] `create.test.ts`: body param + `buildCommentPin` shape (Task 1).
+  - [x] `AnnotationInteraction.test.tsx`: comment DRAG creates `type=comment`/`kind=text`/`body=""`, selects it; comment CLICK (no selection) on a page surface creates `type=comment`/`kind=rect`/`body=""` via `buildCommentPin`, selects it; comment NOT in the pen/memo early-return; selecting a comment (either kind) does NOT open the generic selection quick-box (`showSelectionBox` excludes comment); clicking the pin does not clear selection; clicking the quick-box/an existing pin does NOT drop a second pin. Highlight/underline/pen/memo/cursor paths still pass.
+  - [x] `AnnotationLayer.test.tsx`: a `kind=text` comment paints a fill in `.annotation-highlights` AND a pin in `.annotation-comments` (not aria-hidden); a `kind=rect` comment paints ONLY a pin (no fill); the pin is a button with the testid; selecting it renders `CommentBubble` with `value=body`; typing fires `retextAnnotation`; recolor fires `recolorAnnotation`; delete fires `deleteAnnotation`; re-derives on zoom; empty comment (either kind) is NOT auto-removed.
+  - [x] `ToolRail.test.tsx`: Comment arms in one click; `comment-flyout` shows the swatch row (no width/size row); pick color fires + closes; toggle/Esc/switch-away close it.
+  - [x] `App.test.tsx`: `C` arms `"comment"`; `V`/`Esc` return to cursor (no new `render/` export → both `vi.mock("./render")` barrels untouched, confirm).
+  - [x] Full regression: client suite + `typecheck` clean; server `pytest`. Contract byte-identical (`git diff --stat client/src/api/schema.d.ts` empty). `no-raw-values` green.
+  - [x] **Live smoke** (own fresh `uvicorn` + `vite dev` on alternate ports, a real PDF, DPR=2): (a) arm Comment from cursor (one click) → flyout opens with color; (b) `C` arms comment; (c) DRAG across text → run highlighted ~0.4 + a round pin at the start; (d) CLICK a blank spot → a round pin only, NO highlight (kind=rect); (e) click a pin → bubble opens focused, type a note (body persists), `Esc` dismisses + focus returns; (f) re-click the pin → bubble re-opens with the saved note; (g) recolor from the bubble → fill + pin retint; (h) delete from the bubble removes the comment; (i) zoom 200→250% → fill + pin glued for BOTH a dragged and a clicked comment (record fracLeft/fracW invariants); (j) an empty comment (drag OR click, no typing, deselect) STAYS; (k) highlight/underline/pen/memo still create + select; (l) CROSS-PAGE comment drag at DPR>1 (the highest-risk selection path — fill must not leak full-page; pin renders on the start). Screenshot to `.bmad/implementation-artifacts/2-10-comment-smoke.png`.
 
-- [ ] **Task 6 — Docs + version (AC: all)**
-  - [ ] No `/api` change → `docs/API.md` untouched.
-  - [ ] Update `client/src/annotations/README.md` with the Story 2.10 comment section (a `type=comment`+`kind=text` mark = free highlight fill + a pin + a bubble; `retextAnnotation` reuse; the bubble replaces the selection quick-box; no empty-cleanup; AD-5 `comment → text`).
-  - [ ] `server/pyproject.toml` version `0.1.6 → 0.1.7` at done (single source).
+- [x] **Task 6 — Docs + version (AC: all)**
+  - [x] No `/api` change → `docs/API.md` untouched.
+  - [x] Update `client/src/annotations/README.md` with the Story 2.10 comment section (a `type=comment`+`kind=text` mark = free highlight fill + a pin + a bubble; `retextAnnotation` reuse; the bubble replaces the selection quick-box; no empty-cleanup; AD-5 `comment → text`).
+  - [x] `server/pyproject.toml` version `0.1.6 → 0.1.7` at done (single source).
 
 ## Dev Notes
 
@@ -209,13 +209,44 @@ Ultimate context engine analysis completed - comprehensive developer guide creat
 
 ### Agent Model Used
 
+claude-opus-4-8 (bmad-dev-story)
+
 ### Debug Log References
+
+- Live smoke: own fresh servers on alt ports (uvicorn :8001, vite dev :5174 proxying to it; user's stale :8000/:5173 left untouched), real PDF `fixtures/sample-pdfs/09-regularization.pdf` (23 pages) at DPR=2 via chrome-devtools. Screenshot: `.bmad/implementation-artifacts/2-10-comment-smoke.png`.
 
 ### Completion Notes List
 
+- **Task 1 (create):** `BuildOptions.body?` (default null) threaded onto each built mark; highlight/underline omit it → null, comment drag passes `""`. NEW `buildCommentPin` (`type:"comment"`/`kind:"rect"`/`body:""`/null group, a degenerate point rect). Exported from `annotations/index.ts`. Unit-tested.
+- **Task 2 (gestures):** `pointerup` extended — non-empty selection + `tool==="comment"` → `buildAnnotations` with `body:""` (the highlight path + the one delta); empty selection + `tool==="comment"` over a `.page-surface` (guarded off quick-box / existing pin / bubble / any mark) → `buildCommentPin` at the click. Both add + select. `showSelectionBox` now excludes `type==="comment"`. Pin + bubble added to the empty-space-deselect hit-test. The empty-memo cleanup stays gated on `type==="memo"` (verified) so an empty comment survives (Decision 5).
+- **Task 3 (render):** NEW `CommentBubble` (the `MemoBox` twin): textarea→`retextAnnotation`, `ColorSwatchRow`→`recolorAnnotation`+set default, delete; focus-in on open / focus-return on unmount; local Esc → blur + clearSelection. NEW `renderComment` paints a round pin `<button>` (both kinds) in a NEW NOT-aria-hidden `.annotation-comments` group; the `kind=text` fill rides FREE in `.annotation-highlights` (no second fill path); the bubble mounts only for the exactly-selected comment. CSS: `.annotation-comments`/`.annotation-comment`/`.annotation-comment-pin`/`.comment-bubble` (tokens only); pin/bubble dims added to `theme/components.css`.
+- **Task 4 (rail + key):** Comment `.tool-rail__item` below Memo (`ChatCircle`, color-only flyout, `tool-comment-button`/`comment-flyout` testids, toggle-on-active); `C`/`c` → `setActiveTool("comment")` in App's document keydown.
+- **Task 5 (tests + smoke):** create.test (+body param, +buildCommentPin), AnnotationInteraction.test (drag→text comment, click→rect pin, guard no-double-pin, non-comment no-pin, empty-kept), AnnotationLayer.test (text=fill+pin, rect=pin-only, pin-click→bubble, retext/recolor/delete, zoom re-derive, no-bubble-unselected, empty-not-removed, no group when none), ToolRail.test (arm-one-click, color-only flyout, pick closes, toggle/Esc/switch-away), App.test (`C` arms, V/Esc disarm). Full client suite 366 green, typecheck clean, no-raw-values green, backend pytest 38 green, contract (`schema.d.ts` + `openapi.json`) byte-identical. Live smoke ALL PASS: arm one-click + flyout; `C`/`V`; text drag → ~0.4 fill + pin + focused bubble; blank click → pin only (no fill); type→persist, Esc→dismiss+focus-return; re-click→reopen with saved note; recolor retints fill+pin; delete removes; zoom 100→250% pins glued for BOTH dragged + clicked (fracLeft 0.0333→0.0332, 0.2196→0.2195); empty comment KEPT on deselect; highlight + memo still create; CROSS-PAGE comment drag at DPR=2 → fill split per page (max 33px on a 1980px card), NO full-page leak, a pin on each page's run start.
+- **Task 6 (docs/version):** no `/api` change → `docs/API.md` untouched; `annotations/README.md` gains the Story 2.10 section; `server/pyproject.toml` `0.1.6 → 0.1.7`.
+- No new `render/index.ts` export → both `vi.mock("./render")` barrels untouched (AP-2).
+
 ### File List
+
+- client/src/annotations/create.ts (modified — `BuildOptions.body?`; NEW `buildCommentPin` + types)
+- client/src/annotations/create.test.ts (modified — body param + buildCommentPin tests)
+- client/src/annotations/index.ts (modified — export buildCommentPin)
+- client/src/annotations/AnnotationInteraction.tsx (modified — comment drag + click gestures; showSelectionBox excludes comment; pin/bubble in deselect hit-test)
+- client/src/annotations/AnnotationInteraction.test.tsx (modified — comment gesture tests)
+- client/src/annotations/AnnotationLayer.tsx (modified — NEW CommentBubble + renderComment + comments group)
+- client/src/annotations/AnnotationLayer.test.tsx (modified — comment render/bubble/zoom tests)
+- client/src/annotations/Annotations.css (modified — comments group, pin, bubble styles)
+- client/src/ToolRail.tsx (modified — Comment button + color flyout)
+- client/src/ToolRail.test.tsx (modified — comment rail tests)
+- client/src/App.tsx (modified — `C` hotkey)
+- client/src/App.test.tsx (modified — `C` keymap test)
+- client/src/theme/components.css (modified — comment pin + bubble tokens)
+- client/src/annotations/README.md (modified — Story 2.10 section)
+- server/pyproject.toml (modified — version 0.1.6 → 0.1.7)
+- .bmad/implementation-artifacts/2-10-comment-smoke.png (added — live smoke screenshot)
+- .bmad/implementation-artifacts/deferred-work.md (modified — memo/comment confirm-check feature request)
 
 ## Change Log
 
 - 2026-06-29: Story created (ready-for-dev) via bmad-create-story.
 - 2026-06-29: Revised per user review — comment supports BOTH gestures: DRAG → kind=text (highlight + pin), CLICK → kind=rect (pin only, no highlight). Added buildCommentPin + the no-selection pointerup branch; pin renders for both kinds; empty-kept covers the clicked pin. (AD-5 `comment → text` or `rect`.)
+- 2026-06-29: Implemented (status → review) via bmad-dev-story. Client-only: body param + buildCommentPin, comment drag/click gestures, pin + CommentBubble render, rail button + `C` key. 366 client + 38 server tests green, contract byte-identical, live-smoked at DPR=2 incl. cross-page (no full-page leak). Version 0.1.7.
