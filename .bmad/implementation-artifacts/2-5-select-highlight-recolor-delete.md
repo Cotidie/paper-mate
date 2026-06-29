@@ -4,7 +4,7 @@ baseline_commit: 01c77f6f478aaeaec3e6505cc700c477b1cc7281
 
 # Story 2.5: Select a highlight (click-select, recolor, delete)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
