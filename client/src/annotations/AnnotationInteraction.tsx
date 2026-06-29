@@ -43,6 +43,10 @@ import "./Annotations.css";
  *  anchored below it, so the box clears the run instead of covering it. */
 const QUICK_BOX_GAP = 6;
 
+/** Max pointer travel (px) between a comment pointerdown and its release for the
+ *  release to still count as a CLICK (drops a pin). Beyond this it was a drag. */
+const COMMENT_CLICK_SLOP = 5;
+
 /** Skip editable fields + buttons so the global handlers never eat a control's
  *  own keys/clicks (mirrors the Reader's hold-Space `isExempt`). */
 function isExempt(t: EventTarget | null): boolean {
@@ -143,6 +147,11 @@ export default function AnnotationInteraction({
   activeMemoSizeRef.current = activeMemoSize;
   const rectReaderRef = useRef(rectReader);
   rectReaderRef.current = rectReader;
+  // Comment CLICK candidate (Codex MED): the pointerdown origin of a potential
+  // comment-pin click, so a FAILED text drag (down, move far, release with an
+  // empty selection) does NOT drop an accidental pin — the release must be within
+  // click slop of its own pointerdown. Null = no candidate this gesture.
+  const commentDownRef = useRef<{ x: number; y: number } | null>(null);
 
   const pending = state.status === "pending" ? state : null;
   // Readable from the disarm effect below without making `pending` a dep.
@@ -171,6 +180,26 @@ export default function AnnotationInteraction({
   // proof quick-box (the action creates on click). Bound on document (AP-1).
   useEffect(() => {
     if (!enabled) return;
+    // Record the comment-click candidate at pointerdown over a valid page spot, so
+    // the pointerup click path can reject a release that wandered (a failed drag).
+    const onPointerDownCandidate = (e: PointerEvent) => {
+      if (armedToolRef.current !== "comment" || e.button !== 0 || isExempt(e.target)) {
+        commentDownRef.current = null;
+        return;
+      }
+      const el = e.target as Element | null;
+      if (
+        !el?.closest?.(".page-surface") ||
+        el.closest?.(".quick-box") ||
+        el.closest?.(".annotation-comment-pin") ||
+        el.closest?.(".comment-bubble") ||
+        el.closest?.(".annotation-highlight, .annotation-pen, .annotation-memo")
+      ) {
+        commentDownRef.current = null;
+        return;
+      }
+      commentDownRef.current = { x: e.clientX, y: e.clientY };
+    };
     const onPointerUp = (e: PointerEvent) => {
       if (e.button !== 0 || isExempt(e.target)) return;
       // Pen and memo have their OWN gesture paths (below); neither reads the text
@@ -194,7 +223,14 @@ export default function AnnotationInteraction({
         // nothing on an empty release.
         if (tool === "comment") {
           const el = e.target as Element | null;
+          // A real CLICK: the release must be within click slop of a pointerdown
+          // that started on a valid page spot (Codex MED). A failed/whitespace drag
+          // (moved far, empty selection) fails this and drops no pin.
+          const down = commentDownRef.current;
+          commentDownRef.current = null;
           if (
+            !down ||
+            Math.hypot(e.clientX - down.x, e.clientY - down.y) > COMMENT_CLICK_SLOP ||
             !el?.closest?.(".page-surface") ||
             el.closest?.(".quick-box") ||
             el.closest?.(".annotation-comment-pin") ||
@@ -255,8 +291,12 @@ export default function AnnotationInteraction({
       restoreFocusRef.current = document.activeElement as HTMLElement | null;
       dispatch({ type: "present", selection: pages, at: { x: e.clientX, y: e.clientY } });
     };
+    document.addEventListener("pointerdown", onPointerDownCandidate);
     document.addEventListener("pointerup", onPointerUp);
-    return () => document.removeEventListener("pointerup", onPointerUp);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDownCandidate);
+      document.removeEventListener("pointerup", onPointerUp);
+    };
   }, [enabled, docId, addAnnotation, select]);
 
   // Pen freehand gesture (Story 2.8, Decision A): a pointer DRAG (not a text

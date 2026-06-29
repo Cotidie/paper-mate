@@ -979,6 +979,8 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
     useAnnotationStore.getState().setActiveColor("annotation-blue");
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="comment" />);
 
+    // A real click: pointerdown then pointerup at (near) the same point.
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
     fireEvent.pointerUp(surf, { button: 0, clientX: 60, clientY: 160 });
 
     const all = useAnnotationStore.getState().all();
@@ -1006,7 +1008,27 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
     surf.appendChild(pin);
     const pages = [fakeCard(0, 0)];
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="comment" />);
+    fireEvent.pointerDown(pin, { button: 0, clientX: 60, clientY: 160 });
     fireEvent.pointerUp(pin, { button: 0, clientX: 60, clientY: 160 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("a FAILED drag (release far from pointerdown, empty selection) does NOT drop a pin (Codex MED)", () => {
+    const surf = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="comment" />);
+    // Down at one point, release 40px away with no selection → a drag, not a click.
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
+    fireEvent.pointerUp(surf, { button: 0, clientX: 60, clientY: 200 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("a release with NO preceding valid pointerdown does NOT drop a pin", () => {
+    const surf = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="comment" />);
+    // pointerup alone (no candidate recorded) must not place a pin.
+    fireEvent.pointerUp(surf, { button: 0, clientX: 60, clientY: 160 });
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
   });
 

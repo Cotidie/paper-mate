@@ -435,4 +435,38 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     expect(container.querySelector(".annotation-comments")).toBeNull();
   });
+
+  it("editing a grouped (two-page) comment writes the body to ALL siblings (Codex HIGH)", () => {
+    // Two comment slices sharing a group_id (both rendered on page 0 in the test).
+    const c1 = { ...textComment("c1"), group_id: "g1" };
+    const c2 = { ...textComment("c2"), group_id: "g1" };
+    useAnnotationStore.getState().addAnnotation(c1);
+    useAnnotationStore.getState().addAnnotation(c2);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c1"));
+    fireEvent.change(screen.getByTestId("comment-body-c1"), { target: { value: "shared" } });
+    // BOTH siblings carry the note, so reopening the other page's pin shows it.
+    expect(useAnnotationStore.getState().annotations.get("c1")!.body).toBe("shared");
+    expect(useAnnotationStore.getState().annotations.get("c2")!.body).toBe("shared");
+  });
+
+  it("the bubble's swatch row is labelled 'Comment color' (Codex LOW)", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c7"));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c7"));
+    const row = container.querySelector('.comment-bubble [role="group"]');
+    expect(row!.getAttribute("aria-label")).toBe("Comment color");
+  });
+
+  it("Esc on the bubble container (e.g. a focused swatch) dismisses the comment (Codex MED)", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c8", "note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c8"));
+    // Esc raised from a swatch button inside the bubble (not the textarea) clears.
+    const swatch = screen.getByTestId("color-swatch-annotation-green");
+    fireEvent.keyDown(swatch, { key: "Escape" });
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    // The (non-empty) comment survives (Decision 5 keeps it either way).
+    expect(useAnnotationStore.getState().annotations.has("c8")).toBe(true);
+  });
 });

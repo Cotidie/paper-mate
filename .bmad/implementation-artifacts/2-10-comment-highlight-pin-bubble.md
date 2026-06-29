@@ -103,6 +103,24 @@ Both land, select, and open the bubble for immediate typing. The discriminator i
   - [x] Update `client/src/annotations/README.md` with the Story 2.10 comment section (a `type=comment`+`kind=text` mark = free highlight fill + a pin + a bubble; `retextAnnotation` reuse; the bubble replaces the selection quick-box; no empty-cleanup; AD-5 `comment → text`).
   - [x] `server/pyproject.toml` version `0.1.6 → 0.1.7` at done (single source).
 
+### Review Findings
+
+- [x] [Review][Patch] HIGH - Cross-page comment body edits only update the selected page sibling [client/src/annotations/AnnotationLayer.tsx:404]
+- [x] [Review][Patch] MED - Esc dismisses the comment bubble only from the textarea, not from swatches or delete [client/src/annotations/AnnotationLayer.tsx:162]
+- [x] [Review][Patch] MED - Comment click placement treats any empty pointerup on a page as a click [client/src/annotations/AnnotationInteraction.tsx:187]
+- [x] [Review][Patch] MED - Comment bubble can render offscreen near the page edge [client/src/annotations/AnnotationLayer.tsx:150]
+- [x] [Review][Patch] MED - Comment group recolor is not scoped to the current document [client/src/annotations/AnnotationLayer.tsx:262]
+- [x] [Review][Patch] LOW - Comment bubble color swatches are announced as Highlight color [client/src/annotations/ColorSwatchRow.tsx:39]
+
+### Review Follow-ups (AI)
+
+- [x] [AI-Review][HIGH] Make comment body edits group-aware for cross-page comments, scoped to the same document, and add a sibling-pin reopen regression.
+- [x] [AI-Review][MED] Move comment-bubble Escape handling to the bubble container so it works from textarea, swatches, and delete.
+- [x] [AI-Review][MED] Require a real click candidate for `kind=rect` comment pin placement, not any empty pointerup after movement.
+- [x] [AI-Review][MED] Clamp or flip the comment bubble near viewport/page edges so textarea and actions stay reachable.
+- [x] [AI-Review][MED] Scope comment recolor group collection by `doc_id` and `type === "comment"`.
+- [x] [AI-Review][LOW] Give `ColorSwatchRow` a contextual aria label and pass `Comment color` from `CommentBubble`.
+
 ## Dev Notes
 
 ### What this adds vs reuses
@@ -224,6 +242,14 @@ claude-opus-4-8 (bmad-dev-story)
 - **Task 5 (tests + smoke):** create.test (+body param, +buildCommentPin), AnnotationInteraction.test (drag→text comment, click→rect pin, guard no-double-pin, non-comment no-pin, empty-kept), AnnotationLayer.test (text=fill+pin, rect=pin-only, pin-click→bubble, retext/recolor/delete, zoom re-derive, no-bubble-unselected, empty-not-removed, no group when none), ToolRail.test (arm-one-click, color-only flyout, pick closes, toggle/Esc/switch-away), App.test (`C` arms, V/Esc disarm). Full client suite 366 green, typecheck clean, no-raw-values green, backend pytest 38 green, contract (`schema.d.ts` + `openapi.json`) byte-identical. Live smoke ALL PASS: arm one-click + flyout; `C`/`V`; text drag → ~0.4 fill + pin + focused bubble; blank click → pin only (no fill); type→persist, Esc→dismiss+focus-return; re-click→reopen with saved note; recolor retints fill+pin; delete removes; zoom 100→250% pins glued for BOTH dragged + clicked (fracLeft 0.0333→0.0332, 0.2196→0.2195); empty comment KEPT on deselect; highlight + memo still create; CROSS-PAGE comment drag at DPR=2 → fill split per page (max 33px on a 1980px card), NO full-page leak, a pin on each page's run start.
 - **Task 6 (docs/version):** no `/api` change → `docs/API.md` untouched; `annotations/README.md` gains the Story 2.10 section; `server/pyproject.toml` `0.1.6 → 0.1.7`.
 - No new `render/index.ts` export → both `vi.mock("./render")` barrels untouched (AP-2).
+- **Code review (Codex, 2026-06-30) — all 6 patch findings resolved:**
+  - ✅ Resolved review finding [HIGH]: cross-page comment body edits are now group-aware — `CommentBubble.onRetext` writes `body` to every `commentGroupIds(a)` sibling, so reopening the other page's pin shows the note (regression test added).
+  - ✅ Resolved review finding [MED]: Esc now handled on the `.comment-bubble` container (not just the textarea), so it dismisses from a focused swatch/delete too (test added).
+  - ✅ Resolved review finding [MED]: comment-pin placement now requires a real CLICK — a pointerdown candidate on a valid page spot + release within `COMMENT_CLICK_SLOP` (5px); a failed/whitespace drag drops no pin (tests added; live-verified).
+  - ✅ Resolved review finding [MED]: the bubble clamps to the viewport via `clampToViewport` (measure rect, nudge inline left/top by the overflow delta), so an edge pin keeps the bubble on-screen (live-verified: right-edge pin → bubble right 1392 ≤ 1400).
+  - ✅ Resolved review finding [MED]: `commentGroupIds` is now scoped to `doc_id === a.doc_id` AND `type === "comment"`, so a singleton-store group id from another doc can't be recolored/retexted from this doc's bubble.
+  - ✅ Resolved review finding [LOW]: `ColorSwatchRow` gained an optional `ariaLabel` (default "Highlight color"); the bubble passes "Comment color" (test added).
+  - Post-fix bar: **371 client** + 38 server tests green, typecheck clean, contract byte-identical; the two DOM-dependent fixes (click-slop, bubble clamp) live-verified at DPR=2. 4 raw findings were dismissed by the reviewer after source verification.
 
 ### File List
 
@@ -232,8 +258,9 @@ claude-opus-4-8 (bmad-dev-story)
 - client/src/annotations/index.ts (modified — export buildCommentPin)
 - client/src/annotations/AnnotationInteraction.tsx (modified — comment drag + click gestures; showSelectionBox excludes comment; pin/bubble in deselect hit-test)
 - client/src/annotations/AnnotationInteraction.test.tsx (modified — comment gesture tests)
-- client/src/annotations/AnnotationLayer.tsx (modified — NEW CommentBubble + renderComment + comments group)
-- client/src/annotations/AnnotationLayer.test.tsx (modified — comment render/bubble/zoom tests)
+- client/src/annotations/AnnotationLayer.tsx (modified — NEW CommentBubble + renderComment + comments group; review fixes: group-aware body, container Esc, viewport clamp, doc-scoped group ids)
+- client/src/annotations/AnnotationLayer.test.tsx (modified — comment render/bubble/zoom tests + review-fix tests)
+- client/src/annotations/ColorSwatchRow.tsx (modified — optional `ariaLabel` prop; review LOW)
 - client/src/annotations/Annotations.css (modified — comments group, pin, bubble styles)
 - client/src/ToolRail.tsx (modified — Comment button + color flyout)
 - client/src/ToolRail.test.tsx (modified — comment rail tests)
@@ -243,10 +270,53 @@ claude-opus-4-8 (bmad-dev-story)
 - client/src/annotations/README.md (modified — Story 2.10 section)
 - server/pyproject.toml (modified — version 0.1.6 → 0.1.7)
 - .bmad/implementation-artifacts/2-10-comment-smoke.png (added — live smoke screenshot)
-- .bmad/implementation-artifacts/deferred-work.md (modified — memo/comment confirm-check feature request)
+- .bmad/implementation-artifacts/deferred-work.md (modified — user feature/fix requests logged during the story: memo/comment confirm-check; text-comment must read differently from a highlight; convert between highlight and comment)
+
+## Senior Developer Review (AI)
+
+Reviewer: Codex (BMad code-review workflow: Blind Hunter, Edge Case Hunter, Acceptance Auditor)
+Outcome: **Changes Requested** - 6 patch findings, 0 decision-needed, 0 deferred. Four additional raw findings were dismissed after source verification.
+
+### Findings
+
+**High:**
+- [AI-Review][HIGH] Cross-page comment body edits only update the selected page sibling. A drag-created cross-page comment is stored as grouped `type="comment"` annotations, but `CommentBubble` writes body text with `retextAnnotation(id, body, now)` for only the exact selected annotation. Recolor already uses `commentGroupIds(a)`, so body editing should do the same or use a group-aware store helper. Otherwise reopening the sibling pin shows an empty or stale note, violating the "one grouped comment split across pages" intent. Evidence: `client/src/annotations/AnnotationLayer.tsx:404`, `client/src/store/index.ts:177`. Fix: apply the same body to all current-doc comment group ids and add a two-page comment edit/reopen regression test.
+
+**Medium:**
+- [AI-Review][MED] Esc dismisses the comment bubble only from the textarea, not from all bubble controls. The local Escape handler is attached to the textarea, while the bubble also contains color swatch buttons and a delete button. The document-level selection key handler exempts buttons and editable fields, so Escape on a focused swatch/delete control does nothing. Evidence: `client/src/annotations/AnnotationLayer.tsx:162`, `client/src/annotations/AnnotationLayer.tsx:174`, `client/src/annotations/AnnotationInteraction.tsx:620`. Fix: handle Escape on the `.comment-bubble` container, preferably capture-phase, and test focus on a swatch and delete.
+- [AI-Review][MED] Comment click placement treats any empty pointerup on a page as a click. The click path branches only on `pages.length === 0` plus release target, with no pointerdown origin or movement threshold. A failed text drag or whitespace drag that releases over `.page-surface` can drop an accidental pin. Evidence: `client/src/annotations/AnnotationInteraction.tsx:187`. Fix: track a lightweight comment pointerdown candidate and require same-page release within click slop before calling `buildCommentPin`.
+- [AI-Review][MED] Comment bubble can render offscreen near the page edge. The bubble uses raw page-local `left/top` plus a fixed width and downward transform, with no viewport/page clamp. Pins near the right or bottom edge can put the textarea/actions partially outside the reachable viewport. Evidence: `client/src/annotations/AnnotationLayer.tsx:150`, `client/src/annotations/Annotations.css:382`. Fix: clamp or flip the bubble after measurement, similar to the quick-box `clampToViewport` pattern, and test right/bottom-edge anchors.
+- [AI-Review][MED] Comment group recolor is not scoped to the current document. `commentGroupIds` scans all annotations by `group_id` only. The store is intentionally singleton across document switches until Epic 3, so a matching imported/restored group id in another document could be recolored from this document's bubble. Evidence: `client/src/annotations/AnnotationLayer.tsx:262`. Fix: include `x.doc_id === a.doc_id` and `x.type === "comment"` when collecting group siblings.
+
+**Low:**
+- [AI-Review][LOW] Comment bubble color swatches are announced as Highlight color. `CommentBubble` reuses `ColorSwatchRow`, whose group label is hard-coded to `aria-label="Highlight color"`. In the comment bubble this gives assistive tech the wrong purpose. Evidence: `client/src/annotations/AnnotationLayer.tsx:175`, `client/src/annotations/ColorSwatchRow.tsx:39`. Fix: add an optional `ariaLabel` prop and pass `Comment color` from the bubble.
+
+### Dismissed Raw Findings
+
+- Click pin geometry mixing card and page coordinates: dismissed. `Reader` registers `.page-surface` itself as the card element, and `page.box` is the same page surface geometry.
+- Zero-area rect comment anchors: dismissed for this story. The current model accepts canonical zero-area rects, and the pin renderer intentionally uses the rect top-left as a point anchor.
+- Comment bubble delete might not delete grouped siblings: dismissed. `deleteAnnotation` is already group-aware in `client/src/store/index.ts:131`.
+- Focus restoration might target a detached pin after delete: dismissed as low-impact/noise for this story. Native focus no-ops on detached elements in practice; the stronger actionable Esc focus issue is tracked above.
+
+### Acceptance Notes
+
+- AC1/AC3: Both create paths are present and AD-5 shape is honored (`comment` with `kind=text` for drag, `kind=rect` for click, non-null body). The accidental-empty-drag finding is about incorrectly classifying a non-click empty release as the click path.
+- AC2: The pin is a real button and the textarea is focused on open, but Escape and accessible labeling are incomplete for non-textarea bubble controls.
+- AC4/cross-page: The implementation reuses `rectsFromSelection`/`collectTextRects`, which protects the highlight geometry path. The remaining cross-page issue is data consistency for grouped comment bodies.
+- AC6/AD-3/AD-9: No generated contract diff was found. The implementation stays client-side, but the comment bubble's current group operation should be doc-scoped because the store is singleton.
+
+### Verification
+
+- `cd client && npm test -- --run`: passed, 26 files / 366 tests.
+- `cd client && npm run typecheck`: passed.
+- `cd client && npm test -- --run no-raw-values`: passed, 35 tests.
+- `git diff 1fb83b9..HEAD -- client/src/api/schema.d.ts server/openapi.json --exit-code`: passed, no tracked contract diff.
+- `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`: could not complete in this sandbox. The unmodified command failed because `uv` tried to write `/home/cotidie/.cache/uv` on a read-only filesystem; reruns with `UV_CACHE_DIR=/tmp/uv-cache` and with `.venv/bin/python -m pytest -q` both hung without output and were interrupted.
 
 ## Change Log
 
 - 2026-06-29: Story created (ready-for-dev) via bmad-create-story.
 - 2026-06-29: Revised per user review — comment supports BOTH gestures: DRAG → kind=text (highlight + pin), CLICK → kind=rect (pin only, no highlight). Added buildCommentPin + the no-selection pointerup branch; pin renders for both kinds; empty-kept covers the clicked pin. (AD-5 `comment → text` or `rect`.)
 - 2026-06-29: Implemented (status → review) via bmad-dev-story. Client-only: body param + buildCommentPin, comment drag/click gestures, pin + CommentBubble render, rail button + `C` key. 366 client + 38 server tests green, contract byte-identical, live-smoked at DPR=2 incl. cross-page (no full-page leak). Version 0.1.7.
+- 2026-06-30: Senior Developer Review (AI) via bmad-code-review. Outcome: Changes Requested, 6 patch findings recorded.
+- 2026-06-30: Addressed code review findings — 6 items resolved (group-aware cross-page body, bubble-container Esc, click-slop pin placement, viewport clamp, doc-scoped group ids, comment-color aria-label). 371 client + 38 server green, contract byte-identical, DOM-dependent fixes live-verified at DPR=2.

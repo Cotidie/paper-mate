@@ -29,14 +29,18 @@ const PALETTE: Swatch[] = [
 export default function ColorSwatchRow({
   value,
   onPick,
+  ariaLabel = "Highlight color",
 }: {
   /** The color token currently applied to the mark (its swatch shows armed). */
   value: string;
   /** Called with the chosen token when a swatch is picked. */
   onPick: (token: string) => void;
+  /** Accessible group name. Defaults to "Highlight color"; the comment bubble
+   *  passes "Comment color" so assistive tech announces the right purpose. */
+  ariaLabel?: string;
 }) {
   return (
-    <div className="color-swatch-row" role="group" aria-label="Highlight color">
+    <div className="color-swatch-row" role="group" aria-label={ariaLabel}>
       {PALETTE.map((s) => {
         const armed = value === s.token;
         return (
