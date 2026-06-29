@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildCommentPin } from "./create";
+import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildCommentPin, buildRegionAnnotation } from "./create";
 import type { PageSelection } from "../anchor";
 
 function counter() {
@@ -122,6 +122,31 @@ describe("buildAnnotations body param (Story 2.10 — AC1,3)", () => {
   it("highlight/underline omit body → it stays null (regression)", () => {
     const [h] = buildAnnotations([page0], "doc-1", opts(counter()));
     expect(h.body).toBeNull();
+  });
+});
+
+describe("buildRegionAnnotation (Story 2.11, AD-5 highlight → rect)", () => {
+  const regionOpts = (newId: () => string) => ({
+    now: "2026-06-29T00:00:00+00:00",
+    newId,
+    color: "annotation-green",
+  });
+  const placement = { page_index: 2, rect: { x0: 0.1, y0: 0.2, x1: 0.6, y1: 0.7 } };
+
+  it("builds one region highlight: type=highlight, kind=rect, null body, null group", () => {
+    const a = buildRegionAnnotation(placement, "doc-1", regionOpts(counter()));
+    expect(a.type).toBe("highlight");
+    expect(a.group_id).toBeNull();
+    expect(a.doc_id).toBe("doc-1");
+    expect(a.anchor).toEqual({ kind: "rect", page_index: 2, rect: placement.rect });
+    expect(a.body).toBeNull();
+    expect(a.created_at).toBe("2026-06-29T00:00:00+00:00");
+    expect(a.updated_at).toBe(a.created_at);
+  });
+
+  it("carries accent color; stroke_width null (region has no stroke, AR-5)", () => {
+    const a = buildRegionAnnotation(placement, "doc-1", regionOpts(counter()));
+    expect(a.style).toEqual({ color: "annotation-green", stroke_width: null });
   });
 });
 

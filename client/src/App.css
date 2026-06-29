@@ -245,6 +245,16 @@
   background: var(--color-surface-strong);
 }
 
+/* Horizontal hairline separating a mode toggle (e.g. the Highlight flyout's
+   box-highlight toggle) from the color swatches below it. Inset left/right so it
+   reads as a divider, not a full-width border. */
+.tool-flyout__divider {
+  width: 100%;
+  height: var(--hairline-width);
+  margin: var(--space-xxs) 0;
+  background-color: var(--color-hairline);
+}
+
 /* Pan cursor + selection suppression while the hand is armed or Space is held
    (Reader sets data-pan on the .pdf-canvas). grab when pannable, grabbing during
    the drag; user-select off so a hand-drag never starts a text selection. Token-

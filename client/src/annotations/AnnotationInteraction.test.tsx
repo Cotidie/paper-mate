@@ -1040,7 +1040,7 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
   });
 
-  it("an empty comment is KEPT on deselect (Decision 5 — NOT the memo cleanup)", () => {
+  it("an empty comment is KEPT on deselect (Decision 5 - NOT the memo cleanup)", () => {
     const comment: Annotation = {
       id: "c1",
       doc_id: "doc-1",
@@ -1059,5 +1059,163 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
     act(() => useAnnotationStore.getState().clearSelection());
     // The empty comment survives (unlike an empty memo).
     expect(useAnnotationStore.getState().annotations.has("c1")).toBe(true);
+  });
+});
+
+describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", () => {
+  function pageSurface(): HTMLElement {
+    const canvas = document.createElement("div");
+    canvas.className = "pdf-canvas";
+    const surf = document.createElement("div");
+    surf.className = "page-surface";
+    canvas.appendChild(surf);
+    document.body.appendChild(canvas);
+    stubNodes.push(canvas);
+    return surf;
+  }
+
+  it("a box drag with boxActive=true creates a region highlight with kind=rect, canonical rect, selected, opens the selection quick-box", async () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("annotation-green");
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />,
+    );
+
+    // Drag 60px down-right (above threshold).
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("highlight");
+    expect(all[0].anchor.kind).toBe("rect");
+    expect(all[0].group_id).toBeNull();
+    expect(all[0].style.color).toBe("annotation-green");
+    expect(all[0].style.stroke_width).toBeNull();
+    expect(all[0].body).toBeNull();
+    if (all[0].anchor.kind === "rect") {
+      // card at top=0, page box 600x800, scale 1.
+      // x0=60/600=0.1, y0=80/800=0.1, x1=120/600=0.2, y1=160/800=0.2
+      expect(all[0].anchor.rect.x0).toBeCloseTo(0.1, 5);
+      expect(all[0].anchor.rect.y0).toBeCloseTo(0.1, 5);
+      expect(all[0].anchor.rect.x1).toBeCloseTo(0.2, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2, 5);
+    }
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    // No region tool-type picker any more (box-comment removed): the region lands as
+    // a highlight and the 2.5 selection quick-box (recolor + delete) takes over.
+    expect(screen.queryByTestId("region-quick-box")).toBeNull();
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
+  });
+
+  it("a box drag canonicalizes the rect when dragged up-left (x0>x1, y0>y1)", () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+
+    // Down at bottom-right, up at top-left.
+    fireEvent.pointerDown(surf, { button: 0, clientX: 300, clientY: 400 });
+    fireEvent.pointerMove(document, { clientX: 60, clientY: 80 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 60, clientY: 80 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    if (all[0].anchor.kind === "rect") {
+      // Canonical: x0 <= x1, y0 <= y1.
+      expect(all[0].anchor.rect.x0).toBeLessThan(all[0].anchor.rect.x1);
+      expect(all[0].anchor.rect.y0).toBeLessThan(all[0].anchor.rect.y1);
+    }
+  });
+
+  it("a below-threshold drag creates no mark (stray click guard)", () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    // Travel only 4px — below BOX_DRAG_THRESHOLD (8px).
+    fireEvent.pointerMove(document, { clientX: 64, clientY: 80 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 64, clientY: 80 });
+
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("pointerdown on an existing mark does NOT start a box drag (click-selects instead)", () => {
+    const surf = pageSurface();
+    // Place an existing mark element.
+    const existingMark = document.createElement("div");
+    existingMark.className = "annotation-highlight";
+    surf.appendChild(existingMark);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+
+    fireEvent.pointerDown(existingMark, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 200, clientY: 200 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 200 });
+
+    // No new region created — click on existing mark selects it, not box-draws.
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("pointerdown on .quick-box does NOT start a box drag", () => {
+    const surf = pageSurface();
+    const qb = document.createElement("div");
+    qb.className = "quick-box";
+    surf.appendChild(qb);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+
+    fireEvent.pointerDown(qb, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 200, clientY: 200 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 200 });
+
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("box drag does NOT create a region when boxActive=false", () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    // boxActive not set (defaults false)
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 200, clientY: 200 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 200 });
+
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("a stored region highlight is click-selectable and opens the 2.5 selection quick-box (recolor+delete)", async () => {
+    const region: Annotation = {
+      id: "rg1",
+      doc_id: "doc-1",
+      type: "highlight",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.5 } },
+      style: { color: "annotation-default", stroke_width: null },
+      body: null,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+    useAnnotationStore.getState().addAnnotation(region);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+
+    // Select AFTER mount so the docId-clearSelection effect on mount doesn't clear it.
+    act(() => useAnnotationStore.getState().select("rg1"));
+
+    // Simulate pointerdown on a .annotation-highlight element (like the fill div).
+    const fill = document.createElement("div");
+    fill.className = "annotation-highlight annotation-region";
+    document.body.appendChild(fill);
+    stubNodes.push(fill);
+    fireEvent.pointerDown(fill, { button: 0, clientX: 60, clientY: 160 });
+
+    // The selection quick-box must open (no region picker for pre-existing mark).
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
   });
 });

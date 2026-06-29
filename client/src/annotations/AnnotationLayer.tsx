@@ -267,11 +267,18 @@ export default function AnnotationLayer({
   const highlightMarks = textMarks.filter((a) => a.type !== "underline");
   const underlineMarks = textMarks.filter((a) => a.type === "underline");
   const penMarks = marks.filter((a) => a.anchor.kind === "path");
-  // Memo (Story 2.9): the only kind=rect mark. Rendered as an interactive
+  // Memo (Story 2.9): kind=rect + type=memo. Rendered as an interactive
   // <textarea>, not a paint sheet — so it lives in its OWN group, OUTSIDE the
   // decorative aria-hidden layer (a focusable control must not sit in an
-  // aria-hidden subtree). Keyed off kind=rect + type=memo (AD-5).
+  // aria-hidden subtree).
   const memoMarks = marks.filter((a) => a.anchor.kind === "rect" && a.type === "memo");
+  // Region fills (Story 2.11): kind=rect + type ∈ {highlight, comment}. A region
+  // highlight is ONLY here (no text anchor → not in highlightMarks); a region
+  // comment also appears in commentMarks for its pin. Render the ~0.4 fill here;
+  // do NOT duplicate the pin. Kind=rect memos are excluded (their own group above).
+  const regionMarks = marks.filter(
+    (a) => a.anchor.kind === "rect" && (a.type === "highlight" || a.type === "comment"),
+  );
   // Comment (Story 2.10): a `type=comment` mark of EITHER kind. A `kind=text`
   // comment ALSO appears in `highlightMarks` above (type !== "underline"), so its
   // ~0.4 fill paints for free — do NOT add a second fill path. Here we render only
@@ -291,6 +298,39 @@ export default function AnnotationLayer({
       if (x.group_id === a.group_id && x.doc_id === a.doc_id && x.type === "comment") ids.push(x.id);
     }
     return ids;
+  };
+
+  // Render one region mark as a single positioned fill div (geometry-on-kind = rect,
+  // style-on-type: both highlight and comment get the ~0.4 fill from the highlights
+  // opacity group; the comment's pin is rendered separately in renderComment).
+  // The .annotation-highlight class gives it the 2.5 selection hit-test, hover ring,
+  // and selected ring, so recolor/delete from the selection quick-box work for free.
+  const renderRegion = (a: Annotation) => {
+    if (a.anchor.kind !== "rect") return null;
+    const hovered = inActiveGroup(a, hoveredId, annotations);
+    const selected = inActiveGroup(a, selectedId, annotations);
+    const cls =
+      "annotation-highlight annotation-region" +
+      (hovered ? " annotation-highlight--hovered" : "") +
+      (selected ? " annotation-highlight--selected" : "");
+    const pos = denormalizeRect(a.anchor.rect, box, scale);
+    return (
+      <div
+        key={a.id}
+        className={cls}
+        data-testid={`annotation-mark-${a.id}`}
+        onPointerEnter={() => setHovered(a.id)}
+        onPointerLeave={() => setHovered(null)}
+        onClick={() => select(a.id)}
+        style={{
+          left: pos.left,
+          top: pos.top,
+          width: pos.width,
+          height: pos.height,
+          backgroundColor: `var(--color-${a.style.color})`,
+        }}
+      />
+    );
   };
 
   // Render one annotation's rects as positioned mark divs. `underline` swaps the
@@ -463,6 +503,15 @@ export default function AnnotationLayer({
           wins on shared text (AC #3). `isolation` keeps the group's blending
           self-contained. */}
       <div className="annotation-highlights">{highlightMarks.map((a) => renderMark(a, false))}</div>
+      {/* Region fills (Story 2.11, kind=rect): a sibling opacity group at the same
+          0.4 level so region highlights and region-comment area fills composite
+          identically to text highlights. Conditionally rendered so the element is
+          absent when there are no regions (test assertion: no region group). */}
+      {regionMarks.length > 0 && (
+        <div className="annotation-highlights annotation-regions" data-testid={`annotation-regions-${pageIndex}`}>
+          {regionMarks.map((a) => renderRegion(a))}
+        </div>
+      )}
       {/* Underlines paint full-opacity (a crisp 2px line), so they sit OUTSIDE the
           highlight opacity group. Same rects, same hit surface (NFR-1). */}
       <div className="annotation-underlines">{underlineMarks.map((a) => renderMark(a, true))}</div>

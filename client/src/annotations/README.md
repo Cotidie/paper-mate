@@ -229,5 +229,40 @@ genuinely new pieces are a `body` param, a pin button, and a `CommentBubble`.
   contract already carries `type:"comment"`/`kind=text`/`kind=rect`/`body`, so the
   tracked OpenAPI + generated TS types stay byte-identical.
 
-Still later stories: box-select drag (2.11), the cursor-mode drag-to-change-tool
-picker (2.12), pen alpha (2.13), and editing/undo/persistence (Epic 3).
+## Story 2.11 -- box-highlight a region
+
+Box-highlight is a MODE of the Highlight tool, not its own tool: a `boxHighlight`
+flag App threads down. While Highlight is active AND box mode is on, a pointer DRAG
+over a page creates a `type=highlight` / `kind=rect` region annotation with a fill
+(not text-based). The region lands as a highlight and the 2.5 selection quick-box
+(recolor + delete) takes over. There is no region tool-type picker and no
+box-comment (removed): a box drag always makes a highlight.
+
+- Box mode lives UNDER the Highlight tool's flyout (a `highlight-box-toggle` button
+  beside the color row), keyed `M`. It is NOT a pointer sub-mode and NOT a top-level
+  rail tool. App resets `boxHighlight` to false whenever the active tool leaves
+  Highlight, so re-arming Highlight always starts in plain text mode.
+- The overlay's box-drag gesture gates on an explicit `boxActive?: boolean` prop
+  (`activeTool === "highlight" && boxHighlight`), threaded App → Reader →
+  AnnotationInteraction. The armed tool is `highlight`, but a box drag is a rectangle,
+  not a text selection, so it needs this separate signal.
+- `buildRegionAnnotation` in `create.ts` is the factory (parallel to `buildPenAnnotation`,
+  `buildMemoAnnotation`, `buildCommentPin`): `type=highlight`, `kind=rect`, `body=null`,
+  `stroke_width=null`.
+- The box drag gesture is document-level (AP-1), gated on `boxActiveRef.current`,
+  with an 8px commit threshold (`BOX_DRAG_THRESHOLD`). It builds a canonicalized
+  normalized rect via `normalizeRect` (handles up-left drags and off-card overshoot),
+  then calls `buildRegionAnnotation`, `addAnnotation`, and `select`.
+- The `kind=rect` FILL BRANCH in `AnnotationLayer` renders `kind=rect` marks as fill
+  divs in a `.annotation-regions` group (sibling of `.annotation-highlights`). It also
+  still covers `type=comment` `kind=rect` (the Story 2.10 comment pins). The
+  `.annotation-highlight` base class keeps the 2.5 selection seam (hover/selected
+  classes, hit-tests) working.
+- Rubber-band preview: `boxPreview` state in client coordinates renders as a
+  `.box-preview` fixed div (dashed border, `pointer-events:none`, `z-index:40`).
+- `M` / `m` arms Highlight with box mode on (UX-DR15); `V`/`Esc` return to cursor (AD-11).
+- No API/contract change: `RectAnchor`, `type:"highlight"`, `body` already exist
+  (AR-5); the tracked OpenAPI + generated TS types stay byte-identical.
+
+Still later stories: the cursor-mode drag-to-change-tool picker (2.12), pen alpha
+(2.13), and editing/undo/persistence (Epic 3).

@@ -120,6 +120,16 @@
   overflow: visible;
 }
 
+/* The live box-select preview: a fixed positioned rectangle drawn in client space
+   while a box drag is in progress (Story 2.11). Pointer-transparent, z-index above
+   marks, below the quick-box (z 40); border uses the accent color (set inline). */
+.box-preview {
+  position: fixed;
+  pointer-events: none;
+  z-index: 40;
+  border: var(--hairline-width) dashed;
+}
+
 /* quick-box: floating popup at the drag-release point. position:fixed keeps it
    off the canvas layout, so it never shifts the page (AC-4). */
 .quick-box {
