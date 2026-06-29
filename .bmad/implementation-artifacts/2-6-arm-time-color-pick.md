@@ -330,3 +330,17 @@ Post-review: client 254 tests pass, typecheck clean, contract byte-identical,
   reworded (grep-clean guard restored). Two findings accepted/dismissed with rationale
   (sibling-consistent optional `activeColor`; DPR not a risk surface this story). Client
   254 pass, contract byte-identical.
+- 2026-06-29: Three user UX refinements (supersede Decision A/B for the rail picker):
+  (1) the highlight color sub-toolbox stacks swatches VERTICALLY (scoped CSS override on
+  `.tool-flyout .color-swatch-row`, the overlay recolor row stays horizontal);
+  (2) switching TO highlight now AUTO-OPENS the sub-toolbox (effect on the highlight-
+  active transition) instead of requiring a second click; (3) the active/default color
+  is now the LAST color chosen by EITHER the sub-toolbox OR recoloring an existing mark
+  ("remember last choice"). To support (3)'s second writer, `activeColor` MOVED from App
+  state into the Zustand store (`activeColor` + `setActiveColor`); App subscribes to pass
+  it to the rail, the overlay reads it from the store directly (Reader no longer threads
+  it), and `recolorSelected` also calls `setActiveColor`. Client 257 pass, typecheck
+  clean, contract byte-identical, orange grep clean. Live-smoked on a FRESH own Vite
+  (port 5174, per the new CLAUDE.md rule): vertical column confirmed; single click on
+  Highlight auto-opens the picker; recoloring a mark to purple then re-arming Highlight
+  shows purple armed (default remembered). Capture: `docs/images/story-2-6-vertical-autoopen-flyout.png`.
