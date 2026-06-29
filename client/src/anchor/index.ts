@@ -176,6 +176,62 @@ export interface PageCardRef {
 }
 
 /**
+ * The on-screen rects of the TEXT a `range` selects — one set of line boxes per
+ * text node it covers, EXCLUDING element border boxes.
+ *
+ * Why not `range.getClientRects()` directly: per the DOM spec it also returns
+ * the border boxes of elements FULLY enclosed by the range, not only text. A
+ * selection that spans two page cards fully encloses the intervening page block
+ * elements (canvas / page-surface / text layer), so their full-PAGE rects leak
+ * into the result and, once normalized + clamped, paint as full-page highlights
+ * (the cross-page bug). Decomposing the range into per-text-node sub-ranges
+ * measures only glyph line boxes — never an element box — so the result is the
+ * actual selected text on each page.
+ *
+ * Falls back to the raw range rects only when the range exposes no text nodes
+ * (e.g. a synthetic range in a non-layout test environment); a real text
+ * selection always yields text nodes.
+ *
+ * DOM-touching (jsdom zeroes real client rects); the per-node decomposition is
+ * unit-tested by injecting `rectsOf` (the rect reader) so the test never has to
+ * mutate the global `Range` prototype.
+ */
+export function collectTextRects(
+  range: Range,
+  rectsOf: (r: Range) => ArrayLike<DOMRect> = (r) => r.getClientRects(),
+): DOMRect[] {
+  const out: DOMRect[] = [];
+  try {
+    const root = range.commonAncestorContainer;
+    const doc = root.ownerDocument ?? document;
+    const measure = (node: Node) => {
+      if (node.nodeType !== Node.TEXT_NODE || !range.intersectsNode(node)) return;
+      const sub = doc.createRange();
+      sub.selectNodeContents(node);
+      // Clip the first/last text node to the selection's offsets; interior text
+      // nodes are fully selected.
+      if (node === range.startContainer) sub.setStart(node, range.startOffset);
+      if (node === range.endContainer) sub.setEnd(node, range.endOffset);
+      if (sub.collapsed) return;
+      for (const cr of Array.from(rectsOf(sub))) out.push(cr);
+    };
+    if (root.nodeType === Node.TEXT_NODE) {
+      measure(root);
+    } else {
+      const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) measure(n);
+    }
+  } catch {
+    // A synthetic / non-layout range without real text nodes (e.g. a test fake)
+    // — fall through to the raw range rects below.
+  }
+  if (out.length === 0) {
+    for (const cr of Array.from(rectsOf(range))) out.push(cr);
+  }
+  return out;
+}
+
+/**
  * Map a live text selection to one `PageSelection` per page it covers (AD-4),
  * reading text-run rects from the native Selection API (`Range.getClientRects`,
  * the stable primitive — NOT a glyph hit-test). Each client rect is localized
@@ -199,7 +255,11 @@ export function rectsFromSelection(
 
   for (let r = 0; r < selection.rangeCount; r++) {
     const range = selection.getRangeAt(r);
-    for (const cr of Array.from(range.getClientRects())) {
+    // Measure the selected TEXT (per text node), NOT the whole range: a
+    // cross-page range encloses page block elements whose full-page border boxes
+    // would otherwise leak in and paint as full-page highlights (see
+    // `collectTextRects`).
+    for (const cr of collectTextRects(range)) {
       if (cr.width <= 0 || cr.height <= 0) continue;
       const idx = pickPage({ left: cr.left, top: cr.top, right: cr.right, bottom: cr.bottom }, cardBoxes);
       if (idx < 0) continue;
