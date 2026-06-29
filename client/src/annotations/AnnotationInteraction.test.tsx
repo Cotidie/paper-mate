@@ -337,6 +337,19 @@ describe("AnnotationInteraction underline tool (Story 2.7 — AC1,2,3)", () => {
     expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
   });
 
+  it("a non-text armed tool (e.g. pen) does NOT create and does NOT fall through to the cursor proof box", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool={"pen" as never} />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    // Pen has no text-drag create yet (Story 2.8); it must not land a mark, and it
+    // must not pop the cursor-mode highlight proof box (the inverse-path guard).
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+  });
+
   it("a two-page underline lands two type=underline marks sharing one group_id (AR-4)", () => {
     stubSelection([
       { left: 10, top: 100, right: 200, bottom: 120 },
