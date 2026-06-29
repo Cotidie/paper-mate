@@ -92,7 +92,179 @@ function textMark(id: string, color = "annotation-default", groupId: string | nu
   };
 }
 
-describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
+/** Creates a .page-surface wrapper around a card and mounts it in the body. */
+function setupPageSurface(card: PageCardRef): HTMLElement {
+  const surface = document.createElement("div");
+  surface.className = "page-surface";
+  surface.appendChild(card.cardEl);
+  document.body.appendChild(surface);
+  return surface;
+}
+
+describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1,2,3,4,5)", () => {
+  it("a text drag in cursor mode pops a three-tool picker (highlight/underline/comment, no memo)", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+
+    await screen.findByTestId("quick-box");
+    expect(screen.getByTestId("quick-box-highlight")).toBeTruthy();
+    expect(screen.getByTestId("quick-box-underline")).toBeTruthy();
+    expect(screen.getByTestId("quick-box-comment")).toBeTruthy();
+    // Memo not in the text-drag picker.
+    expect(screen.queryByTestId("quick-box-memo")).toBeNull();
+    // No mark until a tool is picked (create-on-pick).
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("text-drag picker buttons are icon-only (no text children)", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    const btn = await screen.findByTestId("quick-box-highlight");
+    expect(btn.textContent?.trim()).toBe("");
+    expect(btn.getAttribute("aria-label")).toBe("Highlight");
+  });
+
+  it("picking Highlight creates a type=highlight text-anchor mark and dismisses the picker", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    fireEvent.click(await screen.findByTestId("quick-box-highlight"));
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("highlight");
+    expect(all[0].anchor.kind).toBe("text");
+    expect(all[0].group_id).toBeNull();
+    expect(all[0].anchor.page_index).toBe(0);
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+    await screen.findByTestId("selection-quick-box");
+  });
+
+  it("picking Underline creates a type=underline text-anchor mark and selects it", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    fireEvent.click(await screen.findByTestId("quick-box-underline"));
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("underline");
+    expect(all[0].anchor.kind).toBe("text");
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+    await screen.findByTestId("selection-quick-box");
+  });
+
+  it("picking Comment creates a type=comment with body='' and does NOT open the selection quick-box (bubble instead)", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    fireEvent.click(await screen.findByTestId("quick-box-comment"));
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("comment");
+    expect(all[0].anchor.kind).toBe("text");
+    expect(all[0].body).toBe("");
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+    // Comment shows bubble (AnnotationLayer), NOT the generic selection quick-box.
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+  });
+
+  it("a two-page selection: picking Highlight creates two marks sharing a group_id", async () => {
+    stubSelection([
+      { left: 10, top: 100, right: 200, bottom: 120 },
+      { left: 10, top: 900, right: 200, bottom: 920 },
+    ]);
+    const pages = [fakeCard(0, 0), fakeCard(1, 820)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    fireEvent.click(await screen.findByTestId("quick-box-highlight"));
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(2);
+    expect(all[0].group_id).not.toBeNull();
+    expect(all[0].group_id).toBe(all[1].group_id);
+    expect(all.map((a) => a.anchor.page_index).sort()).toEqual([0, 1]);
+  });
+
+  it("double-click on empty page area pops a Comment+Memo picker (no highlight/underline)", async () => {
+    const card = fakeCard(0, 0);
+    const surface = setupPageSurface(card);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
+
+    // Fire dblclick against the surface (so .closest('.page-surface') matches).
+    fireEvent.dblClick(surface, { button: 0, clientX: 100, clientY: 100 });
+
+    await screen.findByTestId("quick-box");
+    expect(screen.getByTestId("quick-box-comment")).toBeTruthy();
+    expect(screen.getByTestId("quick-box-memo")).toBeTruthy();
+    expect(screen.queryByTestId("quick-box-highlight")).toBeNull();
+    expect(screen.queryByTestId("quick-box-underline")).toBeNull();
+    surface.remove();
+  });
+
+  it("double-click mode: picking Comment creates a comment pin at the click point", async () => {
+    const card = fakeCard(0, 0);
+    const surface = setupPageSurface(card);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
+
+    // clientX=120, clientY=200 → card-local x0=120, y0=200 → normalized x0=120/600, y0=200/800
+    fireEvent.dblClick(surface, { button: 0, clientX: 120, clientY: 200 });
+    fireEvent.click(await screen.findByTestId("quick-box-comment"));
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("comment");
+    expect(all[0].anchor.kind).toBe("rect");
+    if (all[0].anchor.kind === "rect") {
+      expect(all[0].anchor.rect.x0).toBeCloseTo(120 / 600, 5);
+      expect(all[0].anchor.rect.y0).toBeCloseTo(200 / 800, 5);
+    }
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+    surface.remove();
+  });
+
+  it("double-click mode: picking Memo creates a memo at the click point", async () => {
+    const card = fakeCard(0, 0);
+    const surface = setupPageSurface(card);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
+
+    // clientX=60, clientY=160 → card-local x0=60, y0=160
+    fireEvent.dblClick(surface, { button: 0, clientX: 60, clientY: 160 });
+    fireEvent.click(await screen.findByTestId("quick-box-memo"));
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("memo");
+    expect(all[0].anchor.kind).toBe("rect");
+    if (all[0].anchor.kind === "rect") {
+      expect(all[0].anchor.rect.x0).toBeCloseTo(60 / 600, 5);
+      expect(all[0].anchor.rect.y0).toBeCloseTo(160 / 800, 5);
+      expect(all[0].anchor.rect.x1).toBeCloseTo((60 + 220) / 600, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo((160 + 88) / 800, 5);
+    }
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+    surface.remove();
+  });
+
   it("a single-page text drag pops the quick-box, whose action stores a highlight", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
@@ -112,25 +284,6 @@ describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
     expect(all[0].anchor.page_index).toBe(0);
     // Quick-box dismissed after commit.
     expect(screen.queryByTestId("quick-box")).toBeNull();
-  });
-
-  it("a two-page selection stores two highlights sharing one group_id (AC-5)", async () => {
-    // One rect on card 0 (y~100), one on card 1 (y~900).
-    stubSelection([
-      { left: 10, top: 100, right: 200, bottom: 120 },
-      { left: 10, top: 900, right: 200, bottom: 920 },
-    ]);
-    const pages = [fakeCard(0, 0), fakeCard(1, 820)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
-
-    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
-    fireEvent.click(await screen.findByTestId("quick-box-highlight"));
-
-    const all = useAnnotationStore.getState().all();
-    expect(all).toHaveLength(2);
-    expect(all[0].group_id).not.toBeNull();
-    expect(all[0].group_id).toBe(all[1].group_id);
-    expect(all.map((a) => a.anchor.page_index).sort()).toEqual([0, 1]);
   });
 
   it("Escape dismisses, clears the selection, and cannot re-pop from it (AC-4/AC-7)", async () => {
@@ -304,14 +457,17 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     expect(useAnnotationStore.getState().selectedId).toBe(id);
   });
 
-  it("cursor mode (no armed tool) keeps the 2.2 proof button, not the swatch row", async () => {
+  it("cursor mode (no armed tool) shows the three-tool picker for text drag, not the swatch row (AC1)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool={null} />);
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     await screen.findByTestId("quick-box-highlight");
+    expect(screen.getByTestId("quick-box-underline")).toBeTruthy();
+    expect(screen.getByTestId("quick-box-comment")).toBeTruthy();
+    expect(screen.queryByTestId("quick-box-memo")).toBeNull();
     expect(screen.queryByTestId("color-swatch-annotation-default")).toBeNull();
-    // No mark until the proof action is clicked (cursor mode is create-on-pick).
+    // No mark until a tool is picked (cursor mode is create-on-pick).
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
   });
 });

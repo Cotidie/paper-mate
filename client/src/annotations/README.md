@@ -264,5 +264,48 @@ box-comment (removed): a box drag always makes a highlight.
 - No API/contract change: `RectAnchor`, `type:"highlight"`, `body` already exist
   (AR-5); the tracked OpenAPI + generated TS types stay byte-identical.
 
-Still later stories: the cursor-mode drag-to-change-tool picker (2.12), pen alpha
-(2.13), and editing/undo/persistence (Epic 3).
+## Story 2.12 -- cursor-mode drag-to-change-tool picker
+
+The cursor-mode quick-box (Story 2.2 "proof box") is replaced with a
+context-sensitive tool picker. In cursor mode (no annotation tool armed)
+the picker has two shapes, keyed off whether there is a text selection:
+
+- **Text drag** (selection.length > 0) pops a three-tool picker: Highlight,
+  Underline, Comment. Picking a tool creates the mark on the current
+  selection. No Memo here (a memo is a rect box, not a text-anchor mark).
+- **Empty-area double-click** (selection.length === 0) pops a two-tool
+  picker: Comment, Memo. The mark is placed at the click point (`pending.at`).
+
+Picking creates the mark without a trip to the left rail. `activeTool` is
+unchanged (one-shot create, not a sticky arm). The buttons are icon-only
+(Phosphor glyphs matching the rail); `aria-label` + `title` carry a11y.
+
+> Deviates from the original story spec (which proposed one four-tool
+> text-drag picker incl. Memo at the selection start). Approved user fixes:
+> icon-only buttons, Memo dropped from the text-drag picker, and the
+> Comment/Memo picker moved onto an empty-area double-click. Double-click on
+> text selects a word, so it still routes through the text-drag (H/U/C) path.
+
+- The picker lives entirely inside the existing `pending` quick-box state
+  (Decision 1): the machine (`machine.ts`), the shell, the position/clamp,
+  the focus-in/return, and the dismiss-on-pick/outside-click/Esc/scroll
+  plumbing are reused verbatim. The change is the CONTENTS of the
+  `pending &&` render branch: `role="menuitem"` buttons in place of one.
+- `createTextTool(pages, tool)` (Decision 2): the armed `onPointerUp` branch
+  AND `commitTool` both call this shared helper so there is ONE text-anchor
+  create path (build via `buildAnnotations` + `addAnnotation` + clear
+  selection + `select`). No duplication.
+- `commitTool(tool)` branches on `pending.selection.length`: text drag (> 0)
+  routes H/U/C through `createTextTool`; empty-area double-click (=== 0)
+  places a Comment pin (`buildCommentPin`, degenerate point rect) or a
+  default-size `kind=rect` Memo (`buildMemoAnnotation` + `activeMemoSize`)
+  at `pending.at`, then selects it.
+- Picking Highlight/Underline routes into the 2.5 selection quick-box
+  (recolor + delete). Picking Comment routes into the 2.10 bubble (the
+  shared selection box already excludes `type="comment"`). Picking Memo
+  selects the new box so the 2.9 textarea autofocuses. Empty-memo cleanup
+  is free (the existing deselect-cleanup already handles it).
+- No contract change: all four types + both builders already exist; the
+  tracked OpenAPI + generated TS types stay byte-identical.
+
+Still later: pen alpha (2.13), and editing/undo/persistence (Epic 3).
