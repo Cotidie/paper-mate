@@ -109,29 +109,47 @@
   display: block;
 }
 
-/* color-swatch row: the highlight recolor pills inside the quick-box (Story 2.3;
-   DESIGN.md#color-swatch). 20px accent pills; the armed (current) color and a
-   keyboard-focused swatch both get a 2px ink ring. */
+/* color-swatch row: the accent pills (Story 2.3; DESIGN.md#color-swatch). The
+   swatch is a CELL (the clickable button) wrapping an inner colored DOT, so the
+   cell can grow to a uniform tool-button footprint inside the rail sub-toolrail
+   while the dot stays a fixed 20px pill. Default (overlay recolor row): the cell
+   hugs the dot, so it stays compact. The armed/current and keyboard-focused
+   swatch get a 2px ink ring hugging the dot. */
 .color-swatch-row {
   display: flex;
   gap: var(--space-xxs);
 }
 
 .color-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: var(--color-swatch-size);
   height: var(--color-swatch-size);
   padding: 0;
-  border: var(--color-swatch-border) solid var(--color-hairline-strong);
+  border: none;
+  background: transparent;
   border-radius: var(--radius-pill);
   cursor: pointer;
 }
 
-.color-swatch--armed {
+.color-swatch__dot {
+  width: var(--color-swatch-size);
+  height: var(--color-swatch-size);
+  border: var(--color-swatch-border) solid var(--color-hairline-strong);
+  border-radius: var(--radius-pill);
+}
+
+.color-swatch--armed .color-swatch__dot {
   outline: var(--color-swatch-ring-width) solid var(--color-ink);
   outline-offset: var(--color-swatch-ring-offset);
 }
 
 .color-swatch:focus-visible {
+  outline: none;
+}
+
+.color-swatch:focus-visible .color-swatch__dot {
   outline: var(--focus-ring-width) solid var(--color-ink);
   outline-offset: var(--color-swatch-ring-offset);
 }

@@ -163,6 +163,13 @@
   margin-top: var(--tool-rail-gap);
 }
 
+/* A rail row that owns a flyout (Story 2.6 Highlight + its color sub-toolbox):
+   relative so the absolute flyout positions against THIS button, not the rail. */
+.tool-rail__item {
+  position: relative;
+  display: flex;
+}
+
 /* tool-button: 36px square, transparent, body-ink glyph, md radius (DESIGN.md). */
 .tool-button {
   width: var(--tool-button-size);
@@ -214,6 +221,28 @@
   padding: var(--space-xxs);
   box-shadow: var(--shadow-card);
   z-index: 6;
+}
+
+/* Inside the shared sub-toolrail (`ToolFlyout`), the color swatches lay out
+   exactly like the pointer options: a vertical column of uniform tool-button-
+   sized CELLS at the rail gap. Each cell is the 36px tool-button footprint, with
+   the 20px colored dot centered inside (matching a 20px glyph in a 36px button),
+   and the same hover wash — so the two sub-toolrails are pixel-consistent. Scoped
+   to the rail flyout; the overlay recolor row keeps its compact horizontal pills. */
+.tool-flyout .color-swatch-row {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--tool-rail-gap);
+}
+
+.tool-flyout .color-swatch {
+  width: var(--tool-button-size);
+  height: var(--tool-button-size);
+  border-radius: var(--radius-md);
+}
+
+.tool-flyout .color-swatch:hover {
+  background: var(--color-surface-strong);
 }
 
 /* Pan cursor + selection suppression while the hand is armed or Space is held

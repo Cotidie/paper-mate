@@ -5,6 +5,7 @@ import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
 import ToolRail from "./ToolRail";
 import { type ActiveTool, isAnnotationTool } from "./tools";
+import { useAnnotationStore } from "./store";
 import ZoomControl from "./ZoomControl";
 import TocPanel from "./TocPanel";
 import Toast from "./Toast";
@@ -36,6 +37,13 @@ export default function App() {
   // of this (below), never stored siblings. Lives in App state (not the store,
   // which is the annotation working copy, AD-9). Sticky until V/Esc/another tool.
   const [activeTool, setActiveTool] = useState<ActiveTool>("cursor");
+  // The active/default annotation color (Story 2.6) lives in the annotation store,
+  // not App state: it is written from two unrelated subtrees (the rail's color
+  // sub-toolbox AND the overlay's recolor-a-mark), and the create path reads it.
+  // App subscribes only to pass it (and its setter) to the rail; the overlay reads
+  // the store directly. It remembers the last color chosen for the session.
+  const activeColor = useAnnotationStore((s) => s.activeColor);
+  const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
@@ -195,6 +203,10 @@ export default function App() {
           // One setter; the rail commits a tool in a single click. Mutual
           // exclusion is intrinsic to `activeTool`, so no cross-setting closures.
           onSelectTool={setActiveTool}
+          // Story 2.6: the Highlight tool's color sub-toolbox reads `activeColor`
+          // and sets it via `onPickColor` (the default for new marks).
+          activeColor={activeColor}
+          onPickColor={setActiveColor}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
         />

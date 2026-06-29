@@ -23,6 +23,15 @@ export interface AnnotationStore {
    *  outlines as ONE: every layer reads it and matches by `group_id`. Transient;
    *  never persisted, cleared on pointer-leave. */
   hoveredId: string | null;
+  /** The active annotation color (Story 2.6): the DEFAULT new marks land in. It
+   *  is the LAST color the user chose — set by the Highlight color sub-toolbox OR
+   *  by recoloring an existing mark (so editing a highlight updates the default
+   *  too). Lives in the store because two unrelated subtrees write it (the rail's
+   *  sub-toolbox and the overlay's recolor) and the create path reads it. A bare
+   *  token name (DESIGN.md `{colors.annotation-*}`); client-only, not persisted. */
+  activeColor: string;
+  /** Set the active/default color (remembers the last choice for the session). */
+  setActiveColor: (color: string) => void;
   /** Select an annotation by id, or clear with `null`. */
   select: (id: string | null) => void;
   /** Clear the selection (sugar for `select(null)`). */
@@ -50,6 +59,8 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
   annotations: new Map(),
   selectedId: null,
   hoveredId: null,
+  activeColor: "annotation-default",
+  setActiveColor: (color) => set({ activeColor: color }),
   select: (id) => set({ selectedId: id }),
   clearSelection: () => set({ selectedId: null }),
   setHovered: (id) => set({ hoveredId: id }),

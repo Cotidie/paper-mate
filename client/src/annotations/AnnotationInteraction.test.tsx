@@ -60,7 +60,14 @@ function stubSelection(rects: { left: number; top: number; right: number; bottom
   return { removeAllRanges };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
+beforeEach(() =>
+  useAnnotationStore.setState({
+    annotations: new Map(),
+    selectedId: null,
+    hoveredId: null,
+    activeColor: "annotation-default",
+  }),
+);
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -183,6 +190,31 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     expect(screen.getByTestId("color-swatch-annotation-default").getAttribute("aria-checked")).toBe("true");
     expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
     expect(screen.queryByTestId("quick-box-highlight")).toBeNull();
+  });
+
+  it("Story 2.6: a drag-release lands the mark in the ACTIVE color (create reads activeColor, not a hardcode)", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    render(
+      <AnnotationInteraction
+        docId="doc-1"
+        getPages={() => pages}
+        scale={1}
+        enabled
+        rectReader={reader}
+        armedTool="highlight"
+      />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    // The new mark used the chosen active color, not the default yellow.
+    expect(all[0].style.color).toBe("annotation-blue");
+    // The selection box opens armed to that same color.
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("color-swatch-annotation-blue").getAttribute("aria-checked")).toBe("true");
   });
 
   it("picking a swatch recolors the just-landed highlight and dismisses the box (selection stays)", async () => {
@@ -338,6 +370,15 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
   });
 
+  it("Story 2.6 req3: recoloring an existing mark also updates the active/default color (remember last choice)", async () => {
+    setup([textMark("m1", "annotation-default")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    expect(useAnnotationStore.getState().activeColor).toBe("annotation-default");
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-purple"));
+    // Editing a highlight's color carries into the session default for new marks.
+    expect(useAnnotationStore.getState().activeColor).toBe("annotation-purple");
+  });
+
   it("recolors the whole group together (two-page highlight)", async () => {
     setup([textMark("m1", "annotation-default", "g1"), textMark("m2", "annotation-default", "g1")], "m1");
     await screen.findByTestId("selection-quick-box");
@@ -452,7 +493,7 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
   });
 
   it("with a mark selected, an empty-space drag still CREATES a highlight (2.3 path unbroken)", async () => {
-    const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     useAnnotationStore.getState().addAnnotation(textMark("m1"));
     render(
@@ -467,6 +508,5 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().all().length).toBe(2);
     // The create swatch row pops (selection box is gone), proving create still works.
     await screen.findByTestId("color-swatch-annotation-default");
-    expect(removeAllRanges).toBeDefined();
   });
 });

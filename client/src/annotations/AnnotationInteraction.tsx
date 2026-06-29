@@ -28,9 +28,6 @@ import { initialOverlayState, overlayReducer, type AnnotationTool } from "./mach
 import ColorSwatchRow from "./ColorSwatchRow";
 import "./Annotations.css";
 
-/** The default highlight color token (aliases yellow; DESIGN.md). */
-const DEFAULT_COLOR = "annotation-default";
-
 /** Skip editable fields + buttons so the global handlers never eat a control's
  *  own keys/clicks (mirrors the Reader's hold-Space `isExempt`). */
 function isExempt(t: EventTarget | null): boolean {
@@ -73,6 +70,11 @@ export default function AnnotationInteraction({
   // reads it to render the selected-mark quick-box (recolor + delete).
   const annotations = useAnnotationStore((s) => s.annotations);
   const selectedId = useAnnotationStore((s) => s.selectedId);
+  // Story 2.6: the active/default color lives in the store (two writers — this
+  // overlay's recolor AND the rail's color sub-toolbox — plus the create path
+  // reads it). Recoloring a mark also updates this default (remember-last-choice).
+  const activeColor = useAnnotationStore((s) => s.activeColor);
+  const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
@@ -96,6 +98,8 @@ export default function AnnotationInteraction({
   getPagesRef.current = getPages;
   const armedToolRef = useRef(armedTool);
   armedToolRef.current = armedTool;
+  const activeColorRef = useRef(activeColor);
+  activeColorRef.current = activeColor;
   const rectReaderRef = useRef(rectReader);
   rectReaderRef.current = rectReader;
 
@@ -137,14 +141,15 @@ export default function AnnotationInteraction({
       );
       if (pages.length === 0) return;
       if (armedToolRef.current === "highlight") {
-        // Create-on-release at the default color (AC-2), then select the new mark:
-        // the selection quick-box recolors/deletes it (the whole group together).
+        // Create-on-release at the active color (Story 2.6 — chosen via the
+        // Highlight sub-toolbox, not a hardcode), then select the new mark: the
+        // selection quick-box recolors/deletes it (the whole group together).
         // Clear the live text selection so it cannot re-pop on the next pointerup.
         const created = buildAnnotations(pages, docId, {
           now: new Date().toISOString(),
           newId,
           type: "highlight",
-          color: DEFAULT_COLOR,
+          color: activeColorRef.current,
         });
         created.forEach(addAnnotation);
         selection?.removeAllRanges();
@@ -236,7 +241,7 @@ export default function AnnotationInteraction({
       now: new Date().toISOString(),
       newId,
       type: "highlight",
-      color: DEFAULT_COLOR,
+      color: activeColorRef.current,
     });
     created.forEach(addAnnotation);
     window.getSelection()?.removeAllRanges();
@@ -294,9 +299,12 @@ export default function AnnotationInteraction({
   const recolorSelected = useCallback(
     (color: string) => {
       recolorAnnotation(selectedGroupIds(), color, new Date().toISOString());
+      // Remember the choice: recoloring an existing mark also sets the default for
+      // the next new mark (Story 2.6 request 3 — last-choice-wins, either path).
+      setActiveColor(color);
       setSelectionBoxOpen(false); // pick dismisses the box; the mark stays selected/ringed
     },
-    [recolorAnnotation, selectedGroupIds],
+    [recolorAnnotation, selectedGroupIds, setActiveColor],
   );
 
   // Delete via the store (removes id + group siblings AND clears `selectedId`).

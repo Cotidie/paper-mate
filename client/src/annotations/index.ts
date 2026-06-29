@@ -6,6 +6,9 @@
 
 export { default as AnnotationLayer } from "./AnnotationLayer";
 export { default as AnnotationInteraction } from "./AnnotationInteraction";
+// The shared color-swatch row (DESIGN.md#color-swatch). Reused by the overlay's
+// selection quick-box AND, from Story 2.6, the rail's Highlight color sub-toolbox.
+export { default as ColorSwatchRow } from "./ColorSwatchRow";
 export { buildAnnotations } from "./create";
 export { clampToViewport } from "./position";
 export {
