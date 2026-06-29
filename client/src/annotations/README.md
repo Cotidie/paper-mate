@@ -29,10 +29,12 @@ Story 2.3 (highlight tool) adds the first real tool on this foundation:
   `AnnotationInteraction` consumes it via `armedTool`. Sticky until
   `V`/`Esc`/another tool.
 - With highlight armed, a text drag-release LANDS a default-color highlight
-  immediately (create-on-release), then the quick-box shows `ColorSwatchRow` (the
-  6 accent colors) to recolor the just-made mark (`store.recolorAnnotation`).
-  Cursor-mode drag keeps the 2.2 single-action proof (the cursor tool-type picker
-  is Story 2.12).
+  immediately (create-on-release). Since Story 2.5 the just-made mark is then
+  SELECTED, so the unified selection quick-box (recolor + delete) takes over —
+  there is no separate create quick-box (one affordance for "act on a mark",
+  whether just-created or clicked later). Cursor-mode drag keeps the 2.2
+  single-action proof button, which also selects the mark after it creates (the
+  cursor tool-type picker is Story 2.12).
 - `ColorSwatchRow`: the highlight/underline recolor row; later color tools reuse
   it (Story 2.6's arm-time picker, Story 2.5's selection recolor).
 

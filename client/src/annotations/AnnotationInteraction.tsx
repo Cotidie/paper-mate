@@ -3,13 +3,14 @@
 //
 // The shell, position/clamp, focus-in/return, and dismiss-on-pick/outside/Esc
 // (plus the `removeAllRanges()` re-pop fix) are the Story 2.2 foundation, reused
-// unchanged. What varies is the quick-box CONTENTS and the create timing, keyed
-// off the armed tool (`armedTool` prop, single source in App):
+// unchanged. Create timing is keyed off the armed tool (`armedTool` prop, single
+// source in App), and BOTH create paths land in the SAME selection quick-box
+// (Story 2.5 unification — one recolor + delete affordance, AD-12):
 //   - Highlight armed → the mark LANDS on drag-release at the default color
-//     (create-on-release), then the quick-box shows the color-swatch row to
-//     recolor it (Story 2.3).
+//     (create-on-release) and is immediately SELECTED → the selection quick-box.
 //   - Cursor (no tool) → the Story 2.2 proof: a single "Highlight" action that
-//     creates the mark on click. (The cursor-mode tool-type picker is Story 2.9.)
+//     creates the mark on click, then selects it. (The cursor-mode tool-type
+//     picker is Story 2.12.)
 //
 // Document-level handlers (Epic-1 retro AP-1): pointer/key handlers bind on
 // `document`, phase-gated (`enabled`), exempting editable fields + buttons — NOT
@@ -67,6 +68,7 @@ export default function AnnotationInteraction({
   // reads it to render the selected-mark quick-box (recolor + delete).
   const annotations = useAnnotationStore((s) => s.annotations);
   const selectedId = useAnnotationStore((s) => s.selectedId);
+  const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const quickBoxRef = useRef<HTMLDivElement | null>(null);
@@ -78,9 +80,6 @@ export default function AnnotationInteraction({
   const [selectionBoxOpen, setSelectionBoxOpen] = useState(false);
   // The element focused before the quick-box opened, restored on dismiss.
   const restoreFocusRef = useRef<HTMLElement | null>(null);
-  // Ids of the marks created on the current drag-release (highlight mode), so the
-  // swatch row can recolor exactly them (a two-page group recolors together).
-  const createdIdsRef = useRef<string[]>([]);
 
   // Latest values for the document-level listeners (bound once) to read without
   // re-binding on every scale / tool change.
@@ -112,9 +111,10 @@ export default function AnnotationInteraction({
   }, [armedTool]);
 
   // Pointer release: if the user just drag-selected text, build the anchor(s).
-  // Highlight armed → create the mark NOW (it lands) and pop the swatch row.
-  // Cursor mode → pop the proof quick-box (the action creates on click).
-  // Bound on document (AP-1), phase-gated.
+  // Highlight armed → create the mark NOW (it lands) and SELECT it, so the one
+  // selection quick-box (recolor + delete) takes over — no separate create box
+  // (unified with the select-an-existing-mark path, AD-12). Cursor mode → pop the
+  // proof quick-box (the action creates on click). Bound on document (AP-1).
   useEffect(() => {
     if (!enabled) return;
     const onPointerUp = (e: PointerEvent) => {
@@ -122,10 +122,10 @@ export default function AnnotationInteraction({
       const selection = window.getSelection();
       const pages = rectsFromSelection(selection, getPagesRef.current(), scaleRef.current);
       if (pages.length === 0) return;
-      restoreFocusRef.current = document.activeElement as HTMLElement | null;
       if (armedToolRef.current === "highlight") {
-        // Create-on-release: the highlight lands at the default color before any
-        // swatch pick (AC-2). The swatch row then recolors these exact ids.
+        // Create-on-release at the default color (AC-2), then select the new mark:
+        // the selection quick-box recolors/deletes it (the whole group together).
+        // Clear the live text selection so it cannot re-pop on the next pointerup.
         const created = buildAnnotations(pages, docId, {
           now: new Date().toISOString(),
           newId,
@@ -133,15 +133,18 @@ export default function AnnotationInteraction({
           color: DEFAULT_COLOR,
         });
         created.forEach(addAnnotation);
-        createdIdsRef.current = created.map((a) => a.id);
-      } else {
-        createdIdsRef.current = [];
+        selection?.removeAllRanges();
+        select(created[0].id);
+        return;
       }
+      // Cursor mode (no tool): the 2.2 proof — a single action that creates the
+      // highlight on click (the cursor-mode tool picker is Story 2.12).
+      restoreFocusRef.current = document.activeElement as HTMLElement | null;
       dispatch({ type: "present", selection: pages, at: { x: e.clientX, y: e.clientY } });
     };
     document.addEventListener("pointerup", onPointerUp);
     return () => document.removeEventListener("pointerup", onPointerUp);
-  }, [enabled, docId, addAnnotation]);
+  }, [enabled, docId, addAnnotation, select]);
 
   // Dismiss the quick-box AND clear the browser selection. Clearing is required:
   // otherwise the still-live selection is re-read by the global pointerup handler
@@ -210,8 +213,9 @@ export default function AnnotationInteraction({
   }, [pending]);
 
   // Cursor-mode proof action (Story 2.2): create a default text-highlight from
-  // the pending selection and store it (AC-3, AC-5). Two-page selections share a
-  // group_id (handled in buildAnnotations).
+  // the pending selection, store it, then SELECT it so the unified selection
+  // quick-box takes over (same as the highlight-armed path). Two-page selections
+  // share a group_id (handled in buildAnnotations).
   const commit = useCallback(() => {
     if (!pending) return;
     const created = buildAnnotations(pending.selection, docId, {
@@ -223,17 +227,8 @@ export default function AnnotationInteraction({
     created.forEach(addAnnotation);
     window.getSelection()?.removeAllRanges();
     dispatch({ type: "commit" });
-  }, [pending, docId, addAnnotation]);
-
-  // Highlight-mode swatch pick: recolor the just-landed mark(s) and dismiss (a
-  // pick is a dismiss per the shell contract). Recolors the whole group together.
-  const recolor = useCallback(
-    (color: string) => {
-      recolorAnnotation(createdIdsRef.current, color, new Date().toISOString());
-      dismiss();
-    },
-    [recolorAnnotation, dismiss],
-  );
+    select(created[0].id);
+  }, [pending, docId, addAnnotation, select]);
 
   // ── Selection (Story 2.5, AD-12) ─────────────────────────────────────────
   // Separate from the create machine (Decision B): the selection quick-box is
@@ -367,37 +362,33 @@ export default function AnnotationInteraction({
 
   if (!pending && !showSelectionBox) return null;
 
-  const highlightMode = pending?.tool === "highlight";
   const selInit = showSelectionBox ? selectionPoint() : { x: 0, y: 0 };
 
   return (
     <>
       {pending && (
+        // Cursor-mode proof box only: a single action that creates the highlight
+        // on click (then selects it). The highlight-armed path never opens this —
+        // it lands + selects straight into the selection quick-box below.
         <div
           ref={quickBoxRef}
           className="quick-box"
           role="menu"
-          aria-label={highlightMode ? "Highlight color" : "Annotation actions"}
+          aria-label="Annotation actions"
           data-testid="quick-box"
           // Initial position at the release point; the layout effect nudges it
           // on-screen once measured. position:fixed keeps it off the canvas flow.
           style={{ left: pending.at.x, top: pending.at.y }}
         >
-          {highlightMode ? (
-            // The mark already landed on release; the row recolors it. The first
-            // swatch is focusable for the focus-in contract.
-            <ColorSwatchRow value={DEFAULT_COLOR} onPick={recolor} />
-          ) : (
-            <button
-              type="button"
-              role="menuitem"
-              className="quick-box__action"
-              data-testid="quick-box-highlight"
-              onClick={commit}
-            >
-              Highlight
-            </button>
-          )}
+          <button
+            type="button"
+            role="menuitem"
+            className="quick-box__action"
+            data-testid="quick-box-highlight"
+            onClick={commit}
+          >
+            Highlight
+          </button>
         </div>
       )}
 

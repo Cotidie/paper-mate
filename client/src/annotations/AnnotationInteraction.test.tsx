@@ -137,8 +137,8 @@ describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
   });
 });
 
-describe("AnnotationInteraction highlight tool (Story 2.3 — AC-1,2,4,5)", () => {
-  it("with highlight armed, a drag-release LANDS a default highlight and pops the swatch row", async () => {
+describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — AC-1,2,4,5)", () => {
+  it("with highlight armed, a drag-release LANDS a default highlight and SELECTS it (unified selection box)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(
@@ -146,17 +146,21 @@ describe("AnnotationInteraction highlight tool (Story 2.3 — AC-1,2,4,5)", () =
     );
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
 
-    // The mark landed on release (before any swatch pick).
+    // The mark landed on release at the default color.
     const all = useAnnotationStore.getState().all();
     expect(all).toHaveLength(1);
     expect(all[0].type).toBe("highlight");
     expect(all[0].style.color).toBe("annotation-default");
-    // The quick-box shows the swatch row, not the cursor-mode proof button.
-    await screen.findByTestId("color-swatch-annotation-default");
+    // It is now the SELECTED mark, and the unified selection quick-box (swatch
+    // row armed to its color + Delete) takes over — no separate create box.
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("color-swatch-annotation-default").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
     expect(screen.queryByTestId("quick-box-highlight")).toBeNull();
   });
 
-  it("picking a swatch recolors the just-landed highlight and dismisses", async () => {
+  it("picking a swatch recolors the just-landed highlight and dismisses the box (selection stays)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(
@@ -168,8 +172,9 @@ describe("AnnotationInteraction highlight tool (Story 2.3 — AC-1,2,4,5)", () =
     const all = useAnnotationStore.getState().all();
     expect(all).toHaveLength(1);
     expect(all[0].style.color).toBe("annotation-green");
-    // Pick dismisses the quick-box.
-    await waitFor(() => expect(screen.queryByTestId("quick-box")).toBeNull());
+    // Pick dismisses the box; the mark stays selected (ring persists).
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
   });
 
   it("a two-page highlight lands two marks sharing a group_id and recolors both", async () => {
@@ -199,8 +204,8 @@ describe("AnnotationInteraction highlight tool (Story 2.3 — AC-1,2,4,5)", () =
     );
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
-    fireEvent.keyDown(document, { key: "Escape" }); // dismiss the swatch row (keep default)
-    await waitFor(() => expect(screen.queryByTestId("quick-box")).toBeNull());
+    fireEvent.keyDown(document, { key: "Escape" }); // clear the selection (keep default)
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
 
     rerender(
       <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
@@ -210,25 +215,34 @@ describe("AnnotationInteraction highlight tool (Story 2.3 — AC-1,2,4,5)", () =
     expect(useAnnotationStore.getState().all()).toHaveLength(2);
   });
 
-  it("disarming (V) while the quick-box is open clears the selection and cannot re-pop (review fix)", async () => {
+  it("highlight create clears the live text selection so it cannot re-create on the next pointerup", () => {
     const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    // One mark landed + selected; the live text selection was cleared.
+    expect(useAnnotationStore.getState().all()).toHaveLength(1);
+    expect(removeAllRanges).toHaveBeenCalled();
+    // The cleared (now-collapsed) selection must NOT create a second mark.
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(1);
+  });
+
+  it("disarming the tool (V) does NOT clear the current selection (selection is orthogonal, AD-12)", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     const { rerender } = render(
       <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
     );
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
-    await screen.findByTestId("quick-box");
-
-    // V disarms in App → armedTool becomes null while a quick-box is pending.
-    rerender(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool={null} />,
-    );
-    await waitFor(() => expect(screen.queryByTestId("quick-box")).toBeNull());
-    expect(removeAllRanges).toHaveBeenCalled();
-
-    // The cleared selection must NOT re-pop the quick-box on the next pointerup.
-    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
-    expect(screen.queryByTestId("quick-box")).toBeNull();
+    const id = useAnnotationStore.getState().selectedId;
+    expect(id).not.toBeNull();
+    await screen.findByTestId("selection-quick-box");
+    // V disarms in App → armedTool null. The selected mark stays selected.
+    rerender(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool={null} />);
+    expect(useAnnotationStore.getState().selectedId).toBe(id);
   });
 
   it("cursor mode (no armed tool) keeps the 2.2 proof button, not the swatch row", async () => {
