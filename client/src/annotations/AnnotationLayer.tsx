@@ -70,6 +70,7 @@ export default function AnnotationLayer({
   const hoveredId = useAnnotationStore((s) => s.hoveredId);
   const select = useAnnotationStore((s) => s.select);
   const setHovered = useAnnotationStore((s) => s.setHovered);
+  const retextAnnotation = useAnnotationStore((s) => s.retextAnnotation);
   const marks = [...annotations.values()]
     .filter((a) => a.doc_id === docId && a.anchor.page_index === pageIndex)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -81,6 +82,11 @@ export default function AnnotationLayer({
   const highlightMarks = textMarks.filter((a) => a.type !== "underline");
   const underlineMarks = textMarks.filter((a) => a.type === "underline");
   const penMarks = marks.filter((a) => a.anchor.kind === "path");
+  // Memo (Story 2.9): the only kind=rect mark. Rendered as an interactive
+  // <textarea>, not a paint sheet — so it lives in its OWN group, OUTSIDE the
+  // decorative aria-hidden layer (a focusable control must not sit in an
+  // aria-hidden subtree). Keyed off kind=rect + type=memo (AD-5).
+  const memoMarks = marks.filter((a) => a.anchor.kind === "rect" && a.type === "memo");
 
   // Render one annotation's rects as positioned mark divs. `underline` swaps the
   // accent fill for a transparent box with a 2px accent bottom-border (the line
@@ -145,13 +151,63 @@ export default function AnnotationLayer({
     );
   };
 
+  // Render one memo as an interactive <textarea> positioned via denormalizeRect
+  // (geometry-on-kind = rect). The box rides the normalized rect (left/top/width
+  // and a min-height) so it stays glued + scales on zoom (NFR-3); typing grows it
+  // downward without reflowing the page (absolute overlay). The accent (border)
+  // color comes from style.color (inline); the body text stays ink. The box is
+  // the selection hit surface (Story 2.5 seam): pointer-events + select/hover.
+  // value = a.body, every edit writes through retextAnnotation. Autofocus when it
+  // is the selected memo so a just-placed box is ready to type into.
+  const renderMemo = (a: Annotation) => {
+    if (a.anchor.kind !== "rect") return null;
+    const hovered = inActiveGroup(a, hoveredId, annotations);
+    const selected = inActiveGroup(a, selectedId, annotations);
+    const cls =
+      "annotation-memo" +
+      (hovered ? " annotation-memo--hovered" : "") +
+      (selected ? " annotation-memo--selected" : "");
+    const pos = denormalizeRect(a.anchor.rect, box, scale);
+    return (
+      <textarea
+        key={a.id}
+        className={cls}
+        data-testid={`annotation-mark-${a.id}`}
+        aria-label="Memo"
+        value={a.body ?? ""}
+        autoFocus={selected}
+        onChange={(e) => retextAnnotation(a.id, e.target.value, new Date().toISOString())}
+        onInput={(e) => {
+          // Auto-grow with content (Decision 1): expand past the preset min-height
+          // so a long note isn't clipped. No-op in jsdom (scrollHeight = 0).
+          const el = e.currentTarget;
+          el.style.height = "auto";
+          el.style.height = `${el.scrollHeight}px`;
+        }}
+        onPointerEnter={() => setHovered(a.id)}
+        onPointerLeave={() => setHovered(null)}
+        onClick={() => select(a.id)}
+        style={{
+          left: pos.left,
+          top: pos.top,
+          width: pos.width,
+          minHeight: pos.height,
+          borderColor: `var(--color-${a.style.color})`,
+        }}
+      />
+    );
+  };
+
   return (
-    // The layer sheet stays decorative (aria-hidden): the marks duplicate the
-    // selectable text underneath and exposing every rect fragment as a control
-    // would be noisier than helpful. Selection is a pointer affordance for now;
-    // Del/Esc work once selected (document-level keys), and a keyboard-reachable
-    // list comes with the Epic-3 Annotation Bank. (Choice noted in the story.)
-    <div className="annotation-layer" aria-hidden="true" data-testid={`annotation-layer-${pageIndex}`}>
+    <>
+      {/* The mark sheet stays decorative (aria-hidden): the highlight/underline/pen
+          marks duplicate the selectable text underneath and exposing every rect
+          fragment as a control would be noisier than helpful. Selection is a
+          pointer affordance for now; Del/Esc work once selected (document-level
+          keys), and a keyboard-reachable list comes with the Epic-3 Annotation
+          Bank. Memos are EXCLUDED from this group (below): they are real typed
+          content, not decoration, so they must stay accessible. */}
+      <div className="annotation-layer" aria-hidden="true" data-testid={`annotation-layer-${pageIndex}`}>
       {/* Highlights share ONE opacity group: marks paint opaque and the group is
           composited once at the highlight opacity, so overlapping marks never
           compound into a darker/thicker band and the most recent (last in DOM)
@@ -169,6 +225,17 @@ export default function AnnotationLayer({
           {penMarks.map((a) => renderPen(a))}
         </svg>
       )}
-    </div>
+      </div>
+      {/* Memos (kind=rect): interactive <textarea> boxes in their OWN, NOT
+          aria-hidden, group — they are typed content, not decoration, and a
+          focusable control cannot live in an aria-hidden subtree. The group is
+          pointer-transparent so page text between memos stays selectable (NFR-1);
+          each box opts back in. */}
+      {memoMarks.length > 0 && (
+        <div className="annotation-memos" data-testid={`annotation-memos-${pageIndex}`}>
+          {memoMarks.map((a) => renderMemo(a))}
+        </div>
+      )}
+    </>
   );
 }

@@ -49,6 +49,11 @@ export default function App() {
   // write it, the create path reads it). App passes it + its setter to the rail.
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
   const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
+  // Story 2.9: the active memo box size is store-backed for the same reason as
+  // activeColor/activeStrokeWidth (the rail's SizeRow + the memo quick-box's
+  // resize both write it, the placement gesture reads it). App threads it down.
+  const activeMemoSize = useAnnotationStore((s) => s.activeMemoSize);
+  const setActiveMemoSize = useAnnotationStore((s) => s.setActiveMemoSize);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
@@ -116,6 +121,10 @@ export default function App() {
         e.preventDefault();
         // Arm pen (UX-DR15: D = pen). Same single-field switch.
         setActiveTool("pen");
+      } else if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        // Arm memo (UX-DR15: T = memo). Same single-field switch.
+        setActiveTool("memo");
       } else if (e.key === "[") {
         e.preventDefault();
         setRailCollapsed((c) => !c);
@@ -224,6 +233,10 @@ export default function App() {
           // sets it via onPickStrokeWidth (the default new strokes land in).
           activeStrokeWidth={activeStrokeWidth}
           onPickStrokeWidth={setActiveStrokeWidth}
+          // Story 2.9: the Memo tool's sub-toolbox reads activeMemoSize and sets
+          // it via onPickMemoSize (the default new memos land in).
+          activeMemoSize={activeMemoSize}
+          onPickMemoSize={setActiveMemoSize}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
         />

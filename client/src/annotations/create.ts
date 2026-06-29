@@ -3,7 +3,7 @@
 // without a live selection. The TS shape comes from the generated type (AD-3);
 // this module never hand-authors it.
 
-import type { Annotation, Point } from "../api/client";
+import type { Annotation, Point, Rect } from "../api/client";
 import type { PageSelection } from "../anchor";
 import type { AnnotationTool } from "./machine";
 
@@ -79,6 +79,46 @@ export function buildPenAnnotation(stroke: PenStroke, docId: string, opts: Build
     anchor: { kind: "path", page_index: stroke.page_index, points: stroke.points },
     style: { color, stroke_width: strokeWidth },
     body: null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+/** One memo placed on a single page: the page it landed on + its normalized
+ *  `[0,1]` box (AD-4). Feeds a `RectAnchor`. The box dimensions ARE the memo's
+ *  size (the `SizeRow` preset, baked into the rect at placement) — there is no
+ *  separate size field (AD-5: geometry-on-kind, no contract field for size). */
+export interface MemoPlacement {
+  page_index: number;
+  rect: Rect;
+}
+
+export interface BuildMemoOptions {
+  /** ISO-8601 UTC timestamp for created_at/updated_at. */
+  now: string;
+  /** UUID factory (injectable for deterministic tests). */
+  newId: () => string;
+  /** Resolved accent color (a token name) — tints the memo border. */
+  color: string;
+}
+
+/**
+ * Build ONE memo `Annotation` (AD-5: `memo → rect`). The FIRST `kind=rect` mark
+ * and the FIRST mark with a non-null `body`: it starts as `""` and updates as the
+ * user types (via `retextAnnotation`). Always single-page (a `RectAnchor` has one
+ * `page_index`), so `group_id` is null. `stroke_width` is path-only style, so it
+ * stays null; the size lives in the rect, not in style.
+ */
+export function buildMemoAnnotation(memo: MemoPlacement, docId: string, opts: BuildMemoOptions): Annotation {
+  const { now, newId, color } = opts;
+  return {
+    id: newId(),
+    doc_id: docId,
+    type: "memo",
+    group_id: null,
+    anchor: { kind: "rect", page_index: memo.page_index, rect: memo.rect },
+    style: { color, stroke_width: null },
+    body: "",
     created_at: now,
     updated_at: now,
   };

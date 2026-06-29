@@ -24,17 +24,19 @@ import {
   denormalizeRect,
   denormalizePoint,
   normalizePoint,
+  normalizeRect,
   pickPage,
   type PageCardRef,
 } from "../anchor";
-import { useAnnotationStore } from "../store";
+import { useAnnotationStore, type MemoSize } from "../store";
 import { newId } from "../uuid";
-import { buildAnnotations, buildPenAnnotation } from "./create";
+import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation } from "./create";
 import { strokeOutline, svgPathFromOutline, type StrokeInputPoint } from "./pen";
 import { clampToViewport } from "./position";
 import { initialOverlayState, overlayReducer, type AnnotationTool } from "./machine";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
+import SizeRow from "./SizeRow";
 import "./Annotations.css";
 
 /** Vertical gap (viewport px) between the marked text and the floating quick-box
@@ -94,6 +96,12 @@ export default function AnnotationInteraction({
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
   const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
   const restrokeAnnotation = useAnnotationStore((s) => s.restrokeAnnotation);
+  // Story 2.9: the active memo box size (default for new memos) lives in the store
+  // next to activeColor/activeStrokeWidth — two writers (the rail's SizeRow AND
+  // the memo selection quick-box's resize) plus the placement gesture reads it.
+  const activeMemoSize = useAnnotationStore((s) => s.activeMemoSize);
+  const setActiveMemoSize = useAnnotationStore((s) => s.setActiveMemoSize);
+  const resizeMemoAnnotation = useAnnotationStore((s) => s.resizeMemoAnnotation);
   const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
@@ -131,6 +139,8 @@ export default function AnnotationInteraction({
   activeColorRef.current = activeColor;
   const activeStrokeWidthRef = useRef(activeStrokeWidth);
   activeStrokeWidthRef.current = activeStrokeWidth;
+  const activeMemoSizeRef = useRef(activeMemoSize);
+  activeMemoSizeRef.current = activeMemoSize;
   const rectReaderRef = useRef(rectReader);
   rectReaderRef.current = rectReader;
 
@@ -163,8 +173,9 @@ export default function AnnotationInteraction({
     if (!enabled) return;
     const onPointerUp = (e: PointerEvent) => {
       if (e.button !== 0 || isExempt(e.target)) return;
-      // Pen has its OWN gesture path (below); it never reads the text selection.
-      if (armedToolRef.current === "pen") return;
+      // Pen and memo have their OWN gesture paths (below); neither reads the text
+      // selection (pen = a drag, memo = a click-to-place).
+      if (armedToolRef.current === "pen" || armedToolRef.current === "memo") return;
       const selection = window.getSelection();
       const pages = rectsFromSelection(
         selection,
@@ -311,6 +322,72 @@ export default function AnnotationInteraction({
     }
   }, [armedTool]);
 
+  // Memo placement gesture (Story 2.9, Decision 1): with memo armed, a single
+  // primary-button pointerdown on a page CARD places a default-size box at that
+  // point (NOT a drag, NOT a text selection), selects it, and the layer focuses
+  // its textarea. Document-level (AP-1), phase-gated; only acts while memo is
+  // armed. The box rect = the activeMemoSize preset (scale-1.0 px) at the click,
+  // normalized against the page. Clicking an EXISTING memo selects it (handled by
+  // the layer + selection seam) — gate placement off `.annotation-memo` so a
+  // second overlapping box isn't dropped on it.
+  useEffect(() => {
+    if (!enabled) return;
+    const onDown = (e: PointerEvent) => {
+      if (armedToolRef.current !== "memo" || e.button !== 0 || isExempt(e.target)) return;
+      const el = e.target as Element | null;
+      // Only over an actual page card; never the gutter/chrome, the quick-box, or
+      // an existing memo (that click selects/edits it, not places a new one).
+      if (!el?.closest?.(".page-surface") || el.closest?.(".quick-box") || el.closest?.(".annotation-memo"))
+        return;
+      const pages = getPagesRef.current();
+      const cardBoxes = pages.map((p) => p.cardEl.getBoundingClientRect());
+      const idx = pickPage(
+        { left: e.clientX, top: e.clientY, right: e.clientX, bottom: e.clientY },
+        cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
+      );
+      if (idx < 0) return;
+      const page = pages[idx];
+      const cardRect = cardBoxes[idx];
+      const scale = scaleRef.current;
+      const size = activeMemoSizeRef.current;
+      // Card-local px at the CURRENT scale (size is scale-1.0 px, so multiply by
+      // scale); normalizeRect divides by box*scale → a scale-independent rect.
+      const x0 = e.clientX - cardRect.left;
+      const y0 = e.clientY - cardRect.top;
+      const rect = normalizeRect(
+        { x0, y0, x1: x0 + size.width * scale, y1: y0 + size.height * scale },
+        page.box,
+        scale,
+      );
+      const created = buildMemoAnnotation({ page_index: page.pageIndex, rect }, docId, {
+        now: new Date().toISOString(),
+        newId,
+        color: activeColorRef.current,
+      });
+      addAnnotation(created);
+      select(created.id);
+      // Don't let the click start a text selection / fall through to another path.
+      e.preventDefault();
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [enabled, docId, addAnnotation, select]);
+
+  // Empty-memo cleanup (Story 2.9, Decision 5): a memo placed but never typed into
+  // is a no-op, not a stray box — remove it when it loses selection with an empty
+  // body. Keyed on DESELECT (not a raw textarea blur): clicking a color/size swatch
+  // in the memo's own quick-box blurs the textarea WITHOUT deselecting the memo, so
+  // a blur-based delete would nuke the memo mid-recolor. When `selectedId` moves off
+  // a memo whose body is still empty, delete it; a memo with text stays.
+  const prevSelectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevSelectedRef.current;
+    prevSelectedRef.current = selectedId;
+    if (!prev || prev === selectedId) return;
+    const m = annotations.get(prev);
+    if (m && m.type === "memo" && (m.body ?? "").trim() === "") deleteAnnotation(prev);
+  }, [selectedId, annotations, deleteAnnotation]);
+
   // Dismiss the quick-box AND clear the browser selection. Clearing is required:
   // otherwise the still-live selection is re-read by the global pointerup handler
   // (or the next click) and immediately re-pops the quick-box (review finding).
@@ -419,8 +496,10 @@ export default function AnnotationInteraction({
     if (!enabled) return;
     const onDown = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
-      // A mark is a rect (.annotation-highlight, incl. underline) OR a pen path.
-      if (t?.closest?.(".annotation-highlight, .annotation-pen")) setSelectionBoxOpen(true);
+      // A mark is a text rect (.annotation-highlight, incl. underline), a pen path,
+      // OR a memo box (.annotation-memo).
+      if (t?.closest?.(".annotation-highlight, .annotation-pen, .annotation-memo"))
+        setSelectionBoxOpen(true);
     };
     document.addEventListener("pointerdown", onDown, true);
     return () => document.removeEventListener("pointerdown", onDown, true);
@@ -466,6 +545,26 @@ export default function AnnotationInteraction({
     [restrokeAnnotation, selectedGroupIds, setActiveStrokeWidth],
   );
 
+  // Resize the selected memo to a new box size (Story 2.9 — the size twin of
+  // restrokeSelected). The SizeRow gives a scale-1.0 px preset; convert it to a
+  // normalized fraction of the memo's page box (scale cancels) so the store stays
+  // geometry-free, keeping the top-left anchor. Also sets the session default
+  // (last-choice-wins); the pick dismisses the box (the memo stays selected).
+  const resizeSelected = useCallback(
+    (size: MemoSize) => {
+      if (!selectedAnno || selectedAnno.anchor.kind !== "rect") return;
+      const page = getPagesRef.current().find((p) => p.pageIndex === selectedAnno.anchor.page_index);
+      if (page) {
+        const w = page.box.width > 0 ? size.width / page.box.width : 0;
+        const h = page.box.height > 0 ? size.height / page.box.height : 0;
+        resizeMemoAnnotation(selectedGroupIds(), { w, h }, new Date().toISOString());
+      }
+      setActiveMemoSize(size);
+      setSelectionBoxOpen(false);
+    },
+    [selectedAnno, resizeMemoAnnotation, selectedGroupIds, setActiveMemoSize],
+  );
+
   // Delete via the store (removes id + group siblings AND clears `selectedId`).
   // Uses the doc-scoped mark so a stale cross-doc id can never be deleted here.
   const deleteSelected = useCallback(() => {
@@ -496,7 +595,7 @@ export default function AnnotationInteraction({
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
       if (isExempt(t)) return;
-      const onMark = !!t?.closest?.(".annotation-highlight, .annotation-pen");
+      const onMark = !!t?.closest?.(".annotation-highlight, .annotation-pen, .annotation-memo");
       const inBox = selectionBoxRef.current?.contains(t as Node) ?? false;
       if (!onMark && !inBox) clearSelection();
     };
@@ -515,14 +614,16 @@ export default function AnnotationInteraction({
   }, [enabled, selectedAnno, clearSelection, deleteAnnotation]);
 
   // A box needs anchor geometry to position against: a text mark with >=1 rect,
-  // or a pen path with >=1 point (the generated types allow empty arrays, which
-  // would crash the denormalize math). A real mark always has geometry.
+  // a pen path with >=1 point, or a memo rect (always present). A real mark always
+  // has geometry.
   const isPenSelected = selectedAnno?.anchor.kind === "path";
+  const isMemoSelected = selectedAnno?.anchor.kind === "rect" && selectedAnno.type === "memo";
   const showSelectionBox =
     selectionBoxOpen &&
     selectedAnno !== null &&
     ((selectedAnno.anchor.kind === "text" && selectedAnno.anchor.rects.length > 0) ||
-      (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0));
+      (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0) ||
+      selectedAnno.anchor.kind === "rect");
 
   // Project the selected mark to the box-anchor viewport point, re-derived from
   // the anchor service so it tracks zoom (clamped in layout). Anchored just BELOW
@@ -555,6 +656,13 @@ export default function AnnotationInteraction({
       }
       return { x: cardRect.left + left, y: cardRect.top + bottom + QUICK_BOX_GAP };
     }
+    if (selectedAnno.anchor.kind === "rect") {
+      // A memo: anchor below the box, left-aligned to it. The box's on-screen
+      // bottom is the denormalized rect bottom (its min-height; typed content can
+      // push it lower, but the rect bottom is a stable, zoom-glued anchor).
+      const r = denormalizeRect(selectedAnno.anchor.rect, page.box, scale);
+      return { x: cardRect.left + r.left, y: cardRect.top + r.top + r.height + QUICK_BOX_GAP };
+    }
     return { x: 0, y: 0 };
   };
 
@@ -567,8 +675,12 @@ export default function AnnotationInteraction({
     if (showSelectionBox) {
       const el = selectionBoxRef.current;
       if (!el) return;
-      if (!restoreSelectionFocusRef.current) {
-        // First open: remember where focus was, move it into the box.
+      if (!restoreSelectionFocusRef.current && !isMemoSelected) {
+        // First open: remember where focus was, move it into the box. EXCEPTION:
+        // a memo owns its focus (its textarea is autofocused for typing) — pulling
+        // focus to the first swatch would fight that, so the memo box never grabs
+        // focus on open. The textarea is the keyboard entry point; the quick-box
+        // swatches stay reachable by Tab.
         restoreSelectionFocusRef.current = (document.activeElement as HTMLElement | null) ?? document.body;
         el.querySelector<HTMLElement>("button")?.focus();
       }
@@ -634,18 +746,22 @@ export default function AnnotationInteraction({
           ref={selectionBoxRef}
           className="quick-box"
           role="menu"
-          aria-label={isPenSelected ? "Pen actions" : "Highlight actions"}
+          aria-label={isMemoSelected ? "Memo actions" : isPenSelected ? "Pen actions" : "Highlight actions"}
           data-testid="selection-quick-box"
           style={{ left: selInit.x, top: selInit.y }}
         >
           {/* Recolor the selected mark (reuses 2.3's row + store.recolorAnnotation);
-              the row shows the mark's CURRENT color armed. */}
+              the row shows the mark's CURRENT color armed. For a memo it tints the
+              box accent (border). */}
           <ColorSwatchRow value={selectedAnno.style.color} onPick={recolorSelected} />
           {/* A pen mark also gets the stroke-width row (restroke), armed to its
               current width. Text marks (highlight/underline) have no width. */}
           {isPenSelected && (
             <StrokeWidthRow value={selectedAnno.style.stroke_width ?? activeStrokeWidth} onPick={restrokeSelected} />
           )}
+          {/* A memo gets the collapsible size row (resize), armed to the session
+              default (memos store size as their rect, not a style field). */}
+          {isMemoSelected && <SizeRow value={activeMemoSize} onPick={resizeSelected} />}
           <span className="quick-box__divider" aria-hidden="true" />
           <button
             type="button"

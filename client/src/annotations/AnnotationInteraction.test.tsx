@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react";
 import AnnotationInteraction from "./AnnotationInteraction";
-import { useAnnotationStore } from "../store";
+import { useAnnotationStore, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "../store";
 import type { PageCardRef, PageBox } from "../anchor";
 import type { Annotation } from "../api/client";
 
@@ -67,6 +67,7 @@ beforeEach(() =>
     hoveredId: null,
     activeColor: "annotation-default",
     activeStrokeWidth: 4,
+    activeMemoSize: DEFAULT_MEMO_SIZE,
   }),
 );
 afterEach(() => {
@@ -753,5 +754,168 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().all().length).toBe(2);
     // The create swatch row pops (selection box is gone), proving create still works.
     await screen.findByTestId("color-swatch-annotation-default");
+  });
+});
+
+describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
+  /** A .page-surface element (inside a .pdf-canvas) so the memo pointerdown's
+   *  closest(".page-surface") check passes. */
+  function canvasTarget(): HTMLElement {
+    const canvas = document.createElement("div");
+    canvas.className = "pdf-canvas";
+    const surf = document.createElement("div");
+    surf.className = "page-surface";
+    canvas.appendChild(surf);
+    document.body.appendChild(canvas);
+    stubNodes.push(canvas);
+    return surf;
+  }
+
+  /** A stored memo mark (kind=rect). */
+  function memoMark(id: string, body = "", color = "annotation-default"): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "memo",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.4 } },
+      style: { color, stroke_width: null },
+      body,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+  }
+
+  it("with memo armed, a click on a page places a type=memo/kind=rect mark with empty body, in the active color, and selects it", async () => {
+    const surf = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("annotation-pink");
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="memo" />);
+
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("memo");
+    expect(all[0].anchor.kind).toBe("rect");
+    expect(all[0].body).toBe("");
+    expect(all[0].group_id).toBeNull();
+    expect(all[0].style.color).toBe("annotation-pink");
+    if (all[0].anchor.kind === "rect") {
+      // top-left normalized: (60,160)/(600,800) = (0.1, 0.2)
+      expect(all[0].anchor.rect.x0).toBeCloseTo(0.1, 5);
+      expect(all[0].anchor.rect.y0).toBeCloseTo(0.2, 5);
+      // medium preset 220x88 → 0.3667 x 0.11 added.
+      expect(all[0].anchor.rect.x1).toBeCloseTo(0.1 + 220 / 600, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2 + 88 / 800, 5);
+    }
+    // Selected → the memo selection quick-box (color + size + delete).
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("color-swatch-annotation-pink").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByTestId("memo-size-trigger")).toBeTruthy();
+    expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
+  });
+
+  it("uses the active memo size for the placed box", () => {
+    const surf = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    const large = MEMO_SIZES.find((s) => s.key === "large")!;
+    useAnnotationStore.getState().setActiveMemoSize(large);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="memo" />);
+    fireEvent.pointerDown(surf, { button: 0, clientX: 0, clientY: 0 });
+    const a = useAnnotationStore.getState().all()[0];
+    if (a.anchor.kind === "rect") {
+      expect(a.anchor.rect.x1).toBeCloseTo(large.width / 600, 5);
+      expect(a.anchor.rect.y1).toBeCloseTo(large.height / 800, 5);
+    }
+  });
+
+  it("does NOT place a memo when memo is not armed (gesture is memo-gated)", () => {
+    const surf = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />);
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
+    expect(useAnnotationStore.getState().all().filter((a) => a.type === "memo")).toHaveLength(0);
+  });
+
+  it("does NOT place a memo on a chrome click (not over a page)", () => {
+    canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="memo" />);
+    fireEvent.pointerDown(document.body, { button: 0, clientX: 60, clientY: 160 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("clicking an EXISTING memo while memo is armed does NOT place a second box", () => {
+    // Build a page-surface that contains an .annotation-memo (the existing box).
+    const surf = canvasTarget();
+    const memoEl = document.createElement("textarea");
+    memoEl.className = "annotation-memo";
+    surf.appendChild(memoEl);
+    useAnnotationStore.getState().addAnnotation(memoMark("m1"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="memo" />);
+    fireEvent.pointerDown(memoEl, { button: 0, clientX: 60, clientY: 160 });
+    // Still just the one memo (no overlapping second box placed on top of it).
+    expect(useAnnotationStore.getState().all().filter((a) => a.type === "memo")).toHaveLength(1);
+  });
+
+  it("an empty memo is removed when it loses selection (Decision 5)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "")); // empty body
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    // Deselect (e.g. clicked elsewhere) → the empty placed-but-never-typed box vanishes.
+    act(() => useAnnotationStore.getState().clearSelection());
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+  });
+
+  it("a memo WITH text survives deselection", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "a note"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    act(() => useAnnotationStore.getState().clearSelection());
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
+  });
+
+  it("a selected memo's quick-box resizes it via the size picker + updates the default, dismisses the box", async () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("memo-size-trigger"));
+    const large = MEMO_SIZES.find((s) => s.key === "large")!;
+    fireEvent.click(screen.getByTestId("memo-size-large"));
+    // The rect regrew to the large preset (normalized against the 600x800 box).
+    const m = useAnnotationStore.getState().annotations.get("m1")!;
+    if (m.anchor.kind === "rect") {
+      expect(m.anchor.rect.x1).toBeCloseTo(m.anchor.rect.x0 + large.width / 600, 5);
+      expect(m.anchor.rect.y1).toBeCloseTo(m.anchor.rect.y0 + large.height / 800, 5);
+    }
+    expect(useAnnotationStore.getState().activeMemoSize).toBe(large);
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+  });
+
+  it("a selected memo's quick-box recolors it (the box accent)", async () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "n", "annotation-default"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
+    expect(useAnnotationStore.getState().annotations.get("m1")!.style.color).toBe("annotation-blue");
+  });
+
+  it("Del deletes the selected memo", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    fireEvent.keyDown(document, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
   });
 });

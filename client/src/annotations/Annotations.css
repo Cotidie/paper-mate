@@ -275,3 +275,150 @@
   outline: var(--focus-ring-width) solid var(--color-ink);
   outline-offset: var(--color-swatch-ring-offset);
 }
+
+/* annotation-memos group (Story 2.9): the on-page memo boxes. Unlike the
+   highlight/underline/pen sheets this group is NOT aria-hidden and NOT
+   pointer-transparent at the box level — each memo is an interactive <textarea>
+   the user types into. The group itself stays pointer-transparent so the page
+   text between memos remains selectable (NFR-1); each box opts back in. */
+.annotation-memos {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* A memo box = a free-floating <textarea> over the page card (DESIGN.md
+   #annotation-memo: surface-card bg, rounded.sm, hairline-strong border,
+   body-sm). Positioned + sized inline from the denormalized rect (so it rides
+   zoom, NFR-3) and never reflows the canvas (absolute overlay). The accent
+   (border) color is applied inline from style.color; this rule supplies the
+   chrome. The box is the selection hit surface (pointer-events:auto). */
+.annotation-memo {
+  position: absolute;
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--annotation-memo-padding);
+  background-color: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink);
+  font-family: inherit;
+  font-size: var(--type-body-sm-size);
+  resize: none;
+  overflow: hidden;
+  pointer-events: auto;
+  box-shadow: var(--shadow-card);
+}
+
+/* Hover outline (transient) + selected ring (persistent), matching the rect/pen
+   marks: hairline on hover, the stronger 2px ink focus weight when selected. */
+.annotation-memo--hovered {
+  outline: var(--hairline-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.annotation-memo--selected {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.annotation-memo:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+/* size-row (Story 2.9): the COLLAPSIBLE memo box-size picker. A compact trigger
+   (current size preview + caret) that expands a short vertical step list, so the
+   rail flyout / quick-box stays narrow (unlike a step ROW). */
+.size-row {
+  position: relative;
+  display: inline-flex;
+}
+
+.size-row__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  height: var(--color-swatch-size);
+  padding: 0 var(--space-xxs);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.size-row__trigger:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+}
+
+.size-row__caret {
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  display: block;
+}
+
+/* The expanded step list: floats below the trigger (above the marks, like the
+   quick-box). One composited popup; tokens only. */
+.size-row__menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--space-xxs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+  padding: var(--space-xxs);
+  background-color: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  z-index: 60;
+}
+
+.size-row__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xxs);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.size-row__step:hover {
+  background-color: var(--color-hairline-soft);
+}
+
+.size-row__step--armed {
+  outline: var(--color-swatch-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.size-row__step:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+}
+
+/* The mini memo-box preview: a small card whose WIDTH previews the size step
+   (5:3 aspect, so only the width is a token). Mirrors MEMO_SIZES order. */
+.size-row__preview {
+  display: block;
+  aspect-ratio: 5 / 3;
+  border: var(--color-swatch-border) solid var(--color-hairline-strong);
+  border-radius: var(--radius-xs);
+  background-color: var(--color-surface-card);
+}
+
+.size-row__preview--small {
+  width: var(--memo-size-preview-small);
+}
+
+.size-row__preview--medium {
+  width: var(--memo-size-preview-medium);
+}
+
+.size-row__preview--large {
+  width: var(--memo-size-preview-large);
+}
