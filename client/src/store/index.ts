@@ -134,8 +134,8 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
   hoveredId: null,
   activeColor: "annotation-default",
   setActiveColor: (color) => set({ activeColor: color }),
-  // Default pen width = the medium step (scale-1.0 px); matches --pen-stroke-medium.
-  activeStrokeWidth: 4,
+  // Default pen width = the medium step (scale-1.0 px); matches --pen-stroke-medium (8px).
+  activeStrokeWidth: 8,
   setActiveStrokeWidth: (width) => set({ activeStrokeWidth: width }),
   // Default memo size = the medium preset (scale-1.0 px); see MEMO_SIZES.
   activeMemoSize: DEFAULT_MEMO_SIZE,

@@ -1,13 +1,17 @@
-// AlphaRow — the pen transparency steps (Story 2.13), the alpha twin of
-// StrokeWidthRow. A row of fixed alpha levels as ink squares whose fill-opacity
-// previews the transparency; the currently-applied alpha shows the 2px ink
-// armed ring. Keyboard-reachable (it lives inside the rail flyout / quick-box
-// `role="menu"`).
+// AlphaRow — the pen Opacity picker (Story 2.13), the alpha twin of
+// StrokeWidthRow. COLLAPSIBLE like SizeRow: an ICON-ONLY trigger (an ink disc filled
+// at the current alpha, WRAPPED in a hairline ring so the fade reads as opacity —
+// toolrail-glyph sized, no caret, no text) that expands a small floating menu to the
+// RIGHT of fixed alpha levels as ink squares whose fill-opacity previews the
+// transparency; the applied alpha shows the 2px ink armed ring. Keyboard-reachable
+// (it lives inside the rail flyout / quick-box `role="menu"`); the meaning lives in
+// the aria-label / tooltip, not visible text (the rail stays icon-only).
 //
-// Alpha values mirror the --pen-alpha-* tokens (no raw numbers in the
-// component; the token layer owns them). Shared by the Pen rail flyout AND the
-// pen selection quick-box.
+// Alpha values mirror the --pen-alpha-* tokens (no raw numbers in the component;
+// the token layer owns them). Shared by the Pen rail flyout AND the pen selection
+// quick-box.
 
+import { useState } from "react";
 import "./Annotations.css";
 
 interface Step {
@@ -30,34 +34,58 @@ export default function AlphaRow({
   value,
   onPick,
 }: {
-  /** The alpha currently applied (its step shows armed). */
+  /** The alpha currently applied (its step shows armed; the trigger previews it). */
   value: number;
   /** Called with the chosen alpha when a step is picked. */
   onPick: (alpha: number) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const current = STEPS.find((s) => s.alpha === value) ?? STEPS[1];
   return (
     <div className="alpha-row" role="group" aria-label="Pen opacity">
-      {STEPS.map((s) => {
-        const armed = value === s.alpha;
-        return (
-          <button
-            key={s.alpha}
-            type="button"
-            role="menuitemradio"
-            className={armed ? "alpha-step alpha-step--armed" : "alpha-step"}
-            aria-label={s.label}
-            aria-checked={armed}
-            title={s.label}
-            data-testid={`alpha-${s.alpha}`}
-            onClick={() => onPick(s.alpha)}
-          >
-            {/* A square swatch whose fill-opacity previews the transparency.
-                The cell is a uniform footprint (like the color swatch) so the
-                steps align; opacity is the `--pen-alpha-<key>` token. */}
-            <span className={`alpha-step__swatch alpha-step__swatch--${s.key}`} />
-          </button>
-        );
-      })}
+      <button
+        type="button"
+        className="pen-picker__trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Pen opacity: ${current.label}`}
+        title={`Pen opacity (${current.label})`}
+        data-testid="alpha-trigger"
+        onClick={() => setOpen((o) => !o)}
+      >
+        {/* An ink disc filled at the current alpha, wrapped in a hairline ring, so
+            the collapsed control reads as opacity at a glance (icon-only). */}
+        <span className="pen-opacity-icon" aria-hidden>
+          <span className={`pen-opacity-icon__fill pen-opacity-icon__fill--${current.key}`} />
+        </span>
+      </button>
+
+      {open && (
+        <div className="pen-picker__menu" role="menu" aria-label="Pen opacity">
+          {STEPS.map((s) => {
+            const armed = value === s.alpha;
+            return (
+              <button
+                key={s.alpha}
+                type="button"
+                role="menuitemradio"
+                className={armed ? "alpha-step alpha-step--armed" : "alpha-step"}
+                aria-label={s.label}
+                aria-checked={armed}
+                title={s.label}
+                data-testid={`alpha-${s.alpha}`}
+                onClick={() => {
+                  onPick(s.alpha);
+                  setOpen(false);
+                }}
+              >
+                {/* A square swatch whose fill-opacity previews the transparency. */}
+                <span className={`alpha-step__swatch alpha-step__swatch--${s.key}`} />
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

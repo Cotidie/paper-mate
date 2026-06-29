@@ -66,7 +66,7 @@ beforeEach(() =>
     selectedId: null,
     hoveredId: null,
     activeColor: "annotation-default",
-    activeStrokeWidth: 4,
+    activeStrokeWidth: 8,
     activeMemoSize: DEFAULT_MEMO_SIZE,
   }),
 );
@@ -558,7 +558,7 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
     expect(all[0].anchor.kind).toBe("path");
     expect(all[0].group_id).toBeNull();
     expect(all[0].style.color).toBe("annotation-blue");
-    expect(all[0].style.stroke_width).toBe(4); // the default activeStrokeWidth
+    expect(all[0].style.stroke_width).toBe(8); // the default activeStrokeWidth (medium)
     if (all[0].anchor.kind === "path") {
       expect(all[0].anchor.points.length).toBe(3);
       // normalized: (60,80)/(600,800) = (0.1, 0.1)
@@ -568,18 +568,19 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
     // The mark is selected → the pen selection quick-box (color + width + delete).
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
     await screen.findByTestId("selection-quick-box");
-    expect(screen.getByTestId("stroke-width-4")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("stroke-width-trigger"));
+    expect(screen.getByTestId("stroke-width-8")).toBeTruthy();
   });
 
   it("uses the active stroke width for a new stroke", () => {
     const canvas = canvasTarget();
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveStrokeWidth(8);
+    useAnnotationStore.getState().setActiveStrokeWidth(16); // override the default (8) to prove it is read
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
     fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
     fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
     fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
-    expect(useAnnotationStore.getState().all()[0].style.stroke_width).toBe(8);
+    expect(useAnnotationStore.getState().all()[0].style.stroke_width).toBe(16);
   });
 
   it("a click with no drag (< 2 points) creates nothing", () => {
@@ -688,20 +689,25 @@ describe("AnnotationInteraction pen selection quick-box (Story 2.8 — AC2,6)", 
     setup(mark);
     await screen.findByTestId("selection-quick-box");
     expect(screen.getByTestId("color-swatch-annotation-green").getAttribute("aria-checked")).toBe("true");
-    // Stroke-width row is present and armed.
+    // Thickness picker present; expand it to see the armed step.
+    fireEvent.click(screen.getByTestId("stroke-width-trigger"));
     expect(screen.getByTestId("stroke-width-8").className).toContain("stroke-width-step--armed");
-    // Alpha row is present and armed to the mark's alpha.
+    // Opacity picker present; expand it to see the armed step (the mark's alpha).
+    fireEvent.click(screen.getByTestId("alpha-trigger"));
     expect(screen.getByTestId("alpha-0.6").className).toContain("alpha-step--armed");
     expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
   });
 
-  it("picking a stroke width restrokes the pen mark + updates the default, dismisses the box", async () => {
+  it("picking a stroke width restrokes the pen mark + updates the default, KEEPS the box open", async () => {
     setup(penMark("p1", "annotation-blue", 4));
     await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("stroke-width-trigger"));
     fireEvent.click(screen.getByTestId("stroke-width-8"));
     expect(useAnnotationStore.getState().annotations.get("p1")!.style.stroke_width).toBe(8);
     expect(useAnnotationStore.getState().activeStrokeWidth).toBe(8);
-    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    // The quick-box stays open (only the inner step menu collapses); the mark stays selected.
+    expect(screen.getByTestId("selection-quick-box")).toBeTruthy();
+    expect(screen.queryByTestId("stroke-width-8")).toBeNull();
     expect(useAnnotationStore.getState().selectedId).toBe("p1");
   });
 
@@ -712,13 +718,16 @@ describe("AnnotationInteraction pen selection quick-box (Story 2.8 — AC2,6)", 
     expect(useAnnotationStore.getState().annotations.get("p1")!.style.color).toBe("annotation-pink");
   });
 
-  it("picking an alpha re-alphas the pen mark + updates the default + dismisses the box (Story 2.13)", async () => {
+  it("picking an alpha re-alphas the pen mark + updates the default, KEEPS the box open (Story 2.13)", async () => {
     setup(penMark("p1", "annotation-blue", 4));
     await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("alpha-trigger"));
     fireEvent.click(screen.getByTestId("alpha-0.6"));
     expect(useAnnotationStore.getState().annotations.get("p1")!.style.alpha).toBe(0.6);
     expect(useAnnotationStore.getState().activeAlpha).toBe(0.6);
-    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    // The quick-box stays open (only the inner step menu collapses); the mark stays selected.
+    expect(screen.getByTestId("selection-quick-box")).toBeTruthy();
+    expect(screen.queryByTestId("alpha-0.6")).toBeNull();
     expect(useAnnotationStore.getState().selectedId).toBe("p1");
   });
 

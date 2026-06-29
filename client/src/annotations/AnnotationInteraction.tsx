@@ -830,24 +830,25 @@ export default function AnnotationInteraction({
 
   // Restroke the selected pen mark to a new width (Story 2.8 — the stroke-width
   // twin of recolorSelected). Also sets the default for the next stroke
-  // (last-choice-wins), and the pick dismisses the box (the mark stays selected).
+  // (last-choice-wins). Unlike recolor, this KEEPS the quick-box open (only the
+  // picker's own step menu collapses) so the user can keep tuning thickness/opacity
+  // without re-selecting the mark — mirrors the rail pen flyout.
   const restrokeSelected = useCallback(
     (width: number) => {
       restrokeAnnotation(selectedGroupIds(), width, new Date().toISOString());
       setActiveStrokeWidth(width);
-      setSelectionBoxOpen(false);
     },
     [restrokeAnnotation, selectedGroupIds, setActiveStrokeWidth],
   );
 
   // Re-alpha the selected pen mark to a new transparency (Story 2.13 — the alpha
   // twin of restrokeSelected). Also sets the default for the next stroke
-  // (last-choice-wins), and the pick dismisses the box (the mark stays selected).
+  // (last-choice-wins). Like restroke, KEEPS the quick-box open (only the picker's
+  // step menu collapses).
   const realphaSelected = useCallback(
     (alpha: number) => {
       realphaAnnotation(selectedGroupIds(), alpha, new Date().toISOString());
       setActiveAlpha(alpha);
-      setSelectionBoxOpen(false);
     },
     [realphaAnnotation, selectedGroupIds, setActiveAlpha],
   );
