@@ -8,9 +8,15 @@
 // (sticky tool).
 
 import type { PageSelection } from "../anchor";
+// `AnnotationTool` is defined ONCE in the zero-import `tools.ts` leaf (AD-11) and
+// re-exported here so existing `import { AnnotationTool } from "./annotations"`
+// sites keep working. Single writer of "which annotation tool is armed": App's
+// `activeTool`, mirrored down via the `armedTool` prop and the prop-sync effect
+// in AnnotationInteraction — the machine never self-arms (it only carries the
+// armed tool through its transient states).
+import type { AnnotationTool } from "../tools";
 
-/** A user-facing annotation tool that can be armed (mirrors `Annotation.type`). */
-export type AnnotationTool = "highlight" | "underline" | "pen" | "memo" | "comment";
+export type { AnnotationTool };
 
 /** Where the quick-box sits — the drag-release point in viewport (fixed) px. */
 export interface QuickBoxAt {
