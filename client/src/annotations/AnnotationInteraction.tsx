@@ -18,7 +18,7 @@
 // anchor/ + store/ only; render/ stays annotation-free (geometry via `getPages`).
 
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
-import { Trash } from "@phosphor-icons/react";
+import { Highlighter, TextUnderline, ChatCircle, TextT, Trash } from "@phosphor-icons/react";
 import {
   rectsFromSelection,
   denormalizeRect,
@@ -27,6 +27,7 @@ import {
   normalizeRect,
   pickPage,
   type PageCardRef,
+  type PageSelection,
 } from "../anchor";
 import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "../store";
 import { newId } from "../uuid";
@@ -175,6 +176,27 @@ export default function AnnotationInteraction({
   const pendingRef = useRef(false);
   pendingRef.current = pending !== null;
 
+  // Shared text-anchor create helper (Story 2.12, Decision 2): builds a
+  // text-anchor mark from a selection + tool type, adds it, clears the live
+  // selection, and selects the first created annotation. Called by BOTH the
+  // armed onPointerUp branch AND commitTool so there is one code path.
+  // Defined before the useEffect that references it in deps to avoid TDZ.
+  const createTextTool = useCallback(
+    (pages: PageSelection[], tool: "highlight" | "underline" | "comment") => {
+      const created = buildAnnotations(pages, docId, {
+        now: new Date().toISOString(),
+        newId,
+        type: tool,
+        color: activeColorRef.current,
+        ...(tool === "comment" ? { body: "" } : {}),
+      });
+      created.forEach(addAnnotation);
+      window.getSelection()?.removeAllRanges();
+      select(created[0].id);
+    },
+    [docId, addAnnotation, select],
+  );
+
   // Sync the armed tool from App into the machine, so `currentTool(state)` (and
   // thus `pending.tool`) reflects it and the machine rests back to armed (sticky)
   // after a mark. App owns the armed tool; the machine just carries it. When a
@@ -231,13 +253,9 @@ export default function AnnotationInteraction({
       );
       const tool = armedToolRef.current;
       if (pages.length === 0) {
-        // No text selection on release. For COMMENT this is the CLICK gesture
-        // (AD-5: `comment → rect`): drop a pin at the click point — the memo
-        // click-to-place twin, but in pointerup branched on `pages.length` (drag
-        // vs click) instead of a separate pointerdown. Only over a real page card,
-        // and never on the quick-box, an existing pin/bubble, or another mark
-        // (that click selects/opens it, not places a new pin). Other tools do
-        // nothing on an empty release.
+        // No text selection. For COMMENT (armed): drop a pin at the click point
+        // (AD-5: `comment → rect`). For cursor mode (tool=null): pop the
+        // Comment+Memo picker (Story 2.12). Other tools do nothing.
         if (tool === "comment") {
           const el = e.target as Element | null;
           // A real CLICK: the release must be within click slop of a pointerdown
@@ -275,36 +293,33 @@ export default function AnnotationInteraction({
           });
           addAnnotation(created);
           select(created.id);
+        } else if (tool === null) {
+          // Cursor mode click: pop the Comment+Memo picker when over a real page area.
+          const clickEl = e.target as Element | null;
+          if (
+            clickEl?.closest?.(".page-surface") &&
+            !clickEl.closest?.(".quick-box") &&
+            !clickEl.closest?.(
+              ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble",
+            )
+          ) {
+            restoreFocusRef.current = document.activeElement as HTMLElement | null;
+            dispatch({ type: "present", selection: [], at: { x: e.clientX, y: e.clientY } });
+          }
         }
         return;
       }
       if (tool === "highlight" || tool === "underline" || tool === "comment") {
-        // Create-on-release for any text-anchor tool: same path, the tool's `type`
-        // is the only difference (highlight paints a fill, underline a 2px line,
-        // comment paints the same ~0.4 fill + a pin — those branches live in
-        // AnnotationLayer, keyed off `type` per AD-5). The comment DRAG also carries
-        // a non-null `body` (`""`, the bubble edits it) — the ONLY delta from the
-        // highlight path. Color is the active color (Story 2.6). Then select the new
-        // mark (the selection quick-box for highlight/underline; the comment-bubble
-        // for comment) and clear the live text selection so it cannot re-pop.
-        const created = buildAnnotations(pages, docId, {
-          now: new Date().toISOString(),
-          newId,
-          type: tool,
-          color: activeColorRef.current,
-          ...(tool === "comment" ? { body: "" } : {}),
-        });
-        created.forEach(addAnnotation);
-        selection?.removeAllRanges();
-        select(created[0].id);
+        // Create-on-release for any text-anchor tool via the shared helper
+        // (Decision 2, Story 2.12): one code path for armed and picker paths.
+        createTextTool(pages, tool);
         return;
       }
       // Any OTHER armed tool (pen/memo — their own gesture paths above) must NOT
-      // fall through to the cursor-mode proof box: that would pop the highlight
-      // proof as if nothing were armed. Only cursor mode (tool === null) reaches it.
+      // fall through to the cursor-mode picker: that would pop it as if nothing
+      // were armed. Only cursor mode (tool === null) reaches it.
       if (tool !== null) return;
-      // Cursor mode (no tool): the 2.2 proof — a single action that creates the
-      // highlight on click (the cursor-mode tool picker is Story 2.12).
+      // Cursor mode with a text drag: pop the H/U/C picker.
       restoreFocusRef.current = document.activeElement as HTMLElement | null;
       dispatch({ type: "present", selection: pages, at: { x: e.clientX, y: e.clientY } });
     };
@@ -314,7 +329,7 @@ export default function AnnotationInteraction({
       document.removeEventListener("pointerdown", onPointerDownCandidate);
       document.removeEventListener("pointerup", onPointerUp);
     };
-  }, [enabled, docId, addAnnotation, select]);
+  }, [enabled, docId, addAnnotation, select, createTextTool]);
 
   // Pen freehand gesture (Story 2.8, Decision A): a pointer DRAG (not a text
   // selection) while pen is armed. pointerdown over a page starts a draft,
@@ -665,23 +680,67 @@ export default function AnnotationInteraction({
     // Re-run when the pending identity changes (open / dismiss / move).
   }, [pending]);
 
-  // Cursor-mode proof action (Story 2.2): create a default text-highlight from
-  // the pending selection, store it, then SELECT it so the unified selection
-  // quick-box takes over (same as the highlight-armed path). Two-page selections
-  // share a group_id (handled in buildAnnotations).
-  const commit = useCallback(() => {
-    if (!pending) return;
-    const created = buildAnnotations(pending.selection, docId, {
-      now: new Date().toISOString(),
-      newId,
-      type: "highlight",
-      color: activeColorRef.current,
-    });
-    created.forEach(addAnnotation);
-    window.getSelection()?.removeAllRanges();
-    dispatch({ type: "commit" });
-    select(created[0].id);
-  }, [pending, docId, addAnnotation, select]);
+  // Cursor-mode tool-type picker action (Story 2.12): creates the chosen mark
+  // and routes into the tool's existing affordance. Text drag (selection.length>0):
+  // H/U/C via createTextTool (Decision 2). Click (selection.length===0): Comment
+  // pin or Memo placed at pending.at (user fix: click-mode shows Comment+Memo).
+  // activeTool is unchanged (one-shot create, not a sticky arm — Decision 5).
+  const commitTool = useCallback(
+    (tool: "highlight" | "underline" | "comment" | "memo") => {
+      if (!pending) return;
+      if (pending.selection.length > 0) {
+        // Text drag: H/U/C only.
+        if (tool !== "highlight" && tool !== "underline" && tool !== "comment") return;
+        createTextTool(pending.selection, tool);
+        dispatch({ type: "commit" });
+      } else {
+        // Click on empty page: place Comment pin or Memo at the click point.
+        const { x, y } = pending.at;
+        const pgs = getPagesRef.current();
+        const cardBoxes = pgs.map((p) => p.cardEl.getBoundingClientRect());
+        const idx = pickPage(
+          { left: x, top: y, right: x, bottom: y },
+          cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
+        );
+        if (idx < 0) return;
+        const page = pgs[idx];
+        const cardRect = cardBoxes[idx];
+        const scale = scaleRef.current;
+        const x0 = x - cardRect.left;
+        const y0 = y - cardRect.top;
+        const now = new Date().toISOString();
+        if (tool === "comment") {
+          const rect = normalizeRect({ x0, y0, x1: x0, y1: y0 }, page.box, scale);
+          const created = buildCommentPin({ page_index: page.pageIndex, rect }, docId, {
+            now,
+            newId,
+            color: activeColorRef.current,
+          });
+          addAnnotation(created);
+          window.getSelection()?.removeAllRanges();
+          dispatch({ type: "commit" });
+          select(created.id);
+        } else if (tool === "memo") {
+          const size = activeMemoSizeRef.current;
+          const rect = normalizeRect(
+            { x0, y0, x1: x0 + size.width * scale, y1: y0 + size.height * scale },
+            page.box,
+            scale,
+          );
+          const created = buildMemoAnnotation({ page_index: page.pageIndex, rect }, docId, {
+            now,
+            newId,
+            color: activeColorRef.current,
+          });
+          addAnnotation(created);
+          window.getSelection()?.removeAllRanges();
+          dispatch({ type: "commit" });
+          select(created.id);
+        }
+      }
+    },
+    [pending, docId, addAnnotation, select, createTextTool],
+  );
 
   // ── Selection (Story 2.5, AD-12) ─────────────────────────────────────────
   // Separate from the create machine (Decision B): the selection quick-box is
@@ -966,28 +1025,81 @@ export default function AnnotationInteraction({
         />
       )}
       {pending && (
-        // Cursor-mode proof box only: a single action that creates the highlight
-        // on click (then selects it). The highlight-armed path never opens this —
-        // it lands + selects straight into the selection quick-box below.
+        // Cursor-mode tool-type picker (Story 2.12). Drag-select → H/U/C (icon
+        // only). Click on empty page → Comment+Memo (icon only). Machine, shell,
+        // position/clamp, focus-in/return, and dismiss plumbing unchanged.
         <div
           ref={quickBoxRef}
           className="quick-box"
           role="menu"
-          aria-label="Annotation actions"
+          aria-label="Annotation tools"
           data-testid="quick-box"
-          // Initial position at the release point; the layout effect nudges it
-          // on-screen once measured. position:fixed keeps it off the canvas flow.
           style={{ left: pending.at.x, top: pending.at.y }}
         >
-          <button
-            type="button"
-            role="menuitem"
-            className="quick-box__action"
-            data-testid="quick-box-highlight"
-            onClick={commit}
-          >
-            Highlight
-          </button>
+          {pending.selection.length > 0 ? (
+            // Text drag: Highlight / Underline / Comment
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="quick-box__action"
+                data-testid="quick-box-highlight"
+                aria-label="Highlight"
+                title="Highlight"
+                onClick={() => commitTool("highlight")}
+              >
+                <Highlighter aria-hidden />
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="quick-box__action"
+                data-testid="quick-box-underline"
+                aria-label="Underline"
+                title="Underline"
+                onClick={() => commitTool("underline")}
+              >
+                <TextUnderline aria-hidden />
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="quick-box__action"
+                data-testid="quick-box-comment"
+                aria-label="Comment"
+                title="Comment"
+                onClick={() => commitTool("comment")}
+              >
+                <ChatCircle aria-hidden />
+              </button>
+            </>
+          ) : (
+            // Click on empty page area: Comment pin + Memo
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="quick-box__action"
+                data-testid="quick-box-comment"
+                aria-label="Comment"
+                title="Comment"
+                onClick={() => commitTool("comment")}
+              >
+                <ChatCircle aria-hidden />
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="quick-box__action"
+                data-testid="quick-box-memo"
+                aria-label="Memo"
+                title="Memo"
+                onClick={() => commitTool("memo")}
+              >
+                <TextT aria-hidden />
+              </button>
+            </>
+          )}
         </div>
       )}
 
