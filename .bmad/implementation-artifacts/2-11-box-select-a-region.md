@@ -4,7 +4,7 @@ baseline_commit: f4fee51
 
 # Story 2.11: Box-select a region
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
