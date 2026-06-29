@@ -185,6 +185,31 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     expect(screen.queryByTestId("quick-box-highlight")).toBeNull();
   });
 
+  it("Story 2.6: a drag-release lands the mark in the ACTIVE color (create reads activeColor, not a hardcode)", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction
+        docId="doc-1"
+        getPages={() => pages}
+        scale={1}
+        enabled
+        rectReader={reader}
+        armedTool="highlight"
+        activeColor="annotation-blue"
+      />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    // The new mark used the chosen active color, not the default yellow.
+    expect(all[0].style.color).toBe("annotation-blue");
+    // The selection box opens armed to that same color.
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("color-swatch-annotation-blue").getAttribute("aria-checked")).toBe("true");
+  });
+
   it("picking a swatch recolors the just-landed highlight and dismisses the box (selection stays)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];

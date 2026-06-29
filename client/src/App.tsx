@@ -36,6 +36,12 @@ export default function App() {
   // of this (below), never stored siblings. Lives in App state (not the store,
   // which is the annotation working copy, AD-9). Sticky until V/Esc/another tool.
   const [activeTool, setActiveTool] = useState<ActiveTool>("cursor");
+  // The active annotation color (Story 2.6): the DEFAULT color new marks land in,
+  // chosen via the Highlight tool's color sub-toolbox. Sibling of `activeTool` —
+  // App owns it and threads it to the rail (sub-toolbox reads/sets it) and down
+  // to the overlay (the create path reads it instead of a hardcoded default). A
+  // bare token name (DESIGN.md `{colors.annotation-*}`); persists for the session.
+  const [activeColor, setActiveColor] = useState<string>("annotation-default");
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
@@ -186,6 +192,7 @@ export default function App() {
           // `activeTool` (AD-11) — no stored siblings to keep in sync.
           panArmed={activeTool === "hand"}
           armedTool={isAnnotationTool(activeTool) ? activeTool : null}
+          activeColor={activeColor}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
           onOutline={setToc}
@@ -195,6 +202,10 @@ export default function App() {
           // One setter; the rail commits a tool in a single click. Mutual
           // exclusion is intrinsic to `activeTool`, so no cross-setting closures.
           onSelectTool={setActiveTool}
+          // Story 2.6: the Highlight tool's color sub-toolbox reads `activeColor`
+          // and sets it via `onPickColor` (the default for new marks).
+          activeColor={activeColor}
+          onPickColor={setActiveColor}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
         />

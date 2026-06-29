@@ -1,19 +1,45 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import ToolRail from "./ToolRail";
+import type { ActiveTool } from "./tools";
 
 afterEach(cleanup);
 
+// Render helper: supplies all required props (incl. the Story 2.6 color props)
+// with overridable defaults, and hands back the spies for assertions.
+function renderRail(
+  over: Partial<{
+    activeTool: ActiveTool;
+    activeColor: string;
+    collapsed: boolean;
+  }> = {},
+) {
+  const onSelectTool = vi.fn();
+  const onPickColor = vi.fn();
+  const onToggleCollapse = vi.fn();
+  const utils = render(
+    <ToolRail
+      activeTool={over.activeTool ?? "cursor"}
+      onSelectTool={onSelectTool}
+      activeColor={over.activeColor ?? "annotation-default"}
+      onPickColor={onPickColor}
+      collapsed={over.collapsed ?? false}
+      onToggleCollapse={onToggleCollapse}
+    />,
+  );
+  return { ...utils, onSelectTool, onPickColor, onToggleCollapse };
+}
+
 describe("ToolRail", () => {
   it("renders the rail shell (data-testid kept stable for App.test)", () => {
-    render(<ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+    renderRail();
     expect(screen.getByTestId("tool-rail")).toBeTruthy();
     // Flyout is closed until the cursor button is clicked.
     expect(screen.queryByTestId("tool-flyout")).toBeNull();
   });
 
   it("opens the flyout with cursor / hand / box on the cursor button when a pointer tool is active", () => {
-    render(<ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+    renderRail({ activeTool: "cursor" });
     const btn = screen.getByTestId("tool-cursor-button");
     expect(btn.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(btn);
@@ -25,8 +51,7 @@ describe("ToolRail", () => {
   });
 
   it("calls onSelectTool('hand') and closes the flyout when hand is picked", () => {
-    const onSelectTool = vi.fn();
-    render(<ToolRail activeTool="cursor" onSelectTool={onSelectTool} collapsed={false} onToggleCollapse={vi.fn()} />);
+    const { onSelectTool } = renderRail({ activeTool: "cursor" });
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
     fireEvent.click(screen.getByTestId("tool-option-hand"));
     expect(onSelectTool).toHaveBeenCalledWith("hand");
@@ -34,7 +59,7 @@ describe("ToolRail", () => {
   });
 
   it("reflects the active pointer tool (aria-pressed on the option, armed class on the button)", () => {
-    render(<ToolRail activeTool="hand" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+    renderRail({ activeTool: "hand" });
     // The rail button shows the armed state for a non-default pointer tool.
     expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
@@ -43,26 +68,19 @@ describe("ToolRail", () => {
   });
 
   it("shows the pointer button active in plain cursor mode (#3)", () => {
-    render(
-      <ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
-    );
+    renderRail({ activeTool: "cursor" });
     // The selection tool IS the active tool in cursor mode — it must read active.
     expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
   });
 
   it("pointer button is NOT active when an annotation tool is active (mutual exclusion)", () => {
-    render(
-      <ToolRail activeTool="highlight" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
-    );
+    renderRail({ activeTool: "highlight" });
     expect(screen.getByTestId("tool-cursor-button").className).not.toContain("tool-button--armed");
     expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
   });
 
   it("single-click switch (AC4): with Highlight active, one click on the pointer button commits to cursor and opens no flyout", () => {
-    const onSelectTool = vi.fn();
-    render(
-      <ToolRail activeTool="highlight" onSelectTool={onSelectTool} collapsed={false} onToggleCollapse={vi.fn()} />,
-    );
+    const { onSelectTool } = renderRail({ activeTool: "highlight" });
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
     // One click commits the switch...
     expect(onSelectTool).toHaveBeenCalledWith("cursor");
@@ -73,19 +91,24 @@ describe("ToolRail", () => {
   it("closes an open pointer flyout when the active tool switches to an annotation tool (AC4, review MED)", () => {
     // Open the flyout in cursor mode, then re-render as if `H`/Highlight switched
     // activeTool to highlight: the stale pointer sub-toolbox must not remain.
-    const { rerender } = render(
-      <ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
-    );
+    const { rerender } = renderRail({ activeTool: "cursor" });
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
     expect(screen.getByTestId("tool-flyout")).toBeTruthy();
     rerender(
-      <ToolRail activeTool="highlight" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
+      <ToolRail
+        activeTool="highlight"
+        onSelectTool={vi.fn()}
+        activeColor="annotation-default"
+        onPickColor={vi.fn()}
+        collapsed={false}
+        onToggleCollapse={vi.fn()}
+      />,
     );
     expect(screen.queryByTestId("tool-flyout")).toBeNull();
   });
 
   it("gives every tool a hover tooltip (native title) describing it + its shortcut", () => {
-    render(<ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />);
+    renderRail({ activeTool: "cursor" });
     // Rail button + collapse have tooltips.
     expect(screen.getByTestId("tool-cursor-button").getAttribute("title")).toBeTruthy();
     expect(screen.getByTestId("tool-rail-collapse").getAttribute("title")).toBeTruthy();
@@ -99,10 +122,7 @@ describe("ToolRail", () => {
   });
 
   it("arms highlight from the Highlight button (Story 2.3)", () => {
-    const onSelectTool = vi.fn();
-    render(
-      <ToolRail activeTool="cursor" onSelectTool={onSelectTool} collapsed={false} onToggleCollapse={vi.fn()} />,
-    );
+    const { onSelectTool } = renderRail({ activeTool: "cursor" });
     const btn = screen.getByTestId("tool-highlight-button");
     expect(btn.className).not.toContain("tool-button--armed");
     expect(btn.getAttribute("title")).toBe("Highlight (H)");
@@ -110,41 +130,98 @@ describe("ToolRail", () => {
     expect(onSelectTool).toHaveBeenCalledWith("highlight");
   });
 
-  it("re-clicking the active Highlight tool keeps it armed (idempotent, does NOT cancel)", () => {
-    const onSelectTool = vi.fn();
-    render(
-      <ToolRail activeTool="highlight" onSelectTool={onSelectTool} collapsed={false} onToggleCollapse={vi.fn()} />,
-    );
+  // ── Story 2.6: arm = one-click switch, opens NO sub-toolbox (AC3) ──────────
+  it("arming highlight from another tool switches in one click and opens NO color flyout (AC3)", () => {
+    const { onSelectTool } = renderRail({ activeTool: "cursor" });
     fireEvent.click(screen.getByTestId("tool-highlight-button"));
-    // Re-click stays on highlight (no toggle-off to cursor); to leave, pick
-    // another tool or press V/Esc.
     expect(onSelectTool).toHaveBeenCalledWith("highlight");
-    expect(onSelectTool).not.toHaveBeenCalledWith("cursor");
+    // The arming switch must not open the color sub-toolbox (pointer symmetry).
+    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+  });
+
+  it("re-clicking the ALREADY-active Highlight tool toggles its color sub-toolbox, never disarms (Story 2.6)", () => {
+    const { onSelectTool } = renderRail({ activeTool: "highlight" });
+    const btn = screen.getByTestId("tool-highlight-button");
+    expect(btn.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(btn);
+    // Opens the color flyout; does NOT call onSelectTool (stays armed, idempotent).
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
+    expect(btn.getAttribute("aria-expanded")).toBe("true");
+    expect(onSelectTool).not.toHaveBeenCalled();
+    // A second click closes it again.
+    fireEvent.click(btn);
+    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+  });
+
+  // ── Story 2.6: the color sub-toolbox itself ────────────────────────────────
+  it("the highlight color sub-toolbox shows the 5-color swatch row with activeColor armed", () => {
+    renderRail({ activeTool: "highlight", activeColor: "annotation-green" });
+    fireEvent.click(screen.getByTestId("tool-highlight-button"));
+    const flyout = screen.getByTestId("highlight-color-flyout");
+    expect(flyout).toBeTruthy();
+    // 5 swatches (Orange removed); the active color is armed.
+    expect(screen.getByTestId("color-swatch-annotation-green").className).toContain(
+      "color-swatch--armed",
+    );
+    expect(screen.queryByTestId("color-swatch-annotation-orange")).toBeNull();
+  });
+
+  it("picking a swatch sets the active color (onPickColor) and closes the flyout (Story 2.6 AC4)", () => {
+    const { onPickColor } = renderRail({ activeTool: "highlight", activeColor: "annotation-default" });
+    fireEvent.click(screen.getByTestId("tool-highlight-button"));
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
+    expect(onPickColor).toHaveBeenCalledWith("annotation-blue");
+    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+  });
+
+  it("Escape closes the open color sub-toolbox (Story 2.6)", () => {
+    renderRail({ activeTool: "highlight" });
+    fireEvent.click(screen.getByTestId("tool-highlight-button"));
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+  });
+
+  it("an outside pointer-down closes the open color sub-toolbox (Story 2.6)", () => {
+    renderRail({ activeTool: "highlight" });
+    fireEvent.click(screen.getByTestId("tool-highlight-button"));
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+  });
+
+  it("the color sub-toolbox closes when the active tool switches away from highlight (AC3 inverse path)", () => {
+    const { rerender } = renderRail({ activeTool: "highlight" });
+    fireEvent.click(screen.getByTestId("tool-highlight-button"));
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
+    rerender(
+      <ToolRail
+        activeTool="cursor"
+        onSelectTool={vi.fn()}
+        activeColor="annotation-default"
+        onPickColor={vi.fn()}
+        collapsed={false}
+        onToggleCollapse={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
   });
 
   it("shows the Highlight button armed when activeTool is highlight (Story 2.3)", () => {
-    render(
-      <ToolRail activeTool="highlight" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={vi.fn()} />,
-    );
+    renderRail({ activeTool: "highlight" });
     const btn = screen.getByTestId("tool-highlight-button");
     expect(btn.className).toContain("tool-button--armed");
     expect(btn.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("calls onToggleCollapse from the collapse affordance", () => {
-    const onToggleCollapse = vi.fn();
-    render(
-      <ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={false} onToggleCollapse={onToggleCollapse} />,
-    );
+    const { onToggleCollapse } = renderRail({ activeTool: "cursor" });
     fireEvent.click(screen.getByTestId("tool-rail-collapse"));
     expect(onToggleCollapse).toHaveBeenCalledTimes(1);
   });
 
   it("when collapsed, renders the minimal rail with an expand affordance", () => {
-    const onToggleCollapse = vi.fn();
-    render(
-      <ToolRail activeTool="cursor" onSelectTool={vi.fn()} collapsed={true} onToggleCollapse={onToggleCollapse} />,
-    );
+    const { onToggleCollapse } = renderRail({ activeTool: "cursor", collapsed: true });
     expect(screen.getByTestId("tool-rail")).toBeTruthy();
     // No cursor button / flyout while collapsed.
     expect(screen.queryByTestId("tool-cursor-button")).toBeNull();

@@ -163,6 +163,13 @@
   margin-top: var(--tool-rail-gap);
 }
 
+/* A rail row that owns a flyout (Story 2.6 Highlight + its color sub-toolbox):
+   relative so the absolute flyout positions against THIS button, not the rail. */
+.tool-rail__item {
+  position: relative;
+  display: flex;
+}
+
 /* tool-button: 36px square, transparent, body-ink glyph, md radius (DESIGN.md). */
 .tool-button {
   width: var(--tool-button-size);

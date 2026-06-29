@@ -3,7 +3,7 @@ version: alpha
 status: final
 updated: 2026-06-28
 name: Paper-Mate-design
-description: A web PDF reading companion for academic papers. The aesthetic is immersive, non-distracting reading in the Obsidian dialect — the paper is the page, and all UI (toolbar rail, annotation bank, contextual quick-boxes) recedes behind it as floating, hairline-bounded surfaces that never reflow the PDF canvas. Pure-white canvas, near-black ink (`#171717`), pure black (`#000000`) reserved for the rare primary action, a small blue accent (`#0d74ce`) for inline links. Inter for all UI text (display 600, body 400), JetBrains Mono for code/monospace surfaces. A soft annotation accent palette (yellow/green/pink/blue/purple/orange) carries highlights, underlines, and pen strokes. Restraint over surfaces: prefer hairlines and soft single-tier shadow; no atmospheric decoration.
+description: A web PDF reading companion for academic papers. The aesthetic is immersive, non-distracting reading in the Obsidian dialect — the paper is the page, and all UI (toolbar rail, annotation bank, contextual quick-boxes) recedes behind it as floating, hairline-bounded surfaces that never reflow the PDF canvas. Pure-white canvas, near-black ink (`#171717`), pure black (`#000000`) reserved for the rare primary action, a small blue accent (`#0d74ce`) for inline links. Inter for all UI text (display 600, body 400), JetBrains Mono for code/monospace surfaces. A soft annotation accent palette (yellow/green/pink/blue/purple) carries highlights, underlines, and pen strokes. Restraint over surfaces: prefer hairlines and soft single-tier shadow; no atmospheric decoration.
 
 colors:
   primary: "#000000"
@@ -38,7 +38,6 @@ colors:
   annotation-pink: "#ffc7de"
   annotation-blue: "#bcdcff"
   annotation-purple: "#e0c8ff"
-  annotation-orange: "#ffd6a8"
   annotation-default: "#ffe478"
 
 typography:
@@ -310,7 +309,7 @@ components:
 
 Paper Mate is a web PDF reading companion for academic papers. The governing principle is **immersive, non-distracting reading**: the paper is the page; every piece of UI recedes behind it. The base canvas is a soft neutral backdrop (`{colors.reader-backdrop}`) that frames white page surfaces; near-black ink `{colors.ink}` (#171717) carries all UI text. The single primary voltage stays **pure black** (`{colors.primary}`), used scarcely. A small blue text-link accent (`{colors.text-link}`) is for inline links only.
 
-UI runs **Inter** as the single sans family (display 600, body/UI 400-500). **JetBrains Mono** carries code/monospace surfaces (per CLAUDE.md, code surfaces use the mono family). A soft **annotation accent palette** (yellow / green / pink / blue / purple / orange) is the only saturated color in the product — and it lives *on the paper*, as highlights, underlines, pen strokes, and comment pins, never on chrome.
+UI runs **Inter** as the single sans family (display 600, body/UI 400-500). **JetBrains Mono** carries code/monospace surfaces (per CLAUDE.md, code surfaces use the mono family). A soft **annotation accent palette** (yellow / green / pink / blue / purple) is the only saturated color in the product — and it lives *on the paper*, as highlights, underlines, pen strokes, and comment pins, never on chrome.
 
 **Key Characteristics:**
 - Reader chrome is Obsidian-quiet: floating, hairline-bounded surfaces over the paper, single soft shadow tier.
@@ -334,7 +333,6 @@ The only saturated color in the product, and only on the paper. Applied to highl
 - **Pink** (`{colors.annotation-pink}` — #ffc7de).
 - **Blue** (`{colors.annotation-blue}` — #bcdcff).
 - **Purple** (`{colors.annotation-purple}` — #e0c8ff).
-- **Orange** (`{colors.annotation-orange}` — #ffd6a8).
 - **Default** (`{colors.annotation-default}`): aliases yellow; the first-armed color.
 
 ### Surface

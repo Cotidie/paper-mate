@@ -1,5 +1,5 @@
 // ColorSwatchRow — the highlight/underline quick-box recolor row (UX-DR5/DR6,
-// DESIGN.md#color-swatch). A row of the 6 annotation accent colors as 20px
+// DESIGN.md#color-swatch). A row of the 5 annotation accent colors as 20px
 // pills; the currently-applied color shows the 2px ink armed ring. Keyboard-
 // reachable (it lives inside the quick-box `role="menu"`). Stories 2.4/2.5 reuse
 // this same row for underline/pen.
@@ -24,7 +24,6 @@ const PALETTE: Swatch[] = [
   { token: "annotation-pink", label: "Pink" },
   { token: "annotation-blue", label: "Blue" },
   { token: "annotation-purple", label: "Purple" },
-  { token: "annotation-orange", label: "Orange" },
 ];
 
 export default function ColorSwatchRow({
