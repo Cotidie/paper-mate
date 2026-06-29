@@ -651,6 +651,25 @@ So that I switch tool mid-annotation without going to the left rail.
 **Given** the picker
 **Then** it dismisses on pick, outside-click, or `Esc`, and never shifts the canvas (UX-DR5)
 
+### Story 2.13: Pen stroke alpha (transparency)
+
+> Added 2026-06-29 via correct-course (user feature request). Pen (Story 2.8) draws a full-opacity vector stroke; the user wants pen marks to be semi-transparent like the highlighter by default, with an adjustable alpha. Appended as 2.13 (after the tool stories) so it does not renumber 2.9–2.12; it is a pen-style refinement that can land any time after pen.
+
+As a reader,
+I want to adjust a pen stroke's transparency,
+So that my freehand marks sit over the text like a highlighter instead of hiding it.
+
+**Acceptance Criteria:**
+
+**Given** the pen tool armed
+**Then** a new stroke lands at the DEFAULT alpha (= the highlighter opacity, `{component.annotation-highlight}` ~0.4), stored per-mark as `style.alpha` (AR-5; additive, backward-compatible contract field — pre-2.13 marks with no alpha fall back to the default) (FR-9)
+
+**Given** the pen sub-toolbox (arm-time) AND a selected pen mark's quick-box
+**Then** an alpha control adjusts the transparency (step set or slider); the live preview, the new stroke, and a recolor/restyle all reflect the chosen alpha; the choice is the sticky session default (last-choice-wins, like color/width) (UX-DR5/DR7)
+
+**Given** zoom
+**Then** the alpha-rendered stroke stays anchored and correctly scaled, alpha unchanged (NFR-3)
+
 ## Epic 3: Edit, persist & review
 
 Make the annotated record durable and curatable: select, move, resize, restyle, re-edit, undo/redo, and delete — all through one command stack — plus autosave to disk with exact restore on reopen, and the Annotation Bank (list + click-to-jump).

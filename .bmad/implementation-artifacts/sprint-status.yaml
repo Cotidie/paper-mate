@@ -91,6 +91,9 @@ development_status:
   2-10-comment-highlight-pin-bubble: backlog
   2-11-box-select-a-region: backlog
   2-12-drag-to-change-tool-quick-box: backlog
+  # 2026-06-29 correct-course (user feature request): pen stroke alpha. Appended as
+  # 2-13 (after the tool stories) so 2-9..2-12 are not renumbered.
+  2-13-pen-alpha: backlog
   epic-2-retrospective: optional
 
   # Epic 3: Edit, persist & review
