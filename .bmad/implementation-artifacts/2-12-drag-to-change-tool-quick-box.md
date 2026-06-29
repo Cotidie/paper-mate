@@ -4,7 +4,7 @@ baseline_commit: 9ca4317
 
 # Story 2.12: Drag-to-change-tool quick-box
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -91,6 +91,10 @@ so that I switch tool mid-annotation without going to the left rail.
   - [x] No `/api` change → `docs/API.md` untouched.
   - [x] `client/src/annotations/README.md`: Story 2.12 picker section added.
   - [x] `server/pyproject.toml` version `0.1.9 → 0.1.10`.
+
+### Review Findings
+
+- [x] [Review][Patch] Update Story 2.12 README to match approved picker deviations [client/src/annotations/README.md:269] (fixed: README rewritten to H/U/C text-drag + Comment/Memo empty-area double-click).
 
 ## Dev Notes
 
