@@ -9,7 +9,10 @@ export { default as AnnotationInteraction } from "./AnnotationInteraction";
 // The shared color-swatch row (DESIGN.md#color-swatch). Reused by the overlay's
 // selection quick-box AND, from Story 2.6, the rail's Highlight color sub-toolbox.
 export { default as ColorSwatchRow } from "./ColorSwatchRow";
-export { buildAnnotations } from "./create";
+// The pen stroke-width steps (Story 2.8), the width twin of ColorSwatchRow.
+// Reused by the rail's Pen sub-toolbox AND the pen selection quick-box.
+export { default as StrokeWidthRow } from "./StrokeWidthRow";
+export { buildAnnotations, buildPenAnnotation } from "./create";
 export { clampToViewport } from "./position";
 export {
   overlayReducer,

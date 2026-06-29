@@ -44,6 +44,11 @@ export default function App() {
   // the store directly. It remembers the last color chosen for the session.
   const activeColor = useAnnotationStore((s) => s.activeColor);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
+  // Story 2.8: the active pen stroke width is store-backed for the same reason as
+  // activeColor (the rail's stroke-width row + the pen quick-box's restroke both
+  // write it, the create path reads it). App passes it + its setter to the rail.
+  const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
+  const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
@@ -107,6 +112,10 @@ export default function App() {
         e.preventDefault();
         // Arm underline (UX-DR15). Same single-field switch as highlight.
         setActiveTool("underline");
+      } else if (e.key === "d" || e.key === "D") {
+        e.preventDefault();
+        // Arm pen (UX-DR15: D = pen). Same single-field switch.
+        setActiveTool("pen");
       } else if (e.key === "[") {
         e.preventDefault();
         setRailCollapsed((c) => !c);
@@ -211,6 +220,10 @@ export default function App() {
           // and sets it via `onPickColor` (the default for new marks).
           activeColor={activeColor}
           onPickColor={setActiveColor}
+          // Story 2.8: the Pen tool's sub-toolbox reads activeStrokeWidth and
+          // sets it via onPickStrokeWidth (the default new strokes land in).
+          activeStrokeWidth={activeStrokeWidth}
+          onPickStrokeWidth={setActiveStrokeWidth}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
         />

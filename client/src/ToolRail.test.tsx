@@ -5,7 +5,12 @@ import type { ActiveTool } from "./tools";
 
 afterEach(cleanup);
 
-type RailProps = { activeTool: ActiveTool; activeColor: string; collapsed: boolean };
+type RailProps = {
+  activeTool: ActiveTool;
+  activeColor: string;
+  activeStrokeWidth: number;
+  collapsed: boolean;
+};
 
 // Render helper: supplies all required props with overridable defaults, keeps the
 // spies STABLE across rerenders, and exposes `update(over)` to change props (e.g.
@@ -13,14 +18,23 @@ type RailProps = { activeTool: ActiveTool; activeColor: string; collapsed: boole
 function renderRail(over: Partial<RailProps> = {}) {
   const onSelectTool = vi.fn();
   const onPickColor = vi.fn();
+  const onPickStrokeWidth = vi.fn();
   const onToggleCollapse = vi.fn();
-  let props: RailProps = { activeTool: "cursor", activeColor: "annotation-default", collapsed: false, ...over };
+  let props: RailProps = {
+    activeTool: "cursor",
+    activeColor: "annotation-default",
+    activeStrokeWidth: 4,
+    collapsed: false,
+    ...over,
+  };
   const el = (p: RailProps) => (
     <ToolRail
       activeTool={p.activeTool}
       onSelectTool={onSelectTool}
       activeColor={p.activeColor}
       onPickColor={onPickColor}
+      activeStrokeWidth={p.activeStrokeWidth}
+      onPickStrokeWidth={onPickStrokeWidth}
       collapsed={p.collapsed}
       onToggleCollapse={onToggleCollapse}
     />
@@ -30,7 +44,15 @@ function renderRail(over: Partial<RailProps> = {}) {
     props = { ...props, ...next };
     utils.rerender(el(props));
   };
-  return { ...utils, onSelectTool, onPickColor, onToggleCollapse, update };
+  return { ...utils, onSelectTool, onPickColor, onPickStrokeWidth, onToggleCollapse, update };
+}
+
+// Arm Pen (Story 2.8): start on cursor, switch to pen so the open-on-tool-change
+// effect pops its color + stroke-width sub-toolbox.
+function armPen(over: Partial<RailProps> = {}) {
+  const r = renderRail({ activeTool: "cursor", ...over });
+  r.update({ activeTool: "pen" });
+  return r;
 }
 
 // Arm Highlight the way the app does — start on cursor, then SWITCH to highlight —
@@ -149,6 +171,8 @@ describe("ToolRail", () => {
         onSelectTool={vi.fn()}
         activeColor="annotation-default"
         onPickColor={vi.fn()}
+        activeStrokeWidth={4}
+        onPickStrokeWidth={vi.fn()}
         collapsed={false}
         onToggleCollapse={vi.fn()}
       />,
@@ -287,6 +311,68 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("underline-color-flyout")).toBeTruthy();
     r.update({ activeTool: "highlight" });
     expect(screen.queryByTestId("underline-color-flyout")).toBeNull();
+  });
+
+  // ── Story 2.8: the Pen tool (color + stroke-width sub-toolbox) ─────────────
+  it("arms pen in ONE click from another tool; switching to it opens its sub-toolbox", () => {
+    const r = renderRail({ activeTool: "cursor" });
+    const btn = screen.getByTestId("tool-pen-button");
+    expect(btn.getAttribute("title")).toBe("Pen (D)");
+    expect(btn.className).not.toContain("tool-button--armed");
+    expect(screen.queryByTestId("pen-flyout")).toBeNull();
+    fireEvent.click(btn);
+    expect(r.onSelectTool).toHaveBeenCalledWith("pen");
+    r.update({ activeTool: "pen" });
+    expect(btn.className).toContain("tool-button--armed");
+    expect(screen.getByTestId("pen-flyout")).toBeTruthy();
+    expect(btn.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("the pen sub-toolbox shows BOTH the color swatch row and the stroke-width row", () => {
+    armPen({ activeColor: "annotation-green", activeStrokeWidth: 8 });
+    const flyout = screen.getByTestId("pen-flyout");
+    expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
+    expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
+    // Three width steps; the active width is armed.
+    expect(flyout.querySelectorAll(".stroke-width-step")).toHaveLength(3);
+    expect(screen.getByTestId("stroke-width-8").className).toContain("stroke-width-step--armed");
+  });
+
+  it("picking a stroke width calls onPickStrokeWidth and closes the flyout", () => {
+    const { onPickStrokeWidth } = armPen({ activeStrokeWidth: 4 });
+    fireEvent.click(screen.getByTestId("stroke-width-8"));
+    expect(onPickStrokeWidth).toHaveBeenCalledWith(8);
+    expect(screen.queryByTestId("pen-flyout")).toBeNull();
+  });
+
+  it("picking a pen color calls onPickColor and closes the flyout", () => {
+    const { onPickColor } = armPen({ activeColor: "annotation-default" });
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
+    expect(onPickColor).toHaveBeenCalledWith("annotation-pink");
+    expect(screen.queryByTestId("pen-flyout")).toBeNull();
+  });
+
+  it("re-clicking the active Pen button toggles its sub-toolbox, never disarms", () => {
+    const { onSelectTool } = armPen();
+    const btn = screen.getByTestId("tool-pen-button");
+    expect(screen.getByTestId("pen-flyout")).toBeTruthy();
+    fireEvent.click(btn);
+    expect(screen.queryByTestId("pen-flyout")).toBeNull();
+    expect(onSelectTool).not.toHaveBeenCalled();
+    fireEvent.click(btn);
+    expect(screen.getByTestId("pen-flyout")).toBeTruthy();
+  });
+
+  it("the pen sub-toolbox closes on Escape / switch-away", () => {
+    const r = armPen();
+    expect(screen.getByTestId("pen-flyout")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByTestId("pen-flyout")).toBeNull();
+    r.update({ activeTool: "cursor" });
+    r.update({ activeTool: "pen" });
+    expect(screen.getByTestId("pen-flyout")).toBeTruthy();
+    r.update({ activeTool: "highlight" });
+    expect(screen.queryByTestId("pen-flyout")).toBeNull();
   });
 
   it("calls onToggleCollapse from the collapse affordance", () => {

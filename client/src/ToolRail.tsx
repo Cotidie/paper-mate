@@ -5,12 +5,13 @@ import {
   Selection,
   Highlighter,
   TextUnderline,
+  PencilSimple,
   CaretDoubleLeft,
   CaretDoubleRight,
   type Icon,
 } from "@phosphor-icons/react";
 import { type ActiveTool, type PointerTool, isPointerTool } from "./tools";
-import { ColorSwatchRow } from "./annotations";
+import { ColorSwatchRow, StrokeWidthRow } from "./annotations";
 import ToolFlyout from "./ToolFlyout";
 
 /**
@@ -44,6 +45,8 @@ export default function ToolRail({
   onSelectTool,
   activeColor,
   onPickColor,
+  activeStrokeWidth,
+  onPickStrokeWidth,
   collapsed,
   onToggleCollapse,
 }: {
@@ -58,6 +61,11 @@ export default function ToolRail({
   activeColor: string;
   /** Set the active color (the default new marks land in). */
   onPickColor: (token: string) => void;
+  /** The active pen stroke width (store-backed; Story 2.8). The Pen tool's
+   *  sub-toolbox shows this armed and sets it via `onPickStrokeWidth`. */
+  activeStrokeWidth: number;
+  /** Set the active pen stroke width (the default new strokes land in). */
+  onPickStrokeWidth: (width: number) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
@@ -70,6 +78,7 @@ export default function ToolRail({
   const pointerActive = isPointerTool(activeTool);
   const highlightActive = activeTool === "highlight";
   const underlineActive = activeTool === "underline";
+  const penActive = activeTool === "pen";
 
   // ONE consistent mechanism (Story 2.6 refinement): switching to ANY tool opens
   // that tool's sub-toolbar by default. Detect a real CHANGE of `activeTool`
@@ -252,6 +261,47 @@ export default function ToolRail({
               value={activeColor}
               onPick={(token) => {
                 onPickColor(token);
+                setFlyoutOpen(false);
+              }}
+            />
+          </ToolFlyout>
+        )}
+      </div>
+
+      {/* Pen — a freehand kind=path tool (Story 2.8). Same arm-in-one-click model;
+          its sub-toolbox carries BOTH a color row AND a stroke-width row (UX-DR5).
+          Color is the shared activeColor; width is the shared activeStrokeWidth. */}
+      <div className="tool-rail__item">
+        <button
+          type="button"
+          className={activeTool === "pen" ? "tool-button tool-button--armed" : "tool-button"}
+          aria-label="Pen"
+          title="Pen (D)"
+          aria-pressed={activeTool === "pen"}
+          aria-haspopup="menu"
+          aria-expanded={penActive && flyoutOpen}
+          data-testid="tool-pen-button"
+          onClick={() => {
+            if (penActive) setFlyoutOpen((o) => !o);
+            else onSelectTool("pen");
+          }}
+        >
+          <PencilSimple aria-hidden />
+        </button>
+
+        {penActive && flyoutOpen && (
+          <ToolFlyout testId="pen-flyout">
+            <ColorSwatchRow
+              value={activeColor}
+              onPick={(token) => {
+                onPickColor(token);
+                setFlyoutOpen(false);
+              }}
+            />
+            <StrokeWidthRow
+              value={activeStrokeWidth}
+              onPick={(width) => {
+                onPickStrokeWidth(width);
                 setFlyoutOpen(false);
               }}
             />

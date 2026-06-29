@@ -32,6 +32,15 @@ export interface AnnotationStore {
   activeColor: string;
   /** Set the active/default color (remembers the last choice for the session). */
   setActiveColor: (color: string) => void;
+  /** The active pen stroke width (Story 2.8): the DEFAULT new pen strokes land
+   *  in, in scale-1.0 CSS px (the renderer multiplies by the current zoom). The
+   *  stroke-width twin of `activeColor` — set by the Pen tool's stroke-width
+   *  sub-toolbox OR by restroking an existing pen mark (last-choice-wins). Lives
+   *  in the store for the same reason `activeColor` does (two writers + the create
+   *  path reads it); client-only, not persisted. */
+  activeStrokeWidth: number;
+  /** Set the active/default pen stroke width (remembers the last choice). */
+  setActiveStrokeWidth: (width: number) => void;
   /** Select an annotation by id, or clear with `null`. */
   select: (id: string | null) => void;
   /** Clear the selection (sugar for `select(null)`). */
@@ -51,6 +60,11 @@ export interface AnnotationStore {
    *  command stack. Epic 3 (Story 3.1) routes restyle-of-existing-marks through
    *  the do/undo command path and will fold this in. */
   recolorAnnotation: (ids: string[], color: string, now: string) => void;
+  /** Restroke one or more pen annotations (by id) to a new stroke width and bump
+   *  `updated_at` — the stroke-width twin of `recolorAnnotation`, from the pen
+   *  selection quick-box's stroke-width row. Width is scale-1.0 CSS px. Same
+   *  creation-time-edit rationale: no command stack yet (Epic 3 folds it in). */
+  restrokeAnnotation: (ids: string[], width: number, now: string) => void;
   /** Every annotation, ordered by `created_at` ascending — the Bank order (AR-12). */
   all: () => Annotation[];
 }
@@ -61,6 +75,9 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
   hoveredId: null,
   activeColor: "annotation-default",
   setActiveColor: (color) => set({ activeColor: color }),
+  // Default pen width = the medium step (scale-1.0 px); matches --pen-stroke-medium.
+  activeStrokeWidth: 4,
+  setActiveStrokeWidth: (width) => set({ activeStrokeWidth: width }),
   select: (id) => set({ selectedId: id }),
   clearSelection: () => set({ selectedId: null }),
   setHovered: (id) => set({ hoveredId: id }),
@@ -94,6 +111,19 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
       for (const id of ids) {
         const a = next.get(id);
         if (a) next.set(id, { ...a, style: { ...a.style, color }, updated_at: now });
+      }
+      return { annotations: next };
+    }),
+  restrokeAnnotation: (ids, width, now) =>
+    set((state) => {
+      const next = new Map(state.annotations);
+      for (const id of ids) {
+        const a = next.get(id);
+        // stroke_width is path-only style (AR-5): never write it onto a text/region
+        // mark, even if a stale id is passed (Codex MED).
+        if (a && a.anchor.kind === "path") {
+          next.set(id, { ...a, style: { ...a.style, stroke_width: width }, updated_at: now });
+        }
       }
       return { annotations: next };
     }),

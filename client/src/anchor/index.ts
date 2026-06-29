@@ -19,7 +19,7 @@
 // normalization (divide/multiply by `box * scale`), which round-trips correctly
 // across zoom AND rotation because both directions use the same baked box.
 
-import type { Rect } from "../api/client";
+import type { Rect, Point } from "../api/client";
 
 /**
  * The page box the anchor service normalizes against: logical page dimensions
@@ -84,6 +84,42 @@ export function normalizeRect(local: LocalRect, box: PageBox, scale: number): Re
 /** Clamp a fraction to the `[0,1]` page range. */
 function clamp01(v: number): number {
   return Math.min(1, Math.max(0, v));
+}
+
+/** A point in page-card-local CSS px (top-left origin), pre-normalization — the
+ *  point twin of `LocalRect`, for pen freehand strokes. */
+export interface LocalPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Normalize a card-local CSS-px point to a `[0,1]` `Point` fraction of the page
+ * box (AD-4) — the point twin of `normalizeRect`, for pen strokes. Divide by
+ * `box * scale` so the stored point is scale-independent; clamp to `[0,1]` so a
+ * stray point dragged off the card edge stays on the page (a pen stroke binds to
+ * the page its `pointerdown` landed on, single-page per AD-5).
+ */
+export function normalizePoint(local: LocalPoint, box: PageBox, scale: number): Point {
+  const w = box.width * scale;
+  const h = box.height * scale;
+  return {
+    x: w > 0 ? clamp01(local.x / w) : 0,
+    y: h > 0 ? clamp01(local.y / h) : 0,
+  };
+}
+
+/**
+ * Denormalize a stored `Point` back to a card-local screen point at the current
+ * `scale` (AD-4, NFR-3) — the inverse of `normalizePoint`. Multiply the fractions
+ * by `box * scale`; called on every scale change so a pen stroke re-renders at its
+ * exact PDF location and rides the zoom.
+ */
+export function denormalizePoint(point: Point, box: PageBox, scale: number): LocalPoint {
+  return {
+    x: point.x * box.width * scale,
+    y: point.y * box.height * scale,
+  };
 }
 
 /**
