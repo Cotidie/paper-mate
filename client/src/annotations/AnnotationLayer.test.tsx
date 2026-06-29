@@ -331,3 +331,108 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(ids).toEqual(["annotation-mark-early", "annotation-mark-late"]);
   });
 });
+
+describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
+  /** A kind=text comment (drag) on page 0. */
+  function textComment(id: string, body = "", color = "annotation-default"): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }], text: "x" },
+      style: { color, stroke_width: null },
+      body,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+  }
+  /** A kind=rect comment (click) on page 0 — a point anchor. */
+  function rectComment(id: string, body = "", color = "annotation-default"): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.2, y1: 0.3 } },
+      style: { color, stroke_width: null },
+      body,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+  }
+
+  it("a kind=text comment paints a FILL in .annotation-highlights AND a pin in the NOT-aria-hidden .annotation-comments group", () => {
+    useAnnotationStore.getState().addAnnotation(textComment("c1", "", "annotation-pink"));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    // The free highlight fill (type !== underline) lives in the highlight group.
+    const fill = screen.getByTestId("annotation-mark-c1");
+    expect(container.querySelector(".annotation-highlights")!.contains(fill)).toBe(true);
+    expect(fill.style.backgroundColor).toBe("var(--color-annotation-pink)");
+    // The pin lives in the comments group, OUTSIDE the aria-hidden mark sheet.
+    const pin = screen.getByTestId("annotation-comment-pin-c1");
+    expect(pin.tagName.toLowerCase()).toBe("button");
+    const group = container.querySelector(".annotation-comments")!;
+    expect(group.contains(pin)).toBe(true);
+    expect(group.getAttribute("aria-hidden")).toBeNull();
+    expect(pin.style.backgroundColor).toBe("var(--color-annotation-pink)");
+  });
+
+  it("a kind=rect comment paints ONLY a pin (no fill)", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c2"));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.getByTestId("annotation-comment-pin-c2")).toBeTruthy();
+    // No fill mark for a rect comment (it never enters the highlight group, which
+    // renders but stays empty).
+    expect(screen.queryByTestId("annotation-mark-c2")).toBeNull();
+    expect(container.querySelector(".annotation-highlights")!.children).toHaveLength(0);
+  });
+
+  it("clicking the pin selects the comment; selecting renders the bubble with value=body", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c3", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    fireEvent.click(screen.getByTestId("annotation-comment-pin-c3"));
+    expect(useAnnotationStore.getState().selectedId).toBe("c3");
+    const body = screen.getByTestId("comment-body-c3") as HTMLTextAreaElement;
+    expect(body.tagName.toLowerCase()).toBe("textarea");
+    expect(body.value).toBe("a note");
+  });
+
+  it("typing in the bubble writes body through retextAnnotation; recolor + delete fire", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c4", "", "annotation-default"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c4"));
+    fireEvent.change(screen.getByTestId("comment-body-c4"), { target: { value: "typed" } });
+    expect(useAnnotationStore.getState().annotations.get("c4")!.body).toBe("typed");
+    // Recolor tints the comment (fill + pin) AND sets the default (last-choice-wins).
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-green"));
+    expect(useAnnotationStore.getState().annotations.get("c4")!.style.color).toBe("annotation-green");
+    expect(useAnnotationStore.getState().activeColor).toBe("annotation-green");
+    // Delete removes the comment.
+    fireEvent.click(screen.getByTestId("comment-delete-c4"));
+    expect(useAnnotationStore.getState().annotations.has("c4")).toBe(false);
+  });
+
+  it("the pin re-derives position on zoom (NFR-3)", () => {
+    useAnnotationStore.getState().addAnnotation(textComment("c5"));
+    const { rerender } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    // first rect start: 0.1*600=60, 0.1*800=80
+    expect(screen.getByTestId("annotation-comment-pin-c5").style.left).toBe("60px");
+    rerender(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={2} />);
+    expect(screen.getByTestId("annotation-comment-pin-c5").style.left).toBe("120px");
+  });
+
+  it("a non-selected comment renders no bubble; an empty comment is NOT auto-removed by the layer", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c6", ""));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.queryByTestId("comment-body-c6")).toBeNull();
+    // The layer only renders; it never deletes. The empty comment stays.
+    expect(useAnnotationStore.getState().annotations.has("c6")).toBe(true);
+  });
+
+  it("does not render the comments group when there are no comment marks", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("h1", 0));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(container.querySelector(".annotation-comments")).toBeNull();
+  });
+});

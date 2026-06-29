@@ -69,6 +69,14 @@ function armMemo(over: Partial<RailProps> = {}) {
   return r;
 }
 
+// Arm Comment (Story 2.10): start on cursor, switch to comment so the
+// open-on-tool-change effect pops its color sub-toolbox.
+function armComment(over: Partial<RailProps> = {}) {
+  const r = renderRail({ activeTool: "cursor", ...over });
+  r.update({ activeTool: "comment" });
+  return r;
+}
+
 // Arm Highlight the way the app does — start on cursor, then SWITCH to highlight —
 // so the open-on-tool-change effect pops the color sub-toolbar (it does NOT open
 // on mount). Returns the same stable spies + `update`.
@@ -449,6 +457,54 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("memo-flyout")).toBeTruthy();
     r.update({ activeTool: "highlight" });
     expect(screen.queryByTestId("memo-flyout")).toBeNull();
+  });
+
+  it("arms comment in ONE click from another tool; switching to it opens its sub-toolbox", () => {
+    const r = renderRail({ activeTool: "cursor" });
+    const btn = screen.getByTestId("tool-comment-button");
+    expect(btn.getAttribute("title")).toBe("Comment (C)");
+    expect(btn.className).not.toContain("tool-button--armed");
+    expect(screen.queryByTestId("comment-flyout")).toBeNull();
+    fireEvent.click(btn);
+    expect(r.onSelectTool).toHaveBeenCalledWith("comment");
+    r.update({ activeTool: "comment" });
+    expect(btn.className).toContain("tool-button--armed");
+    expect(screen.getByTestId("comment-flyout")).toBeTruthy();
+    expect(btn.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("the comment sub-toolbox shows ONLY the color swatch row (no width/size)", () => {
+    armComment({ activeColor: "annotation-green" });
+    const flyout = screen.getByTestId("comment-flyout");
+    expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
+    expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
+    expect(flyout.querySelector(".stroke-width-row")).toBeNull();
+    expect(flyout.querySelector(".size-row")).toBeNull();
+  });
+
+  it("picking a comment color calls onPickColor and closes the flyout", () => {
+    const { onPickColor } = armComment({ activeColor: "annotation-default" });
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
+    expect(onPickColor).toHaveBeenCalledWith("annotation-pink");
+    expect(screen.queryByTestId("comment-flyout")).toBeNull();
+  });
+
+  it("re-clicking the active Comment button toggles its sub-toolbox, never disarms; Esc / switch-away close it", () => {
+    const r = armComment();
+    const btn = screen.getByTestId("tool-comment-button");
+    expect(screen.getByTestId("comment-flyout")).toBeTruthy();
+    fireEvent.click(btn);
+    expect(screen.queryByTestId("comment-flyout")).toBeNull();
+    expect(r.onSelectTool).not.toHaveBeenCalled();
+    fireEvent.click(btn);
+    expect(screen.getByTestId("comment-flyout")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByTestId("comment-flyout")).toBeNull();
+    r.update({ activeTool: "cursor" });
+    r.update({ activeTool: "comment" });
+    expect(screen.getByTestId("comment-flyout")).toBeTruthy();
+    r.update({ activeTool: "highlight" });
+    expect(screen.queryByTestId("comment-flyout")).toBeNull();
   });
 
   it("calls onToggleCollapse from the collapse affordance", () => {

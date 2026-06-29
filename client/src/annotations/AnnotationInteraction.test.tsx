@@ -937,3 +937,105 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
   });
 });
+
+describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () => {
+  /** A .page-surface element so the comment CLICK pointerup's closest checks pass. */
+  function canvasTarget(): HTMLElement {
+    const canvas = document.createElement("div");
+    canvas.className = "pdf-canvas";
+    const surf = document.createElement("div");
+    surf.className = "page-surface";
+    canvas.appendChild(surf);
+    document.body.appendChild(canvas);
+    stubNodes.push(canvas);
+    return surf;
+  }
+
+  it("comment DRAG (text selection) lands a type=comment/kind=text mark with body='' and selects it", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("annotation-purple");
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="comment" />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("comment");
+    expect(all[0].anchor.kind).toBe("text");
+    expect(all[0].body).toBe("");
+    expect(all[0].style.color).toBe("annotation-purple");
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    // A comment shows the bubble (rendered by AnnotationLayer), NEVER the generic
+    // selection quick-box (Decision 4).
+    await waitFor(() => expect(useAnnotationStore.getState().all()).toHaveLength(1));
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+  });
+
+  it("comment CLICK (no selection) on a page surface drops a type=comment/kind=rect pin via buildCommentPin and selects it", () => {
+    const surf = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="comment" />);
+
+    fireEvent.pointerUp(surf, { button: 0, clientX: 60, clientY: 160 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("comment");
+    expect(all[0].anchor.kind).toBe("rect");
+    expect(all[0].body).toBe("");
+    expect(all[0].style.color).toBe("annotation-blue");
+    if (all[0].anchor.kind === "rect") {
+      // top-left normalized: (60,160)/(600,800) = (0.1, 0.2); a point rect.
+      expect(all[0].anchor.rect.x0).toBeCloseTo(0.1, 5);
+      expect(all[0].anchor.rect.y0).toBeCloseTo(0.2, 5);
+      expect(all[0].anchor.rect.x1).toBeCloseTo(0.1, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2, 5);
+    }
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+  });
+
+  it("comment CLICK over the quick-box or an existing pin does NOT drop a second pin", () => {
+    const surf = canvasTarget();
+    // An existing pin inside the page surface (the kind the click must NOT stack on).
+    const pin = document.createElement("button");
+    pin.className = "annotation-comment-pin";
+    surf.appendChild(pin);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="comment" />);
+    fireEvent.pointerUp(pin, { button: 0, clientX: 60, clientY: 160 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("a non-comment armed tool does NOT drop a pin on an empty click", () => {
+    const surf = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="underline" />);
+    fireEvent.pointerUp(surf, { button: 0, clientX: 60, clientY: 160 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("an empty comment is KEPT on deselect (Decision 5 — NOT the memo cleanup)", () => {
+    const comment: Annotation = {
+      id: "c1",
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.1, y1: 0.2 } },
+      style: { color: "annotation-default", stroke_width: null },
+      body: "",
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+    useAnnotationStore.getState().addAnnotation(comment);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("c1"));
+    act(() => useAnnotationStore.getState().clearSelection());
+    // The empty comment survives (unlike an empty memo).
+    expect(useAnnotationStore.getState().annotations.has("c1")).toBe(true);
+  });
+});

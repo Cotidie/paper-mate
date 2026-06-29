@@ -30,7 +30,7 @@ import {
 } from "../anchor";
 import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "../store";
 import { newId } from "../uuid";
-import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation } from "./create";
+import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildCommentPin } from "./create";
 import { strokeOutline, svgPathFromOutline, type StrokeInputPoint } from "./pen";
 import { clampToViewport } from "./position";
 import { initialOverlayState, overlayReducer, type AnnotationTool } from "./machine";
@@ -183,30 +183,72 @@ export default function AnnotationInteraction({
         scaleRef.current,
         rectReaderRef.current,
       );
-      if (pages.length === 0) return;
       const tool = armedToolRef.current;
-      if (tool === "highlight" || tool === "underline") {
-        // Create-on-release for either text-anchor tool: same path, the tool's
-        // `type` is the only difference (highlight paints a fill, underline a 2px
-        // line — that branch lives in AnnotationLayer, keyed off `type` per AD-5).
-        // Color is the active color (Story 2.6 — chosen via the tool's color
-        // sub-toolbox, not a hardcode). Then select the new mark so the selection
-        // quick-box recolors/deletes it (the whole group together). Clear the live
-        // text selection so it cannot re-pop on the next pointerup.
+      if (pages.length === 0) {
+        // No text selection on release. For COMMENT this is the CLICK gesture
+        // (AD-5: `comment → rect`): drop a pin at the click point — the memo
+        // click-to-place twin, but in pointerup branched on `pages.length` (drag
+        // vs click) instead of a separate pointerdown. Only over a real page card,
+        // and never on the quick-box, an existing pin/bubble, or another mark
+        // (that click selects/opens it, not places a new pin). Other tools do
+        // nothing on an empty release.
+        if (tool === "comment") {
+          const el = e.target as Element | null;
+          if (
+            !el?.closest?.(".page-surface") ||
+            el.closest?.(".quick-box") ||
+            el.closest?.(".annotation-comment-pin") ||
+            el.closest?.(".comment-bubble") ||
+            el.closest?.(".annotation-highlight, .annotation-pen, .annotation-memo")
+          )
+            return;
+          const pgs = getPagesRef.current();
+          const cardBoxes = pgs.map((p) => p.cardEl.getBoundingClientRect());
+          const idx = pickPage(
+            { left: e.clientX, top: e.clientY, right: e.clientX, bottom: e.clientY },
+            cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
+          );
+          if (idx < 0) return;
+          const page = pgs[idx];
+          const cardRect = cardBoxes[idx];
+          const x0 = e.clientX - cardRect.left;
+          const y0 = e.clientY - cardRect.top;
+          // A degenerate (point) rect: the pin renders at its top-left, no box.
+          const rect = normalizeRect({ x0, y0, x1: x0, y1: y0 }, page.box, scaleRef.current);
+          const created = buildCommentPin({ page_index: page.pageIndex, rect }, docId, {
+            now: new Date().toISOString(),
+            newId,
+            color: activeColorRef.current,
+          });
+          addAnnotation(created);
+          select(created.id);
+        }
+        return;
+      }
+      if (tool === "highlight" || tool === "underline" || tool === "comment") {
+        // Create-on-release for any text-anchor tool: same path, the tool's `type`
+        // is the only difference (highlight paints a fill, underline a 2px line,
+        // comment paints the same ~0.4 fill + a pin — those branches live in
+        // AnnotationLayer, keyed off `type` per AD-5). The comment DRAG also carries
+        // a non-null `body` (`""`, the bubble edits it) — the ONLY delta from the
+        // highlight path. Color is the active color (Story 2.6). Then select the new
+        // mark (the selection quick-box for highlight/underline; the comment-bubble
+        // for comment) and clear the live text selection so it cannot re-pop.
         const created = buildAnnotations(pages, docId, {
           now: new Date().toISOString(),
           newId,
           type: tool,
           color: activeColorRef.current,
+          ...(tool === "comment" ? { body: "" } : {}),
         });
         created.forEach(addAnnotation);
         selection?.removeAllRanges();
         select(created[0].id);
         return;
       }
-      // Any OTHER armed tool (pen/memo/comment — future stories) must NOT fall
-      // through to the cursor-mode proof box: that would pop the highlight proof
-      // as if nothing were armed. Only cursor mode (tool === null) reaches it.
+      // Any OTHER armed tool (pen/memo — their own gesture paths above) must NOT
+      // fall through to the cursor-mode proof box: that would pop the highlight
+      // proof as if nothing were armed. Only cursor mode (tool === null) reaches it.
       if (tool !== null) return;
       // Cursor mode (no tool): the 2.2 proof — a single action that creates the
       // highlight on click (the cursor-mode tool picker is Story 2.12).
@@ -595,7 +637,11 @@ export default function AnnotationInteraction({
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
       if (isExempt(t)) return;
-      const onMark = !!t?.closest?.(".annotation-highlight, .annotation-pen, .annotation-memo");
+      // A comment's pin (a focusable control) and its bubble are part of the
+      // selected mark's affordance, so clicking them must NOT clear the selection.
+      const onMark = !!t?.closest?.(
+        ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble",
+      );
       const inBox = selectionBoxRef.current?.contains(t as Node) ?? false;
       if (!onMark && !inBox) clearSelection();
     };
@@ -618,9 +664,13 @@ export default function AnnotationInteraction({
   // has geometry.
   const isPenSelected = selectedAnno?.anchor.kind === "path";
   const isMemoSelected = selectedAnno?.anchor.kind === "rect" && selectedAnno.type === "memo";
+  // A COMMENT shows the comment-bubble (in AnnotationLayer), NOT the generic
+  // selection quick-box (UX-DR5: comment mode → bubble directly; Decision 4). So
+  // the shared box is gated to exclude `type === "comment"` — both kinds.
   const showSelectionBox =
     selectionBoxOpen &&
     selectedAnno !== null &&
+    selectedAnno.type !== "comment" &&
     ((selectedAnno.anchor.kind === "text" && selectedAnno.anchor.rects.length > 0) ||
       (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0) ||
       selectedAnno.anchor.kind === "rect");
