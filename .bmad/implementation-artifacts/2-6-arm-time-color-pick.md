@@ -330,6 +330,21 @@ Post-review: client 254 tests pass, typecheck clean, contract byte-identical,
   reworded (grep-clean guard restored). Two findings accepted/dismissed with rationale
   (sibling-consistent optional `activeColor`; DPR not a risk surface this story). Client
   254 pass, contract byte-identical.
+- 2026-06-29: Two more UX refinements (supersede the old AC4 single-click-no-flyout rule):
+  (1) UNIFIED sub-toolbar layout — the rail's color flyout now matches the pointer flyout
+  box (same width = one tool-button, centered swatches, the rail's standard gap), via the
+  scoped `.tool-flyout .color-swatch-row` override; the overlay recolor row stays
+  horizontal. (2) ONE consistent open mechanism — switching to ANY tool (pointer or
+  highlight) auto-opens that tool's sub-toolbar by default; collapsed the two flyout
+  booleans (`open` + `colorOpen`) into a single `flyoutOpen` driven by a StrictMode-safe
+  "open on activeTool CHANGE" effect (skips mount, so the load-time cursor default does
+  not pop a flyout). Clicking the active tool's button toggles it; Esc/outside/switch-
+  away/collapse close it. Updated ToolRail + App tests for the new behavior (the old AC4
+  "switch opens no flyout" assertion is replaced — switching now opens the target tool's
+  bar). Client 258 pass, typecheck clean, contract byte-identical. Live-smoked on a fresh
+  own Vite (5174): clean load (no flyout), arming Highlight auto-opens the color picker,
+  switching to cursor auto-opens the pointer flyout, both flyouts measure 46px wide
+  (unified). Captures: `docs/images/story-2-6-unified-pointer-flyout.png`.
 - 2026-06-29: Three user UX refinements (supersede Decision A/B for the rail picker):
   (1) the highlight color sub-toolbox stacks swatches VERTICALLY (scoped CSS override on
   `.tool-flyout .color-swatch-row`, the overlay recolor row stays horizontal);

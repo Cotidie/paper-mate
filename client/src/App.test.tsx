@@ -246,7 +246,11 @@ describe("tool rail + tool keys (Story 1.8)", () => {
   it("V and Escape return to cursor (un-arm pan)", async () => {
     await openReader();
     const armHand = () => {
-      fireEvent.click(screen.getByTestId("tool-cursor-button"));
+      // Open the pointer flyout if a tool switch hasn't already auto-opened it
+      // (switching to any tool opens its sub-toolbar — the unified mechanism).
+      if (!screen.queryByTestId("tool-flyout")) {
+        fireEvent.click(screen.getByTestId("tool-cursor-button"));
+      }
       fireEvent.click(screen.getByTestId("tool-option-hand"));
     };
     armHand();
@@ -311,16 +315,17 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(screen.getByTestId("tool-cursor-button").className).not.toContain("tool-button--armed");
   });
 
-  it("clicking the pointer button while Highlight is armed switches to cursor in ONE click (AC4)", async () => {
+  it("clicking the pointer button while Highlight is armed switches to cursor in ONE click", async () => {
     await openReader();
     fireEvent.keyDown(document, { key: "h" });
     expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
-    // Single click on the pointer button commits to cursor — no flyout opens in
-    // place of the switch, and highlight is disarmed (mutual exclusion).
+    // Single click on the pointer button commits to cursor in ONE click (highlight
+    // disarmed, mutual exclusion). Per the unified mechanism, switching to the
+    // pointer tool also opens its sub-toolbar by default.
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
-    expect(screen.queryByTestId("tool-flyout")).toBeNull();
     expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
     expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
+    expect(screen.getByTestId("tool-flyout")).toBeTruthy();
     // Cursor (not hand), so pan is not armed.
     expect(screen.getByTestId("reader-backdrop").hasAttribute("data-pan")).toBe(false);
   });
@@ -329,9 +334,8 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     await openReader();
     fireEvent.keyDown(document, { key: "h" });
     expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
-    // One click switches Highlight → cursor; cursor is now active, so a second
-    // click opens the flyout, from which hand can be picked → pan arms.
-    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    // One click switches Highlight → cursor and auto-opens the pointer flyout
+    // (unified mechanism), from which hand can be picked → pan arms.
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
     fireEvent.click(screen.getByTestId("tool-option-hand"));
     expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");

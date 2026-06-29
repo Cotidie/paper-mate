@@ -59,29 +59,36 @@ export default function ToolRail({
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  // Story 2.6: the Highlight tool's color sub-toolbox — the twin of the pointer
-  // flyout. Opens AUTOMATICALLY when highlight becomes active (the effect below);
-  // a click on the already-active Highlight button toggles it.
-  const [colorOpen, setColorOpen] = useState(false);
+  // ONE open/close bit for the active tool's sub-toolbar — whichever tool is
+  // active, its flyout (pointer cursor/hand/box, or the Highlight color row) is
+  // the one shown. Since exactly one tool is active (AD-11), one boolean suffices.
+  const [flyoutOpen, setFlyoutOpen] = useState(false);
   const rootRef = useRef<HTMLElement | null>(null);
 
-  // Close whichever flyout is open on outside-click and Escape (Escape also
-  // returns to cursor via the App-level handler — that's fine; here it just
-  // dismisses the flyout). One effect serves both the pointer and the highlight
-  // color flyout: both live inside the rail (`rootRef`), so an outside pointer-
-  // down or Esc closes both.
+  const pointerActive = isPointerTool(activeTool);
+  const highlightActive = activeTool === "highlight";
+
+  // ONE consistent mechanism (Story 2.6 refinement): switching to ANY tool opens
+  // that tool's sub-toolbar by default. Detect a real CHANGE of `activeTool`
+  // (compare to the previous value) so it does NOT fire on mount — the initial
+  // cursor default must not pop a flyout at load — and is StrictMode-safe (a
+  // double-invoked effect with an unchanged tool is a no-op).
+  const prevTool = useRef(activeTool);
   useEffect(() => {
-    if (!open && !colorOpen) return;
-    const closeAll = () => {
-      setOpen(false);
-      setColorOpen(false);
-    };
+    if (prevTool.current !== activeTool) setFlyoutOpen(true);
+    prevTool.current = activeTool;
+  }, [activeTool]);
+
+  // Esc / outside-click close the open flyout (it lives inside the rail, so an
+  // outside pointer-down or Esc dismisses it).
+  useEffect(() => {
+    if (!flyoutOpen) return;
+    const close = () => setFlyoutOpen(false);
     const onPointerDown = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) closeAll();
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeAll();
+      if (e.key === "Escape") close();
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKey);
@@ -89,42 +96,16 @@ export default function ToolRail({
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, colorOpen]);
+  }, [flyoutOpen]);
 
-  // The pointer button reads ACTIVE when `activeTool` is a pointer tool (cursor/
-  // hand/box) — including plain cursor mode, which must show active (the 2.3 #3
-  // fix, re-expressed against `activeTool`). When an annotation tool is active,
-  // this button is not active; that tool's button is. Exactly one reads active.
-  const pointerActive = isPointerTool(activeTool);
-
-  // Switching to an annotation tool (via `H` or the Highlight button while the
-  // pointer flyout is open) must not leave the pointer sub-toolbox visible —
-  // AC4: a switch never leaves another tool's flyout in its place. Close it
-  // whenever the active tool is no longer a pointer tool.
+  // Collapsing the rail unmounts the buttons; close the flyout so expanding later
+  // never resurrects it without a fresh switch/gesture (Codex review).
   useEffect(() => {
-    if (!pointerActive) setOpen(false);
-  }, [pointerActive]);
-
-  // The highlight color flyout opens automatically when highlight becomes the
-  // active tool (switching to a tool reveals its sub-toolbox by default — user
-  // request) and closes when highlight is no longer active (the inverse path the
-  // 2.4 review flagged). Keyed on the highlight-active TRANSITION, so a later
-  // pick / re-click / collapse that closes it does not re-open on re-render.
-  const highlightActive = activeTool === "highlight";
-  useEffect(() => {
-    setColorOpen(highlightActive);
-  }, [highlightActive]);
-
-  // Collapsing the rail unmounts the buttons; clear both flyouts so expanding
-  // later never resurrects a flyout without a fresh secondary gesture (Codex review).
-  useEffect(() => {
-    if (collapsed) {
-      setOpen(false);
-      setColorOpen(false);
-    }
+    if (collapsed) setFlyoutOpen(false);
   }, [collapsed]);
-  // The pointer sub-mode the button shows + commits to in one click: the active
-  // pointer tool when one is active, else cursor (the default, AC4).
+
+  // The pointer sub-mode the button shows: the active pointer tool when one is
+  // active, else cursor (the default).
   const pointerMode: PointerTool = isPointerTool(activeTool) ? activeTool : "cursor";
   const active = OPTIONS.find((o) => o.value === pointerMode) ?? OPTIONS[0];
   const ActiveIcon = active.Icon;
@@ -155,21 +136,20 @@ export default function ToolRail({
         aria-label={`Pointer tool: ${active.label}`}
         title={active.hint}
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={pointerActive && flyoutOpen}
         data-testid="tool-cursor-button"
-        // Single-click switch (AC4): when a pointer tool is NOT active (e.g.
-        // Highlight is armed), one click COMMITS to the pointer sub-mode and
-        // opens no flyout. When the pointer tool is already active, the click
-        // opens the flyout to choose a different sub-mode (a secondary gesture).
+        // When the pointer tool is already active, the click toggles its flyout.
+        // Otherwise it switches to the pointer tool; the activeTool-change effect
+        // then opens that flyout by default (one consistent mechanism).
         onClick={() => {
-          if (pointerActive) setOpen((o) => !o);
+          if (pointerActive) setFlyoutOpen((o) => !o);
           else onSelectTool(pointerMode);
         }}
       >
         <ActiveIcon aria-hidden />
       </button>
 
-      {open && (
+      {pointerActive && flyoutOpen && (
         <div className="tool-flyout" role="menu" data-testid="tool-flyout">
           {OPTIONS.map((o) => (
             <button
@@ -181,10 +161,9 @@ export default function ToolRail({
               title={o.hint}
               aria-pressed={activeTool === o.value}
               data-testid={`tool-option-${o.value}`}
-              onClick={() => {
-                onSelectTool(o.value);
-                setOpen(false);
-              }}
+              // Picking a sub-mode switches the tool; the change-effect keeps the
+              // flyout open showing the new armed sub-mode (consistent mechanism).
+              onClick={() => onSelectTool(o.value)}
             >
               <o.Icon aria-hidden />
             </button>
@@ -193,14 +172,12 @@ export default function ToolRail({
       )}
 
       {/* Annotation tools (Story 2.3 adds Highlight; later stories add the rest
-          below it in DESIGN.md#tool-rail order). One model: arming is just
-          `onSelectTool("highlight")`. Re-clicking an already-active tool does NOT
-          cancel it — it stays armed (idempotent). Story 2.6: ARMING highlight (from
-          another tool) auto-opens its color sub-toolbox (the effect above, on the
-          active transition); a click on the ALREADY-active button toggles that
-          sub-toolbox. To leave Highlight, pick another tool or press V/Esc. */}
-      {/* Relative wrapper so the color flyout aligns to the Highlight button
-          (not the rail's top like the pointer flyout). */}
+          below it in DESIGN.md#tool-rail order). Same model as the pointer button:
+          switching TO Highlight opens its color sub-toolbar by default (the
+          activeTool-change effect); a click on the ALREADY-active button toggles
+          it. Re-clicking an active tool never disarms it. To leave Highlight, pick
+          another tool or press V/Esc. The relative wrapper anchors the flyout to
+          this button (not the rail top like the pointer flyout). */}
       <div className="tool-rail__item">
         <button
           type="button"
@@ -211,27 +188,27 @@ export default function ToolRail({
           title="Highlight (H)"
           aria-pressed={activeTool === "highlight"}
           aria-haspopup="menu"
-          aria-expanded={colorOpen}
+          aria-expanded={highlightActive && flyoutOpen}
           data-testid="tool-highlight-button"
           onClick={() => {
-            if (highlightActive) setColorOpen((o) => !o);
+            if (highlightActive) setFlyoutOpen((o) => !o);
             else onSelectTool("highlight");
           }}
         >
           <Highlighter aria-hidden />
         </button>
 
-        {colorOpen && (
+        {highlightActive && flyoutOpen && (
           <div className="tool-flyout" role="menu" data-testid="highlight-color-flyout">
             {/* Reuse the shared swatch row (DESIGN.md#color-swatch): the armed
                 swatch (= activeColor) shows the 2px ink ring. Picking sets the
-                default color for new marks and closes the flyout (pick-is-dismiss,
-                matching the recolor row's feel). */}
+                default color for new marks and closes the flyout (pick-is-dismiss;
+                color is not a tool change, so the open-on-switch effect won't reopen). */}
             <ColorSwatchRow
               value={activeColor}
               onPick={(token) => {
                 onPickColor(token);
-                setColorOpen(false);
+                setFlyoutOpen(false);
               }}
             />
           </div>

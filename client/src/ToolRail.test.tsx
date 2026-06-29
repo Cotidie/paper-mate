@@ -5,29 +5,41 @@ import type { ActiveTool } from "./tools";
 
 afterEach(cleanup);
 
-// Render helper: supplies all required props (incl. the Story 2.6 color props)
-// with overridable defaults, and hands back the spies for assertions.
-function renderRail(
-  over: Partial<{
-    activeTool: ActiveTool;
-    activeColor: string;
-    collapsed: boolean;
-  }> = {},
-) {
+type RailProps = { activeTool: ActiveTool; activeColor: string; collapsed: boolean };
+
+// Render helper: supplies all required props with overridable defaults, keeps the
+// spies STABLE across rerenders, and exposes `update(over)` to change props (e.g.
+// switch the active tool) so tests can drive the open-on-tool-change behavior.
+function renderRail(over: Partial<RailProps> = {}) {
   const onSelectTool = vi.fn();
   const onPickColor = vi.fn();
   const onToggleCollapse = vi.fn();
-  const utils = render(
+  let props: RailProps = { activeTool: "cursor", activeColor: "annotation-default", collapsed: false, ...over };
+  const el = (p: RailProps) => (
     <ToolRail
-      activeTool={over.activeTool ?? "cursor"}
+      activeTool={p.activeTool}
       onSelectTool={onSelectTool}
-      activeColor={over.activeColor ?? "annotation-default"}
+      activeColor={p.activeColor}
       onPickColor={onPickColor}
-      collapsed={over.collapsed ?? false}
+      collapsed={p.collapsed}
       onToggleCollapse={onToggleCollapse}
-    />,
+    />
   );
-  return { ...utils, onSelectTool, onPickColor, onToggleCollapse };
+  const utils = render(el(props));
+  const update = (next: Partial<RailProps>) => {
+    props = { ...props, ...next };
+    utils.rerender(el(props));
+  };
+  return { ...utils, onSelectTool, onPickColor, onToggleCollapse, update };
+}
+
+// Arm Highlight the way the app does — start on cursor, then SWITCH to highlight —
+// so the open-on-tool-change effect pops the color sub-toolbar (it does NOT open
+// on mount). Returns the same stable spies + `update`.
+function armHighlight(over: Partial<RailProps> = {}) {
+  const r = renderRail({ activeTool: "cursor", ...over });
+  r.update({ activeTool: "highlight" });
+  return r;
 }
 
 describe("ToolRail", () => {
@@ -50,12 +62,16 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-option-box")).toBeTruthy();
   });
 
-  it("calls onSelectTool('hand') and closes the flyout when hand is picked", () => {
-    const { onSelectTool } = renderRail({ activeTool: "cursor" });
-    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+  it("picking a pointer sub-mode switches the tool; the flyout stays open showing it (unified mechanism)", () => {
+    const r = renderRail({ activeTool: "cursor" });
+    fireEvent.click(screen.getByTestId("tool-cursor-button")); // open the flyout
     fireEvent.click(screen.getByTestId("tool-option-hand"));
-    expect(onSelectTool).toHaveBeenCalledWith("hand");
-    expect(screen.queryByTestId("tool-flyout")).toBeNull();
+    expect(r.onSelectTool).toHaveBeenCalledWith("hand");
+    // The parent applies the switch; the flyout stays open showing hand armed
+    // (switching to a tool keeps its sub-toolbar shown — the one consistent rule).
+    r.update({ activeTool: "hand" });
+    expect(screen.getByTestId("tool-flyout")).toBeTruthy();
+    expect(screen.getByTestId("tool-option-hand").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("reflects the active pointer tool (aria-pressed on the option, armed class on the button)", () => {
@@ -157,8 +173,19 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-highlight-button").getAttribute("aria-expanded")).toBe("true");
   });
 
+  // ── Story 2.6 refinement: ONE mechanism — switching to ANY tool opens its bar ─
+  it("switching to a POINTER tool also opens the pointer flyout (unified mechanism)", () => {
+    // Start on highlight (color flyout open), switch to cursor: the pointer flyout
+    // opens by default, the color flyout is gone. Same rule for every tool.
+    const r = armHighlight();
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
+    r.update({ activeTool: "cursor" });
+    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+    expect(screen.getByTestId("tool-flyout")).toBeTruthy();
+  });
+
   it("re-clicking the ALREADY-active Highlight tool toggles its color sub-toolbox, never disarms (Story 2.6)", () => {
-    const { onSelectTool } = renderRail({ activeTool: "highlight" });
+    const { onSelectTool } = armHighlight();
     const btn = screen.getByTestId("tool-highlight-button");
     expect(btn.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
@@ -174,7 +201,7 @@ describe("ToolRail", () => {
 
   // ── Story 2.6: the color sub-toolbox itself ────────────────────────────────
   it("the highlight color sub-toolbox shows the 5-color swatch row with activeColor armed", () => {
-    renderRail({ activeTool: "highlight", activeColor: "annotation-green" });
+    armHighlight({ activeColor: "annotation-green" });
     const flyout = screen.getByTestId("highlight-color-flyout");
     expect(flyout).toBeTruthy();
     // Exactly 5 swatches (trimmed palette); the active color is armed.
@@ -184,67 +211,40 @@ describe("ToolRail", () => {
     );
   });
 
-  it("picking a swatch sets the active color (onPickColor) and closes the flyout (Story 2.6 AC4)", () => {
-    const { onPickColor } = renderRail({ activeTool: "highlight", activeColor: "annotation-default" });
+  it("picking a swatch sets the active color (onPickColor) and closes the flyout (Story 2.6)", () => {
+    const { onPickColor } = armHighlight({ activeColor: "annotation-default" });
     fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
     expect(onPickColor).toHaveBeenCalledWith("annotation-blue");
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
   });
 
   it("Escape closes the open color sub-toolbox (Story 2.6)", () => {
-    renderRail({ activeTool: "highlight" });
+    armHighlight();
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
   });
 
   it("an outside pointer-down closes the open color sub-toolbox (Story 2.6)", () => {
-    renderRail({ activeTool: "highlight" });
+    armHighlight();
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
     fireEvent.pointerDown(document.body);
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
   });
 
-  it("the color sub-toolbox closes when the active tool switches away from highlight (AC3 inverse path)", () => {
-    const { rerender } = renderRail({ activeTool: "highlight" });
+  it("the color sub-toolbox closes when the active tool switches away from highlight", () => {
+    const r = armHighlight();
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
-    rerender(
-      <ToolRail
-        activeTool="cursor"
-        onSelectTool={vi.fn()}
-        activeColor="annotation-default"
-        onPickColor={vi.fn()}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-      />,
-    );
+    r.update({ activeTool: "cursor" });
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
   });
 
   it("clears an open color sub-toolbox when the rail collapses (Codex review MED)", () => {
-    const { rerender } = renderRail({ activeTool: "highlight" });
+    const r = armHighlight();
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
-    // Collapse, then expand: the flyout must NOT resurrect without a new gesture.
-    rerender(
-      <ToolRail
-        activeTool="highlight"
-        onSelectTool={vi.fn()}
-        activeColor="annotation-default"
-        onPickColor={vi.fn()}
-        collapsed={true}
-        onToggleCollapse={vi.fn()}
-      />,
-    );
-    rerender(
-      <ToolRail
-        activeTool="highlight"
-        onSelectTool={vi.fn()}
-        activeColor="annotation-default"
-        onPickColor={vi.fn()}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-      />,
-    );
+    // Collapse, then expand: the flyout must NOT resurrect without a new switch.
+    r.update({ collapsed: true });
+    r.update({ collapsed: false });
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
   });
 
