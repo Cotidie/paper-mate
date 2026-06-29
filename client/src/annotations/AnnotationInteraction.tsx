@@ -30,7 +30,7 @@ import {
 } from "../anchor";
 import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "../store";
 import { newId } from "../uuid";
-import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildCommentPin } from "./create";
+import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildCommentPin, buildRegionAnnotation } from "./create";
 import { strokeOutline, svgPathFromOutline, type StrokeInputPoint } from "./pen";
 import { clampToViewport } from "./position";
 import { initialOverlayState, overlayReducer, type AnnotationTool } from "./machine";
@@ -46,6 +46,10 @@ const QUICK_BOX_GAP = 6;
 /** Max pointer travel (px) between a comment pointerdown and its release for the
  *  release to still count as a CLICK (drops a pin). Beyond this it was a drag. */
 const COMMENT_CLICK_SLOP = 5;
+
+/** Minimum pointer travel (px) for a box-select drag to commit a region. Below
+ *  this the drag is treated as a stray click and no mark is created. */
+const BOX_DRAG_THRESHOLD = 8;
 
 /** Skip editable fields + buttons so the global handlers never eat a control's
  *  own keys/clicks (mirrors the Reader's hold-Space `isExempt`). */
@@ -64,6 +68,7 @@ export default function AnnotationInteraction({
   scale,
   enabled,
   armedTool = null,
+  boxActive = false,
   rectReader,
 }: {
   docId: string;
@@ -77,6 +82,10 @@ export default function AnnotationInteraction({
   /** The armed annotation tool (single source in App; null = cursor mode). The
    *  machine carries it through so the quick-box knows its mode and stays sticky. */
   armedTool?: AnnotationTool | null;
+  /** True when the box-select pointer tool is active (`activeTool === "box"`).
+   *  Box is a POINTER tool so `armedTool` is null while it is active; this
+   *  separate signal lets the box drag gesture gate on it (Decision 5). */
+  boxActive?: boolean;
   /** Test seam: how a text-node sub-range yields client rects. Omit in
    *  production (uses the real `getClientRects`); jsdom tests inject a reader
    *  since they have no layout. */
@@ -109,9 +118,13 @@ export default function AnnotationInteraction({
   const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
+  // Story 2.11: flip a kind=rect mark's type between highlight and comment.
+  const retypeRegion = useAnnotationStore((s) => s.retypeRegion);
   const quickBoxRef = useRef<HTMLDivElement | null>(null);
   // The selection quick-box (separate render path off `selectedId`, Decision B).
   const selectionBoxRef = useRef<HTMLDivElement | null>(null);
+  // The region tool-type picker ref (for outside-click dismiss).
+  const regionPickerRef = useRef<HTMLDivElement | null>(null);
   // The element focused before the selection box opened, restored on close.
   const restoreSelectionFocusRef = useRef<HTMLElement | null>(null);
   // The selection quick-box opens when a NEW mark is selected and closes on a
@@ -120,6 +133,9 @@ export default function AnnotationInteraction({
   const [selectionBoxOpen, setSelectionBoxOpen] = useState(false);
   // The element focused before the quick-box opened, restored on dismiss.
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  // Region tool-type picker: which annotation's picker is showing (null = closed).
+  // Set immediately after a box drag commits a region; cleared on pick/dismiss.
+  const [regionPickerForId, setRegionPickerForId] = useState<string | null>(null);
 
   // ── Pen freehand gesture (Story 2.8) ─────────────────────────────────────
   // The in-progress stroke's CLIENT-space points. `penDraftRef` is the
@@ -147,6 +163,14 @@ export default function AnnotationInteraction({
   activeMemoSizeRef.current = activeMemoSize;
   const rectReaderRef = useRef(rectReader);
   rectReaderRef.current = rectReader;
+  // Box-select gesture (Story 2.11): gates on boxActive (a pointer tool), NOT
+  // armedTool (which is null while box is active, Decision 5).
+  const boxActiveRef = useRef(boxActive);
+  boxActiveRef.current = boxActive;
+  const boxDrawingRef = useRef(false);
+  const boxStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Client-space rubber-band preview rect, cleared on commit/abort.
+  const [boxPreview, setBoxPreview] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   // Comment CLICK candidate (Codex MED): the pointerdown origin of a potential
   // comment-pin click, so a FAILED text drag (down, move far, release with an
   // empty selection) does NOT drop an accidental pin — the release must be within
@@ -455,6 +479,118 @@ export default function AnnotationInteraction({
     return () => document.removeEventListener("pointerdown", onDown);
   }, [enabled, docId, addAnnotation, select]);
 
+  // Box-select drag gesture (Story 2.11, Decision 1 + 5): a pointer DRAG while
+  // box-select is the active tool. Gates on `boxActiveRef.current` (a pointer tool
+  // → `armedTool` is null; the gate must use the explicit `boxActive` signal).
+  // Clone of the pen gesture: document-level (AP-1), page-gated, draft→preview→
+  // commit, abort. On commit: canonicalized rect → normalizeRect → buildRegionAnnotation
+  // → addAnnotation → select → open region picker.
+  useEffect(() => {
+    if (!enabled) return;
+    const abort = () => {
+      boxDrawingRef.current = false;
+      boxStartRef.current = null;
+      setBoxPreview(null);
+    };
+    const onDown = (e: PointerEvent) => {
+      if (!boxActiveRef.current || e.button !== 0 || isExempt(e.target)) return;
+      const el = e.target as Element | null;
+      // Reject chrome, quick-box, and existing marks (a click on a mark selects it,
+      // not starts a new region). Require a real page card.
+      if (
+        !el?.closest?.(".page-surface") ||
+        el.closest?.(".quick-box") ||
+        el.closest?.(".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin")
+      )
+        return;
+      boxDrawingRef.current = true;
+      boxStartRef.current = { x: e.clientX, y: e.clientY };
+      setBoxPreview({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY });
+      e.preventDefault();
+      try {
+        (el as Element & { setPointerCapture?: (id: number) => void }).setPointerCapture?.(e.pointerId);
+      } catch {
+        /* capture refused on synthetic events */
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!boxDrawingRef.current || !boxStartRef.current) return;
+      const { x, y } = boxStartRef.current;
+      setBoxPreview({ x0: x, y0: y, x1: e.clientX, y1: e.clientY });
+      e.preventDefault();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && boxDrawingRef.current) abort();
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!boxDrawingRef.current || !boxStartRef.current) return;
+      boxDrawingRef.current = false;
+      const start = boxStartRef.current;
+      boxStartRef.current = null;
+      setBoxPreview(null);
+      // Disarm mid-drag (tool switched): do not persist.
+      if (!boxActiveRef.current) return;
+      // Below-threshold drag → stray click, no region.
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) < BOX_DRAG_THRESHOLD) return;
+      const pages = getPagesRef.current();
+      const cardBoxes = pages.map((p) => p.cardEl.getBoundingClientRect());
+      const startIdx = pickPage(
+        { left: start.x, top: start.y, right: start.x, bottom: start.y },
+        cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
+      );
+      if (startIdx < 0) return;
+      const page = pages[startIdx];
+      const cardRect = cardBoxes[startIdx];
+      const scale = scaleRef.current;
+      // Card-local corners; normalizeRect canonicalizes (x0≤x1, y0≤y1) and clamps
+      // to [0,1] — handles an up-left drag (negative delta) and off-card overshoot.
+      const rect = normalizeRect(
+        {
+          x0: start.x - cardRect.left,
+          y0: start.y - cardRect.top,
+          x1: e.clientX - cardRect.left,
+          y1: e.clientY - cardRect.top,
+        },
+        page.box,
+        scale,
+      );
+      const created = buildRegionAnnotation({ page_index: page.pageIndex, rect }, docId, {
+        now: new Date().toISOString(),
+        newId,
+        color: activeColorRef.current,
+      });
+      addAnnotation(created);
+      select(created.id);
+      setRegionPickerForId(created.id);
+      e.preventDefault();
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", abort);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("blur", abort);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", abort);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", abort);
+    };
+  }, [enabled, docId, addAnnotation, select]);
+
+  // Abort an in-progress box draft the moment the box tool is switched away —
+  // so a stranded draft can't keep a stale preview or persist after disarm
+  // (mirrors the pen abort-on-disarm pattern, Codex HIGH).
+  useEffect(() => {
+    if (!boxActive && boxDrawingRef.current) {
+      boxDrawingRef.current = false;
+      boxStartRef.current = null;
+      setBoxPreview(null);
+    }
+  }, [boxActive]);
+
   // Empty-memo cleanup (Story 2.9, Decision 5): a memo placed but never typed into
   // is a no-op, not a stray box — remove it when it loses selection with an empty
   // body. Keyed on DESELECT (not a raw textarea blur): clicking a color/size swatch
@@ -469,6 +605,36 @@ export default function AnnotationInteraction({
     const m = annotations.get(prev);
     if (m && m.type === "memo" && (m.body ?? "").trim() === "") deleteAnnotation(prev);
   }, [selectedId, annotations, deleteAnnotation]);
+
+  // Region picker dismiss: Esc and outside-click. Separate from the selection-box
+  // dismiss so the region picker's Esc doesn't also deselect the annotation.
+  useEffect(() => {
+    if (!regionPickerForId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setRegionPickerForId(null);
+      }
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (regionPickerRef.current && !regionPickerRef.current.contains(e.target as Node)) {
+        setRegionPickerForId(null);
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [regionPickerForId]);
+
+  // Clear the region picker when the selection clears (e.g. empty-space click),
+  // so the picker never lingers without a selected annotation.
+  useEffect(() => {
+    if (selectedId === null) setRegionPickerForId(null);
+  }, [selectedId]);
 
   // Dismiss the quick-box AND clear the browser selection. Clearing is required:
   // otherwise the still-live selection is re-read by the global pointerup handler
@@ -700,17 +866,20 @@ export default function AnnotationInteraction({
   }, [enabled, selectedAnno, clearSelection, deleteAnnotation]);
 
   // A box needs anchor geometry to position against: a text mark with >=1 rect,
-  // a pen path with >=1 point, or a memo rect (always present). A real mark always
-  // has geometry.
+  // a pen path with >=1 point, or a memo/region rect (always present). A real mark
+  // always has geometry.
   const isPenSelected = selectedAnno?.anchor.kind === "path";
   const isMemoSelected = selectedAnno?.anchor.kind === "rect" && selectedAnno.type === "memo";
   // A COMMENT shows the comment-bubble (in AnnotationLayer), NOT the generic
   // selection quick-box (UX-DR5: comment mode → bubble directly; Decision 4). So
   // the shared box is gated to exclude `type === "comment"` — both kinds.
+  // A region with the picker open (regionPickerForId) also suppresses the selection
+  // quick-box until the user picks Highlight/Comment (Decision 2).
   const showSelectionBox =
     selectionBoxOpen &&
     selectedAnno !== null &&
     selectedAnno.type !== "comment" &&
+    regionPickerForId !== selectedId &&
     ((selectedAnno.anchor.kind === "text" && selectedAnno.anchor.rects.length > 0) ||
       (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0) ||
       selectedAnno.anchor.kind === "rect");
@@ -803,7 +972,8 @@ export default function AnnotationInteraction({
     // Re-run on open/close and on zoom (rect re-derives).
   }, [showSelectionBox, selectedId, scale]);
 
-  if (!pending && !showSelectionBox && !penPreview) return null;
+  const showRegionPicker = regionPickerForId !== null && regionPickerForId === selectedAnno?.id;
+  if (!pending && !showSelectionBox && !penPreview && !boxPreview && !showRegionPicker) return null;
 
   const selInit = showSelectionBox ? selectionPoint() : { x: 0, y: 0 };
 
@@ -815,12 +985,62 @@ export default function AnnotationInteraction({
       ? svgPathFromOutline(strokeOutline(penPreview, activeStrokeWidth * scale))
       : "";
 
+  // Region picker position: below the region rect, left-aligned (same anchor as
+  // the selection box for kind=rect marks, reusing selectionPoint()).
+  const regionPickerInit = showRegionPicker ? selectionPoint() : { x: 0, y: 0 };
+
   return (
     <>
       {penPreview && previewPath && (
         <svg className="pen-preview" data-testid="pen-preview" aria-hidden="true">
           <path d={previewPath} fill={`var(--color-${activeColor})`} />
         </svg>
+      )}
+      {boxPreview && (
+        <div
+          className="box-preview"
+          data-testid="box-preview"
+          aria-hidden="true"
+          style={{
+            left: Math.min(boxPreview.x0, boxPreview.x1),
+            top: Math.min(boxPreview.y0, boxPreview.y1),
+            width: Math.abs(boxPreview.x1 - boxPreview.x0),
+            height: Math.abs(boxPreview.y1 - boxPreview.y0),
+            borderColor: `var(--color-${activeColor})`,
+          }}
+        />
+      )}
+      {showRegionPicker && selectedAnno && (
+        <div
+          ref={regionPickerRef}
+          className="quick-box"
+          role="menu"
+          aria-label="Region type"
+          data-testid="region-quick-box"
+          style={{ left: regionPickerInit.x, top: regionPickerInit.y }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="quick-box__action"
+            data-testid="region-picker-highlight"
+            onClick={() => setRegionPickerForId(null)}
+          >
+            Highlight
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="quick-box__action"
+            data-testid="region-picker-comment"
+            onClick={() => {
+              retypeRegion(regionPickerForId!, "comment", new Date().toISOString());
+              setRegionPickerForId(null);
+            }}
+          >
+            Comment
+          </button>
+        </div>
       )}
       {pending && (
         // Cursor-mode proof box only: a single action that creates the highlight

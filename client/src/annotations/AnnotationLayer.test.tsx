@@ -378,14 +378,17 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     expect(pin.style.backgroundColor).toBe("var(--color-annotation-pink)");
   });
 
-  it("a kind=rect comment paints ONLY a pin (no fill)", () => {
+  it("a kind=rect comment paints a fill AND a pin (Story 2.11 region fill branch)", () => {
     useAnnotationStore.getState().addAnnotation(rectComment("c2"));
     const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     expect(screen.getByTestId("annotation-comment-pin-c2")).toBeTruthy();
-    // No fill mark for a rect comment (it never enters the highlight group, which
-    // renders but stays empty).
-    expect(screen.queryByTestId("annotation-mark-c2")).toBeNull();
-    expect(container.querySelector(".annotation-highlights")!.children).toHaveLength(0);
+    // Story 2.11 closes the 2.10 gap: a kind=rect comment now gets a ~0.4 fill
+    // (via the region fill branch) in addition to its pin.
+    expect(screen.getByTestId("annotation-mark-c2")).toBeTruthy();
+    // The fill is in the annotation-regions group (a sibling of annotation-highlights).
+    const regionsGroup = container.querySelector(".annotation-regions");
+    expect(regionsGroup).not.toBeNull();
+    expect(regionsGroup!.querySelector(`[data-testid="annotation-mark-c2"]`)).not.toBeNull();
   });
 
   it("clicking the pin selects the comment; selecting renders the bubble with value=body", () => {
@@ -468,5 +471,119 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     expect(useAnnotationStore.getState().selectedId).toBeNull();
     // The (non-empty) comment survives (Decision 5 keeps it either way).
     expect(useAnnotationStore.getState().annotations.has("c8")).toBe(true);
+  });
+});
+
+describe("AnnotationLayer region fills (Story 2.11 — AC3,4,6)", () => {
+  function regionHighlight(
+    id: string,
+    rect = { x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.6 },
+    color = "annotation-default",
+  ): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "highlight",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect },
+      style: { color, stroke_width: null },
+      body: null,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+  }
+
+  function regionComment(id: string, body = ""): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.6, y1: 0.7 } },
+      style: { color: "annotation-blue", stroke_width: null },
+      body,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+  }
+
+  beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
+
+  it("kind=rect + type=highlight renders a fill div in .annotation-regions, NOT memo/pen groups", () => {
+    useAnnotationStore.getState().addAnnotation(regionHighlight("r1"));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const fill = screen.getByTestId("annotation-mark-r1");
+    expect(fill).toBeTruthy();
+    // Must be in the .annotation-regions group (not memo, not pen).
+    const regionsGroup = container.querySelector(".annotation-regions");
+    expect(regionsGroup).not.toBeNull();
+    expect(regionsGroup!.contains(fill)).toBe(true);
+    expect(container.querySelector(".annotation-memos")).toBeNull();
+    expect(container.querySelector(".annotation-pens")).toBeNull();
+  });
+
+  it("region fill has .annotation-highlight class and uses the mark's color (AC6, NFR-1)", () => {
+    useAnnotationStore.getState().addAnnotation(regionHighlight("r2", { x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.6 }, "annotation-green"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const fill = screen.getByTestId("annotation-mark-r2");
+    expect(fill.classList.contains("annotation-highlight")).toBe(true);
+    expect(fill.style.backgroundColor).toBe("var(--color-annotation-green)");
+  });
+
+  it("re-derives fill position from anchor on zoom (NFR-3)", () => {
+    useAnnotationStore.getState().addAnnotation(
+      regionHighlight("r3", { x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.6 }),
+    );
+    const { rerender } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    // scale 1: left=0.1*600=60, top=0.2*800=160, w=0.4*600=240, h=0.4*800=320.
+    const fill = screen.getByTestId("annotation-mark-r3");
+    expect(fill.style.left).toBe("60px");
+    expect(fill.style.top).toBe("160px");
+    rerender(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={2} />);
+    // doubled at 2x: left=120, top=320.
+    expect(fill.style.left).toBe("120px");
+    expect(fill.style.top).toBe("320px");
+  });
+
+  it("clicking the region fill selects it (selection seam, AC6)", () => {
+    useAnnotationStore.getState().addAnnotation(regionHighlight("r4"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    fireEvent.click(screen.getByTestId("annotation-mark-r4"));
+    expect(useAnnotationStore.getState().selectedId).toBe("r4");
+  });
+
+  it("hover adds --hovered class; select adds --selected class (AC6)", () => {
+    useAnnotationStore.getState().addAnnotation(regionHighlight("r5"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const fill = screen.getByTestId("annotation-mark-r5");
+    // Hover via pointer enter.
+    fireEvent.pointerEnter(fill);
+    expect(fill.classList.contains("annotation-highlight--hovered")).toBe(true);
+    fireEvent.pointerLeave(fill);
+    expect(fill.classList.contains("annotation-highlight--hovered")).toBe(false);
+    // Select.
+    act(() => useAnnotationStore.getState().select("r5"));
+    expect(fill.classList.contains("annotation-highlight--selected")).toBe(true);
+  });
+
+  it("kind=rect + type=comment renders fill AND pin, no fill duplicate (AC2,6)", () => {
+    useAnnotationStore.getState().addAnnotation(regionComment("rc1"));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    // Fill in .annotation-regions.
+    const fill = container.querySelector("[data-testid='annotation-mark-rc1']");
+    expect(fill).not.toBeNull();
+    expect(container.querySelector(".annotation-regions")!.contains(fill)).toBe(true);
+    // Pin in .annotation-comments (NOT in the fill group — no duplicate).
+    const pin = screen.getByTestId("annotation-comment-pin-rc1");
+    expect(pin).toBeTruthy();
+    expect(container.querySelector(".annotation-comments")!.contains(pin)).toBe(true);
+    // No duplicate fill in .annotation-highlights (only text highlights go there).
+    expect(container.querySelector(".annotation-highlights")!.children).toHaveLength(0);
+  });
+
+  it("no .annotation-regions group when there are no region marks", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("t1", 0));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(container.querySelector(".annotation-regions")).toBeNull();
   });
 });

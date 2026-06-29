@@ -244,4 +244,61 @@ describe("memo size, retext + resize (Story 2.9)", () => {
     expect(h.anchor.kind).toBe("text");
     expect(h.updated_at).toBe("2026-06-29T00:00:01Z"); // not bumped
   });
+
+  it("retypeRegion flips highlight → comment, sets body='', bumps updated_at", () => {
+    const s = useAnnotationStore.getState();
+    const regionMark: Annotation = {
+      id: "r1",
+      doc_id: "doc-1",
+      type: "highlight",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.5 } },
+      style: { color: "annotation-default", stroke_width: null },
+      body: null,
+      created_at: "2026-06-29T00:00:01Z",
+      updated_at: "2026-06-29T00:00:01Z",
+    };
+    s.addAnnotation(regionMark);
+    useAnnotationStore.getState().retypeRegion("r1", "comment", "2026-06-29T12:00:00Z");
+    const r = useAnnotationStore.getState().annotations.get("r1")!;
+    expect(r.type).toBe("comment");
+    expect(r.body).toBe("");
+    expect(r.updated_at).toBe("2026-06-29T12:00:00Z");
+    expect(r.created_at).toBe("2026-06-29T00:00:01Z"); // unchanged
+  });
+
+  it("retypeRegion flips comment → highlight, clears body to null, bumps updated_at", () => {
+    const s = useAnnotationStore.getState();
+    const commentRegion: Annotation = {
+      id: "r2",
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.2, x1: 0.6, y1: 0.6 } },
+      style: { color: "annotation-default", stroke_width: null },
+      body: "some note",
+      created_at: "2026-06-29T00:00:01Z",
+      updated_at: "2026-06-29T00:00:01Z",
+    };
+    s.addAnnotation(commentRegion);
+    useAnnotationStore.getState().retypeRegion("r2", "highlight", "2026-06-29T12:00:00Z");
+    const r = useAnnotationStore.getState().annotations.get("r2")!;
+    expect(r.type).toBe("highlight");
+    expect(r.body).toBeNull();
+    expect(r.updated_at).toBe("2026-06-29T12:00:00Z");
+  });
+
+  it("retypeRegion guards non-rect marks (a text/path id is untouched)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("h", "annotation-default", "2026-06-29T00:00:01Z")); // kind=text
+    useAnnotationStore.getState().retypeRegion("h", "comment", "2026-06-29T12:00:00Z");
+    const h = useAnnotationStore.getState().annotations.get("h")!;
+    expect(h.type).toBe("highlight"); // unchanged
+    expect(h.updated_at).toBe("2026-06-29T00:00:01Z"); // not bumped
+  });
+
+  it("retypeRegion is a no-op for an unknown id", () => {
+    useAnnotationStore.getState().retypeRegion("missing", "comment", "2026-06-29T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
 });

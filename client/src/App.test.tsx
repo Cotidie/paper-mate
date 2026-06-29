@@ -349,6 +349,27 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(comment().className).not.toContain("tool-button--armed");
   });
 
+  it("'M' arms box-select; 'V'/'Escape' return to cursor (Story 2.11, UX-DR15)", async () => {
+    await openReader();
+    const cursor = () => screen.getByTestId("tool-cursor-button");
+    expect(cursor().className).toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "m" });
+    // Box-select is a pointer tool; the cursor button shows it in the pointer flyout.
+    // Its class becomes armed (pointer tools share the cursor button).
+    expect(cursor().className).toContain("tool-button--armed");
+    // No annotation tool button becomes armed.
+    expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "v" });
+    // V returns to plain cursor — still cursor-button armed, all annotation tools off.
+    expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "M" });
+    // Capital M also works.
+    expect(cursor().className).toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "Escape" });
+    // Escape returns to cursor (AD-11).
+    expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
+  });
+
   it("'H' over a focused button/select does NOT arm (handler exempts controls)", async () => {
     await openReader();
     const btn = screen.getByTestId("tool-highlight-button");

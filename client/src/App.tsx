@@ -129,6 +129,11 @@ export default function App() {
         e.preventDefault();
         // Arm comment (UX-DR15: C = comment). Same single-field switch.
         setActiveTool("comment");
+      } else if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        // Arm box-select (UX-DR15: M = box-select). Box is a pointer tool; setting
+        // it disarms any armed annotation tool via the single `activeTool` (AD-11).
+        setActiveTool("box");
       } else if (e.key === "[") {
         e.preventDefault();
         setRailCollapsed((c) => !c);
@@ -220,6 +225,9 @@ export default function App() {
           // `activeTool` (AD-11) — no stored siblings to keep in sync.
           panArmed={activeTool === "hand"}
           armedTool={isAnnotationTool(activeTool) ? activeTool : null}
+          // Box is a pointer tool (armedTool=null while active); thread the signal
+          // separately so the overlay's box gesture can gate on it (Decision 5).
+          boxActive={activeTool === "box"}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
           onOutline={setToc}

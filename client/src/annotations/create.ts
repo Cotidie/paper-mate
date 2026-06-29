@@ -147,6 +147,49 @@ export interface BuildCommentPinOptions {
   color: string;
 }
 
+/** A region dragged with the box-select tool: one page + a normalized `[0,1]`
+ *  bounding rect from the two drag corners (canonicalized in `normalizeRect`).
+ *  Feeds a `RectAnchor` as a region highlight (`type=highlight`, `kind=rect`). */
+export interface RegionPlacement {
+  page_index: number;
+  rect: Rect;
+}
+
+export interface BuildRegionOptions {
+  /** ISO-8601 UTC timestamp for created_at/updated_at. */
+  now: string;
+  /** UUID factory (injectable for deterministic tests). */
+  newId: () => string;
+  /** Resolved accent color (a token name). */
+  color: string;
+}
+
+/**
+ * Build ONE region highlight `Annotation` (AD-5: `highlight → rect`, AR-5).
+ * The first mark built from a free rectangle drag (pen drags a path; box-select
+ * builds a bounding rect). Always single-page (`group_id` null); `stroke_width`
+ * is path-only, so null; `body` is null (highlight default — the region picker
+ * can retype it to a comment via `retypeRegion`).
+ */
+export function buildRegionAnnotation(
+  region: RegionPlacement,
+  docId: string,
+  opts: BuildRegionOptions,
+): Annotation {
+  const { now, newId, color } = opts;
+  return {
+    id: newId(),
+    doc_id: docId,
+    type: "highlight",
+    group_id: null,
+    anchor: { kind: "rect", page_index: region.page_index, rect: region.rect },
+    style: { color, stroke_width: null },
+    body: null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 /**
  * Build ONE `kind=rect` comment `Annotation` (AD-5: `comment → rect`). The twin of
  * `buildMemoAnnotation` but `type="comment"`: the rect is a small anchor for the

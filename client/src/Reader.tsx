@@ -62,6 +62,7 @@ export default function Reader({
   doc,
   panArmed,
   armedTool,
+  boxActive,
   onVisiblePageChange,
   onZoomChange,
   onOutline,
@@ -74,6 +75,10 @@ export default function Reader({
   /** The armed annotation tool (App owns it; null = cursor). Passed straight to
    * the overlay interaction; the Reader itself does no annotation logic (AD-9). */
   armedTool?: AnnotationTool | null;
+  /** True when the box-select pointer tool is active. Box is a pointer tool so
+   * armedTool is null while it is active; this is the explicit signal the
+   * overlay's box gesture needs (Decision 5). Passed straight to the overlay. */
+  boxActive?: boolean;
   /** Reports the 1-based page currently in view, for the top-bar indicator. */
   onVisiblePageChange?: (page: number) => void;
   /** Reports the live zoom percent (rounded) for the top-bar zoom control. */
@@ -571,6 +576,7 @@ export default function Reader({
           scale={scale}
           enabled={phase === "ready"}
           armedTool={armedTool ?? null}
+          boxActive={boxActive ?? false}
         />
       )}
     </div>

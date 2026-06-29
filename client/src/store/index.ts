@@ -109,6 +109,12 @@ export interface AnnotationStore {
    *  so a stale text/path id is never mutated (AR-5). Creation-time edit; no
    *  command stack yet. */
   resizeMemoAnnotation: (ids: string[], size: { w: number; h: number }, now: string) => void;
+  /** Flip a `kind=rect` mark's `type` between `highlight` and `comment` and bump
+   *  `updated_at`. Sets `body=""` when switching to comment (the bubble edits it)
+   *  and `null` when switching back to highlight (no body for a highlight). Guarded
+   *  to `anchor.kind === "rect"` so a stale text/path id is never mutated (AR-5).
+   *  A no-op for unknown ids. Used by the region quick-box (Story 2.11). */
+  retypeRegion: (id: string, type: "highlight" | "comment", now: string) => void;
   /** Every annotation, ordered by `created_at` ascending — the Bank order (AR-12). */
   all: () => Annotation[];
 }
@@ -180,6 +186,20 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
       if (!a) return state;
       const next = new Map(state.annotations);
       next.set(id, { ...a, body, updated_at: now });
+      return { annotations: next };
+    }),
+  retypeRegion: (id, type, now) =>
+    set((state) => {
+      const a = state.annotations.get(id);
+      // Guard: only rect marks can be retyped (AR-5); unknown ids are a no-op.
+      if (!a || a.anchor.kind !== "rect") return state;
+      const next = new Map(state.annotations);
+      next.set(id, {
+        ...a,
+        type,
+        body: type === "comment" ? "" : null,
+        updated_at: now,
+      });
       return { annotations: next };
     }),
   resizeMemoAnnotation: (ids, size, now) =>
