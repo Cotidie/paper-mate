@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAnnotations } from "./create";
+import { buildAnnotations, buildPenAnnotation } from "./create";
 import type { PageSelection } from "../anchor";
 
 function counter() {
@@ -43,5 +43,38 @@ describe("buildAnnotations (AC-3, AC-5)", () => {
   it("renders off anchor.kind: every proof mark is a text anchor", () => {
     const anns = buildAnnotations([page0, page1], "doc-1", opts(counter()));
     expect(anns.every((a) => a.anchor.kind === "text")).toBe(true);
+  });
+});
+
+describe("buildPenAnnotation (Story 2.8, AD-5 pen → path)", () => {
+  const penOpts = (newId: () => string) => ({
+    now: "2026-06-29T00:00:00+00:00",
+    newId,
+    color: "annotation-green",
+    strokeWidth: 4,
+  });
+  const stroke = {
+    page_index: 2,
+    points: [
+      { x: 0.1, y: 0.1 },
+      { x: 0.2, y: 0.15 },
+      { x: 0.3, y: 0.2 },
+    ],
+  };
+
+  it("builds one single-page pen mark with a path anchor + null group", () => {
+    const a = buildPenAnnotation(stroke, "doc-1", penOpts(counter()));
+    expect(a.type).toBe("pen");
+    expect(a.group_id).toBeNull();
+    expect(a.doc_id).toBe("doc-1");
+    expect(a.anchor).toEqual({ kind: "path", page_index: 2, points: stroke.points });
+    expect(a.body).toBeNull();
+    expect(a.created_at).toBe("2026-06-29T00:00:00+00:00");
+    expect(a.updated_at).toBe(a.created_at);
+  });
+
+  it("carries color + stroke_width in style (stroke_width path-only, AR-5)", () => {
+    const a = buildPenAnnotation(stroke, "doc-1", penOpts(counter()));
+    expect(a.style).toEqual({ color: "annotation-green", stroke_width: 4 });
   });
 });

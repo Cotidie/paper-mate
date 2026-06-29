@@ -19,13 +19,22 @@
 
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { Trash } from "@phosphor-icons/react";
-import { rectsFromSelection, denormalizeRect, type PageCardRef } from "../anchor";
+import {
+  rectsFromSelection,
+  denormalizeRect,
+  denormalizePoint,
+  normalizePoint,
+  pickPage,
+  type PageCardRef,
+} from "../anchor";
 import { useAnnotationStore } from "../store";
 import { newId } from "../uuid";
-import { buildAnnotations } from "./create";
+import { buildAnnotations, buildPenAnnotation } from "./create";
+import { strokeOutline, svgPathFromOutline, type StrokeInputPoint } from "./pen";
 import { clampToViewport } from "./position";
 import { initialOverlayState, overlayReducer, type AnnotationTool } from "./machine";
 import ColorSwatchRow from "./ColorSwatchRow";
+import StrokeWidthRow from "./StrokeWidthRow";
 import "./Annotations.css";
 
 /** Vertical gap (viewport px) between the marked text and the floating quick-box
@@ -79,6 +88,12 @@ export default function AnnotationInteraction({
   // reads it). Recoloring a mark also updates this default (remember-last-choice).
   const activeColor = useAnnotationStore((s) => s.activeColor);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
+  // Story 2.8: the active pen stroke width (default for new strokes) lives in the
+  // store next to activeColor — two writers (the rail's stroke-width row AND the
+  // pen selection quick-box's restroke) plus the create path reads it.
+  const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
+  const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
+  const restrokeAnnotation = useAnnotationStore((s) => s.restrokeAnnotation);
   const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
@@ -94,6 +109,16 @@ export default function AnnotationInteraction({
   // The element focused before the quick-box opened, restored on dismiss.
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
+  // ── Pen freehand gesture (Story 2.8) ─────────────────────────────────────
+  // The in-progress stroke's CLIENT-space points. `penDraftRef` is the
+  // authoritative list (read at pointerup to build the mark); `penPreview` mirrors
+  // it as state so the live preview SVG re-renders as the pointer moves. Both clear
+  // on pointerup/abort. Client space is safe for one stroke: the pointer is
+  // captured for the gesture, so the canvas can't scroll mid-draw.
+  const penDraftRef = useRef<StrokeInputPoint[]>([]);
+  const penDrawingRef = useRef(false);
+  const [penPreview, setPenPreview] = useState<StrokeInputPoint[] | null>(null);
+
   // Latest values for the document-level listeners (bound once) to read without
   // re-binding on every scale / tool change.
   const scaleRef = useRef(scale);
@@ -104,6 +129,8 @@ export default function AnnotationInteraction({
   armedToolRef.current = armedTool;
   const activeColorRef = useRef(activeColor);
   activeColorRef.current = activeColor;
+  const activeStrokeWidthRef = useRef(activeStrokeWidth);
+  activeStrokeWidthRef.current = activeStrokeWidth;
   const rectReaderRef = useRef(rectReader);
   rectReaderRef.current = rectReader;
 
@@ -136,6 +163,8 @@ export default function AnnotationInteraction({
     if (!enabled) return;
     const onPointerUp = (e: PointerEvent) => {
       if (e.button !== 0 || isExempt(e.target)) return;
+      // Pen has its OWN gesture path (below); it never reads the text selection.
+      if (armedToolRef.current === "pen") return;
       const selection = window.getSelection();
       const pages = rectsFromSelection(
         selection,
@@ -175,6 +204,94 @@ export default function AnnotationInteraction({
     };
     document.addEventListener("pointerup", onPointerUp);
     return () => document.removeEventListener("pointerup", onPointerUp);
+  }, [enabled, docId, addAnnotation, select]);
+
+  // Pen freehand gesture (Story 2.8, Decision A): a pointer DRAG (not a text
+  // selection) while pen is armed. pointerdown over a page starts a draft,
+  // pointermove accumulates client points (and drives the preview), pointerup
+  // resolves the page, normalizes the points, and stores ONE kind=path mark. Bound
+  // on document (AP-1), phase-gated; only acts while pen is armed. `preventDefault`
+  // on down/move suppresses native text-selection + image drag. Document-level
+  // move/up catch the whole in-window drag; pointercancel/blur abort a half-stroke
+  // so an interrupted gesture can't strand a draft (the recurring held-state bug).
+  useEffect(() => {
+    if (!enabled) return;
+    const abort = () => {
+      penDrawingRef.current = false;
+      penDraftRef.current = [];
+      setPenPreview(null);
+    };
+    const onDown = (e: PointerEvent) => {
+      if (armedToolRef.current !== "pen" || e.button !== 0 || isExempt(e.target)) return;
+      const el = e.target as Element | null;
+      // Only start over a page; ignore clicks on chrome / the quick-box.
+      if (!el?.closest?.(".pdf-canvas") || el.closest?.(".quick-box")) return;
+      penDrawingRef.current = true;
+      penDraftRef.current = [{ x: e.clientX, y: e.clientY }];
+      setPenPreview([{ x: e.clientX, y: e.clientY }]);
+      e.preventDefault();
+      // Best-effort capture so a drag leaving the canvas still finishes (mirrors
+      // the Reader pan); document listeners are the real mechanism either way.
+      try {
+        (el as Element & { setPointerCapture?: (id: number) => void }).setPointerCapture?.(e.pointerId);
+      } catch {
+        /* capture refused (e.g. synthetic event) — the drag still works */
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!penDrawingRef.current) return;
+      penDraftRef.current.push({ x: e.clientX, y: e.clientY });
+      setPenPreview([...penDraftRef.current]);
+      e.preventDefault();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && penDrawingRef.current) abort();
+    };
+    const onUp = () => {
+      if (!penDrawingRef.current) return;
+      penDrawingRef.current = false;
+      const pts = penDraftRef.current;
+      penDraftRef.current = [];
+      setPenPreview(null);
+      // A click with no real drag (< 2 points) makes no mark.
+      if (pts.length < 2) return;
+      const pages = getPagesRef.current();
+      const cardBoxes = pages.map((p) => p.cardEl.getBoundingClientRect());
+      // The stroke binds to the page its pointerdown landed on (single-page, AD-5).
+      const startIdx = pickPage(
+        { left: pts[0].x, top: pts[0].y, right: pts[0].x, bottom: pts[0].y },
+        cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
+      );
+      if (startIdx < 0) return;
+      const page = pages[startIdx];
+      const cardRect = cardBoxes[startIdx];
+      const scale = scaleRef.current;
+      const points = pts.map((p) =>
+        normalizePoint({ x: p.x - cardRect.left, y: p.y - cardRect.top }, page.box, scale),
+      );
+      const created = buildPenAnnotation({ page_index: page.pageIndex, points }, docId, {
+        now: new Date().toISOString(),
+        newId,
+        color: activeColorRef.current,
+        strokeWidth: activeStrokeWidthRef.current,
+      });
+      addAnnotation(created);
+      select(created.id);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", abort);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("blur", abort);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", abort);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", abort);
+    };
   }, [enabled, docId, addAnnotation, select]);
 
   // Dismiss the quick-box AND clear the browser selection. Clearing is required:
@@ -285,7 +402,8 @@ export default function AnnotationInteraction({
     if (!enabled) return;
     const onDown = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t?.closest?.(".annotation-highlight")) setSelectionBoxOpen(true);
+      // A mark is a rect (.annotation-highlight, incl. underline) OR a pen path.
+      if (t?.closest?.(".annotation-highlight, .annotation-pen")) setSelectionBoxOpen(true);
     };
     document.addEventListener("pointerdown", onDown, true);
     return () => document.removeEventListener("pointerdown", onDown, true);
@@ -319,6 +437,18 @@ export default function AnnotationInteraction({
     [recolorAnnotation, selectedGroupIds, setActiveColor],
   );
 
+  // Restroke the selected pen mark to a new width (Story 2.8 — the stroke-width
+  // twin of recolorSelected). Also sets the default for the next stroke
+  // (last-choice-wins), and the pick dismisses the box (the mark stays selected).
+  const restrokeSelected = useCallback(
+    (width: number) => {
+      restrokeAnnotation(selectedGroupIds(), width, new Date().toISOString());
+      setActiveStrokeWidth(width);
+      setSelectionBoxOpen(false);
+    },
+    [restrokeAnnotation, selectedGroupIds, setActiveStrokeWidth],
+  );
+
   // Delete via the store (removes id + group siblings AND clears `selectedId`).
   // Uses the doc-scoped mark so a stale cross-doc id can never be deleted here.
   const deleteSelected = useCallback(() => {
@@ -349,7 +479,7 @@ export default function AnnotationInteraction({
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as HTMLElement | null;
       if (isExempt(t)) return;
-      const onMark = !!t?.closest?.(".annotation-highlight");
+      const onMark = !!t?.closest?.(".annotation-highlight, .annotation-pen");
       const inBox = selectionBoxRef.current?.contains(t as Node) ?? false;
       if (!onMark && !inBox) clearSelection();
     };
@@ -367,35 +497,48 @@ export default function AnnotationInteraction({
     };
   }, [enabled, selectedAnno, clearSelection, deleteAnnotation]);
 
-  // Require at least one anchor rect: the box anchors at the mark's first rect,
-  // and a text anchor with an empty `rects` array (the generated type allows it)
-  // would crash `denormalizeRect`. A real highlight always has rects.
+  // A box needs anchor geometry to position against: a text mark with >=1 rect,
+  // or a pen path with >=1 point (the generated types allow empty arrays, which
+  // would crash the denormalize math). A real mark always has geometry.
+  const isPenSelected = selectedAnno?.anchor.kind === "path";
   const showSelectionBox =
     selectionBoxOpen &&
     selectedAnno !== null &&
-    selectedAnno.anchor.kind === "text" &&
-    selectedAnno.anchor.rects.length > 0;
+    ((selectedAnno.anchor.kind === "text" && selectedAnno.anchor.rects.length > 0) ||
+      (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0));
 
   // Project the selected mark to the box-anchor viewport point, re-derived from
   // the anchor service so it tracks zoom (clamped in layout). Anchored just BELOW
-  // the selection's LOWEST line (left-aligned to the first line) so the floating
-  // box never covers the marked text — it sits in the gap under the run.
+  // the mark (left-aligned to its start) so the floating box never covers it:
+  // for text, below the selection's LOWEST line; for a pen stroke, below the
+  // stroke's bounding box, left at its leftmost point.
   const selectionPoint = (): { x: number; y: number } => {
-    if (!selectedAnno || selectedAnno.anchor.kind !== "text" || selectedAnno.anchor.rects.length === 0) {
-      return { x: 0, y: 0 };
-    }
+    if (!selectedAnno) return { x: 0, y: 0 };
     const page = getPagesRef.current().find((p) => p.pageIndex === selectedAnno.anchor.page_index);
     if (!page) return { x: 0, y: 0 };
     const cardRect = page.cardEl.getBoundingClientRect();
     const scale = scaleRef.current;
-    const rects = selectedAnno.anchor.rects;
-    const first = denormalizeRect(rects[0], page.box, scale);
-    let bottom = first.top + first.height;
-    for (const r of rects) {
-      const p = denormalizeRect(r, page.box, scale);
-      bottom = Math.max(bottom, p.top + p.height);
+    if (selectedAnno.anchor.kind === "text" && selectedAnno.anchor.rects.length > 0) {
+      const rects = selectedAnno.anchor.rects;
+      const first = denormalizeRect(rects[0], page.box, scale);
+      let bottom = first.top + first.height;
+      for (const r of rects) {
+        const p = denormalizeRect(r, page.box, scale);
+        bottom = Math.max(bottom, p.top + p.height);
+      }
+      return { x: cardRect.left + first.left, y: cardRect.top + bottom + QUICK_BOX_GAP };
     }
-    return { x: cardRect.left + first.left, y: cardRect.top + bottom + QUICK_BOX_GAP };
+    if (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0) {
+      let left = Infinity;
+      let bottom = -Infinity;
+      for (const pt of selectedAnno.anchor.points) {
+        const d = denormalizePoint(pt, page.box, scale);
+        left = Math.min(left, d.x);
+        bottom = Math.max(bottom, d.y);
+      }
+      return { x: cardRect.left + left, y: cardRect.top + bottom + QUICK_BOX_GAP };
+    }
+    return { x: 0, y: 0 };
   };
 
   // Focus moves INTO the selection box on open and RETURNS to the prior element
@@ -424,12 +567,25 @@ export default function AnnotationInteraction({
     // Re-run on open/close and on zoom (rect re-derives).
   }, [showSelectionBox, selectedId, scale]);
 
-  if (!pending && !showSelectionBox) return null;
+  if (!pending && !showSelectionBox && !penPreview) return null;
 
   const selInit = showSelectionBox ? selectionPoint() : { x: 0, y: 0 };
 
+  // The live pen preview, drawn in fixed/client space (the same engine the mark
+  // uses, so what-you-draw-is-what-you-get). Width = activeStrokeWidth * scale so
+  // it matches the stored mark, which denormalizes at the current scale.
+  const previewPath =
+    penPreview && penPreview.length > 0
+      ? svgPathFromOutline(strokeOutline(penPreview, activeStrokeWidth * scale))
+      : "";
+
   return (
     <>
+      {penPreview && previewPath && (
+        <svg className="pen-preview" data-testid="pen-preview" aria-hidden="true">
+          <path d={previewPath} fill={`var(--color-${activeColor})`} />
+        </svg>
+      )}
       {pending && (
         // Cursor-mode proof box only: a single action that creates the highlight
         // on click (then selects it). The highlight-armed path never opens this —
@@ -461,13 +617,18 @@ export default function AnnotationInteraction({
           ref={selectionBoxRef}
           className="quick-box"
           role="menu"
-          aria-label="Highlight actions"
+          aria-label={isPenSelected ? "Pen actions" : "Highlight actions"}
           data-testid="selection-quick-box"
           style={{ left: selInit.x, top: selInit.y }}
         >
           {/* Recolor the selected mark (reuses 2.3's row + store.recolorAnnotation);
               the row shows the mark's CURRENT color armed. */}
           <ColorSwatchRow value={selectedAnno.style.color} onPick={recolorSelected} />
+          {/* A pen mark also gets the stroke-width row (restroke), armed to its
+              current width. Text marks (highlight/underline) have no width. */}
+          {isPenSelected && (
+            <StrokeWidthRow value={selectedAnno.style.stroke_width ?? activeStrokeWidth} onPick={restrokeSelected} />
+          )}
           <span className="quick-box__divider" aria-hidden="true" />
           <button
             type="button"

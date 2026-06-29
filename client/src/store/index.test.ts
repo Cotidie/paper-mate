@@ -22,6 +22,7 @@ beforeEach(() =>
     selectedId: null,
     hoveredId: null,
     activeColor: "annotation-default",
+    activeStrokeWidth: 4,
   }),
 );
 
@@ -125,5 +126,43 @@ describe("active/default color (Story 2.6)", () => {
     expect(useAnnotationStore.getState().activeColor).toBe("annotation-pink");
     useAnnotationStore.getState().setActiveColor("annotation-blue");
     expect(useAnnotationStore.getState().activeColor).toBe("annotation-blue");
+  });
+});
+
+describe("pen stroke width + restroke (Story 2.8)", () => {
+  function penMark(id: string, width: number, createdAt: string): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "pen",
+      group_id: null,
+      anchor: { kind: "path", page_index: 0, points: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }] },
+      style: { color: "annotation-default", stroke_width: width },
+      body: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+  }
+
+  it("defaults activeStrokeWidth and setActiveStrokeWidth remembers the last choice", () => {
+    expect(useAnnotationStore.getState().activeStrokeWidth).toBe(4);
+    useAnnotationStore.getState().setActiveStrokeWidth(8);
+    expect(useAnnotationStore.getState().activeStrokeWidth).toBe(8);
+  });
+
+  it("restrokeAnnotation changes style.stroke_width + bumps updated_at, keyed by id", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(penMark("p", 4, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().restrokeAnnotation(["p"], 8, "2026-06-29T12:00:00Z");
+    const p = useAnnotationStore.getState().annotations.get("p")!;
+    expect(p.style.stroke_width).toBe(8);
+    expect(p.style.color).toBe("annotation-default");
+    expect(p.updated_at).toBe("2026-06-29T12:00:00Z");
+    expect(p.created_at).toBe("2026-06-29T00:00:01Z");
+  });
+
+  it("restrokeAnnotation ignores unknown ids without throwing", () => {
+    useAnnotationStore.getState().restrokeAnnotation(["missing"], 8, "2026-06-29T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
   });
 });

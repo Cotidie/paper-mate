@@ -258,6 +258,14 @@
   cursor: grabbing;
 }
 
+/* Pen armed (Story 2.8): a crosshair + selection suppression so a freehand drag
+   draws instead of selecting text (the draw gesture lives in the overlay). Token-
+   free CSS keywords only. */
+.pdf-canvas[data-draw] {
+  cursor: crosshair;
+  user-select: none;
+}
+
 /* toc-panel: the table-of-contents overlay (Story 1.9). A right-edge floating
    panel (mirrors the tool-rail overlay precedent) that lists the PDF outline.
    Overlays the canvas and never reflows it (NFR-1); the list scrolls INSIDE the

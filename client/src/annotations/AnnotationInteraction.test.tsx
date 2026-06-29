@@ -66,6 +66,7 @@ beforeEach(() =>
     selectedId: null,
     hoveredId: null,
     activeColor: "annotation-default",
+    activeStrokeWidth: 4,
   }),
 );
 afterEach(() => {
@@ -365,6 +366,175 @@ describe("AnnotationInteraction underline tool (Story 2.7 — AC1,2,3)", () => {
     expect(all.every((a) => a.type === "underline")).toBe(true);
     expect(all[0].group_id).not.toBeNull();
     expect(all[0].group_id).toBe(all[1].group_id);
+  });
+});
+
+describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
+  /** A .pdf-canvas element so the pen pointerdown's closest() check passes (the
+   *  draw gesture only starts over a page, not on chrome). */
+  function canvasTarget(): HTMLElement {
+    const c = document.createElement("div");
+    c.className = "pdf-canvas";
+    document.body.appendChild(c);
+    stubNodes.push(c);
+    return c;
+  }
+
+  it("with pen armed, a pointer drag stores ONE kind=path mark and selects it", async () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
+
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    fireEvent.pointerMove(document, { clientX: 180, clientY: 240 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 180, clientY: 240 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("pen");
+    expect(all[0].anchor.kind).toBe("path");
+    expect(all[0].group_id).toBeNull();
+    expect(all[0].style.color).toBe("annotation-blue");
+    expect(all[0].style.stroke_width).toBe(4); // the default activeStrokeWidth
+    if (all[0].anchor.kind === "path") {
+      expect(all[0].anchor.points.length).toBe(3);
+      // normalized: (60,80)/(600,800) = (0.1, 0.1)
+      expect(all[0].anchor.points[0].x).toBeCloseTo(0.1, 5);
+      expect(all[0].anchor.points[0].y).toBeCloseTo(0.1, 5);
+    }
+    // The mark is selected → the pen selection quick-box (color + width + delete).
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("stroke-width-4")).toBeTruthy();
+  });
+
+  it("uses the active stroke width for a new stroke", () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveStrokeWidth(8);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    expect(useAnnotationStore.getState().all()[0].style.stroke_width).toBe(8);
+  });
+
+  it("a click with no drag (< 2 points) creates nothing", () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 60, clientY: 80 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("shows the live preview while drawing and clears it on release", () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    expect(screen.queryByTestId("pen-preview")).toBeTruthy();
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    expect(screen.queryByTestId("pen-preview")).toBeNull();
+  });
+
+  it("Escape mid-draft aborts the stroke (no mark, no preview)", () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByTestId("pen-preview")).toBeNull();
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("does NOT draw when the pointerdown is not over a page (chrome click)", () => {
+    canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
+    // Target is document.body (no .pdf-canvas ancestor) → no draft starts.
+    fireEvent.pointerDown(document.body, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("does not draw with a non-pen tool armed (the gesture is pen-gated)", () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />);
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    // No pen mark; the highlight create path needs a text selection (none here).
+    expect(useAnnotationStore.getState().all().filter((a) => a.type === "pen")).toHaveLength(0);
+  });
+});
+
+describe("AnnotationInteraction pen selection quick-box (Story 2.8 — AC2,6)", () => {
+  function penMark(id: string, color = "annotation-blue", width = 4): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "pen",
+      group_id: null,
+      anchor: {
+        kind: "path",
+        page_index: 0,
+        points: [
+          { x: 0.1, y: 0.1 },
+          { x: 0.2, y: 0.2 },
+        ],
+      },
+      style: { color, stroke_width: width },
+      body: null,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+  }
+
+  function setup(mark: Annotation) {
+    useAnnotationStore.getState().addAnnotation(mark);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select(mark.id));
+  }
+
+  it("a selected pen mark opens the box with the color row AND the stroke-width row + delete", async () => {
+    setup(penMark("p1", "annotation-green", 8));
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("color-swatch-annotation-green").getAttribute("aria-checked")).toBe("true");
+    // The stroke-width row is present and armed to the mark's width.
+    expect(screen.getByTestId("stroke-width-8").className).toContain("stroke-width-step--armed");
+    expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
+  });
+
+  it("picking a stroke width restrokes the pen mark + updates the default, dismisses the box", async () => {
+    setup(penMark("p1", "annotation-blue", 4));
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("stroke-width-8"));
+    expect(useAnnotationStore.getState().annotations.get("p1")!.style.stroke_width).toBe(8);
+    expect(useAnnotationStore.getState().activeStrokeWidth).toBe(8);
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    expect(useAnnotationStore.getState().selectedId).toBe("p1");
+  });
+
+  it("picking a color recolors the pen mark (reuses the recolor seam)", async () => {
+    setup(penMark("p1", "annotation-blue", 4));
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
+    expect(useAnnotationStore.getState().annotations.get("p1")!.style.color).toBe("annotation-pink");
+  });
+
+  it("Del deletes the selected pen mark", () => {
+    setup(penMark("p1"));
+    fireEvent.keyDown(document, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("p1")).toBe(false);
   });
 });
 

@@ -9,7 +9,10 @@
 // what differs is the PAINT: `type=highlight` → an accent fill at ~0.4 opacity
 // OVER the run (in the `.annotation-highlights` opacity group); `type=underline`
 // → a 2px accent line UNDER the run (full opacity, in `.annotation-underlines`).
-// Never infer the anchor SHAPE from `type` — only the visual treatment.
+// A `kind=path` mark (pen, Story 2.8) is a DIFFERENT geometry: a freehand stroke
+// rendered as one filled SVG `<path>` from its normalized `points` (re-derived via
+// `denormalizePoint` + the perfect-freehand outline, both shared with the live
+// preview). Never infer the anchor SHAPE from `type` — render branches on `kind`.
 //
 // Story 2.5: the highlight marks become pointer-interactive (the selection hit
 // surface, AD-12 Decision A). Each mark rect IS the page-normalized anchor rect
@@ -27,7 +30,8 @@
 
 import type { Annotation } from "../api/client";
 import { useAnnotationStore } from "../store";
-import { denormalizeRect, type PageBox } from "../anchor";
+import { denormalizeRect, denormalizePoint, type PageBox } from "../anchor";
+import { strokeOutline, svgPathFromOutline } from "./pen";
 import "./Annotations.css";
 
 /** Is `a` part of the active set named by `activeId`? True when it IS that mark,
@@ -69,11 +73,14 @@ export default function AnnotationLayer({
   const marks = [...annotations.values()]
     .filter((a) => a.doc_id === docId && a.anchor.page_index === pageIndex)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
-  // Style-on-type split (AD-5): underlines paint a full-opacity 2px line, so they
-  // live OUTSIDE the 0.4-opacity highlight group; everything else (highlight, and
-  // the cursor-mode proof mark) paints a fill in the opacity group.
-  const highlightMarks = marks.filter((a) => a.type !== "underline");
-  const underlineMarks = marks.filter((a) => a.type === "underline");
+  // Geometry-on-kind / style-on-type split (AD-5). Three groups:
+  //  - text + NOT underline → the 0.4-opacity highlight fill group;
+  //  - text + underline → the full-opacity underline group (2px line);
+  //  - path (pen) → the full-opacity SVG stroke group.
+  const textMarks = marks.filter((a) => a.anchor.kind === "text");
+  const highlightMarks = textMarks.filter((a) => a.type !== "underline");
+  const underlineMarks = textMarks.filter((a) => a.type === "underline");
+  const penMarks = marks.filter((a) => a.anchor.kind === "path");
 
   // Render one annotation's rects as positioned mark divs. `underline` swaps the
   // accent fill for a transparent box with a 2px accent bottom-border (the line
@@ -107,6 +114,37 @@ export default function AnnotationLayer({
     });
   };
 
+  // Render one pen mark as a single filled SVG `<path>` (geometry-on-kind = path).
+  // Points denormalize to card-local px at the current scale; the stroke diameter
+  // also scales (`stroke_width * scale`) so the line stays glued AND thickens with
+  // zoom (NFR-3). Outline + path-`d` come from pen.ts (same engine as the live
+  // preview). The path is the selection hit surface (Story 2.5 seam): fill-only
+  // pointer events + hover/select handlers; hover/selected add an ink SVG stroke.
+  const renderPen = (a: Annotation) => {
+    if (a.anchor.kind !== "path") return null;
+    const hovered = inActiveGroup(a, hoveredId, annotations);
+    const selected = inActiveGroup(a, selectedId, annotations);
+    const cls =
+      "annotation-pen" +
+      (hovered ? " annotation-pen--hovered" : "") +
+      (selected ? " annotation-pen--selected" : "");
+    const pts = a.anchor.points.map((p) => denormalizePoint(p, box, scale));
+    const width = (a.style.stroke_width ?? 0) * scale;
+    const d = svgPathFromOutline(strokeOutline(pts, width));
+    return (
+      <path
+        key={a.id}
+        className={cls}
+        data-testid={`annotation-mark-${a.id}`}
+        d={d}
+        fill={`var(--color-${a.style.color})`}
+        onPointerEnter={() => setHovered(a.id)}
+        onPointerLeave={() => setHovered(null)}
+        onClick={() => select(a.id)}
+      />
+    );
+  };
+
   return (
     // The layer sheet stays decorative (aria-hidden): the marks duplicate the
     // selectable text underneath and exposing every rect fragment as a control
@@ -123,6 +161,14 @@ export default function AnnotationLayer({
       {/* Underlines paint full-opacity (a crisp 2px line), so they sit OUTSIDE the
           highlight opacity group. Same rects, same hit surface (NFR-1). */}
       <div className="annotation-underlines">{underlineMarks.map((a) => renderMark(a, true))}</div>
+      {/* Pen strokes (kind=path): full-opacity filled vector paths in one SVG sheet
+          over the card. Same re-derive-on-zoom invariant; the fill is the hit
+          surface (NFR-1). */}
+      {penMarks.length > 0 && (
+        <svg className="annotation-pens" data-testid={`annotation-pens-${pageIndex}`}>
+          {penMarks.map((a) => renderPen(a))}
+        </svg>
+      )}
     </div>
   );
 }

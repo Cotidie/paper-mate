@@ -69,6 +69,57 @@
   border-bottom: var(--annotation-underline-width) solid;
 }
 
+/* The pen group: full-opacity SVG strokes (a crisp filled vector), so — like the
+   underline group — it sits OUTSIDE the 0.4-opacity highlight group. One SVG sheet
+   over the card; the paths opt back into pointer events (the sheet is transparent
+   to non-stroke pixels via fill-only hit-testing). Geometry keys off anchor.kind
+   = path (AD-5); the math lives in anchor/, the outline in pen.ts. */
+.annotation-pens {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* The SVG sheet itself is transparent to the pointer; each path opts back in,
+     so only the filled stroke is the hit target (text between strokes stays
+     selectable, NFR-1). */
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* A pen stroke = one filled path (the perfect-freehand outline), painted in the
+   mark's style.color (inline fill). It is the selection hit surface (Story 2.5
+   seam, AD-12): pointer-events on the fill, pointer cursor. */
+.annotation-pen {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Hover / selected treatment for a stroke: the rect outline ring does not fit a
+   vector path, so a hovered/selected stroke gets an ink hairline drawn AROUND the
+   filled outline (SVG stroke). Selected is the stronger 2px focus weight. */
+.annotation-pen--hovered {
+  stroke: var(--color-ink);
+  stroke-width: var(--annotation-pen-selected-width);
+}
+
+.annotation-pen--selected {
+  stroke: var(--color-ink);
+  stroke-width: var(--focus-ring-width);
+}
+
+/* The live pen preview: a fixed, full-viewport, pointer-transparent SVG drawn in
+   client space while a stroke is in progress (Story 2.8). It overlays everything
+   (z above the marks, below the quick-box) and never reflows the canvas. */
+.pen-preview {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 40;
+  overflow: visible;
+}
+
 /* quick-box: floating popup at the drag-release point. position:fixed keeps it
    off the canvas layout, so it never shifts the page (AC-4). */
 .quick-box {
@@ -168,6 +219,42 @@
 }
 
 .color-swatch:focus-visible .color-swatch__dot {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+/* stroke-width row: the pen quick-box width steps (Story 2.8). Mirrors the
+   color-swatch row — a uniform-footprint cell wrapping an ink dot whose diameter
+   previews the line weight; the armed (current) step gets the 2px ink ring. */
+.stroke-width-row {
+  display: flex;
+  gap: var(--space-xxs);
+}
+
+.stroke-width-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--color-swatch-size);
+  height: var(--color-swatch-size);
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.stroke-width-step__dot {
+  background-color: var(--color-ink);
+  border-radius: var(--radius-pill);
+}
+
+.stroke-width-step--armed {
+  outline: var(--color-swatch-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.stroke-width-step:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-ink);
   outline-offset: var(--color-swatch-ring-offset);
 }

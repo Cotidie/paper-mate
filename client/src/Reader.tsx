@@ -530,6 +530,10 @@ export default function Reader({
       // selection while pannable (CSS targets [data-pan]). Absent → normal cursor
       // and the Story 1.3 selectable text layer is untouched.
       data-pan={canPan ? (dragging ? "grabbing" : "") : undefined}
+      // Pen armed (Story 2.8): suppress native text selection + show a crosshair
+      // so a freehand drag draws instead of selecting. Derived from armedTool; the
+      // draw GESTURE itself lives in the overlay (AnnotationInteraction), not here.
+      data-draw={armedTool === "pen" ? "" : undefined}
       onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

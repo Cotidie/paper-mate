@@ -119,6 +119,37 @@ highlight — no new machinery:
   the open-on-tool-change effect); `U` arms it. Underline shares the one
   `activeColor` with highlight.
 
-Still later stories: pen/memo/comment tools + box-select drag (2.8-2.11),
+Story 2.8 (pen tool) is the FIRST non-text tool, so it adds real machinery (a
+gesture-capture path + a new `anchor.kind`), not just a paint variant:
+
+- A pen mark is a freehand pointer GESTURE, not a text selection. `AnnotationInteraction`
+  has a SEPARATE document-level path, active only while `armedTool === "pen"`:
+  `pointerdown` over a page starts a draft (client-space points), `pointermove`
+  accumulates points + drives a live preview, `pointerup` resolves the page
+  (`pickPage` on the first point), converts client→card-local→normalized points
+  (`anchor/normalizePoint`), and stores ONE `type=pen` / `kind=path` mark via
+  `buildPenAnnotation`, then selects it. `preventDefault` on down/move suppresses
+  native text selection; the Reader sets `data-draw` on `.pdf-canvas` (a pure
+  derivation of `armedTool==="pen"`) for `user-select:none` + a crosshair cursor.
+  A draft with < 2 points (a click) makes no mark; `Esc`/pointercancel/blur abort.
+- Point math lives in `anchor/` (AD-9): `normalizePoint`/`denormalizePoint` are the
+  point twins of the rect pair (`[0,1]` fractions of `box*scale`, clamped). The
+  freehand outline + its SVG path `d` come from `pen.ts` (perfect-freehand, AD-2),
+  used by BOTH the live preview AND `AnnotationLayer` so what-you-draw is what lands.
+- Rendering follows AD-5: GEOMETRY keys off `anchor.kind` = `path` (an SVG `<path>`
+  from `points`), STYLE off `style`. `AnnotationLayer` renders pen marks in a
+  full-opacity `.annotation-pens` SVG sheet (sibling of the highlight/underline
+  groups); the path is filled in the mark's `style.color`. The stroke diameter is
+  `style.stroke_width * scale`, so it stays glued AND thickens with zoom (NFR-3).
+  The path is the 2.5 selection hit surface (`.annotation-pen`, added to both
+  `.closest()` hit-tests); hover/selected add an ink SVG stroke around the fill.
+- `stroke_width` is stored at scale 1.0 (path-only style per AR-5). The rail has a
+  Pen button whose sub-toolbox carries BOTH a `ColorSwatchRow` AND a
+  `StrokeWidthRow` (UX-DR5); `D` arms it. The shared store state is `activeColor`
+  (with highlight/underline) + a new `activeStrokeWidth`. The selection quick-box
+  is type-aware: a selected pen mark also shows the `StrokeWidthRow` (restroke via
+  `store.restrokeAnnotation`), and its box anchors below the stroke's bounding box.
+
+Still later stories: memo/comment tools + box-select drag (2.9-2.11),
 the cursor-mode drag-to-change-tool picker (2.12), and editing/undo/persistence
 (Epic 3).

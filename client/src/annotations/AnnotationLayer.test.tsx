@@ -34,6 +34,34 @@ function groupMark(id: string, groupId: string, createdAt = "2026-06-29T00:00:00
   return { ...m, group_id: groupId };
 }
 
+/** A pen mark (kind=path) on the given page. */
+function penMark(
+  id: string,
+  pageIndex: number,
+  docId = "doc-1",
+  createdAt = "2026-06-29T00:00:00+00:00",
+): Annotation {
+  return {
+    id,
+    doc_id: docId,
+    type: "pen",
+    group_id: null,
+    anchor: {
+      kind: "path",
+      page_index: pageIndex,
+      points: [
+        { x: 0.1, y: 0.1 },
+        { x: 0.2, y: 0.15 },
+        { x: 0.3, y: 0.2 },
+      ],
+    },
+    style: { color: "annotation-blue", stroke_width: 4 },
+    body: null,
+    created_at: createdAt,
+    updated_at: createdAt,
+  };
+}
+
 beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
 afterEach(cleanup);
 
@@ -178,6 +206,38 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(screen.getByTestId("annotation-mark-u1").className).toContain("annotation-highlight--selected");
     fireEvent.pointerEnter(screen.getByTestId("annotation-mark-u1"));
     expect(screen.getByTestId("annotation-mark-u1").className).toContain("annotation-highlight--hovered");
+  });
+
+  it("renders a kind=path mark as a filled SVG path inside the pen group (Story 2.8)", () => {
+    useAnnotationStore.getState().addAnnotation(penMark("p1", 0));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const mark = screen.getByTestId("annotation-mark-p1");
+    expect(mark.tagName.toLowerCase()).toBe("path");
+    expect(mark.getAttribute("fill")).toBe("var(--color-annotation-blue)");
+    // A non-empty path d (geometry from pen.ts).
+    expect((mark.getAttribute("d") ?? "").length).toBeGreaterThan(0);
+    // It lives in the pen SVG sheet, not the highlight/underline rect groups.
+    expect(container.querySelector(".annotation-pens")!.contains(mark)).toBe(true);
+    expect(container.querySelector(".annotation-highlights")!.contains(mark)).toBe(false);
+  });
+
+  it("a pen mark is the 2.5 hit surface: click selects, hover/selected classes apply", () => {
+    useAnnotationStore.getState().addAnnotation(penMark("p1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const mark = screen.getByTestId("annotation-mark-p1");
+    fireEvent.click(mark);
+    expect(useAnnotationStore.getState().selectedId).toBe("p1");
+    act(() => useAnnotationStore.getState().select("p1"));
+    // SVG className is an SVGAnimatedString — read the class attribute as a string.
+    expect(screen.getByTestId("annotation-mark-p1").getAttribute("class")).toContain("annotation-pen--selected");
+    fireEvent.pointerEnter(screen.getByTestId("annotation-mark-p1"));
+    expect(screen.getByTestId("annotation-mark-p1").getAttribute("class")).toContain("annotation-pen--hovered");
+  });
+
+  it("does not render the pen group when there are no pen marks", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("h1", 0));
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(container.querySelector(".annotation-pens")).toBeNull();
   });
 
   it("renders marks sorted by created_at (newest last in DOM, recent-wins)", () => {

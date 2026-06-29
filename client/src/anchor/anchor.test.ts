@@ -3,6 +3,8 @@ import {
   canonicalize,
   normalizeRect,
   denormalizeRect,
+  normalizePoint,
+  denormalizePoint,
   pickPage,
   mergeRects,
   collectTextRects,
@@ -76,6 +78,37 @@ describe("normalize ↔ denormalize round-trip (AC-6 anchor fidelity)", () => {
     const at2 = denormalizeRect(norm, box, 2);
     // Position + size scale exactly with zoom — the anchor stays put in PDF space.
     expect(at2).toEqual({ left: at1.left * 2, top: at1.top * 2, width: at1.width * 2, height: at1.height * 2 });
+  });
+});
+
+describe("normalizePoint / denormalizePoint (pen freehand points, AD-4)", () => {
+  it("normalizes a card-local point to [0,1] fractions of box*scale", () => {
+    expect(normalizePoint({ x: 300, y: 400 }, box, 1)).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it("removes scale so the same PDF point normalizes identically at any zoom", () => {
+    const at1 = normalizePoint({ x: 150, y: 200 }, box, 1);
+    const at2 = normalizePoint({ x: 300, y: 400 }, box, 2);
+    expect(at1).toEqual(at2);
+  });
+
+  it("clamps an off-card point back into [0,1] (stroke binds to its start page)", () => {
+    expect(normalizePoint({ x: -50, y: 1200 }, box, 1)).toEqual({ x: 0, y: 1 });
+  });
+
+  it("guards divide-by-zero on a zero-size box", () => {
+    expect(normalizePoint({ x: 5, y: 5 }, { width: 0, height: 0 }, 1)).toEqual({ x: 0, y: 0 });
+  });
+
+  it("denormalize is the inverse of normalize at the same scale", () => {
+    const norm = normalizePoint({ x: 150, y: 240 }, box, 1);
+    expect(denormalizePoint(norm, box, 1)).toEqual({ x: 150, y: 240 });
+  });
+
+  it("re-derives a larger screen point when scale grows (zoom, NFR-3)", () => {
+    const norm = normalizePoint({ x: 150, y: 240 }, box, 1);
+    const at2 = denormalizePoint(norm, box, 2);
+    expect(at2).toEqual({ x: 300, y: 480 });
   });
 });
 
