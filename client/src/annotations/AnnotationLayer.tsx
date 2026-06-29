@@ -2,8 +2,14 @@
 // annotation anchored to this page, positioned via the anchor service against
 // the live page-card box + scale, so it re-derives on every zoom (AC-6) and
 // never reflows the canvas (NFR-1: the layer is an absolutely-positioned,
-// pointer-transparent sheet over the card). Render keys off `anchor.kind`,
-// NEVER off `type` (AD-5).
+// pointer-transparent sheet over the card).
+//
+// GEOMETRY keys off `anchor.kind`; STYLE keys off `type` (AD-5 — two different
+// axes). A `kind=text` mark's rects + positioning are shared by every text tool;
+// what differs is the PAINT: `type=highlight` → an accent fill at ~0.4 opacity
+// OVER the run (in the `.annotation-highlights` opacity group); `type=underline`
+// → a 2px accent line UNDER the run (full opacity, in `.annotation-underlines`).
+// Never infer the anchor SHAPE from `type` — only the visual treatment.
 //
 // Story 2.5: the highlight marks become pointer-interactive (the selection hit
 // surface, AD-12 Decision A). Each mark rect IS the page-normalized anchor rect
@@ -63,6 +69,43 @@ export default function AnnotationLayer({
   const marks = [...annotations.values()]
     .filter((a) => a.doc_id === docId && a.anchor.page_index === pageIndex)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // Style-on-type split (AD-5): underlines paint a full-opacity 2px line, so they
+  // live OUTSIDE the 0.4-opacity highlight group; everything else (highlight, and
+  // the cursor-mode proof mark) paints a fill in the opacity group.
+  const highlightMarks = marks.filter((a) => a.type !== "underline");
+  const underlineMarks = marks.filter((a) => a.type === "underline");
+
+  // Render one annotation's rects as positioned mark divs. `underline` swaps the
+  // accent fill for a transparent box with a 2px accent bottom-border (the line
+  // under the run); both keep the `.annotation-highlight` base class so the Story
+  // 2.5 selection hit-test / hover / selected ring work identically.
+  const renderMark = (a: Annotation, underline: boolean) => {
+    if (a.anchor.kind !== "text") return null;
+    const hovered = inActiveGroup(a, hoveredId, annotations);
+    const selected = inActiveGroup(a, selectedId, annotations);
+    const cls =
+      "annotation-highlight" +
+      (underline ? " annotation-highlight--underline" : "") +
+      (hovered ? " annotation-highlight--hovered" : "") +
+      (selected ? " annotation-highlight--selected" : "");
+    return a.anchor.rects.map((r, i) => {
+      const pos = denormalizeRect(r, box, scale);
+      const paint = underline
+        ? { borderBottomColor: `var(--color-${a.style.color})` }
+        : { backgroundColor: `var(--color-${a.style.color})` };
+      return (
+        <div
+          key={`${a.id}-${i}`}
+          className={cls}
+          data-testid={`annotation-mark-${a.id}`}
+          onPointerEnter={() => setHovered(a.id)}
+          onPointerLeave={() => setHovered(null)}
+          onClick={() => select(a.id)}
+          style={{ left: pos.left, top: pos.top, width: pos.width, height: pos.height, ...paint }}
+        />
+      );
+    });
+  };
 
   return (
     // The layer sheet stays decorative (aria-hidden): the marks duplicate the
@@ -76,39 +119,10 @@ export default function AnnotationLayer({
           compound into a darker/thicker band and the most recent (last in DOM)
           wins on shared text (AC #3). `isolation` keeps the group's blending
           self-contained. */}
-      <div className="annotation-highlights">
-        {marks.map((a) => {
-          // Render off the anchor KIND, not the annotation type. Story 2.2 paints
-          // the `text` kind (highlight); rect/path kinds arrive in 2.6–2.10.
-          if (a.anchor.kind !== "text") return null;
-          const hovered = inActiveGroup(a, hoveredId, annotations);
-          const selected = inActiveGroup(a, selectedId, annotations);
-          const cls =
-            "annotation-highlight" +
-            (hovered ? " annotation-highlight--hovered" : "") +
-            (selected ? " annotation-highlight--selected" : "");
-          return a.anchor.rects.map((r, i) => {
-            const pos = denormalizeRect(r, box, scale);
-            return (
-              <div
-                key={`${a.id}-${i}`}
-                className={cls}
-                data-testid={`annotation-mark-${a.id}`}
-                onPointerEnter={() => setHovered(a.id)}
-                onPointerLeave={() => setHovered(null)}
-                onClick={() => select(a.id)}
-                style={{
-                  left: pos.left,
-                  top: pos.top,
-                  width: pos.width,
-                  height: pos.height,
-                  backgroundColor: `var(--color-${a.style.color})`,
-                }}
-              />
-            );
-          });
-        })}
-      </div>
+      <div className="annotation-highlights">{highlightMarks.map((a) => renderMark(a, false))}</div>
+      {/* Underlines paint full-opacity (a crisp 2px line), so they sit OUTSIDE the
+          highlight opacity group. Same rects, same hit surface (NFR-1). */}
+      <div className="annotation-underlines">{underlineMarks.map((a) => renderMark(a, true))}</div>
     </div>
   );
 }

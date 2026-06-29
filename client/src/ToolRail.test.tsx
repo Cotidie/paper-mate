@@ -42,6 +42,14 @@ function armHighlight(over: Partial<RailProps> = {}) {
   return r;
 }
 
+// Same for Underline (Story 2.7): start on cursor, switch to underline so the
+// open-on-tool-change effect pops its color sub-toolbar.
+function armUnderline(over: Partial<RailProps> = {}) {
+  const r = renderRail({ activeTool: "cursor", ...over });
+  r.update({ activeTool: "underline" });
+  return r;
+}
+
 describe("ToolRail", () => {
   it("renders the rail shell (data-testid kept stable for App.test)", () => {
     renderRail();
@@ -229,6 +237,56 @@ describe("ToolRail", () => {
     const btn = screen.getByTestId("tool-highlight-button");
     expect(btn.className).toContain("tool-button--armed");
     expect(btn.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  // ── Story 2.7: the Underline tool (twin of Highlight) ──────────────────────
+  it("arms underline in ONE click from another tool; switching to it opens its color sub-toolbox", () => {
+    const r = renderRail({ activeTool: "cursor" });
+    const btn = screen.getByTestId("tool-underline-button");
+    expect(btn.getAttribute("title")).toBe("Underline (U)");
+    expect(btn.className).not.toContain("tool-button--armed");
+    expect(screen.queryByTestId("underline-color-flyout")).toBeNull();
+    fireEvent.click(btn);
+    expect(r.onSelectTool).toHaveBeenCalledWith("underline");
+    // The parent applies the switch → the underline color sub-toolbox opens.
+    r.update({ activeTool: "underline" });
+    expect(btn.className).toContain("tool-button--armed");
+    expect(screen.getByTestId("underline-color-flyout")).toBeTruthy();
+    expect(btn.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("re-clicking the active Underline button toggles its color sub-toolbox, never disarms", () => {
+    const { onSelectTool } = armUnderline();
+    const btn = screen.getByTestId("tool-underline-button");
+    expect(screen.getByTestId("underline-color-flyout")).toBeTruthy();
+    fireEvent.click(btn);
+    expect(screen.queryByTestId("underline-color-flyout")).toBeNull();
+    expect(onSelectTool).not.toHaveBeenCalled();
+    fireEvent.click(btn);
+    expect(screen.getByTestId("underline-color-flyout")).toBeTruthy();
+  });
+
+  it("the underline color sub-toolbox shows the 5-swatch row with activeColor armed; picking sets it + closes", () => {
+    const { onPickColor } = armUnderline({ activeColor: "annotation-green" });
+    const flyout = screen.getByTestId("underline-color-flyout");
+    expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
+    expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
+    expect(onPickColor).toHaveBeenCalledWith("annotation-blue");
+    expect(screen.queryByTestId("underline-color-flyout")).toBeNull();
+  });
+
+  it("the underline sub-toolbox closes on Escape / switch-away", () => {
+    const r = armUnderline();
+    expect(screen.getByTestId("underline-color-flyout")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByTestId("underline-color-flyout")).toBeNull();
+    // Re-arm, then switch away to highlight: gone.
+    r.update({ activeTool: "cursor" });
+    r.update({ activeTool: "underline" });
+    expect(screen.getByTestId("underline-color-flyout")).toBeTruthy();
+    r.update({ activeTool: "highlight" });
+    expect(screen.queryByTestId("underline-color-flyout")).toBeNull();
   });
 
   it("calls onToggleCollapse from the collapse affordance", () => {

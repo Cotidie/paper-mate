@@ -28,6 +28,10 @@ import { initialOverlayState, overlayReducer, type AnnotationTool } from "./mach
 import ColorSwatchRow from "./ColorSwatchRow";
 import "./Annotations.css";
 
+/** Vertical gap (viewport px) between the marked text and the floating quick-box
+ *  anchored below it, so the box clears the run instead of covering it. */
+const QUICK_BOX_GAP = 6;
+
 /** Skip editable fields + buttons so the global handlers never eat a control's
  *  own keys/clicks (mirrors the Reader's hold-Space `isExempt`). */
 function isExempt(t: EventTarget | null): boolean {
@@ -140,15 +144,19 @@ export default function AnnotationInteraction({
         rectReaderRef.current,
       );
       if (pages.length === 0) return;
-      if (armedToolRef.current === "highlight") {
-        // Create-on-release at the active color (Story 2.6 — chosen via the
-        // Highlight sub-toolbox, not a hardcode), then select the new mark: the
-        // selection quick-box recolors/deletes it (the whole group together).
-        // Clear the live text selection so it cannot re-pop on the next pointerup.
+      const tool = armedToolRef.current;
+      if (tool === "highlight" || tool === "underline") {
+        // Create-on-release for either text-anchor tool: same path, the tool's
+        // `type` is the only difference (highlight paints a fill, underline a 2px
+        // line — that branch lives in AnnotationLayer, keyed off `type` per AD-5).
+        // Color is the active color (Story 2.6 — chosen via the tool's color
+        // sub-toolbox, not a hardcode). Then select the new mark so the selection
+        // quick-box recolors/deletes it (the whole group together). Clear the live
+        // text selection so it cannot re-pop on the next pointerup.
         const created = buildAnnotations(pages, docId, {
           now: new Date().toISOString(),
           newId,
-          type: "highlight",
+          type: tool,
           color: activeColorRef.current,
         });
         created.forEach(addAnnotation);
@@ -156,6 +164,10 @@ export default function AnnotationInteraction({
         select(created[0].id);
         return;
       }
+      // Any OTHER armed tool (pen/memo/comment — future stories) must NOT fall
+      // through to the cursor-mode proof box: that would pop the highlight proof
+      // as if nothing were armed. Only cursor mode (tool === null) reaches it.
+      if (tool !== null) return;
       // Cursor mode (no tool): the 2.2 proof — a single action that creates the
       // highlight on click (the cursor-mode tool picker is Story 2.12).
       restoreFocusRef.current = document.activeElement as HTMLElement | null;
@@ -364,17 +376,26 @@ export default function AnnotationInteraction({
     selectedAnno.anchor.kind === "text" &&
     selectedAnno.anchor.rects.length > 0;
 
-  // Project the selected mark's first rect to a viewport point (the box anchor),
-  // re-derived from the anchor service so it tracks zoom. clamped in layout.
+  // Project the selected mark to the box-anchor viewport point, re-derived from
+  // the anchor service so it tracks zoom (clamped in layout). Anchored just BELOW
+  // the selection's LOWEST line (left-aligned to the first line) so the floating
+  // box never covers the marked text — it sits in the gap under the run.
   const selectionPoint = (): { x: number; y: number } => {
     if (!selectedAnno || selectedAnno.anchor.kind !== "text" || selectedAnno.anchor.rects.length === 0) {
       return { x: 0, y: 0 };
     }
     const page = getPagesRef.current().find((p) => p.pageIndex === selectedAnno.anchor.page_index);
     if (!page) return { x: 0, y: 0 };
-    const pos = denormalizeRect(selectedAnno.anchor.rects[0], page.box, scaleRef.current);
     const cardRect = page.cardEl.getBoundingClientRect();
-    return { x: cardRect.left + pos.left, y: cardRect.top + pos.top };
+    const scale = scaleRef.current;
+    const rects = selectedAnno.anchor.rects;
+    const first = denormalizeRect(rects[0], page.box, scale);
+    let bottom = first.top + first.height;
+    for (const r of rects) {
+      const p = denormalizeRect(r, page.box, scale);
+      bottom = Math.max(bottom, p.top + p.height);
+    }
+    return { x: cardRect.left + first.left, y: cardRect.top + bottom + QUICK_BOX_GAP };
   };
 
   // Focus moves INTO the selection box on open and RETURNS to the prior element

@@ -314,6 +314,60 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
   });
 });
 
+describe("AnnotationInteraction underline tool (Story 2.7 — AC1,2,3)", () => {
+  it("with underline armed, a drag-release LANDS a type=underline mark in the active color and SELECTS it", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("annotation-green");
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="underline" />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    // The create path read the armed tool's type, not a hardcoded "highlight".
+    expect(all[0].type).toBe("underline");
+    expect(all[0].anchor.kind).toBe("text");
+    expect(all[0].style.color).toBe("annotation-green");
+    // It is selected → the same selection quick-box (swatch row + delete, AC2).
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("color-swatch-annotation-green").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
+  });
+
+  it("a non-text armed tool (e.g. pen) does NOT create and does NOT fall through to the cursor proof box", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool={"pen" as never} />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    // Pen has no text-drag create yet (Story 2.8); it must not land a mark, and it
+    // must not pop the cursor-mode highlight proof box (the inverse-path guard).
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+  });
+
+  it("a two-page underline lands two type=underline marks sharing one group_id (AR-4)", () => {
+    stubSelection([
+      { left: 10, top: 100, right: 200, bottom: 120 },
+      { left: 10, top: 900, right: 200, bottom: 920 },
+    ]);
+    const pages = [fakeCard(0, 0), fakeCard(1, 820)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="underline" />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(2);
+    expect(all.every((a) => a.type === "underline")).toBe(true);
+    expect(all[0].group_id).not.toBeNull();
+    expect(all[0].group_id).toBe(all[1].group_id);
+  });
+});
+
 describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", () => {
   /** Render the interaction layer with one page card and select a stored mark. */
   function setup(marks: Annotation[], selectId: string) {

@@ -282,6 +282,22 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(hi().className).not.toContain("tool-button--armed");
   });
 
+  it("'U' arms the underline tool; 'V'/'Escape' disarm it (Story 2.7)", async () => {
+    await openReader();
+    const un = () => screen.getByTestId("tool-underline-button");
+    expect(un().className).not.toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "u" });
+    expect(un().className).toContain("tool-button--armed");
+    // Mutual exclusion: highlight is not also armed.
+    expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "v" });
+    expect(un().className).not.toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "U" });
+    expect(un().className).toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(un().className).not.toContain("tool-button--armed");
+  });
+
   it("'H' over a focused button/select does NOT arm (handler exempts controls)", async () => {
     await openReader();
     const btn = screen.getByTestId("tool-highlight-button");
