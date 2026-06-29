@@ -240,6 +240,16 @@ Implemented the selection seam (AD-12) entirely client-side; no contract/anchor/
 - .bmad/implementation-artifacts/2-5-select-highlight-recolor-delete.md (this story)
 - .bmad/implementation-artifacts/sprint-status.yaml (status tracking)
 
+### Code Review (cross-model: Codex gpt-5.5, read-only)
+
+Ran the BMad code-review method via `codex exec`. No BLOCKERs. Resolved:
+
+- ✅ **HIGH — cross-doc selection leak** (`AnnotationInteraction.tsx`): `selectedId` survives a doc switch (global store, not cleared until Epic 3), so a stale selection from doc A could render a box / be recolored/deleted from doc B. Fix: `selectedAnno` is now doc-scoped (`doc_id === docId`); delete/recolor use the scoped mark; added a clear-selection-on-`docId`-change effect. Tests added.
+- ✅ **MEDIUM — Esc handled before the exempt/chord guard**: reordered so chords + editable/button targets are skipped before any key (incl. Esc), matching the document-level handler convention. Tests added (Esc-in-input, Ctrl+Del).
+- ⏸️ **MEDIUM — a11y (interactive marks under `aria-hidden`)**: accepted/deferred. Selection is a pointer affordance with document-level Del/Esc; full keyboard-reachable selection lands with the Epic-3 Annotation Bank (noted in code).
+- ⏸️ **LOW — selected ring dimmed by the 0.4 opacity group**: accepted. Live smoke confirmed the ring is visibly darker (1.6px ink) at DPR 1.25; a separate full-opacity overlay is a future polish if needed.
+
 ### Change Log
 
 - 2026-06-29: Implemented Story 2.5 (select highlight: click-select + recolor + delete, AD-12). Selection seam added client-only — `selectedId` + group-aware delete in `store/`, pointer-interactive marks + hover/selected affordances + selection quick-box in `annotations/`; `anchor/` and the API contract unchanged. Status → review.
+- 2026-06-29: Addressed code-review findings — doc-scoped selection (cross-doc leak fix) + key-handler exemption order; +4 tests. Client 239 pass, contract byte-identical.

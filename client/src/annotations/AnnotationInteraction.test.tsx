@@ -345,6 +345,45 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     input.remove();
   });
 
+  it("Esc inside an editable field does NOT clear the selection (exempt order)", () => {
+    setup([textMark("m1")], "m1");
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+    input.remove();
+  });
+
+  it("a Ctrl-chord Delete does NOT delete the selected mark", () => {
+    setup([textMark("m1")], "m1");
+    fireEvent.keyDown(document, { key: "Delete", ctrlKey: true });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
+  });
+
+  it("a stale selection from another doc renders no box and cannot be deleted here", () => {
+    // Mark belongs to doc-1; this reader is doc-2. The global store survives a
+    // doc switch, so the cross-doc selectedId must be inert here.
+    useAnnotationStore.getState().addAnnotation(textMark("other"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-2" getPages={() => pages} scale={1} enabled />);
+    act(() => useAnnotationStore.getState().select("other"));
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+    fireEvent.keyDown(document, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("other")).toBe(true);
+  });
+
+  it("switching the reader's doc clears any prior selection", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("m1"));
+    const pages = [fakeCard(0, 0)];
+    const { rerender } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />,
+    );
+    act(() => useAnnotationStore.getState().select("m1"));
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+    rerender(<AnnotationInteraction docId="doc-2" getPages={() => pages} scale={1} enabled />);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
   it("with a mark selected, an empty-space drag still CREATES a highlight (2.3 path unbroken)", async () => {
     const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];

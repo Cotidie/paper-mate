@@ -236,8 +236,20 @@ export default function AnnotationInteraction({
 
   // ── Selection (Story 2.5, AD-12) ─────────────────────────────────────────
   // Separate from the create machine (Decision B): the selection quick-box is
-  // driven by the store's `selectedId`, not `machine.ts`.
-  const selectedAnno = selectedId ? annotations.get(selectedId) ?? null : null;
+  // driven by the store's `selectedId`, not `machine.ts`. Scope the resolved mark
+  // to THIS doc: the store is global and not cleared on doc switch (Epic 3), so a
+  // stale `selectedId` from another document must not render a box or be mutated
+  // here. (The clear-on-doc-switch effect below is the primary guard; this keeps
+  // every downstream read consistent even within the same render.)
+  const selectedRaw = selectedId ? annotations.get(selectedId) ?? null : null;
+  const selectedAnno = selectedRaw && selectedRaw.doc_id === docId ? selectedRaw : null;
+
+  // A doc switch (the singleton store survives it) must drop any prior selection
+  // so it can't be recolored/deleted from the new reader. Runs once on mount too
+  // (no-op: nothing selected).
+  useEffect(() => {
+    clearSelection();
+  }, [docId, clearSelection]);
 
   // Clicking ANY mark (re)opens its quick-box. Bound always-on (phase-gated) so
   // the FIRST selection opens it too, and re-clicking the same mark reopens it
@@ -278,24 +290,27 @@ export default function AnnotationInteraction({
   );
 
   // Delete via the store (removes id + group siblings AND clears `selectedId`).
+  // Uses the doc-scoped mark so a stale cross-doc id can never be deleted here.
   const deleteSelected = useCallback(() => {
-    if (selectedId) deleteAnnotation(selectedId);
-  }, [selectedId, deleteAnnotation]);
+    if (selectedAnno) deleteAnnotation(selectedAnno.id);
+  }, [selectedAnno, deleteAnnotation]);
 
   // Selection keys + dismiss, document-level + phase-gated (AP-1). Live only
-  // while something is selected so we don't shadow other handlers.
+  // while a current-doc mark is selected so we don't shadow other handlers.
   useEffect(() => {
-    if (!enabled || !selectedId) return;
+    if (!enabled || !selectedAnno) return;
     const onKey = (e: KeyboardEvent) => {
+      // Same exemption order as the other document-level handlers: skip chords
+      // and editable/button targets BEFORE acting on any key (incl. Esc).
+      if (e.ctrlKey || e.altKey || e.metaKey || isExempt(e.target)) return;
       if (e.key === "Escape") {
         // Esc clears the selection (the App-level Esc->cursor also runs).
         clearSelection();
         return;
       }
-      if (e.ctrlKey || e.altKey || e.metaKey || isExempt(e.target)) return;
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
-        deleteAnnotation(selectedId);
+        deleteAnnotation(selectedAnno.id);
       }
     };
     // Empty-space deselect: a pointerdown on empty page content (NOT a mark, the
@@ -320,7 +335,7 @@ export default function AnnotationInteraction({
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("scroll", onScroll, true);
     };
-  }, [enabled, selectedId, clearSelection, deleteAnnotation]);
+  }, [enabled, selectedAnno, clearSelection, deleteAnnotation]);
 
   const showSelectionBox =
     selectionBoxOpen && selectedAnno !== null && selectedAnno.anchor.kind === "text";
