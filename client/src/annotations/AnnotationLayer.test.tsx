@@ -20,7 +20,7 @@ function textMark(
     type: "highlight",
     group_id: null,
     anchor: { kind: "text", page_index: pageIndex, rects, text: "x" },
-    style: { color: "annotation-default", stroke_width: null },
+    style: { color: "annotation-default", stroke_width: null, alpha: null },
     body: null,
     created_at: createdAt,
     updated_at: createdAt,
@@ -55,7 +55,7 @@ function penMark(
         { x: 0.3, y: 0.2 },
       ],
     },
-    style: { color: "annotation-blue", stroke_width: 4 },
+    style: { color: "annotation-blue", stroke_width: 4, alpha: null },
     body: null,
     created_at: createdAt,
     updated_at: createdAt,
@@ -76,7 +76,7 @@ function memoMark(
     type: "memo",
     group_id: null,
     anchor: { kind: "rect", page_index: pageIndex, rect: { x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.4 } },
-    style: { color: "annotation-pink", stroke_width: null },
+    style: { color: "annotation-pink", stroke_width: null, alpha: null },
     body,
     created_at: createdAt,
     updated_at: createdAt,
@@ -196,7 +196,7 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
   });
 
   it("renders a type=underline mark in the underline group with the underline paint class (Story 2.7)", () => {
-    const u = { ...textMark("u1", 0), type: "underline" as const, style: { color: "annotation-green", stroke_width: null } };
+    const u = { ...textMark("u1", 0), type: "underline" as const, style: { color: "annotation-green", stroke_width: null, alpha: null } };
     useAnnotationStore.getState().addAnnotation(u);
     useAnnotationStore.getState().addAnnotation(textMark("h1", 0)); // a highlight, for contrast
     const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
@@ -253,6 +253,21 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(screen.getByTestId("annotation-mark-p1").getAttribute("class")).toContain("annotation-pen--selected");
     fireEvent.pointerEnter(screen.getByTestId("annotation-mark-p1"));
     expect(screen.getByTestId("annotation-mark-p1").getAttribute("class")).toContain("annotation-pen--hovered");
+  });
+
+  it("pen mark with explicit alpha renders fill-opacity from style.alpha (Story 2.13)", () => {
+    const mark = { ...penMark("p2", 0), style: { color: "annotation-blue", stroke_width: 4, alpha: 0.6 } };
+    useAnnotationStore.getState().addAnnotation(mark);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const el = screen.getByTestId("annotation-mark-p2");
+    expect(el.getAttribute("fill-opacity")).toBe("0.6");
+  });
+
+  it("pen mark with null alpha renders fill-opacity at default 0.4 (Story 2.13, backward compat)", () => {
+    useAnnotationStore.getState().addAnnotation(penMark("p3", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const el = screen.getByTestId("annotation-mark-p3");
+    expect(el.getAttribute("fill-opacity")).toBe("0.4");
   });
 
   it("does not render the pen group when there are no pen marks", () => {
@@ -341,7 +356,7 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
       type: "comment",
       group_id: null,
       anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }], text: "x" },
-      style: { color, stroke_width: null },
+      style: { color, stroke_width: null, alpha: null },
       body,
       created_at: "2026-06-29T00:00:01+00:00",
       updated_at: "2026-06-29T00:00:01+00:00",
@@ -355,7 +370,7 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
       type: "comment",
       group_id: null,
       anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.2, y1: 0.3 } },
-      style: { color, stroke_width: null },
+      style: { color, stroke_width: null, alpha: null },
       body,
       created_at: "2026-06-29T00:00:01+00:00",
       updated_at: "2026-06-29T00:00:01+00:00",
@@ -486,7 +501,7 @@ describe("AnnotationLayer region fills (Story 2.11 — AC3,4,6)", () => {
       type: "highlight",
       group_id: null,
       anchor: { kind: "rect", page_index: 0, rect },
-      style: { color, stroke_width: null },
+      style: { color, stroke_width: null, alpha: null },
       body: null,
       created_at: "2026-06-29T00:00:01+00:00",
       updated_at: "2026-06-29T00:00:01+00:00",
@@ -500,7 +515,7 @@ describe("AnnotationLayer region fills (Story 2.11 — AC3,4,6)", () => {
       type: "comment",
       group_id: null,
       anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.6, y1: 0.7 } },
-      style: { color: "annotation-blue", stroke_width: null },
+      style: { color: "annotation-blue", stroke_width: null, alpha: null },
       body,
       created_at: "2026-06-29T00:00:01+00:00",
       updated_at: "2026-06-29T00:00:01+00:00",

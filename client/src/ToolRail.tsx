@@ -14,7 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { type ActiveTool, type PointerTool, isPointerTool } from "./tools";
 import { type MemoSize } from "./store";
-import { ColorSwatchRow, StrokeWidthRow, SizeRow } from "./annotations";
+import { ColorSwatchRow, StrokeWidthRow, AlphaRow, SizeRow } from "./annotations";
 import ToolFlyout from "./ToolFlyout";
 
 /**
@@ -51,6 +51,8 @@ export default function ToolRail({
   onToggleBoxHighlight,
   activeStrokeWidth,
   onPickStrokeWidth,
+  activeAlpha,
+  onPickAlpha,
   activeMemoSize,
   onPickMemoSize,
   collapsed,
@@ -78,6 +80,11 @@ export default function ToolRail({
   activeStrokeWidth: number;
   /** Set the active pen stroke width (the default new strokes land in). */
   onPickStrokeWidth: (width: number) => void;
+  /** The active pen stroke alpha (store-backed; Story 2.13). The Pen tool's
+   *  sub-toolbox shows this armed and sets it via `onPickAlpha`. */
+  activeAlpha: number;
+  /** Set the active pen alpha (the default new strokes land in). */
+  onPickAlpha: (alpha: number) => void;
   /** The active memo box size (store-backed; Story 2.9). The Memo tool's
    *  sub-toolbox shows this armed and sets it via `onPickMemoSize`. */
   activeMemoSize: MemoSize;
@@ -342,6 +349,13 @@ export default function ToolRail({
               value={activeStrokeWidth}
               onPick={(width) => {
                 onPickStrokeWidth(width);
+                setFlyoutOpen(false);
+              }}
+            />
+            <AlphaRow
+              value={activeAlpha}
+              onPick={(alpha) => {
+                onPickAlpha(alpha);
                 setFlyoutOpen(false);
               }}
             />

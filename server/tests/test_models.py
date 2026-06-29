@@ -1,9 +1,12 @@
-"""Annotation entity tests (AD-5, Story 2.2): the discriminated-union anchor
-round-trips and the model is surfaced into OpenAPI (so the client gets a
-generated TS type) without adding endpoints."""
+"""Annotation entity tests (AD-5, Story 2.2 + 2.13): the discriminated-union
+anchor round-trips and the model is surfaced into OpenAPI (so the client gets a
+generated TS type) without adding endpoints. Story 2.13 adds Style.alpha."""
+
+import pytest
+from pydantic import ValidationError
 
 from app.main import app
-from app.models import Annotation, PathAnchor, RectAnchor, TextAnchor
+from app.models import Annotation, PathAnchor, RectAnchor, Style, TextAnchor
 
 BASE = {
     "id": "11111111-1111-1111-1111-111111111111",
@@ -39,6 +42,54 @@ def test_path_anchor_parses_via_discriminator() -> None:
     )
     assert isinstance(ann.anchor, PathAnchor)
     assert ann.style.stroke_width == 2.0
+
+
+def test_style_alpha_null_by_default() -> None:
+    """Story 2.13: alpha defaults to None (backward-compatible, AD-8)."""
+    s = Style(color="annotation-default")
+    assert s.alpha is None
+    assert s.stroke_width is None
+
+
+def test_style_alpha_round_trips() -> None:
+    """Story 2.13: alpha is stored and retrieved exactly."""
+    s = Style(color="annotation-ink", stroke_width=4.0, alpha=0.4)
+    assert s.alpha == pytest.approx(0.4)
+
+
+def test_style_alpha_rejects_out_of_range() -> None:
+    """Story 2.13: Pydantic rejects alpha outside [0, 1]."""
+    with pytest.raises(ValidationError):
+        Style(color="x", alpha=1.5)
+    with pytest.raises(ValidationError):
+        Style(color="x", alpha=-0.1)
+
+
+def test_pen_annotation_with_alpha_round_trips() -> None:
+    """Story 2.13: a pen Annotation with alpha parses correctly."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "pen",
+            "style": {"color": "ink", "stroke_width": 2.0, "alpha": 0.6},
+            "anchor": {"kind": "path", "page_index": 0, "points": [{"x": 0.1, "y": 0.2}]},
+        }
+    )
+    assert isinstance(ann.anchor, PathAnchor)
+    assert ann.style.alpha == pytest.approx(0.6)
+
+
+def test_pen_annotation_null_alpha_backward_compatible() -> None:
+    """Story 2.13 / AD-8: a pre-2.13 pen mark (no alpha field) parses fine."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "pen",
+            "style": {"color": "ink", "stroke_width": 2.0},
+            "anchor": {"kind": "path", "page_index": 0, "points": [{"x": 0.1, "y": 0.2}]},
+        }
+    )
+    assert ann.style.alpha is None
 
 
 def test_annotation_surfaced_in_openapi_without_endpoints() -> None:

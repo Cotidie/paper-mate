@@ -308,4 +308,29 @@ unchanged (one-shot create, not a sticky arm). The buttons are icon-only
 - No contract change: all four types + both builders already exist; the
   tracked OpenAPI + generated TS types stay byte-identical.
 
-Still later: pen alpha (2.13), and editing/undo/persistence (Epic 3).
+## Story 2.13 -- pen stroke alpha (opacity)
+
+Alpha is the THIRD pen style axis (after color and stroke_width), stored as
+`style.alpha: float | null` on the `Style` model (Pydantic + generated TS
+contract). `null` is backward-compatible (renders at the 0.4 default, same
+as the highlighter opacity). Only pen marks carry a non-null alpha; all other
+marks store `null` (AR-5).
+
+- `AlphaRow`: a 4-step row (Low 0.2 / Mid 0.4 / High 0.6 / Full 1.0),
+  mirroring `StrokeWidthRow`. Swatches visualize the step opacity. Exported
+  from the barrel and reused by BOTH the pen sub-toolbox (arm-time picker) AND
+  the selection quick-box (per-mark edit).
+- `store.activeAlpha` / `setActiveAlpha`: sticky default (last-choice-wins,
+  same model as `activeColor`/`activeStrokeWidth`). Default = 0.4.
+- `store.realphaAnnotation`: per-mark alpha update (twin of
+  `restrokeAnnotation`), guarded to `anchor.kind === "path"` so a stale
+  selection id for a text mark is silently skipped.
+- `AnnotationLayer.renderPen`: each `<path>` now carries `fillOpacity` (per-stroke,
+  NOT group opacity, so overlapping strokes at different alphas render correctly).
+  `PEN_DEFAULT_ALPHA = 0.4` bridges the CSS token to the TS render path.
+- The live preview path (the in-flight draft) also carries `fillOpacity`.
+- The selection quick-box shows `AlphaRow` when `isPenSelected`, reflecting the
+  selected mark's own `style.alpha ?? activeAlpha`. Picking calls
+  `realphaAnnotation` + `setActiveAlpha` + closes the box.
+
+Still later: editing/undo/persistence (Epic 3).

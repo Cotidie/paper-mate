@@ -72,6 +72,15 @@ export interface AnnotationStore {
   activeMemoSize: MemoSize;
   /** Set the active/default memo size (remembers the last choice). */
   setActiveMemoSize: (size: MemoSize) => void;
+  /** The active pen stroke alpha (Story 2.13): the DEFAULT transparency new pen
+   *  strokes land in (0..1, where 1 is fully opaque). The alpha twin of
+   *  `activeStrokeWidth` — set by the Pen tool's alpha sub-toolbox OR by
+   *  re-alphaing an existing mark (last-choice-wins). Default = highlighter
+   *  opacity (0.4) so new strokes sit over text like a highlighter. Client-only,
+   *  not persisted. */
+  activeAlpha: number;
+  /** Set the active/default pen alpha (remembers the last choice). */
+  setActiveAlpha: (alpha: number) => void;
   /** Select an annotation by id, or clear with `null`. */
   select: (id: string | null) => void;
   /** Clear the selection (sugar for `select(null)`). */
@@ -96,6 +105,12 @@ export interface AnnotationStore {
    *  selection quick-box's stroke-width row. Width is scale-1.0 CSS px. Same
    *  creation-time-edit rationale: no command stack yet (Epic 3 folds it in). */
   restrokeAnnotation: (ids: string[], width: number, now: string) => void;
+  /** Re-alpha one or more pen annotations (by id) to a new transparency and bump
+   *  `updated_at` — the alpha twin of `restrokeAnnotation`, from the pen
+   *  selection quick-box's alpha row. Guarded to `kind=path` (alpha is pen-only
+   *  in the UI; do not write it onto text/rect marks). Same creation-time-edit
+   *  rationale: no command stack yet (Epic 3 folds it in). */
+  realphaAnnotation: (ids: string[], alpha: number, now: string) => void;
   /** Set a memo's `body` text and bump `updated_at` — the body twin of
    *  `recolorAnnotation`, called as the user types into the memo's textarea. This
    *  is CREATION-time editing (the memo was just placed in the same gesture), so
@@ -125,6 +140,9 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
   // Default memo size = the medium preset (scale-1.0 px); see MEMO_SIZES.
   activeMemoSize: DEFAULT_MEMO_SIZE,
   setActiveMemoSize: (size) => set({ activeMemoSize: size }),
+  // Default alpha = highlighter opacity (0.4); mirrors --annotation-highlight-opacity.
+  activeAlpha: 0.4,
+  setActiveAlpha: (alpha) => set({ activeAlpha: alpha }),
   select: (id) => set({ selectedId: id }),
   clearSelection: () => set({ selectedId: null }),
   setHovered: (id) => set({ hoveredId: id }),
@@ -170,6 +188,19 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
         // mark, even if a stale id is passed (Codex MED).
         if (a && a.anchor.kind === "path") {
           next.set(id, { ...a, style: { ...a.style, stroke_width: width }, updated_at: now });
+        }
+      }
+      return { annotations: next };
+    }),
+  realphaAnnotation: (ids, alpha, now) =>
+    set((state) => {
+      const next = new Map(state.annotations);
+      for (const id of ids) {
+        const a = next.get(id);
+        // alpha is path-only style (AR-5): never write it onto a text/region
+        // mark, even if a stale id is passed.
+        if (a && a.anchor.kind === "path") {
+          next.set(id, { ...a, style: { ...a.style, alpha }, updated_at: now });
         }
       }
       return { annotations: next };

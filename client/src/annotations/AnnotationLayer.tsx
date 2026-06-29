@@ -38,6 +38,12 @@ import ColorSwatchRow from "./ColorSwatchRow";
 import { clampToViewport } from "./position";
 import "./Annotations.css";
 
+/** Default pen stroke alpha (transparency). Matches --annotation-highlight-opacity
+ *  (0.4) so pre-2.13 marks (alpha=null) render like a highlighter out of the box.
+ *  Kept in sync with the CSS token by the comment; used as the `??` fallback on
+ *  every pen path (the CSS var can't be read as a number in TSX). */
+const PEN_DEFAULT_ALPHA = 0.4;
+
 /** One on-page memo box (Story 2.9): an interactive `<textarea>` positioned via
  *  the denormalized rect. Extracted so each box owns a ref + a layout effect that
  *  re-fits its height to the content — auto-grow must re-run on body/scale change
@@ -389,6 +395,7 @@ export default function AnnotationLayer({
         data-testid={`annotation-mark-${a.id}`}
         d={d}
         fill={`var(--color-${a.style.color})`}
+        fillOpacity={a.style.alpha ?? PEN_DEFAULT_ALPHA}
         onPointerEnter={() => setHovered(a.id)}
         onPointerLeave={() => setHovered(null)}
         onClick={() => select(a.id)}

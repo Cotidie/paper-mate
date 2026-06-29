@@ -58,6 +58,11 @@ export default function App() {
   // write it, the create path reads it). App passes it + its setter to the rail.
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
   const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
+  // Story 2.13: the active pen alpha is store-backed for the same reason as
+  // activeColor/activeStrokeWidth (the rail's AlphaRow + the pen quick-box's
+  // realpha both write it, the create path reads it). App threads it down.
+  const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
+  const setActiveAlpha = useAnnotationStore((s) => s.setActiveAlpha);
   // Story 2.9: the active memo box size is store-backed for the same reason as
   // activeColor/activeStrokeWidth (the rail's SizeRow + the memo quick-box's
   // resize both write it, the placement gesture reads it). App threads it down.
@@ -259,6 +264,10 @@ export default function App() {
           // sets it via onPickStrokeWidth (the default new strokes land in).
           activeStrokeWidth={activeStrokeWidth}
           onPickStrokeWidth={setActiveStrokeWidth}
+          // Story 2.13: the Pen tool's sub-toolbox reads activeAlpha and sets
+          // it via onPickAlpha (the default new strokes land in).
+          activeAlpha={activeAlpha}
+          onPickAlpha={setActiveAlpha}
           // Story 2.9: the Memo tool's sub-toolbox reads activeMemoSize and sets
           // it via onPickMemoSize (the default new memos land in).
           activeMemoSize={activeMemoSize}

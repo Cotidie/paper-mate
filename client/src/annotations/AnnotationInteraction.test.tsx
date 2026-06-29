@@ -85,7 +85,7 @@ function textMark(id: string, color = "annotation-default", groupId: string | nu
     type: "highlight",
     group_id: groupId,
     anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }], text: "x" },
-    style: { color, stroke_width: null },
+    style: { color, stroke_width: null, alpha: null },
     body: null,
     created_at: "2026-06-29T00:00:01+00:00",
     updated_at: "2026-06-29T00:00:01+00:00",
@@ -669,7 +669,7 @@ describe("AnnotationInteraction pen selection quick-box (Story 2.8 — AC2,6)", 
           { x: 0.2, y: 0.2 },
         ],
       },
-      style: { color, stroke_width: width },
+      style: { color, stroke_width: width, alpha: null },
       body: null,
       created_at: "2026-06-29T00:00:01+00:00",
       updated_at: "2026-06-29T00:00:01+00:00",
@@ -683,12 +683,15 @@ describe("AnnotationInteraction pen selection quick-box (Story 2.8 — AC2,6)", 
     act(() => useAnnotationStore.getState().select(mark.id));
   }
 
-  it("a selected pen mark opens the box with the color row AND the stroke-width row + delete", async () => {
-    setup(penMark("p1", "annotation-green", 8));
+  it("a selected pen mark opens the box with the color row, stroke-width row, alpha row + delete (Story 2.13)", async () => {
+    const mark: Annotation = { ...penMark("p1", "annotation-green", 8), style: { color: "annotation-green", stroke_width: 8, alpha: 0.6 } };
+    setup(mark);
     await screen.findByTestId("selection-quick-box");
     expect(screen.getByTestId("color-swatch-annotation-green").getAttribute("aria-checked")).toBe("true");
-    // The stroke-width row is present and armed to the mark's width.
+    // Stroke-width row is present and armed.
     expect(screen.getByTestId("stroke-width-8").className).toContain("stroke-width-step--armed");
+    // Alpha row is present and armed to the mark's alpha.
+    expect(screen.getByTestId("alpha-0.6").className).toContain("alpha-step--armed");
     expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
   });
 
@@ -707,6 +710,36 @@ describe("AnnotationInteraction pen selection quick-box (Story 2.8 — AC2,6)", 
     await screen.findByTestId("selection-quick-box");
     fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
     expect(useAnnotationStore.getState().annotations.get("p1")!.style.color).toBe("annotation-pink");
+  });
+
+  it("picking an alpha re-alphas the pen mark + updates the default + dismisses the box (Story 2.13)", async () => {
+    setup(penMark("p1", "annotation-blue", 4));
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("alpha-0.6"));
+    expect(useAnnotationStore.getState().annotations.get("p1")!.style.alpha).toBe(0.6);
+    expect(useAnnotationStore.getState().activeAlpha).toBe(0.6);
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    expect(useAnnotationStore.getState().selectedId).toBe("p1");
+  });
+
+  it("the alpha row is NOT shown for a selected text highlight (isPenSelected guard)", async () => {
+    const highlight: Annotation = {
+      id: "h1",
+      doc_id: "doc-1",
+      type: "highlight",
+      group_id: null,
+      anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }], text: "x" },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: null,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().addAnnotation(highlight);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("h1"));
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.queryByRole("group", { name: "Pen opacity" })).toBeNull();
   });
 
   it("Del deletes the selected pen mark", () => {
@@ -935,7 +968,7 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
       type: "memo",
       group_id: null,
       anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.4 } },
-      style: { color, stroke_width: null },
+      style: { color, stroke_width: null, alpha: null },
       body,
       created_at: "2026-06-29T00:00:01+00:00",
       updated_at: "2026-06-29T00:00:01+00:00",
@@ -1203,7 +1236,7 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
       type: "comment",
       group_id: null,
       anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.1, y1: 0.2 } },
-      style: { color: "annotation-default", stroke_width: null },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
       body: "",
       created_at: "2026-06-29T00:00:01+00:00",
       updated_at: "2026-06-29T00:00:01+00:00",
@@ -1351,7 +1384,7 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
       type: "highlight",
       group_id: null,
       anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.5 } },
-      style: { color: "annotation-default", stroke_width: null },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
       body: null,
       created_at: "2026-06-29T00:00:01+00:00",
       updated_at: "2026-06-29T00:00:01+00:00",

@@ -108,6 +108,13 @@
   /* The ink hairline a hovered/selected pen stroke gets (drawn as an SVG stroke
      around the filled path, since the rect outline ring does not fit a stroke). */
   --annotation-pen-selected-width: 1.5px;
+  /* annotation-pen alpha steps (Story 2.13): the four transparency levels the
+     AlphaRow offers. --pen-alpha-mid matches --annotation-highlight-opacity (the
+     default). The swatch previews use these as CSS opacity values. */
+  --pen-alpha-low:  0.2;
+  --pen-alpha-mid:  0.4;
+  --pen-alpha-high: 0.6;
+  --pen-alpha-full: 1.0;
 
   /* annotation-memo (DESIGN.md components.annotation-memo): the on-page text box.
      Its WIDTH/HEIGHT are the size preset baked into the rect (inline, scaled by

@@ -37,6 +37,7 @@ import { clampToViewport } from "./position";
 import { initialOverlayState, overlayReducer, type AnnotationTool } from "./machine";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
+import AlphaRow from "./AlphaRow";
 import SizeRow from "./SizeRow";
 import "./Annotations.css";
 
@@ -110,6 +111,12 @@ export default function AnnotationInteraction({
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
   const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
   const restrokeAnnotation = useAnnotationStore((s) => s.restrokeAnnotation);
+  // Story 2.13: the active pen alpha (default transparency) lives in the store
+  // next to activeStrokeWidth — two writers (the rail's alpha row AND the pen
+  // selection quick-box's realpha) plus the create path reads it.
+  const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
+  const setActiveAlpha = useAnnotationStore((s) => s.setActiveAlpha);
+  const realphaAnnotation = useAnnotationStore((s) => s.realphaAnnotation);
   // Story 2.9: the active memo box size (default for new memos) lives in the store
   // next to activeColor/activeStrokeWidth — two writers (the rail's SizeRow AND
   // the memo selection quick-box's resize) plus the placement gesture reads it.
@@ -153,6 +160,8 @@ export default function AnnotationInteraction({
   activeColorRef.current = activeColor;
   const activeStrokeWidthRef = useRef(activeStrokeWidth);
   activeStrokeWidthRef.current = activeStrokeWidth;
+  const activeAlphaRef = useRef(activeAlpha);
+  activeAlphaRef.current = activeAlpha;
   const activeMemoSizeRef = useRef(activeMemoSize);
   activeMemoSizeRef.current = activeMemoSize;
   const rectReaderRef = useRef(rectReader);
@@ -419,6 +428,7 @@ export default function AnnotationInteraction({
         newId,
         color: activeColorRef.current,
         strokeWidth: activeStrokeWidthRef.current,
+        alpha: activeAlphaRef.current,
       });
       addAnnotation(created);
       select(created.id);
@@ -830,6 +840,18 @@ export default function AnnotationInteraction({
     [restrokeAnnotation, selectedGroupIds, setActiveStrokeWidth],
   );
 
+  // Re-alpha the selected pen mark to a new transparency (Story 2.13 — the alpha
+  // twin of restrokeSelected). Also sets the default for the next stroke
+  // (last-choice-wins), and the pick dismisses the box (the mark stays selected).
+  const realphaSelected = useCallback(
+    (alpha: number) => {
+      realphaAnnotation(selectedGroupIds(), alpha, new Date().toISOString());
+      setActiveAlpha(alpha);
+      setSelectionBoxOpen(false);
+    },
+    [realphaAnnotation, selectedGroupIds, setActiveAlpha],
+  );
+
   // Resize the selected memo to a new box size (Story 2.9 — the size twin of
   // restrokeSelected). The SizeRow gives a scale-1.0 px preset; convert it to a
   // normalized fraction of the memo's page box (scale cancels) so the store stays
@@ -1022,7 +1044,7 @@ export default function AnnotationInteraction({
     <>
       {penPreview && previewPath && (
         <svg className="pen-preview" data-testid="pen-preview" aria-hidden="true">
-          <path d={previewPath} fill={`var(--color-${activeColor})`} />
+          <path d={previewPath} fill={`var(--color-${activeColor})`} fillOpacity={activeAlpha} />
         </svg>
       )}
       {boxPreview && (
@@ -1135,6 +1157,11 @@ export default function AnnotationInteraction({
               current width. Text marks (highlight/underline) have no width. */}
           {isPenSelected && (
             <StrokeWidthRow value={selectedAnno.style.stroke_width ?? activeStrokeWidth} onPick={restrokeSelected} />
+          )}
+          {/* A pen mark also gets the alpha row (realpha), armed to its current
+              transparency (Story 2.13). Slots right after the stroke-width row. */}
+          {isPenSelected && (
+            <AlphaRow value={selectedAnno.style.alpha ?? activeAlpha} onPick={realphaSelected} />
           )}
           {/* A memo gets the collapsible size row (resize), armed to the session
               default (memos store size as their rect, not a style field). */}

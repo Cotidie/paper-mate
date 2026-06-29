@@ -24,7 +24,7 @@ describe("buildAnnotations (AC-3, AC-5)", () => {
     expect(a.doc_id).toBe("doc-1");
     expect(a.type).toBe("highlight");
     expect(a.anchor).toEqual({ kind: "text", page_index: 0, rects: page0.rects, text: "hello" });
-    expect(a.style).toEqual({ color: "annotation-default", stroke_width: null });
+    expect(a.style).toEqual({ color: "annotation-default", stroke_width: null, alpha: null });
     expect(a.body).toBeNull();
     expect(a.created_at).toBe("2026-06-29T00:00:00+00:00");
     expect(a.updated_at).toBe(a.created_at);
@@ -46,12 +46,13 @@ describe("buildAnnotations (AC-3, AC-5)", () => {
   });
 });
 
-describe("buildPenAnnotation (Story 2.8, AD-5 pen → path)", () => {
+describe("buildPenAnnotation (Story 2.8 + 2.13, AD-5 pen → path)", () => {
   const penOpts = (newId: () => string) => ({
     now: "2026-06-29T00:00:00+00:00",
     newId,
     color: "annotation-green",
     strokeWidth: 4,
+    alpha: 0.4,
   });
   const stroke = {
     page_index: 2,
@@ -73,9 +74,14 @@ describe("buildPenAnnotation (Story 2.8, AD-5 pen → path)", () => {
     expect(a.updated_at).toBe(a.created_at);
   });
 
-  it("carries color + stroke_width in style (stroke_width path-only, AR-5)", () => {
+  it("carries color + stroke_width + alpha in style (path-only fields, AR-5)", () => {
     const a = buildPenAnnotation(stroke, "doc-1", penOpts(counter()));
-    expect(a.style).toEqual({ color: "annotation-green", stroke_width: 4 });
+    expect(a.style).toEqual({ color: "annotation-green", stroke_width: 4, alpha: 0.4 });
+  });
+
+  it("carries a non-default alpha when specified", () => {
+    const a = buildPenAnnotation(stroke, "doc-1", { ...penOpts(counter()), alpha: 0.8 });
+    expect(a.style.alpha).toBe(0.8);
   });
 });
 
@@ -101,7 +107,7 @@ describe("buildMemoAnnotation (Story 2.9, AD-5 memo → rect)", () => {
 
   it("carries the accent color; stroke_width stays null (memo has no stroke)", () => {
     const a = buildMemoAnnotation(placement, "doc-1", memoOpts(counter()));
-    expect(a.style).toEqual({ color: "annotation-blue", stroke_width: null });
+    expect(a.style).toEqual({ color: "annotation-blue", stroke_width: null, alpha: null });
   });
 });
 
@@ -146,7 +152,7 @@ describe("buildRegionAnnotation (Story 2.11, AD-5 highlight → rect)", () => {
 
   it("carries accent color; stroke_width null (region has no stroke, AR-5)", () => {
     const a = buildRegionAnnotation(placement, "doc-1", regionOpts(counter()));
-    expect(a.style).toEqual({ color: "annotation-green", stroke_width: null });
+    expect(a.style).toEqual({ color: "annotation-green", stroke_width: null, alpha: null });
   });
 });
 
@@ -171,6 +177,6 @@ describe("buildCommentPin (Story 2.10, AD-5 comment → rect)", () => {
 
   it("carries the accent color; stroke_width stays null (a pin has no stroke)", () => {
     const a = buildCommentPin(placement, "doc-1", pinOpts(counter()));
-    expect(a.style).toEqual({ color: "annotation-purple", stroke_width: null });
+    expect(a.style).toEqual({ color: "annotation-purple", stroke_width: null, alpha: null });
   });
 });

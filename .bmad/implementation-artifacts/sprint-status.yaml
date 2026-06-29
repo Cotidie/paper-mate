@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: 2026-06-30 (story 2-12-drag-to-change-tool-quick-box -> done; code review passed)
+last_updated: 2026-06-30 (2-13-pen-alpha implemented; status review)
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -93,7 +93,7 @@ development_status:
   2-12-drag-to-change-tool-quick-box: done
   # 2026-06-29 correct-course (user feature request): pen stroke alpha. Appended as
   # 2-13 (after the tool stories) so 2-9..2-12 are not renumbered.
-  2-13-pen-alpha: ready-for-dev
+  2-13-pen-alpha: review
   epic-2-retrospective: optional
 
   # Epic 3: Edit, persist & review
@@ -104,7 +104,31 @@ development_status:
   3-4-autosave-to-disk: backlog
   3-5-restore-on-reopen: backlog
   3-6-annotation-bank: backlog
+  # 2026-06-30 correct-course (sprint-change-proposal-2026-06-30.md): folded two
+  # deferred-work edit capabilities onto the Epic-3 command path (post-v1, FR-26/27).
+  3-7-convert-highlight-comment: backlog
+  3-8-adjust-text-range: backlog
   epic-3-retrospective: optional
+
+  # 2026-06-30 correct-course (sprint-change-proposal-2026-06-30.md): grouped the
+  # deferred-work polish/quality items into two POST-v1 (Phase-1.5) epics.
+  # Epic 4: Reading & annotation fidelity (render/anchor correctness + on-page treatment)
+  epic-4: backlog
+  4-1-text-layer-copy-selection-fidelity: backlog
+  4-2-column-aware-selection-highlight: backlog
+  4-3-distinct-on-page-mark-treatment: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Reader preferences & polish (refactor enabler + preferences + UX polish)
+  epic-5: backlog
+  # 5-0 structural refactor: ideally pulled to the Epic-2/3 boundary (before 3.1).
+  5-0-structural-refactor: backlog
+  5-1-settings-hotkey-rebinding: backlog
+  5-2-color-system-per-tool-custom: backlog
+  5-3-hide-show-all-annotations: backlog
+  5-4-interaction-polish-esc-confirm-strokewidth: backlog
+  5-5-dim-toc-panel: backlog
+  epic-5-retrospective: optional
 
 action_items:
   - epic: 1

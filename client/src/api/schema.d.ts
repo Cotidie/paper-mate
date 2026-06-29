@@ -176,7 +176,9 @@ export interface components {
         /**
          * Style
          * @description Visual style. ``color`` is a token-name or hex resolved by the client;
-         *     ``stroke_width`` is pen-only (``None`` for text/region marks).
+         *     ``stroke_width`` is pen-only (``None`` for text/region marks);
+         *     ``alpha`` is transparency 0..1 for pen strokes (``None`` = render at the
+         *     default highlighter opacity). Additive + optional (AD-8).
          */
         Style: {
             /** Color */
@@ -186,6 +188,11 @@ export interface components {
              * @default null
              */
             stroke_width: number | null;
+            /**
+             * Alpha
+             * @default null
+             */
+            alpha: number | null;
         };
         /**
          * TextAnchor

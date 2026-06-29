@@ -286,6 +286,51 @@
   outline-offset: var(--color-swatch-ring-offset);
 }
 
+/* alpha row: the pen quick-box alpha steps (Story 2.13). Mirrors the
+   stroke-width row — a uniform-footprint cell wrapping an ink square whose
+   opacity previews the transparency; the armed (current) step gets the 2px
+   ink ring. */
+.alpha-row {
+  display: flex;
+  gap: var(--space-xxs);
+}
+
+.alpha-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--color-swatch-size);
+  height: var(--color-swatch-size);
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.alpha-step__swatch {
+  width: var(--pen-stroke-medium);
+  height: var(--pen-stroke-medium);
+  background-color: var(--color-ink);
+  border-radius: var(--radius-xs);
+}
+
+/* Swatch opacity previews the transparency level; values match the --pen-alpha-* tokens. */
+.alpha-step__swatch--low  { opacity: var(--pen-alpha-low);  }
+.alpha-step__swatch--mid  { opacity: var(--pen-alpha-mid);  }
+.alpha-step__swatch--high { opacity: var(--pen-alpha-high); }
+.alpha-step__swatch--full { opacity: var(--pen-alpha-full); }
+
+.alpha-step--armed {
+  outline: var(--color-swatch-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.alpha-step:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
 /* annotation-memos group (Story 2.9): the on-page memo boxes. Unlike the
    highlight/underline/pen sheets this group is NOT aria-hidden and NOT
    pointer-transparent at the box level — each memo is an interactive <textarea>

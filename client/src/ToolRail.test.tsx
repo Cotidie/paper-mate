@@ -11,6 +11,7 @@ type RailProps = {
   activeColor: string;
   boxHighlight: boolean;
   activeStrokeWidth: number;
+  activeAlpha: number;
   activeMemoSize: MemoSize;
   collapsed: boolean;
 };
@@ -23,6 +24,7 @@ function renderRail(over: Partial<RailProps> = {}) {
   const onPickColor = vi.fn();
   const onToggleBoxHighlight = vi.fn();
   const onPickStrokeWidth = vi.fn();
+  const onPickAlpha = vi.fn();
   const onPickMemoSize = vi.fn();
   const onToggleCollapse = vi.fn();
   let props: RailProps = {
@@ -30,6 +32,7 @@ function renderRail(over: Partial<RailProps> = {}) {
     activeColor: "annotation-default",
     boxHighlight: false,
     activeStrokeWidth: 4,
+    activeAlpha: 0.4,
     activeMemoSize: DEFAULT_MEMO_SIZE,
     collapsed: false,
     ...over,
@@ -44,6 +47,8 @@ function renderRail(over: Partial<RailProps> = {}) {
       onToggleBoxHighlight={onToggleBoxHighlight}
       activeStrokeWidth={p.activeStrokeWidth}
       onPickStrokeWidth={onPickStrokeWidth}
+      activeAlpha={p.activeAlpha}
+      onPickAlpha={onPickAlpha}
       activeMemoSize={p.activeMemoSize}
       onPickMemoSize={onPickMemoSize}
       collapsed={p.collapsed}
@@ -55,7 +60,7 @@ function renderRail(over: Partial<RailProps> = {}) {
     props = { ...props, ...next };
     utils.rerender(el(props));
   };
-  return { ...utils, onSelectTool, onPickColor, onToggleBoxHighlight, onPickStrokeWidth, onPickMemoSize, onToggleCollapse, update };
+  return { ...utils, onSelectTool, onPickColor, onToggleBoxHighlight, onPickStrokeWidth, onPickAlpha, onPickMemoSize, onToggleCollapse, update };
 }
 
 // Arm Pen (Story 2.8): start on cursor, switch to pen so the open-on-tool-change
@@ -203,6 +208,8 @@ describe("ToolRail", () => {
         onToggleBoxHighlight={vi.fn()}
         activeStrokeWidth={4}
         onPickStrokeWidth={vi.fn()}
+        activeAlpha={0.4}
+        onPickAlpha={vi.fn()}
         activeMemoSize={DEFAULT_MEMO_SIZE}
         onPickMemoSize={vi.fn()}
         collapsed={false}
@@ -386,20 +393,30 @@ describe("ToolRail", () => {
     expect(btn.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("the pen sub-toolbox shows BOTH the color swatch row and the stroke-width row", () => {
-    armPen({ activeColor: "annotation-green", activeStrokeWidth: 8 });
+  it("the pen sub-toolbox shows the color swatch row, stroke-width row, and alpha row (Story 2.13)", () => {
+    armPen({ activeColor: "annotation-green", activeStrokeWidth: 8, activeAlpha: 0.4 });
     const flyout = screen.getByTestId("pen-flyout");
     expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
     expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
     // Three width steps; the active width is armed.
     expect(flyout.querySelectorAll(".stroke-width-step")).toHaveLength(3);
     expect(screen.getByTestId("stroke-width-8").className).toContain("stroke-width-step--armed");
+    // Four alpha steps; the active alpha is armed.
+    expect(flyout.querySelectorAll(".alpha-step")).toHaveLength(4);
+    expect(screen.getByTestId("alpha-0.4").className).toContain("alpha-step--armed");
   });
 
   it("picking a stroke width calls onPickStrokeWidth and closes the flyout", () => {
     const { onPickStrokeWidth } = armPen({ activeStrokeWidth: 4 });
     fireEvent.click(screen.getByTestId("stroke-width-8"));
     expect(onPickStrokeWidth).toHaveBeenCalledWith(8);
+    expect(screen.queryByTestId("pen-flyout")).toBeNull();
+  });
+
+  it("picking an alpha calls onPickAlpha and closes the flyout (Story 2.13)", () => {
+    const { onPickAlpha } = armPen({ activeAlpha: 0.4 });
+    fireEvent.click(screen.getByTestId("alpha-0.6"));
+    expect(onPickAlpha).toHaveBeenCalledWith(0.6);
     expect(screen.queryByTestId("pen-flyout")).toBeNull();
   });
 

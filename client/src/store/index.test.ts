@@ -9,7 +9,7 @@ function mark(id: string, color: string, createdAt: string, groupId: string | nu
     type: "highlight",
     group_id: groupId,
     anchor: { kind: "text", page_index: 0, rects: [], text: "x" },
-    style: { color, stroke_width: null },
+    style: { color, stroke_width: null, alpha: null },
     body: null,
     created_at: createdAt,
     updated_at: createdAt,
@@ -24,6 +24,7 @@ beforeEach(() =>
     activeColor: "annotation-default",
     activeStrokeWidth: 4,
     activeMemoSize: DEFAULT_MEMO_SIZE,
+    activeAlpha: 0.4,
   }),
 );
 
@@ -39,7 +40,7 @@ function memoMark(
     type: "memo",
     group_id: null,
     anchor: { kind: "rect", page_index: 0, rect },
-    style: { color: "annotation-default", stroke_width: null },
+    style: { color: "annotation-default", stroke_width: null, alpha: null },
     body,
     created_at: createdAt,
     updated_at: createdAt,
@@ -157,7 +158,7 @@ describe("pen stroke width + restroke (Story 2.8)", () => {
       type: "pen",
       group_id: null,
       anchor: { kind: "path", page_index: 0, points: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }] },
-      style: { color: "annotation-default", stroke_width: width },
+      style: { color: "annotation-default", stroke_width: width, alpha: null },
       body: null,
       created_at: createdAt,
       updated_at: createdAt,
@@ -184,6 +185,67 @@ describe("pen stroke width + restroke (Story 2.8)", () => {
   it("restrokeAnnotation ignores unknown ids without throwing", () => {
     useAnnotationStore.getState().restrokeAnnotation(["missing"], 8, "2026-06-29T12:00:00Z");
     expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
+});
+
+describe("pen alpha + realpha (Story 2.13)", () => {
+  function penMark(id: string, createdAt: string): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "pen",
+      group_id: null,
+      anchor: { kind: "path", page_index: 0, points: [{ x: 0.1, y: 0.1 }] },
+      style: { color: "annotation-default", stroke_width: 4, alpha: null },
+      body: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+  }
+
+  function textMark(id: string, createdAt: string): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "highlight",
+      group_id: null,
+      anchor: { kind: "text", page_index: 0, rects: [], text: "hi" },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+  }
+
+  it("defaults activeAlpha to 0.4 and setActiveAlpha remembers the last choice", () => {
+    expect(useAnnotationStore.getState().activeAlpha).toBe(0.4);
+    useAnnotationStore.getState().setActiveAlpha(0.8);
+    expect(useAnnotationStore.getState().activeAlpha).toBe(0.8);
+  });
+
+  it("realphaAnnotation changes style.alpha + bumps updated_at, keyed by id", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(penMark("p", "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().realphaAnnotation(["p"], 0.8, "2026-06-29T12:00:00Z");
+    const p = useAnnotationStore.getState().annotations.get("p")!;
+    expect(p.style.alpha).toBe(0.8);
+    expect(p.style.color).toBe("annotation-default");
+    expect(p.updated_at).toBe("2026-06-29T12:00:00Z");
+    expect(p.created_at).toBe("2026-06-29T00:00:01Z");
+  });
+
+  it("realphaAnnotation ignores unknown ids without throwing", () => {
+    useAnnotationStore.getState().realphaAnnotation(["missing"], 0.8, "2026-06-29T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
+
+  it("realphaAnnotation guards non-path marks (a stale text id is untouched)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(textMark("h", "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().realphaAnnotation(["h"], 0.8, "2026-06-29T12:00:00Z");
+    const h = useAnnotationStore.getState().annotations.get("h")!;
+    expect(h.style.alpha).toBeNull();
+    expect(h.updated_at).toBe("2026-06-29T00:00:01Z");
   });
 });
 

@@ -43,7 +43,7 @@ export function buildAnnotations(pages: PageSelection[], docId: string, opts: Bu
       rects: page.rects,
       text: page.text,
     },
-    style: { color, stroke_width: null },
+    style: { color, stroke_width: null, alpha: null },
     body: body ?? null,
     created_at: now,
     updated_at: now,
@@ -66,23 +66,25 @@ export interface BuildPenOptions {
   color: string;
   /** Stroke diameter in scale-1.0 CSS px (the renderer multiplies by scale). */
   strokeWidth: number;
+  /** Stroke transparency 0..1 (Story 2.13). Default = highlighter opacity. */
+  alpha: number;
 }
 
 /**
  * Build ONE pen `Annotation` from a freehand stroke (AD-5: `pen → path`). Always
  * single-page (a `PathAnchor` has one `page_index`), so `group_id` is null — no
  * two-page split (that is the text-selection path's concern, AR-4). `stroke_width`
- * is path-only style; `body` is null.
+ * and `alpha` are path-only style; `body` is null.
  */
 export function buildPenAnnotation(stroke: PenStroke, docId: string, opts: BuildPenOptions): Annotation {
-  const { now, newId, color, strokeWidth } = opts;
+  const { now, newId, color, strokeWidth, alpha } = opts;
   return {
     id: newId(),
     doc_id: docId,
     type: "pen",
     group_id: null,
     anchor: { kind: "path", page_index: stroke.page_index, points: stroke.points },
-    style: { color, stroke_width: strokeWidth },
+    style: { color, stroke_width: strokeWidth, alpha },
     body: null,
     created_at: now,
     updated_at: now,
@@ -122,7 +124,7 @@ export function buildMemoAnnotation(memo: MemoPlacement, docId: string, opts: Bu
     type: "memo",
     group_id: null,
     anchor: { kind: "rect", page_index: memo.page_index, rect: memo.rect },
-    style: { color, stroke_width: null },
+    style: { color, stroke_width: null, alpha: null },
     body: "",
     created_at: now,
     updated_at: now,
@@ -182,7 +184,7 @@ export function buildRegionAnnotation(
     type: "highlight",
     group_id: null,
     anchor: { kind: "rect", page_index: region.page_index, rect: region.rect },
-    style: { color, stroke_width: null },
+    style: { color, stroke_width: null, alpha: null },
     body: null,
     created_at: now,
     updated_at: now,
@@ -204,7 +206,7 @@ export function buildCommentPin(pin: CommentPinPlacement, docId: string, opts: B
     type: "comment",
     group_id: null,
     anchor: { kind: "rect", page_index: pin.page_index, rect: pin.rect },
-    style: { color, stroke_width: null },
+    style: { color, stroke_width: null, alpha: null },
     body: "",
     created_at: now,
     updated_at: now,
