@@ -186,6 +186,48 @@ Story 2.9 (memo tool) is the FIRST `kind=rect` tool AND the first mark with a
   `SizeRow` + delete, anchored below the box. The memo's own textarea is the inline
   text-input the AC names; color/size are the quick-box rows.
 
-Still later stories: comment tool + box-select drag (2.10-2.11),
-the cursor-mode drag-to-change-tool picker (2.12), and editing/undo/persistence
-(Epic 3).
+## Story 2.10 — comment (text+pin OR pin, + bubble)
+
+Story 2.10 (comment tool) adds the LEAST new code of any tool: it REUSES two
+existing gestures behind `type=comment` (AD-5: `comment → text` OR `rect`). The
+genuinely new pieces are a `body` param, a pin button, and a `CommentBubble`.
+
+- A comment is created TWO ways, branched on `pages.length` in the SAME `pointerup`:
+  - **DRAG across text → a `kind=text` comment** (highlight fill + a pin). This is
+    the highlight/underline create path VERBATIM — `buildAnnotations` with
+    `type:"comment"` and the ONE delta `body:""` (a non-null body, AD-5). Because a
+    `type=comment` mark is `type !== "underline"`, it is ALREADY in `highlightMarks`,
+    so its ~0.4 fill paints for FREE in the `.annotation-highlights` opacity group —
+    there is NO second fill path.
+  - **CLICK a spot (no selection) → a `kind=rect` comment** (a pin only, no fill).
+    The memo click-to-place twin: `buildCommentPin` builds a degenerate (point) rect
+    at the click via `pickPage`/`normalizeRect`, `type:"comment"`/`body:""`. Branched
+    on the empty-selection `pointerup` (guarded over `.page-surface`, off the
+    quick-box / an existing pin / bubble / mark — never stacks a second pin).
+- Both kinds render a round PIN (`{component.annotation-comment-pin}`,
+  `rounded.full`, accent fill) — a real `<button>` at the first rect's start
+  (`kind=text`) or the rect's top-left (`kind=rect`), in a NEW, NOT aria-hidden
+  `.annotation-comments` group (a focusable control can't live in the decorative
+  aria-hidden mark sheet — same rule memos follow). The pin rides `denormalizeRect`
+  so it stays glued on zoom (NFR-3).
+- Clicking the pin selects the comment and opens the `{component.comment-bubble}`
+  (the `CommentBubble`, the `MemoBox` twin): a positioned surface with a `<textarea>`
+  bound to `body` (every edit → `retextAnnotation`, REUSED unchanged — it has no type
+  guard), a `ColorSwatchRow` (recolor tints the fill AND the pin via
+  `recolorAnnotation` + sets the active default), and a delete. Focus moves into the
+  textarea on open and RETURNS to the prior element on close (mount/unmount effect);
+  local `Esc` blurs + `clearSelection`.
+- The bubble REPLACES the generic selection quick-box for comments (UX-DR5,
+  Decision 4): `showSelectionBox` excludes `type === "comment"`, so a selected
+  comment shows the bubble, never the shared color/delete box. The pin + bubble are
+  added to the empty-space-deselect hit-test so clicking them keeps the selection.
+- An empty comment is KEPT (Decision 5 — the INVERSE of the 2.9 empty-memo cleanup,
+  which stays gated on `type === "memo"`): a clicked pin with no note is a deliberate
+  marker, so deselecting an empty comment leaves it in place.
+- The rail has a Comment button (below Memo, `ChatCircle`) whose sub-toolbox is a
+  `ColorSwatchRow` only (color, no width/size); `C` arms it. Client-only — the
+  contract already carries `type:"comment"`/`kind=text`/`kind=rect`/`body`, so the
+  tracked OpenAPI + generated TS types stay byte-identical.
+
+Still later stories: box-select drag (2.11), the cursor-mode drag-to-change-tool
+picker (2.12), pen alpha (2.13), and editing/undo/persistence (Epic 3).

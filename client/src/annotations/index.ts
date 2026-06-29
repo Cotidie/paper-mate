@@ -15,7 +15,7 @@ export { default as StrokeWidthRow } from "./StrokeWidthRow";
 // The memo box-size picker (Story 2.9), the collapsible size twin of the swatch/
 // width rows. Reused by the rail's Memo sub-toolbox AND the memo selection quick-box.
 export { default as SizeRow } from "./SizeRow";
-export { buildAnnotations, buildPenAnnotation, buildMemoAnnotation } from "./create";
+export { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildCommentPin } from "./create";
 export { clampToViewport } from "./position";
 export {
   overlayReducer,

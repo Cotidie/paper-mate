@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation } from "./create";
+import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildCommentPin } from "./create";
 import type { PageSelection } from "../anchor";
 
 function counter() {
@@ -102,5 +102,50 @@ describe("buildMemoAnnotation (Story 2.9, AD-5 memo → rect)", () => {
   it("carries the accent color; stroke_width stays null (memo has no stroke)", () => {
     const a = buildMemoAnnotation(placement, "doc-1", memoOpts(counter()));
     expect(a.style).toEqual({ color: "annotation-blue", stroke_width: null });
+  });
+});
+
+describe("buildAnnotations body param (Story 2.10 — AC1,3)", () => {
+  it("a comment DRAG passes body='' → a kind=text comment with non-null body", () => {
+    const [a] = buildAnnotations([page0], "doc-1", {
+      now: "2026-06-29T00:00:00+00:00",
+      newId: counter(),
+      type: "comment",
+      color: "annotation-default",
+      body: "",
+    });
+    expect(a.type).toBe("comment");
+    expect(a.anchor.kind).toBe("text");
+    expect(a.body).toBe("");
+  });
+
+  it("highlight/underline omit body → it stays null (regression)", () => {
+    const [h] = buildAnnotations([page0], "doc-1", opts(counter()));
+    expect(h.body).toBeNull();
+  });
+});
+
+describe("buildCommentPin (Story 2.10, AD-5 comment → rect)", () => {
+  const pinOpts = (newId: () => string) => ({
+    now: "2026-06-29T00:00:00+00:00",
+    newId,
+    color: "annotation-purple",
+  });
+  const placement = { page_index: 4, rect: { x0: 0.25, y0: 0.35, x1: 0.25, y1: 0.35 } };
+
+  it("builds one single-page comment pin: type=comment, kind=rect, empty body, null group", () => {
+    const a = buildCommentPin(placement, "doc-1", pinOpts(counter()));
+    expect(a.type).toBe("comment");
+    expect(a.group_id).toBeNull();
+    expect(a.doc_id).toBe("doc-1");
+    expect(a.anchor).toEqual({ kind: "rect", page_index: 4, rect: placement.rect });
+    expect(a.body).toBe("");
+    expect(a.created_at).toBe("2026-06-29T00:00:00+00:00");
+    expect(a.updated_at).toBe(a.created_at);
+  });
+
+  it("carries the accent color; stroke_width stays null (a pin has no stroke)", () => {
+    const a = buildCommentPin(placement, "doc-1", pinOpts(counter()));
+    expect(a.style).toEqual({ color: "annotation-purple", stroke_width: null });
   });
 });

@@ -7,6 +7,7 @@ import {
   TextUnderline,
   PencilSimple,
   TextT,
+  ChatCircle,
   CaretDoubleLeft,
   CaretDoubleRight,
   type Icon,
@@ -89,6 +90,7 @@ export default function ToolRail({
   const underlineActive = activeTool === "underline";
   const penActive = activeTool === "pen";
   const memoActive = activeTool === "memo";
+  const commentActive = activeTool === "comment";
 
   // ONE consistent mechanism (Story 2.6 refinement): switching to ANY tool opens
   // that tool's sub-toolbar by default. Detect a real CHANGE of `activeTool`
@@ -354,6 +356,41 @@ export default function ToolRail({
               value={activeMemoSize}
               onPick={(size) => {
                 onPickMemoSize(size);
+                setFlyoutOpen(false);
+              }}
+            />
+          </ToolFlyout>
+        )}
+      </div>
+
+      {/* Comment — a text+pin annotation (Story 2.10), below Memo in the
+          DESIGN.md#tool-rail order. Same arm-in-one-click model; its sub-toolbox
+          carries a color row only (no width/size). A drag highlights the run + a
+          pin; a click drops a pin only. Shares the one activeColor. */}
+      <div className="tool-rail__item">
+        <button
+          type="button"
+          className={activeTool === "comment" ? "tool-button tool-button--armed" : "tool-button"}
+          aria-label="Comment"
+          title="Comment (C)"
+          aria-pressed={activeTool === "comment"}
+          aria-haspopup="menu"
+          aria-expanded={commentActive && flyoutOpen}
+          data-testid="tool-comment-button"
+          onClick={() => {
+            if (commentActive) setFlyoutOpen((o) => !o);
+            else onSelectTool("comment");
+          }}
+        >
+          <ChatCircle aria-hidden />
+        </button>
+
+        {commentActive && flyoutOpen && (
+          <ToolFlyout testId="comment-flyout">
+            <ColorSwatchRow
+              value={activeColor}
+              onPick={(token) => {
+                onPickColor(token);
                 setFlyoutOpen(false);
               }}
             />

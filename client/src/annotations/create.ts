@@ -13,19 +13,24 @@ export interface BuildOptions {
   /** UUID factory (the `newId` util — `crypto.randomUUID` with an insecure-context
    *  `getRandomValues` fallback); injectable for deterministic tests. */
   newId: () => string;
-  /** The annotation type (Story 2.2 proof = "highlight"). */
+  /** The annotation type (a text-anchor tool: highlight / underline / comment). */
   type: AnnotationTool;
-  /** Resolved style color (a token name; Story 2.2 = the default highlight). */
+  /** Resolved style color (a token name; e.g. the default highlight). */
   color: string;
+  /** Optional `body` for the built marks (Story 2.10). Highlight/underline omit it
+   *  (→ null); the comment DRAG path passes `""` so a `kind=text` comment carries a
+   *  non-null body (AD-5: `body` non-null for comment) the bubble then edits. */
+  body?: string;
 }
 
 /**
  * One `Annotation` per page the selection covers, each with a single-page
  * `text` anchor. A selection that split across two pages shares one `group_id`
- * (UUIDv4); a single-page selection has `group_id = null` (AC-5).
+ * (UUIDv4); a single-page selection has `group_id = null` (AC-5). `body` defaults
+ * to null (highlight/underline); a comment drag passes `""` (Story 2.10).
  */
 export function buildAnnotations(pages: PageSelection[], docId: string, opts: BuildOptions): Annotation[] {
-  const { now, newId, type, color } = opts;
+  const { now, newId, type, color, body } = opts;
   const groupId = pages.length > 1 ? newId() : null;
   return pages.map((page) => ({
     id: newId(),
@@ -39,7 +44,7 @@ export function buildAnnotations(pages: PageSelection[], docId: string, opts: Bu
       text: page.text,
     },
     style: { color, stroke_width: null },
-    body: null,
+    body: body ?? null,
     created_at: now,
     updated_at: now,
   }));
@@ -117,6 +122,46 @@ export function buildMemoAnnotation(memo: MemoPlacement, docId: string, opts: Bu
     type: "memo",
     group_id: null,
     anchor: { kind: "rect", page_index: memo.page_index, rect: memo.rect },
+    style: { color, stroke_width: null },
+    body: "",
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+/** One comment PIN placed by a CLICK (no text selection): the page + a small
+ *  normalized anchor rect at the click point (the pin renders at its top-left).
+ *  Feeds a `RectAnchor`. */
+export interface CommentPinPlacement {
+  page_index: number;
+  rect: Rect;
+}
+
+export interface BuildCommentPinOptions {
+  /** ISO-8601 UTC timestamp for created_at/updated_at. */
+  now: string;
+  /** UUID factory (injectable for deterministic tests). */
+  newId: () => string;
+  /** Resolved accent color (a token name) — tints the pin (and would tint a fill,
+   *  but a clicked pin has none). */
+  color: string;
+}
+
+/**
+ * Build ONE `kind=rect` comment `Annotation` (AD-5: `comment → rect`). The twin of
+ * `buildMemoAnnotation` but `type="comment"`: the rect is a small anchor for the
+ * pin (no box is drawn, no fill). `body` starts as `""` (non-null, like memo) and
+ * updates as the user types into the bubble (via `retextAnnotation`). Always
+ * single-page, so `group_id` is null; `stroke_width` is path-only, so it stays null.
+ */
+export function buildCommentPin(pin: CommentPinPlacement, docId: string, opts: BuildCommentPinOptions): Annotation {
+  const { now, newId, color } = opts;
+  return {
+    id: newId(),
+    doc_id: docId,
+    type: "comment",
+    group_id: null,
+    anchor: { kind: "rect", page_index: pin.page_index, rect: pin.rect },
     style: { color, stroke_width: null },
     body: "",
     created_at: now,

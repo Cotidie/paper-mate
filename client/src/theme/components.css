@@ -119,6 +119,16 @@
   --memo-size-preview-medium: 18px;
   --memo-size-preview-large: 22px;
 
+  /* annotation-comment-pin + comment-bubble (DESIGN.md components.annotation-
+     comment-pin / comment-bubble): the round pin (rounded.full, 20px, accent fill)
+     anchored at a comment's run start / click point, and its note popup. The pin
+     size doubles as the bubble's vertical offset below the pin; the bubble width +
+     its textarea min-height are the only other raw dims (chrome, scale-independent
+     since the bubble is a fixed popup, not page-anchored geometry). */
+  --comment-pin-size: 20px;
+  --comment-bubble-width: 220px;
+  --comment-bubble-text-min-height: 48px;
+
   /* shared chrome */
   --hairline-width: 1px;
   --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);

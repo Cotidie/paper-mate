@@ -28,11 +28,14 @@
 // `hoveredId`/`selectedId` and lights any mark that matches by id OR shares a
 // non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
 
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { Trash } from "@phosphor-icons/react";
 import type { Annotation } from "../api/client";
 import { useAnnotationStore } from "../store";
 import { denormalizeRect, denormalizePoint, type PageBox, type ScreenRect } from "../anchor";
 import { strokeOutline, svgPathFromOutline } from "./pen";
+import ColorSwatchRow from "./ColorSwatchRow";
+import { clampToViewport } from "./position";
 import "./Annotations.css";
 
 /** One on-page memo box (Story 2.9): an interactive `<textarea>` positioned via
@@ -105,6 +108,109 @@ function MemoBox({
   );
 }
 
+/** The comment's note popup (Story 2.10): the twin of `MemoBox`, but a floating
+ *  surface off the pin (not the on-page box). A `<textarea>` bound to `body` +
+ *  a `ColorSwatchRow` (recolor tints the fill AND the pin) + a delete. Anchored at
+ *  the pin's screen point (`pos`); CSS nudges it below the pin. Mounts only while
+ *  the comment is selected → mount = open, unmount = close: it focuses its textarea
+ *  on open (AC2) and RETURNS focus to the prior element on close (the unmount
+ *  cleanup). Owns its ref + the auto-grow layout effect (like `MemoBox`). */
+function CommentBubble({
+  anno,
+  pos,
+  onRetext,
+  onRecolor,
+  onDelete,
+  onClearSelection,
+}: {
+  anno: Annotation;
+  pos: ScreenRect;
+  onRetext: (id: string, body: string) => void;
+  onRecolor: (color: string) => void;
+  onDelete: () => void;
+  onClearSelection: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const body = anno.body ?? "";
+  // Focus moves INTO the textarea on open; on close (unmount) it RETURNS to the
+  // element focused before the bubble opened (UX-DR8/DR17). Runs once per open.
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    ref.current?.focus();
+    return () => prev?.focus?.();
+  }, []);
+  // Auto-grow the textarea to its content whenever the text OR position changes
+  // (zoom re-anchors it). jsdom has no layout (scrollHeight 0) → guarded no-op.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
+  }, [body, pos.left, pos.top]);
+  // Keep the bubble fully on-screen (Codex MED): the bubble is anchored at the
+  // pin's page-local point + a downward transform, so a pin near the right/bottom
+  // edge would push the textarea/actions partly out of the viewport. Measure the
+  // rendered rect and nudge the inline left/top by the viewport-overflow DELTA
+  // (a pure translation, so it works in page-local coords). jsdom has no layout
+  // (rect all-zero) → the clamp is a no-op there.
+  useLayoutEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    el.style.left = `${pos.left}px`;
+    el.style.top = `${pos.top}px`;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return;
+    const c = clampToViewport(r.left, r.top, r.width, r.height, window.innerWidth, window.innerHeight);
+    const dx = c.x - r.left;
+    const dy = c.y - r.top;
+    if (dx !== 0) el.style.left = `${pos.left + dx}px`;
+    if (dy !== 0) el.style.top = `${pos.top + dy}px`;
+  }, [body, pos.left, pos.top]);
+  return (
+    <div
+      ref={boxRef}
+      className="comment-bubble"
+      data-testid={`comment-bubble-${anno.id}`}
+      style={{ left: pos.left, top: pos.top }}
+      // Esc dismisses from ANY control in the bubble, not just the textarea
+      // (Codex MED): the swatch/delete buttons are exempt from the document-level
+      // selection keys, so Esc on them would otherwise do nothing. Handling it on
+      // the container catches every focused child.
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          (document.activeElement as HTMLElement | null)?.blur?.();
+          onClearSelection();
+        }
+      }}
+    >
+      <textarea
+        ref={ref}
+        className="comment-bubble__text"
+        data-testid={`comment-body-${anno.id}`}
+        aria-label="Comment"
+        value={body}
+        onChange={(e) => onRetext(anno.id, e.target.value)}
+      />
+      <div className="comment-bubble__actions">
+        <ColorSwatchRow value={anno.style.color} onPick={onRecolor} ariaLabel="Comment color" />
+        <button
+          type="button"
+          className="comment-bubble__delete"
+          data-testid={`comment-delete-${anno.id}`}
+          aria-label="Delete"
+          title="Delete (Del)"
+          onClick={onDelete}
+        >
+          <Trash aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Is `a` part of the active set named by `activeId`? True when it IS that mark,
  *  or shares a non-null `group_id` with it — so a two-page highlight's sibling on
  *  another page lights together (hover outline + selected ring). */
@@ -143,6 +249,13 @@ export default function AnnotationLayer({
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const setHovered = useAnnotationStore((s) => s.setHovered);
   const retextAnnotation = useAnnotationStore((s) => s.retextAnnotation);
+  // Story 2.10: a selected comment's bubble recolors/deletes the comment itself
+  // (the bubble REPLACES the generic selection quick-box, Decision 4), so the
+  // layer owns those actions for comments. Recolor sets the active default too
+  // (last-choice-wins, like every other tool).
+  const recolorAnnotation = useAnnotationStore((s) => s.recolorAnnotation);
+  const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
+  const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   const marks = [...annotations.values()]
     .filter((a) => a.doc_id === docId && a.anchor.page_index === pageIndex)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -159,6 +272,26 @@ export default function AnnotationLayer({
   // decorative aria-hidden layer (a focusable control must not sit in an
   // aria-hidden subtree). Keyed off kind=rect + type=memo (AD-5).
   const memoMarks = marks.filter((a) => a.anchor.kind === "rect" && a.type === "memo");
+  // Comment (Story 2.10): a `type=comment` mark of EITHER kind. A `kind=text`
+  // comment ALSO appears in `highlightMarks` above (type !== "underline"), so its
+  // ~0.4 fill paints for free — do NOT add a second fill path. Here we render only
+  // the comment-specific chrome: a round PIN (both kinds) + the bubble when
+  // selected, in their own NOT-aria-hidden group (focusable controls).
+  const commentMarks = marks.filter((a) => a.type === "comment");
+
+  // The ids a comment recolor/retext touches: the comment + its group siblings
+  // (a two-page text comment recolors AND retexts together, AR-4). Scoped to THIS
+  // doc + type=comment (Codex MED): the store is a singleton across doc switches
+  // (until Epic 3), so a matching group_id in another doc must never be touched
+  // from this doc's bubble. Delete is already group-aware in the store.
+  const commentGroupIds = (a: Annotation): string[] => {
+    if (!a.group_id) return [a.id];
+    const ids: string[] = [];
+    for (const x of annotations.values()) {
+      if (x.group_id === a.group_id && x.doc_id === a.doc_id && x.type === "comment") ids.push(x.id);
+    }
+    return ids;
+  };
 
   // Render one annotation's rects as positioned mark divs. `underline` swaps the
   // accent fill for a transparent box with a 2px accent bottom-border (the line
@@ -254,6 +387,66 @@ export default function AnnotationLayer({
     );
   };
 
+  // Render one comment's PIN (both kinds) + its bubble when selected
+  // (geometry-on-kind: a text comment anchors at its first rect's start; a rect
+  // comment at the rect's top-left). The pin is a round <button> (keyboard-
+  // reachable, the click selects the comment); the fill (text comments only) is
+  // painted by the highlight group. The bubble mounts only for the EXACTLY-selected
+  // annotation (not group siblings), so a two-page comment shows one bubble.
+  const renderComment = (a: Annotation) => {
+    let anchor: ScreenRect | null = null;
+    if (a.anchor.kind === "text") {
+      if (a.anchor.rects.length === 0) return null;
+      anchor = denormalizeRect(a.anchor.rects[0], box, scale);
+    } else if (a.anchor.kind === "rect") {
+      anchor = denormalizeRect(a.anchor.rect, box, scale);
+    }
+    if (!anchor) return null;
+    const hovered = inActiveGroup(a, hoveredId, annotations);
+    const selected = inActiveGroup(a, selectedId, annotations);
+    const cls =
+      "annotation-comment-pin" +
+      (hovered ? " annotation-comment-pin--hovered" : "") +
+      (selected ? " annotation-comment-pin--selected" : "");
+    return (
+      <div key={a.id} className="annotation-comment" data-comment-id={a.id}>
+        <button
+          type="button"
+          className={cls}
+          data-testid={`annotation-comment-pin-${a.id}`}
+          aria-label="Comment"
+          style={{
+            left: anchor.left,
+            top: anchor.top,
+            backgroundColor: `var(--color-${a.style.color})`,
+          }}
+          onPointerEnter={() => setHovered(a.id)}
+          onPointerLeave={() => setHovered(null)}
+          onClick={() => select(a.id)}
+        />
+        {a.id === selectedId && (
+          <CommentBubble
+            anno={a}
+            pos={anchor}
+            onRetext={(_id, body) => {
+              // Group-aware (Codex HIGH): a two-page comment is grouped siblings;
+              // write the same body to ALL of them so reopening the other page's
+              // pin shows the note, not a stale/empty one (matches recolor/delete).
+              const now = new Date().toISOString();
+              for (const gid of commentGroupIds(a)) retextAnnotation(gid, body, now);
+            }}
+            onRecolor={(color) => {
+              recolorAnnotation(commentGroupIds(a), color, new Date().toISOString());
+              setActiveColor(color);
+            }}
+            onDelete={() => deleteAnnotation(a.id)}
+            onClearSelection={clearSelection}
+          />
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       {/* The mark sheet stays decorative (aria-hidden): the highlight/underline/pen
@@ -290,6 +483,17 @@ export default function AnnotationLayer({
       {memoMarks.length > 0 && (
         <div className="annotation-memos" data-testid={`annotation-memos-${pageIndex}`}>
           {memoMarks.map((a) => renderMemo(a))}
+        </div>
+      )}
+      {/* Comments (Story 2.10): round pins + the selected comment's bubble, in
+          their OWN, NOT aria-hidden, group (focusable controls cannot live in the
+          decorative aria-hidden sheet — same rule as memos). Pointer-transparent
+          group; the pin/bubble opt back in so page text between pins stays
+          selectable (NFR-1). The ~0.4 fill (text comments) is in the highlight
+          group above; this group is the pin + bubble only. */}
+      {commentMarks.length > 0 && (
+        <div className="annotation-comments" data-testid={`annotation-comments-${pageIndex}`}>
+          {commentMarks.map((a) => renderComment(a))}
         </div>
       )}
     </>

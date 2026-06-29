@@ -125,6 +125,10 @@ export default function App() {
         e.preventDefault();
         // Arm memo (UX-DR15: T = memo). Same single-field switch.
         setActiveTool("memo");
+      } else if (e.key === "c" || e.key === "C") {
+        e.preventDefault();
+        // Arm comment (UX-DR15: C = comment). Same single-field switch.
+        setActiveTool("comment");
       } else if (e.key === "[") {
         e.preventDefault();
         setRailCollapsed((c) => !c);

@@ -328,6 +328,134 @@
   outline-offset: var(--color-swatch-ring-offset);
 }
 
+/* annotation-comments group (Story 2.10): the comment pins + the selected
+   comment's bubble. Like the memos group it is NOT aria-hidden and NOT
+   pointer-transparent at the control level (the pin is a focusable <button>, the
+   bubble holds an editable <textarea>). The group stays pointer-transparent so
+   page text between pins remains selectable (NFR-1); each control opts back in. */
+.annotation-comments {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* The per-comment wrapper holds the pin + (when selected) the bubble. It is a
+   zero-size anchor so the absolutely-positioned pin/bubble place against the
+   layer, not against each other. */
+.annotation-comment {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* A comment PIN (DESIGN.md#annotation-comment-pin): a round accent dot anchored at
+   the run start / click point, marking a commented spot. A real <button> (keyboard
+   reachable, focus ring); the accent fill comes inline from style.color. Rides the
+   denormalized anchor (inline left/top) so it stays glued on zoom (NFR-3). */
+.annotation-comment-pin {
+  position: absolute;
+  width: var(--comment-pin-size);
+  height: var(--comment-pin-size);
+  padding: 0;
+  border: var(--color-swatch-border) solid var(--color-hairline-strong);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: var(--shadow-card);
+}
+
+.annotation-comment-pin--hovered {
+  outline: var(--hairline-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.annotation-comment-pin--selected {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.annotation-comment-pin:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+/* comment-bubble (DESIGN.md#comment-bubble): the comment's note popup. surface-card
+   bg, rounded.md, hairline-strong border, body-sm, soft drop. Anchored inline at
+   the pin's screen point; the transform nudges it BELOW the pin (so it clears it)
+   without recomputing the offset in JS (keeps the pin-size token in CSS only). */
+.comment-bubble {
+  position: absolute;
+  transform: translateY(calc(var(--comment-pin-size) + var(--space-xxs)));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+  width: var(--comment-bubble-width);
+  padding: var(--space-sm);
+  background-color: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  pointer-events: auto;
+  z-index: 50;
+}
+
+.comment-bubble__text {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: var(--comment-bubble-text-min-height);
+  margin: 0;
+  padding: var(--annotation-memo-padding);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-card);
+  color: var(--color-ink);
+  font-family: inherit;
+  font-size: var(--type-body-sm-size);
+  resize: none;
+  overflow: hidden;
+}
+
+.comment-bubble__text:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+}
+
+/* The bubble's action row: the recolor swatches + the delete button. */
+.comment-bubble__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
+}
+
+.comment-bubble__delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--quick-box-action-height);
+  height: var(--quick-box-action-height);
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.comment-bubble__delete:hover {
+  background-color: var(--color-hairline-soft);
+}
+
+.comment-bubble__delete:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+}
+
+.comment-bubble__delete svg {
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  display: block;
+}
+
 /* size-row (Story 2.9): the COLLAPSIBLE memo box-size picker. A compact trigger
    (current size preview + caret) that expands a short vertical step list, so the
    rail flyout / quick-box stays narrow (unlike a step ROW). */
