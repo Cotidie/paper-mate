@@ -4,7 +4,7 @@ baseline_commit: 7126a2292d69908e66b2becb71b74e40061f4013
 
 # Story 2.7: Underline text
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -304,8 +304,52 @@ memory risk (cross-page full-page leak) was verified live and is clean.
 - server/pyproject.toml (version 0.1.3 → 0.1.4)
 - docs/images/story-2-7-underline-green-live.png (live-smoke capture)
 - docs/images/story-2-7-underline-crosspage-live.png (live-smoke capture)
+- docs/images/story-2-7-quickbox-below-3px.png (post-review: 3px + box-below-text capture)
 - .bmad/implementation-artifacts/2-7-underline-text.md (this story)
 - .bmad/implementation-artifacts/sprint-status.yaml (status tracking)
+
+## Code Review (cross-model: Codex via `codex exec --sandbox read-only`)
+
+Ran the BMad code-review method through `codex exec --sandbox read-only` against
+`7126a22..HEAD`. No BLOCKER / HIGH. Verdict: Changes-Requested. Triage:
+
+- ✅ **LOW — non-text armed tools fall through to the cursor proof box**
+  (`AnnotationInteraction.tsx`): a future `pen`/`memo`/`comment` armed tool would
+  skip the highlight/underline branch and then pop the cursor-mode highlight proof
+  box as if nothing were armed — the inverse-path the story guards. Fixed: added
+  `if (tool !== null) return;` after the highlight/underline create branch, before
+  the cursor-mode proof. +1 regression test (armed `pen` creates nothing and opens
+  no proof box).
+- ⏸️ **MED — cross-type recent-wins across the two render groups (dismissed, with
+  rationale + deferred note):** the split into `.annotation-highlights` (an isolated
+  0.4-opacity stacking context) and `.annotation-underlines` means an underline
+  always stacks above a highlight on shared text, so newest-wins is not preserved
+  ACROSS types. Dismissed for this story because: (a) within EACH type recent-wins
+  is intact (each group is `created_at`-sorted); (b) cross-type overlap is a new,
+  previously-undefined scenario (only one type existed before), not a regressed
+  spec; (c) it only mis-targets in the narrow case of a highlight created LATER than
+  an underline on the EXACT same run; (d) the correct fix (a unified transparent
+  hit-layer sorted by the full mark list, decoupled from the opacity groups) would
+  restructure the Story 2.5 selection seam and churn its tests — disproportionate
+  to a MED edge case. **Deferred:** unify mark hit-testing into one created-at-ordered
+  interaction layer when Epic 3's multi-type selection / Annotation Bank lands (the
+  isolated opacity group makes per-mark z-index unavailable, so this needs the
+  hit-layer, not a tweak). Recorded in `deferred-work.md`.
+
+Post-review follow-ups requested live by the user (folded into this story since it
+is not yet merged):
+
+- **Underline thicker: 2px → 3px** — `--annotation-underline-width` bumped to `3px`
+  in `components.css` (single source). Live-verified (computed 2.4px at the test
+  browser's 80% page-zoom).
+- **Quick-box must not cover the marked text** — the selection quick-box now anchors
+  just BELOW the selection's lowest line (`QUICK_BOX_GAP` under the run, left-aligned
+  to the first line) instead of over the mark's top-left. Live-verified: box top sits
+  ≥ mark bottom (gap ~5px at zoom), `boxClearsTargetText: true`. Capture:
+  `docs/images/story-2-7-quickbox-below-3px.png`.
+
+Post-review: client 267 tests pass, typecheck clean, contract byte-identical,
+`no-raw-values` green.
 
 ## Change Log
 
@@ -318,3 +362,9 @@ memory risk (cross-page full-page leak) was verified live and is clean.
   sub-toolbox (twin of Highlight) + `U` hotkey. Client-only; tracked contract
   byte-identical. Live-smoked on own fresh servers incl. a clean cross-page underline
   (no full-page leak) and zoom-glue. Version 0.1.3 → 0.1.4. Status → review.
+- 2026-06-29: Cross-model code review (Codex, read-only). Fixed the LOW inverse-path
+  guard (non-text armed tools no longer pop the cursor proof box; +test); dismissed
+  the MED cross-type recent-wins with rationale + a deferred note (unified hit-layer
+  in Epic 3). Folded two user UX follow-ups: underline 2px → 3px; the selection
+  quick-box now anchors below the marked text so it never covers it. Client 267 pass,
+  contract byte-identical. Status → done.
