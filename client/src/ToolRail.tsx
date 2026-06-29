@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Cursor,
   Hand,
-  Selection,
+  BoundingBox,
   Highlighter,
   TextUnderline,
   PencilSimple,
@@ -235,22 +235,12 @@ export default function ToolRail({
 
         {highlightActive && flyoutOpen && (
           <ToolFlyout testId="highlight-color-flyout">
-            {/* The shared swatch row (DESIGN.md#color-swatch): the armed swatch
-                (= activeColor) shows the 2px ink ring. Picking sets the default
-                color for new marks and closes the flyout (pick-is-dismiss; color is
-                not a tool change, so the open-on-switch effect won't reopen). */}
-            <ColorSwatchRow
-              value={activeColor}
-              onPick={(token) => {
-                onPickColor(token);
-                setFlyoutOpen(false);
-              }}
-            />
             {/* Box-highlight mode (Story 2.11, relocated): a toggle that lives UNDER
-                the Highlight tool, not as its own rail tool. While on, a rectangle
-                drag makes a region highlight instead of a text-run highlight. A mode
-                toggle, so it does NOT close the flyout (the user may still pick a
-                color). `aria-checked` reflects the mode. */}
+                the Highlight tool, not as its own rail tool. It sits FIRST, above the
+                colors, with a divider between. While on, a rectangle drag makes a
+                region highlight instead of a text-run highlight. A mode toggle, so it
+                does NOT close the flyout (the user may still pick a color).
+                `aria-checked` reflects the mode. */}
             <button
               type="button"
               role="menuitemcheckbox"
@@ -263,8 +253,20 @@ export default function ToolRail({
               data-testid="highlight-box-toggle"
               onClick={onToggleBoxHighlight}
             >
-              <Selection aria-hidden />
+              <BoundingBox aria-hidden />
             </button>
+            <div className="tool-flyout__divider" data-testid="highlight-box-divider" />
+            {/* The shared swatch row (DESIGN.md#color-swatch): the armed swatch
+                (= activeColor) shows the 2px ink ring. Picking sets the default
+                color for new marks and closes the flyout (pick-is-dismiss; color is
+                not a tool change, so the open-on-switch effect won't reopen). */}
+            <ColorSwatchRow
+              value={activeColor}
+              onPick={(token) => {
+                onPickColor(token);
+                setFlyoutOpen(false);
+              }}
+            />
           </ToolFlyout>
         )}
       </div>
