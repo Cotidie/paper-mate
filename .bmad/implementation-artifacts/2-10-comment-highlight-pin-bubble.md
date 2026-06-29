@@ -4,7 +4,7 @@ baseline_commit: 1fb83b9195ee7f68b97a88ae7d9382eeada21424
 
 # Story 2.10: Comment (highlight + pin + bubble)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
