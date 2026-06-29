@@ -4,7 +4,7 @@ baseline_commit: 5747ec7cd30e747c419393f361ae81d429ef59aa
 
 # Story 2.9: Textbox memo
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
