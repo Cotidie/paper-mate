@@ -57,6 +57,7 @@
   position: fixed;
   z-index: 50;
   display: flex;
+  align-items: center;
   gap: var(--space-xxs);
   padding: var(--space-xxs);
   background-color: var(--color-surface-card);
@@ -82,6 +83,30 @@
 
 .quick-box__action:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-ink);
+}
+
+/* Vertical hairline separating the swatch row from the delete action (Story 2.5
+   selection quick-box). Inset top/bottom so it reads as a divider, not a border. */
+.quick-box__divider {
+  align-self: stretch;
+  width: var(--hairline-width);
+  margin-block: var(--space-xxs);
+  background-color: var(--color-hairline);
+}
+
+/* Square icon-only variant of the action (the trash delete glyph). */
+.quick-box__action--icon {
+  width: var(--quick-box-action-height);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quick-box__action--icon svg {
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  display: block;
 }
 
 /* color-swatch row: the highlight recolor pills inside the quick-box (Story 2.3;

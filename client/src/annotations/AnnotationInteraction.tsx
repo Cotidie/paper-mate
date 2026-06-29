@@ -17,6 +17,7 @@
 // anchor/ + store/ only; render/ stays annotation-free (geometry via `getPages`).
 
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { Trash } from "@phosphor-icons/react";
 import { rectsFromSelection, denormalizeRect, type PageCardRef } from "../anchor";
 import { useAnnotationStore } from "../store";
 import { newId } from "../uuid";
@@ -412,16 +413,17 @@ export default function AnnotationInteraction({
           {/* Recolor the selected mark (reuses 2.3's row + store.recolorAnnotation);
               the row shows the mark's CURRENT color armed. */}
           <ColorSwatchRow value={selectedAnno.style.color} onPick={recolorSelected} />
+          <span className="quick-box__divider" aria-hidden="true" />
           <button
             type="button"
             role="menuitem"
-            className="quick-box__action"
+            className="quick-box__action quick-box__action--icon"
             data-testid="quick-box-delete"
             aria-label="Delete"
             title="Delete (Del)"
             onClick={deleteSelected}
           >
-            Delete
+            <Trash aria-hidden />
           </button>
         </div>
       )}
