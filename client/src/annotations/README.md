@@ -43,6 +43,37 @@ single click — a per-tool quick-box only opens on drag-release or when the too
 is already active, never in place of a switch. That is what lets Story 2.6 add an
 arm-time color picker and Story 2.5 add click-to-select safely on this one model.
 
+Story 2.5 adds the selection seam (AD-12) — the first way to act on an EXISTING
+mark, decoupled from the create machine and the Epic-3 command stack:
+
+- One `selectedId: string | null` in the store is the single source of truth for
+  selection (`select`/`clearSelection`), plus a group-aware `deleteAnnotation`
+  (removes the id AND its `group_id` siblings, so a two-page highlight deletes
+  both pages; clears `selectedId` if it was in the set). Client-only — no
+  persistence/undo yet (that is the seed Story 3.3 reuses).
+- The highlight marks are now pointer-interactive (Decision A): each mark rect IS
+  the page-normalized anchor rect (`denormalizeRect`), so `pointer-events:auto` +
+  `cursor:pointer` make it the hit surface. Hovering outlines the WHOLE annotation
+  (a per-layer transient `hoveredId`) and shows the pointer cursor (NOT the text
+  I-beam) — so you cannot start a new highlight over an existing one. Clicking
+  selects it (a `--selected` ring, stronger than the hover outline). Recent-wins:
+  marks render sorted by `created_at` ascending (newest on top wins overlap). The
+  rest of the layer sheet stays `pointer-events:none`, so non-highlighted text
+  stays selectable (trade-off: you cannot text-select over a highlight).
+- The selection quick-box is a SEPARATE render path off `selectedId` (Decision B,
+  NOT `machine.ts`): it reuses `ColorSwatchRow` (armed to the mark's current
+  color → `store.recolorAnnotation`, reused from 2.3) + a Delete action, reusing
+  the `.quick-box` shell + `clampToViewport`. A pick dismisses the box but keeps
+  the mark selected/ringed; clicking a mark again reopens its box. `Del`/
+  `Backspace` delete; `Esc` or a pointerdown on empty page content clears the
+  selection (document-level, phase-gated, editable/buttons/chrome exempt so the
+  toolbar/zoom keep it). Scroll (including zoom recenters) only CLOSES the
+  floating box — the ring rides the denormalized rect and stays glued (NFR-3). Selection works in cursor mode AND while a highlight
+  tool is active (a pointerdown on a mark selects; empty text falls through to the
+  2.3 create path). a11y: the layer stays decorative (`aria-hidden`); selection is
+  a pointer affordance with document-level Del/Esc — a keyboard-reachable list
+  comes with the Epic-3 Annotation Bank.
+
 Still later stories: underline/pen/memo/comment tools + box-select drag (2.6-2.11),
-select-a-highlight (2.5), the cursor-mode drag-to-change-tool picker (2.12), and
-editing/undo/persistence (Epic 3).
+the cursor-mode drag-to-change-tool picker (2.12), and editing/undo/persistence
+(Epic 3).

@@ -16,8 +16,8 @@
 // on `.pdf-canvas`. Layering (AD-9): this lives in annotations/, consuming
 // anchor/ + store/ only; render/ stays annotation-free (geometry via `getPages`).
 
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
-import { rectsFromSelection, type PageCardRef } from "../anchor";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { rectsFromSelection, denormalizeRect, type PageCardRef } from "../anchor";
 import { useAnnotationStore } from "../store";
 import { newId } from "../uuid";
 import { buildAnnotations } from "./create";
@@ -62,7 +62,19 @@ export default function AnnotationInteraction({
   const [state, dispatch] = useReducer(overlayReducer, initialOverlayState);
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation);
   const recolorAnnotation = useAnnotationStore((s) => s.recolorAnnotation);
+  // Story 2.5 selection seam (AD-12): selection lives in the store; this layer
+  // reads it to render the selected-mark quick-box (recolor + delete).
+  const annotations = useAnnotationStore((s) => s.annotations);
+  const selectedId = useAnnotationStore((s) => s.selectedId);
+  const clearSelection = useAnnotationStore((s) => s.clearSelection);
+  const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const quickBoxRef = useRef<HTMLDivElement | null>(null);
+  // The selection quick-box (separate render path off `selectedId`, Decision B).
+  const selectionBoxRef = useRef<HTMLDivElement | null>(null);
+  // The selection quick-box opens when a NEW mark is selected and closes on a
+  // pick (the 2.3 pick-is-dismiss feel) while the ring stays — so its visibility
+  // is its own bit, not just `selectedId != null`.
+  const [selectionBoxOpen, setSelectionBoxOpen] = useState(false);
   // The element focused before the quick-box opened, restored on dismiss.
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   // Ids of the marks created on the current drag-release (highlight mode), so the
@@ -222,36 +234,182 @@ export default function AnnotationInteraction({
     [recolorAnnotation, dismiss],
   );
 
-  if (!pending) return null;
+  // ── Selection (Story 2.5, AD-12) ─────────────────────────────────────────
+  // Separate from the create machine (Decision B): the selection quick-box is
+  // driven by the store's `selectedId`, not `machine.ts`.
+  const selectedAnno = selectedId ? annotations.get(selectedId) ?? null : null;
 
-  const highlightMode = pending.tool === "highlight";
+  // Clicking ANY mark (re)opens its quick-box. Bound always-on (phase-gated) so
+  // the FIRST selection opens it too, and re-clicking the same mark reopens it
+  // after a pick/scroll closed it. Capture phase, before the click selects it.
+  useEffect(() => {
+    if (!enabled) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.(".annotation-highlight")) setSelectionBoxOpen(true);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [enabled]);
+
+  // Open the box on a new selection; close it when nothing is selected (e.g.
+  // after a delete). A pick/scroll closes it WITHOUT changing `selectedId`, so
+  // this effect won't re-run and reopen it; re-clicking the mark does (above).
+  useEffect(() => {
+    setSelectionBoxOpen(selectedId !== null);
+  }, [selectedId]);
+
+  // The ids a selection action touches: the selected mark + its group siblings
+  // (a two-page highlight recolors/deletes together, AR-4).
+  const selectedGroupIds = useCallback((): string[] => {
+    if (!selectedAnno) return [];
+    if (!selectedAnno.group_id) return [selectedAnno.id];
+    const ids: string[] = [];
+    for (const a of annotations.values()) if (a.group_id === selectedAnno.group_id) ids.push(a.id);
+    return ids;
+  }, [selectedAnno, annotations]);
+
+  const recolorSelected = useCallback(
+    (color: string) => {
+      recolorAnnotation(selectedGroupIds(), color, new Date().toISOString());
+      setSelectionBoxOpen(false); // pick dismisses the box; the mark stays selected/ringed
+    },
+    [recolorAnnotation, selectedGroupIds],
+  );
+
+  // Delete via the store (removes id + group siblings AND clears `selectedId`).
+  const deleteSelected = useCallback(() => {
+    if (selectedId) deleteAnnotation(selectedId);
+  }, [selectedId, deleteAnnotation]);
+
+  // Selection keys + dismiss, document-level + phase-gated (AP-1). Live only
+  // while something is selected so we don't shadow other handlers.
+  useEffect(() => {
+    if (!enabled || !selectedId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        // Esc clears the selection (the App-level Esc->cursor also runs).
+        clearSelection();
+        return;
+      }
+      if (e.ctrlKey || e.altKey || e.metaKey || isExempt(e.target)) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        deleteAnnotation(selectedId);
+      }
+    };
+    // Empty-space deselect: a pointerdown on empty page content (NOT a mark, the
+    // selection box, or a control) clears the selection. Exempting buttons/inputs
+    // means using the chrome (toolbar, zoom) keeps the selection (AC1).
+    const onPointerDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (isExempt(t)) return;
+      const onMark = !!t?.closest?.(".annotation-highlight");
+      const inBox = selectionBoxRef.current?.contains(t as Node) ?? false;
+      if (!onMark && !inBox) clearSelection();
+    };
+    // The box is position:fixed; once the canvas scrolls (incl. zoom recenters)
+    // it floats detached, so scrolling CLOSES the box — but the selection (ring)
+    // stays, since it rides the denormalized rect and re-derives glued (NFR-3).
+    const onScroll = () => setSelectionBoxOpen(false);
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("scroll", onScroll, true);
+    };
+  }, [enabled, selectedId, clearSelection, deleteAnnotation]);
+
+  const showSelectionBox =
+    selectionBoxOpen && selectedAnno !== null && selectedAnno.anchor.kind === "text";
+
+  // Project the selected mark's first rect to a viewport point (the box anchor),
+  // re-derived from the anchor service so it tracks zoom. clamped in layout.
+  const selectionPoint = (): { x: number; y: number } => {
+    if (!selectedAnno || selectedAnno.anchor.kind !== "text") return { x: 0, y: 0 };
+    const page = getPagesRef.current().find((p) => p.pageIndex === selectedAnno.anchor.page_index);
+    if (!page) return { x: 0, y: 0 };
+    const pos = denormalizeRect(selectedAnno.anchor.rects[0], page.box, scaleRef.current);
+    const cardRect = page.cardEl.getBoundingClientRect();
+    return { x: cardRect.left + pos.left, y: cardRect.top + pos.top };
+  };
+
+  // Nudge the selection box on-screen once measured (mirrors the create box).
+  useLayoutEffect(() => {
+    if (!showSelectionBox) return;
+    const el = selectionBoxRef.current;
+    if (!el) return;
+    const { x, y } = selectionPoint();
+    const rect = el.getBoundingClientRect();
+    const c = clampToViewport(x, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
+    el.style.left = `${c.x}px`;
+    el.style.top = `${c.y}px`;
+    // Re-run on open and on zoom (rect re-derives).
+  }, [showSelectionBox, selectedId, scale]);
+
+  if (!pending && !showSelectionBox) return null;
+
+  const highlightMode = pending?.tool === "highlight";
+  const selInit = showSelectionBox ? selectionPoint() : { x: 0, y: 0 };
 
   return (
-    <div
-      ref={quickBoxRef}
-      className="quick-box"
-      role="menu"
-      aria-label={highlightMode ? "Highlight color" : "Annotation actions"}
-      data-testid="quick-box"
-      // Initial position at the release point; the layout effect nudges it
-      // on-screen once measured. position:fixed keeps it off the canvas flow.
-      style={{ left: pending.at.x, top: pending.at.y }}
-    >
-      {highlightMode ? (
-        // The mark already landed on release; the row recolors it. The first
-        // swatch is focusable for the focus-in contract.
-        <ColorSwatchRow value={DEFAULT_COLOR} onPick={recolor} />
-      ) : (
-        <button
-          type="button"
-          role="menuitem"
-          className="quick-box__action"
-          data-testid="quick-box-highlight"
-          onClick={commit}
+    <>
+      {pending && (
+        <div
+          ref={quickBoxRef}
+          className="quick-box"
+          role="menu"
+          aria-label={highlightMode ? "Highlight color" : "Annotation actions"}
+          data-testid="quick-box"
+          // Initial position at the release point; the layout effect nudges it
+          // on-screen once measured. position:fixed keeps it off the canvas flow.
+          style={{ left: pending.at.x, top: pending.at.y }}
         >
-          Highlight
-        </button>
+          {highlightMode ? (
+            // The mark already landed on release; the row recolors it. The first
+            // swatch is focusable for the focus-in contract.
+            <ColorSwatchRow value={DEFAULT_COLOR} onPick={recolor} />
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              className="quick-box__action"
+              data-testid="quick-box-highlight"
+              onClick={commit}
+            >
+              Highlight
+            </button>
+          )}
+        </div>
       )}
-    </div>
+
+      {showSelectionBox && selectedAnno && (
+        <div
+          ref={selectionBoxRef}
+          className="quick-box"
+          role="menu"
+          aria-label="Highlight actions"
+          data-testid="selection-quick-box"
+          style={{ left: selInit.x, top: selInit.y }}
+        >
+          {/* Recolor the selected mark (reuses 2.3's row + store.recolorAnnotation);
+              the row shows the mark's CURRENT color armed. */}
+          <ColorSwatchRow value={selectedAnno.style.color} onPick={recolorSelected} />
+          <button
+            type="button"
+            role="menuitem"
+            className="quick-box__action"
+            data-testid="quick-box-delete"
+            aria-label="Delete"
+            title="Delete (Del)"
+            onClick={deleteSelected}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+    </>
   );
 }

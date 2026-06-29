@@ -1,6 +1,10 @@
+---
+baseline_commit: 01c77f6f478aaeaec3e6505cc700c477b1cc7281
+---
+
 # Story 2.5: Select a highlight (click-select, recolor, delete)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -49,44 +53,44 @@ so that I can fix or remove marks without re-creating them.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Hit surface = the rendered anchor rects (no new `anchor/` math) (AC: 1, 2, 5)**
-  - [ ] No new geometry helper. The hit-test is the DOM: `AnnotationLayer` already positions each mark rect with `denormalizeRect` (AD-4), so the rendered mark element IS the page-normalized anchor rect at the current scale. Making it pointer-interactive (Task 3) lets the browser resolve hover/click to the topmost rect — that satisfies AD-12's "hit-test via the anchor service" because the rect geometry still comes only from `anchor/` (AD-9). [Decision A — revised; see Dev Notes]
-  - [ ] Recent-wins: render marks sorted by `created_at` ascending so the newest paints last (on top) and receives the pointer on overlap — matching the existing opacity-group "last/topmost wins on shared text" comment. (Today `AnnotationLayer` iterates the Map in insertion order; add the sort.)
-  - [ ] `anchor/` is otherwise UNCHANGED this story — confirm no edits to `index.ts` beyond (none expected). Layer rule preserved (AD-9).
+- [x] **Task 1 — Hit surface = the rendered anchor rects (no new `anchor/` math) (AC: 1, 2, 5)**
+  - [x] No new geometry helper. The hit-test is the DOM: `AnnotationLayer` already positions each mark rect with `denormalizeRect` (AD-4), so the rendered mark element IS the page-normalized anchor rect at the current scale. Making it pointer-interactive (Task 3) lets the browser resolve hover/click to the topmost rect — that satisfies AD-12's "hit-test via the anchor service" because the rect geometry still comes only from `anchor/` (AD-9). [Decision A — revised; see Dev Notes]
+  - [x] Recent-wins: render marks sorted by `created_at` ascending so the newest paints last (on top) and receives the pointer on overlap — matching the existing opacity-group "last/topmost wins on shared text" comment. (Today `AnnotationLayer` iterates the Map in insertion order; add the sort.)
+  - [x] `anchor/` is otherwise UNCHANGED this story — confirm no edits to `index.ts` beyond (none expected). Layer rule preserved (AD-9).
 
-- [ ] **Task 2 — Selection + delete state in `store/` (AC: 1, 2, 3, 5)**
-  - [ ] In `client/src/store/index.ts`, add to `AnnotationStore`: `selectedId: string | null` (init `null`), `select(id: string | null): void`, `clearSelection(): void` (or fold into `select(null)`), and `deleteAnnotation(id: string): void`.
-  - [ ] `deleteAnnotation(id)`: look up the mark; gather every annotation sharing a non-null `group_id` with it (plus the mark itself); remove them all from the map (new Map each mutation for Zustand). If the deleted set includes `selectedId`, clear `selectedId`. (Group logic lives in the store because it owns the map — keep callers from re-deriving siblings.)
-  - [ ] Keep the store dependency-clean (AD-9): it still imports `api/` types only. `recolorAnnotation` is REUSED as-is for the selected-mark recolor (no change). Do NOT add persistence/command-stack here.
-  - [ ] Store unit tests (`store/store.test.ts` or wherever the store tests live): select/clear sets `selectedId`; `deleteAnnotation` removes the mark; a grouped two-page mark deletes both ids together; deleting the selected mark clears `selectedId`.
+- [x] **Task 2 — Selection + delete state in `store/` (AC: 1, 2, 3, 5)**
+  - [x] In `client/src/store/index.ts`, add to `AnnotationStore`: `selectedId: string | null` (init `null`), `select(id: string | null): void`, `clearSelection(): void` (or fold into `select(null)`), and `deleteAnnotation(id: string): void`.
+  - [x] `deleteAnnotation(id)`: look up the mark; gather every annotation sharing a non-null `group_id` with it (plus the mark itself); remove them all from the map (new Map each mutation for Zustand). If the deleted set includes `selectedId`, clear `selectedId`. (Group logic lives in the store because it owns the map — keep callers from re-deriving siblings.)
+  - [x] Keep the store dependency-clean (AD-9): it still imports `api/` types only. `recolorAnnotation` is REUSED as-is for the selected-mark recolor (no change). Do NOT add persistence/command-stack here.
+  - [x] Store unit tests (`store/store.test.ts` or wherever the store tests live): select/clear sets `selectedId`; `deleteAnnotation` removes the mark; a grouped two-page mark deletes both ids together; deleting the selected mark clears `selectedId`.
 
-- [ ] **Task 3 — Interactive marks: hover outline + cursor + selected ring in `AnnotationLayer` (AC: 1, 2, 3, 5)**
-  - [ ] In `client/src/annotations/AnnotationLayer.tsx`, make the highlight marks pointer-interactive: render each annotation's rects so they receive pointer events (`pointer-events: auto`, `cursor: pointer`). The mark click is the hit-test (Decision A). Keep the `.annotation-layer`/`.annotation-highlights` group otherwise as-is; only the mark rects opt back into pointer events.
-  - [ ] **Hover outline (whole annotation):** keep a per-layer `hoveredId` state; set it on a mark's `onPointerEnter` (to that annotation's `id`) and clear on `onPointerLeave`. Render a hover-outline class on ALL rects whose annotation `id === hoveredId` (so a multi-line mark outlines as one annotation, matching the Kami reference). Transient only — never writes `selectedId`.
-  - [ ] **Selected ring (persistent):** subscribe to `selectedId` (`useAnnotationStore((s) => s.selectedId)`); add a selected class to all rects of the `selectedId` annotation. Selected ring is visually stronger than hover outline.
-  - [ ] **Cursor:** with `cursor: pointer` on the mark, hovering a highlight shows the pointer (not the text I-beam), so the user cannot start a new text-drag highlight over an existing mark (AC2) — the mark intercepts the pointerdown.
-  - [ ] **Recent-wins ordering:** render marks sorted by `created_at` ascending so the newest paints last (on top) and wins hover/click on overlap (Task 1).
-  - [ ] **Click → select:** on a mark's `onClick` (or pointerdown), call `select(annotation.id)` and report the click position UP so the quick-box can anchor there. Since `AnnotationLayer` is per-card and currently presentational, pass a callback prop from the Reader/overlay (e.g. `onSelectMark(id, {x,y})`) OR read the select action from the store directly and let `AnnotationInteraction` own the quick-box off `selectedId` (preferred — keeps the layer thin). Choose the smaller wiring and record it.
-  - [ ] **CSS** in `client/src/annotations/Annotations.css`: add `.annotation-highlight` `pointer-events:auto; cursor:pointer;`, an `--hovered` outline class, and an `--selected` ring class — EXISTING theme tokens only (e.g. `outline: var(--hairline-width) solid var(--color-ink)`, radius/shadow tokens); NO raw hex/px (`no-raw-values.test.ts` applies; Annotations.css is not under `src/theme/**`). Both outlines must be visible against all 6 swatch colors and ride the denormalized rect so they stay glued across zoom (NFR-3).
-  - [ ] **Keep `aria-hidden`** on the layer? The marks are now interactive — give the clickable mark an accessible name (`aria-label="Highlight"`, `role="button"`) or keep selection keyboard-reachable another way; do not regress a11y. (Marks were decorative in 2.2/2.3; selecting makes them actionable.) Use your judgment; note the choice.
+- [x] **Task 3 — Interactive marks: hover outline + cursor + selected ring in `AnnotationLayer` (AC: 1, 2, 3, 5)**
+  - [x] In `client/src/annotations/AnnotationLayer.tsx`, make the highlight marks pointer-interactive: render each annotation's rects so they receive pointer events (`pointer-events: auto`, `cursor: pointer`). The mark click is the hit-test (Decision A). Keep the `.annotation-layer`/`.annotation-highlights` group otherwise as-is; only the mark rects opt back into pointer events.
+  - [x] **Hover outline (whole annotation):** keep a per-layer `hoveredId` state; set it on a mark's `onPointerEnter` (to that annotation's `id`) and clear on `onPointerLeave`. Render a hover-outline class on ALL rects whose annotation `id === hoveredId` (so a multi-line mark outlines as one annotation, matching the Kami reference). Transient only — never writes `selectedId`.
+  - [x] **Selected ring (persistent):** subscribe to `selectedId` (`useAnnotationStore((s) => s.selectedId)`); add a selected class to all rects of the `selectedId` annotation. Selected ring is visually stronger than hover outline.
+  - [x] **Cursor:** with `cursor: pointer` on the mark, hovering a highlight shows the pointer (not the text I-beam), so the user cannot start a new text-drag highlight over an existing mark (AC2) — the mark intercepts the pointerdown.
+  - [x] **Recent-wins ordering:** render marks sorted by `created_at` ascending so the newest paints last (on top) and wins hover/click on overlap (Task 1).
+  - [x] **Click → select:** on a mark's `onClick` (or pointerdown), call `select(annotation.id)` and report the click position UP so the quick-box can anchor there. Since `AnnotationLayer` is per-card and currently presentational, pass a callback prop from the Reader/overlay (e.g. `onSelectMark(id, {x,y})`) OR read the select action from the store directly and let `AnnotationInteraction` own the quick-box off `selectedId` (preferred — keeps the layer thin). Choose the smaller wiring and record it.
+  - [x] **CSS** in `client/src/annotations/Annotations.css`: add `.annotation-highlight` `pointer-events:auto; cursor:pointer;`, an `--hovered` outline class, and an `--selected` ring class — EXISTING theme tokens only (e.g. `outline: var(--hairline-width) solid var(--color-ink)`, radius/shadow tokens); NO raw hex/px (`no-raw-values.test.ts` applies; Annotations.css is not under `src/theme/**`). Both outlines must be visible against all 6 swatch colors and ride the denormalized rect so they stay glued across zoom (NFR-3).
+  - [x] **Keep `aria-hidden`** on the layer? The marks are now interactive — give the clickable mark an accessible name (`aria-label="Highlight"`, `role="button"`) or keep selection keyboard-reachable another way; do not regress a11y. (Marks were decorative in 2.2/2.3; selecting makes them actionable.) Use your judgment; note the choice.
 
-- [ ] **Task 4 — Selection quick-box + keys in `AnnotationInteraction` (AC: 2, 3, 4)**
-  - [ ] In `client/src/annotations/AnnotationInteraction.tsx`, render a selection quick-box driven by the store's `selectedId` (NOT the transient create machine — Decision B). When `selectedId` is set, show `ColorSwatchRow` (value = the selected mark's `style.color`) + a Delete button (`data-testid="quick-box-delete"`, `aria-label="Delete"`, `title="Delete (Del)"`), positioned at the selected mark's first denormalized rect (or the recorded click point), nudged on-screen with `clampToViewport`. Reuse the `.quick-box` shell.
-  - [ ] Swatch pick → `recolorAnnotation([mark.id + its group siblings], token, now)`; match the 2.3 pick-is-dismiss feel (pick dismisses the quick-box; the mark stays selected/ringed). Delete button → `deleteAnnotation(selectedId)` (clears `selectedId`). Dismiss the quick-box on outside-click/`Esc`/scroll (reuse the existing dismiss wiring) → `clearSelection()`.
-  - [ ] **Disambiguate select vs create (AC4):** because the interactive mark (Task 3) intercepts a pointerdown that starts on it, the text layer never begins a selection over a mark → no create over an existing highlight, automatically. Empty-space pointerdown still reaches the text layer → the 2.3 create-on-release path runs unchanged. Verify the create machine (re-pop fix, sticky-after-mark) is untouched. A document-level pointerdown that hits NEITHER a mark NOR the quick-box clears the selection (clicking empty space deselects, AC1).
-  - [ ] **Keys (AC3):** add `Del`/`Backspace` → `deleteAnnotation(selectedId)` when selected; `Esc` → `clearSelection()` (the App-level `Esc`→cursor still runs; deselect + return-to-cursor is acceptable). Document-level, phase-gated, chord-skip + editable/buttons exempt.
-  - [ ] Confirm `Reader.tsx` needs only minimal change (if Task 3 lifts an `onSelectMark` callback, thread it through `AnnotationLayer`'s mount in `PageCard`; otherwise none). Prefer reading/writing the store directly to keep prop changes minimal.
+- [x] **Task 4 — Selection quick-box + keys in `AnnotationInteraction` (AC: 2, 3, 4)**
+  - [x] In `client/src/annotations/AnnotationInteraction.tsx`, render a selection quick-box driven by the store's `selectedId` (NOT the transient create machine — Decision B). When `selectedId` is set, show `ColorSwatchRow` (value = the selected mark's `style.color`) + a Delete button (`data-testid="quick-box-delete"`, `aria-label="Delete"`, `title="Delete (Del)"`), positioned at the selected mark's first denormalized rect (or the recorded click point), nudged on-screen with `clampToViewport`. Reuse the `.quick-box` shell.
+  - [x] Swatch pick → `recolorAnnotation([mark.id + its group siblings], token, now)`; match the 2.3 pick-is-dismiss feel (pick dismisses the quick-box; the mark stays selected/ringed). Delete button → `deleteAnnotation(selectedId)` (clears `selectedId`). Dismiss the quick-box on outside-click/`Esc`/scroll (reuse the existing dismiss wiring) → `clearSelection()`.
+  - [x] **Disambiguate select vs create (AC4):** because the interactive mark (Task 3) intercepts a pointerdown that starts on it, the text layer never begins a selection over a mark → no create over an existing highlight, automatically. Empty-space pointerdown still reaches the text layer → the 2.3 create-on-release path runs unchanged. Verify the create machine (re-pop fix, sticky-after-mark) is untouched. A document-level pointerdown that hits NEITHER a mark NOR the quick-box clears the selection (clicking empty space deselects, AC1).
+  - [x] **Keys (AC3):** add `Del`/`Backspace` → `deleteAnnotation(selectedId)` when selected; `Esc` → `clearSelection()` (the App-level `Esc`→cursor still runs; deselect + return-to-cursor is acceptable). Document-level, phase-gated, chord-skip + editable/buttons exempt.
+  - [x] Confirm `Reader.tsx` needs only minimal change (if Task 3 lifts an `onSelectMark` callback, thread it through `AnnotationLayer`'s mount in `PageCard`; otherwise none). Prefer reading/writing the store directly to keep prop changes minimal.
 
-- [ ] **Task 5 — Tests + regression bar (AC: all)**
-  - [ ] Store selection/delete unit tests (Task 2). No new `anchor/` tests (anchor unchanged this story).
-  - [ ] `AnnotationLayer.test.tsx`: a mark fires `select(id)` (or the lifted callback) on click; `onPointerEnter`/`Leave` toggles the `--hovered` class on all rects of that annotation; the `selectedId` annotation's rects get the `--selected` class and non-selected do not; clearing `selectedId` removes the ring; marks render sorted by `created_at` (newest last/on top).
-  - [ ] `AnnotationInteraction.test.tsx`: with `selectedId` set, the selection quick-box renders (`ColorSwatchRow` + `quick-box-delete`); swatch recolors the mark (+ group siblings); Delete removes it; `Del`/`Backspace` deletes; `Esc`/outside-click clears selection; an empty-space drag still CREATES (the 2.3 path + re-pop fix + sticky-after-mark unbroken). Use the file's existing fake-card/stub-selection pattern (jsdom zeroes real rects).
-  - [ ] Full regression: `cd client && npm test` + `npm run typecheck`; `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`. Contract byte-identical: `git diff --stat -- server/openapi.json client/src/api/schema.d.ts` empty. `no-raw-values.test.ts` green. Both `vi.mock("./render")` barrels untouched (no new render export).
-  - [ ] **Live smoke (the real verifier — Epic-1 retro; jsdom proves wiring, not gesture routing).** Host two-process flow + a real PDF at DPR>1: (a) hover an existing highlight → whole-annotation outline appears AND the cursor is the pointer, NOT the text I-beam; starting a drag on the highlight does NOT begin a new selection; (b) click a highlight in cursor mode → selected ring + quick-box with swatches + Delete; (c) recolor via a swatch → mark repaints; (d) `Del` → mark gone; (e) with the Highlight tool armed, click an existing mark → selects (does NOT create a new one), drag empty text → still creates; (f) two-page highlight, delete → both pages clear; (g) click empty space / `Esc` → deselects; (h) zoom in/out with a mark selected → ring + hover outline stay glued. Capture results in Completion Notes. [Reuse `fixtures/sample-pdfs/09-regularization.pdf`.]
+- [x] **Task 5 — Tests + regression bar (AC: all)**
+  - [x] Store selection/delete unit tests (Task 2). No new `anchor/` tests (anchor unchanged this story).
+  - [x] `AnnotationLayer.test.tsx`: a mark fires `select(id)` (or the lifted callback) on click; `onPointerEnter`/`Leave` toggles the `--hovered` class on all rects of that annotation; the `selectedId` annotation's rects get the `--selected` class and non-selected do not; clearing `selectedId` removes the ring; marks render sorted by `created_at` (newest last/on top).
+  - [x] `AnnotationInteraction.test.tsx`: with `selectedId` set, the selection quick-box renders (`ColorSwatchRow` + `quick-box-delete`); swatch recolors the mark (+ group siblings); Delete removes it; `Del`/`Backspace` deletes; `Esc`/outside-click clears selection; an empty-space drag still CREATES (the 2.3 path + re-pop fix + sticky-after-mark unbroken). Use the file's existing fake-card/stub-selection pattern (jsdom zeroes real rects).
+  - [x] Full regression: `cd client && npm test` + `npm run typecheck`; `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`. Contract byte-identical: `git diff --stat -- server/openapi.json client/src/api/schema.d.ts` empty. `no-raw-values.test.ts` green. Both `vi.mock("./render")` barrels untouched (no new render export).
+  - [x] **Live smoke (the real verifier — Epic-1 retro; jsdom proves wiring, not gesture routing).** Host two-process flow + a real PDF at DPR>1: (a) hover an existing highlight → whole-annotation outline appears AND the cursor is the pointer, NOT the text I-beam; starting a drag on the highlight does NOT begin a new selection; (b) click a highlight in cursor mode → selected ring + quick-box with swatches + Delete; (c) recolor via a swatch → mark repaints; (d) `Del` → mark gone; (e) with the Highlight tool armed, click an existing mark → selects (does NOT create a new one), drag empty text → still creates; (f) two-page highlight, delete → both pages clear; (g) click empty space / `Esc` → deselects; (h) zoom in/out with a mark selected → ring + hover outline stay glued. Capture results in Completion Notes. [Reuse `fixtures/sample-pdfs/09-regularization.pdf`.]
 
-- [ ] **Task 6 — Docs (AC: 5)**
-  - [ ] No `/api` change → `docs/API.md` untouched.
-  - [ ] Update `client/src/annotations/README.md`: note the selection model (AD-12) — one `selectedId` in the store; marks are pointer-interactive (hover outlines the whole annotation, cursor is pointer not I-beam so you cannot start a new highlight over an existing one, click selects; recent-wins = newest on top); the selected ring + the selection quick-box (recolor reuses 2.3; delete removes id + group siblings; client-only, persistence/undo deferred to Epic 3).
+- [x] **Task 6 — Docs (AC: 5)**
+  - [x] No `/api` change → `docs/API.md` untouched.
+  - [x] Update `client/src/annotations/README.md`: note the selection model (AD-12) — one `selectedId` in the store; marks are pointer-interactive (hover outlines the whole annotation, cursor is pointer not I-beam so you cannot start a new highlight over an existing one, click selects; recent-wins = newest on top); the selected ring + the selection quick-box (recolor reuses 2.3; delete removes id + group siblings; client-only, persistence/undo deferred to Epic 3).
 
 ## Dev Notes
 
@@ -203,8 +207,39 @@ Ultimate context engine analysis completed - comprehensive developer guide creat
 
 ### Agent Model Used
 
+claude-opus-4-8 (Claude Code dev-story workflow).
+
 ### Debug Log References
+
+- React enter/leave routing: native `pointerenter`/`pointerleave` dispatch does NOT trigger React's synthetic `onPointerEnter`/`onPointerLeave` (React derives them from `pointerover`/`pointerout`); the live smoke used `pointerover`/`pointerout`. jsdom tests use RTL `fireEvent.pointerEnter/Leave` (which works) — both pass.
+- Live-smoke design fix (caught only by the real browser, jsdom missed it): zoom recenters fire a `scroll`, and my first cut had `scroll → clearSelection`, which lost the ring on zoom (failing smoke (h)). Corrected so `scroll` only CLOSES the floating quick-box while the selection (ring) stays glued via the denormalized rect. Also exempted buttons/chrome from empty-space-deselect so toolbar/zoom clicks keep the selection.
 
 ### Completion Notes List
 
+Implemented the selection seam (AD-12) entirely client-side; no contract/anchor/persistence change.
+
+- **Store (Task 2):** added `selectedId: string | null` + `select`/`clearSelection` + group-aware `deleteAnnotation` (removes id + non-null `group_id` siblings, AR-4; clears `selectedId` if it was in the removed set).
+- **AnnotationLayer (Tasks 1+3):** marks are now the pointer-interactive hit surface (`pointer-events:auto; cursor:pointer`) — the rendered `denormalizeRect` rect IS the anchor hit surface, so `anchor/` is unchanged (Decision A). Per-layer transient `hoveredId` outlines the WHOLE hovered annotation; the `selectedId` mark gets a stronger `--selected` ring; marks render sorted by `created_at` ascending (recent-wins = newest on top). Layer stays `aria-hidden` (decorative; selection is a pointer affordance, Del/Esc work once selected) — keyboard-reachable selection deferred to the Epic-3 Annotation Bank (choice noted in code).
+- **AnnotationInteraction (Task 4):** a SEPARATE selection quick-box off `selectedId` (Decision B, create machine untouched) — `ColorSwatchRow` armed to the mark's current color → `store.recolorAnnotation` (reused) + a Delete button (`data-testid="quick-box-delete"`, `aria-label`/`title` "Delete (Del)", no em-dash). Click a mark opens its box; pick recolors + closes the box (ring stays); `Del`/`Backspace` delete; `Esc` / empty-page pointerdown clear; scroll/zoom-recenter close the box but keep the ring glued. Document-level, phase-gated, editable/buttons/chrome exempt.
+- **CSS:** `--hovered`/`--selected` outline classes use existing tokens only (`--hairline-width`/`--focus-ring-width` ink); `no-raw-values.test.ts` green.
+
+**Regression bar:** client `npm test` 235 passed (23 files); `npm run typecheck` clean; server pytest 38 passed; `git diff --stat` on `server/openapi.json` + `client/src/api/schema.d.ts` empty (contract byte-identical); both `vi.mock("./render")` barrels untouched (no new render export).
+
+**Live smoke (host two-process flow, real PDF `09-regularization.pdf`, Chrome at DPR 1.25):** (a) hover a highlight → whole-annotation outline (solid ink, all rects) + `cursor:pointer` (not the text I-beam); (b) click → `--selected` ring (1.6px ink, stronger than the 0.8px hover) + selection quick-box (6 swatches, armed = current color, Delete); (c) recolor (default→pink) → mark repaints, box dismisses on pick, ring stays; (d) `Del` → mark removed + selection cleared (note: with focus on a BUTTON the exempt rule correctly skips Del — works with focus off chrome); (h) keyboard zoom with a mark selected → ring stays glued (width scaled 193→241px, outline solid, color preserved), box closes on the recenter scroll. Select-vs-create on an active tool, two-page group delete, and empty-space/`Esc` deselect are covered by jsdom (real-DOM two-page selection not scripted in the smoke).
+
 ### File List
+
+- client/src/store/index.ts (selectedId + select/clearSelection/deleteAnnotation)
+- client/src/store/index.test.ts (selection + delete tests)
+- client/src/annotations/AnnotationLayer.tsx (interactive marks, hoveredId, selected ring, recent-wins sort)
+- client/src/annotations/AnnotationLayer.test.tsx (selection/hover/sort tests)
+- client/src/annotations/AnnotationInteraction.tsx (selection quick-box, keys, deselect/scroll wiring)
+- client/src/annotations/AnnotationInteraction.test.tsx (selection quick-box tests)
+- client/src/annotations/Annotations.css (interactive mark + --hovered/--selected classes)
+- client/src/annotations/README.md (selection model docs)
+- .bmad/implementation-artifacts/2-5-select-highlight-recolor-delete.md (this story)
+- .bmad/implementation-artifacts/sprint-status.yaml (status tracking)
+
+### Change Log
+
+- 2026-06-29: Implemented Story 2.5 (select highlight: click-select + recolor + delete, AD-12). Selection seam added client-only — `selectedId` + group-aware delete in `store/`, pointer-interactive marks + hover/selected affordances + selection quick-box in `annotations/`; `anchor/` and the API contract unchanged. Status → review.

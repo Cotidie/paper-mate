@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react";
 import AnnotationInteraction from "./AnnotationInteraction";
 import { useAnnotationStore } from "../store";
 import type { PageCardRef, PageBox } from "../anchor";
+import type { Annotation } from "../api/client";
 
 const box: PageBox = { width: 600, height: 800 };
 
@@ -36,11 +37,26 @@ function stubSelection(rects: { left: number; top: number; right: number; bottom
   return { removeAllRanges };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map() }));
+beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
+
+/** A stored text highlight (the selection target). */
+function textMark(id: string, color = "annotation-default", groupId: string | null = null): Annotation {
+  return {
+    id,
+    doc_id: "doc-1",
+    type: "highlight",
+    group_id: groupId,
+    anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }], text: "x" },
+    style: { color, stroke_width: null },
+    body: null,
+    created_at: "2026-06-29T00:00:01+00:00",
+    updated_at: "2026-06-29T00:00:01+00:00",
+  };
+}
 
 describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
   it("a single-page text drag pops the quick-box, whose action stores a highlight", async () => {
@@ -224,5 +240,127 @@ describe("AnnotationInteraction highlight tool (Story 2.3 — AC-1,2,4,5)", () =
     expect(screen.queryByTestId("color-swatch-annotation-default")).toBeNull();
     // No mark until the proof action is clicked (cursor mode is create-on-pick).
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+});
+
+describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", () => {
+  /** Render the interaction layer with one page card and select a stored mark. */
+  function setup(marks: Annotation[], selectId: string) {
+    marks.forEach((m) => useAnnotationStore.getState().addAnnotation(m));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />);
+    act(() => useAnnotationStore.getState().select(selectId));
+  }
+
+  it("renders the selection quick-box (swatch row armed to the mark color + Delete) when a mark is selected", async () => {
+    setup([textMark("m1", "annotation-green")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    // The row shows the mark's CURRENT color armed.
+    const armed = screen.getByTestId("color-swatch-annotation-green");
+    expect(armed.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
+  });
+
+  it("picking a swatch recolors the selected mark and dismisses the box; the selection stays", async () => {
+    setup([textMark("m1", "annotation-default")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
+    expect(useAnnotationStore.getState().annotations.get("m1")!.style.color).toBe("annotation-pink");
+    // Pick dismisses the box but the mark stays selected (ring persists).
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+  });
+
+  it("recolors the whole group together (two-page highlight)", async () => {
+    setup([textMark("m1", "annotation-default", "g1"), textMark("m2", "annotation-default", "g1")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
+    const map = useAnnotationStore.getState().annotations;
+    expect(map.get("m1")!.style.color).toBe("annotation-blue");
+    expect(map.get("m2")!.style.color).toBe("annotation-blue");
+  });
+
+  it("the Delete button removes the mark and clears the selection", async () => {
+    setup([textMark("m1")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("quick-box-delete"));
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+  });
+
+  it("Del deletes the selected mark (and its group siblings, AR-4)", () => {
+    setup([textMark("m1", "annotation-default", "g1"), textMark("m2", "annotation-default", "g1")], "m1");
+    fireEvent.keyDown(document, { key: "Delete" });
+    const map = useAnnotationStore.getState().annotations;
+    expect(map.has("m1")).toBe(false);
+    expect(map.has("m2")).toBe(false);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
+  it("Backspace also deletes the selected mark", () => {
+    setup([textMark("m1")], "m1");
+    fireEvent.keyDown(document, { key: "Backspace" });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+  });
+
+  it("Esc clears the selection without deleting", async () => {
+    setup([textMark("m1")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+  });
+
+  it("a pointerdown on empty space (not a mark, not the box) clears the selection", async () => {
+    setup([textMark("m1")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.pointerDown(document.body);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
+  it("a pointerdown inside the selection box does NOT clear the selection", async () => {
+    setup([textMark("m1")], "m1");
+    const box = await screen.findByTestId("selection-quick-box");
+    fireEvent.pointerDown(box);
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+  });
+
+  it("scroll (incl. zoom recenter) CLOSES the box but keeps the selection ringed", async () => {
+    setup([textMark("m1")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.scroll(document, {});
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    // The selection (ring) stays — it rides the denormalized rect (NFR-3).
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+  });
+
+  it("does not delete on Del while typing in an input (editable exempt)", () => {
+    setup([textMark("m1")], "m1");
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    fireEvent.keyDown(input, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
+    input.remove();
+  });
+
+  it("with a mark selected, an empty-space drag still CREATES a highlight (2.3 path unbroken)", async () => {
+    const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().addAnnotation(textMark("m1"));
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+    );
+    act(() => useAnnotationStore.getState().select("m1"));
+    // A drag over EMPTY text: pointerdown on empty space deselects (AC1), then
+    // release runs the 2.3 create-on-release path and lands a new mark.
+    fireEvent.pointerDown(document.body);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    expect(useAnnotationStore.getState().all().length).toBe(2);
+    // The create swatch row pops (selection box is gone), proving create still works.
+    await screen.findByTestId("color-swatch-annotation-default");
+    expect(removeAllRanges).toBeDefined();
   });
 });

@@ -27,7 +27,28 @@
   /* Opaque: the .annotation-highlights group carries the opacity, so overlaps
      don't deepen and the most recent (topmost) wins on shared text. */
   border-radius: var(--radius-xs);
-  pointer-events: none;
+  /* Story 2.5: the mark is the selection hit surface (AD-12 Decision A). It opts
+     back into pointer events (the rest of the .annotation-layer sheet stays
+     pointer-events:none) and shows the pointer cursor, so hovering a highlight
+     cannot start a new text-drag highlight over it — the mark intercepts the
+     pointer and the cursor is not the text I-beam. */
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Hover outline (transient): rings the whole hovered annotation so a multi-line
+   mark reads as one. Subtle hairline; the selected ring below is stronger. */
+.annotation-highlight--hovered {
+  outline: var(--hairline-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+/* Selected ring (persistent): visually stronger than the hover outline — the
+   2px focus-ring weight in ink. Rides the denormalized rect, so it stays glued
+   across zoom (NFR-3). Tokens only (no raw hex/px). */
+.annotation-highlight--selected {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
 }
 
 /* quick-box: floating popup at the drag-release point. position:fixed keeps it
