@@ -110,13 +110,16 @@ describe("ToolRail", () => {
     expect(onSelectTool).toHaveBeenCalledWith("highlight");
   });
 
-  it("toggles Highlight off back to cursor on a second click (Story 2.3 toggle-off feel)", () => {
+  it("re-clicking the active Highlight tool keeps it armed (idempotent, does NOT cancel)", () => {
     const onSelectTool = vi.fn();
     render(
       <ToolRail activeTool="highlight" onSelectTool={onSelectTool} collapsed={false} onToggleCollapse={vi.fn()} />,
     );
     fireEvent.click(screen.getByTestId("tool-highlight-button"));
-    expect(onSelectTool).toHaveBeenCalledWith("cursor");
+    // Re-click stays on highlight (no toggle-off to cursor); to leave, pick
+    // another tool or press V/Esc.
+    expect(onSelectTool).toHaveBeenCalledWith("highlight");
+    expect(onSelectTool).not.toHaveBeenCalledWith("cursor");
   });
 
   it("shows the Highlight button armed when activeTool is highlight (Story 2.3)", () => {

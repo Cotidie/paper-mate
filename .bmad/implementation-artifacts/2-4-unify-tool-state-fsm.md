@@ -257,6 +257,7 @@ claude-opus-4-8 (Claude Code, bmad-dev-story)
 
 - 2026-06-29: Unified the tool state into one `activeTool` FSM (AD-11). Replaced App's `mode`+`armedTool` pair and the Story 2.3 cross-setter with a single source of truth; pan + overlay armed-tool now derive from it; ToolRail switches in a single click (AC4); overlay machine driven by the one model (single writer). Behavior-preserving refactor; live smoke re-passed the pan-doesn't-eat-the-drag + single-click-switch scenarios at DPR 1.25.
 - 2026-06-29: Addressed cross-model code review (Codex) — 1 MED item resolved. Close the pointer flyout whenever `activeTool` stops being a pointer tool, so switching to Highlight never leaves a stale cursor/hand/box sub-toolbox open (AC4). Added a regression test (213 FE tests green).
+- 2026-06-29: UX fix (user request): re-clicking an already-active annotation tool no longer cancels it (was toggling Highlight back to cursor). Re-click is now idempotent (stays armed), consistent with the pointer button (re-click opens/closes its sub-toolbox, never disarms). Leave a tool via another tool or V/Esc. Tests updated.
 
 ## Senior Developer Review (AI)
 

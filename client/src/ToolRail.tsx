@@ -155,8 +155,10 @@ export default function ToolRail({
 
       {/* Annotation tools (Story 2.3 adds Highlight; later stories add the rest
           below it in DESIGN.md#tool-rail order). One model: arming is just
-          `onSelectTool("highlight")`; a second click toggles back to cursor
-          (preserving the 2.3 toggle-off feel). */}
+          `onSelectTool("highlight")`. Re-clicking an already-active tool does NOT
+          cancel it — it stays armed (idempotent), consistent with the pointer
+          button (a re-click opens/closes its sub-toolbox, never disarms). To
+          leave Highlight, pick another tool or press V/Esc. */}
       <button
         type="button"
         className={
@@ -166,7 +168,7 @@ export default function ToolRail({
         title="Highlight (H)"
         aria-pressed={activeTool === "highlight"}
         data-testid="tool-highlight-button"
-        onClick={() => onSelectTool(activeTool === "highlight" ? "cursor" : "highlight")}
+        onClick={() => onSelectTool("highlight")}
       >
         <Highlighter aria-hidden />
       </button>

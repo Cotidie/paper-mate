@@ -286,14 +286,14 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(btn.className).not.toContain("tool-button--armed");
   });
 
-  it("clicking the Highlight rail button toggles it armed (Story 2.3)", async () => {
+  it("clicking the Highlight rail button arms it; re-click keeps it armed (no toggle-off)", async () => {
     await openReader();
     const btn = screen.getByTestId("tool-highlight-button");
     fireEvent.click(btn);
     expect(btn.className).toContain("tool-button--armed");
-    // Clicking again disarms (toggle).
+    // Re-clicking the active tool does NOT cancel it — it stays armed.
     fireEvent.click(btn);
-    expect(btn.className).not.toContain("tool-button--armed");
+    expect(btn.className).toContain("tool-button--armed");
   });
 
   it("arming highlight releases the hand pan so the drag is not eaten (#5/#2 mutual exclusion)", async () => {
