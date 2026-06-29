@@ -13,12 +13,13 @@ const TOKENS = [
 ];
 
 describe("ColorSwatchRow (Story 2.3; 5-color palette per Story 2.6)", () => {
-  it("renders the 5 accent swatches (Orange removed, Story 2.6)", () => {
-    render(<ColorSwatchRow value="annotation-default" onPick={vi.fn()} />);
+  it("renders exactly the 5 accent swatches (palette trimmed in Story 2.6)", () => {
+    const { container } = render(<ColorSwatchRow value="annotation-default" onPick={vi.fn()} />);
     for (const t of TOKENS) {
       expect(screen.getByTestId(`color-swatch-${t}`)).toBeTruthy();
     }
-    expect(screen.queryByTestId("color-swatch-annotation-orange")).toBeNull();
+    // Exactly five — no sixth swatch lingers from the old palette.
+    expect(container.querySelectorAll(".color-swatch")).toHaveLength(5);
   });
 
   it("marks the current color's swatch armed (2px ink ring), others not", () => {

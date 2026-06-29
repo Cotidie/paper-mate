@@ -287,6 +287,37 @@ covered in jsdom.
 - .bmad/implementation-artifacts/2-6-arm-time-color-pick.md (this story)
 - .bmad/implementation-artifacts/sprint-status.yaml (status tracking)
 
+### Code Review (cross-model: Codex via `codex exec`, read-only)
+
+Ran the BMad code-review method through `codex exec --sandbox read-only` against
+`43b54ce..HEAD`. No BLOCKER / HIGH. Triage:
+
+- ✅ **MED — open flyout state survived rail collapse** (`ToolRail.tsx`): collapsing
+  the rail unmounts the buttons but left `open`/`colorOpen` true, so expanding could
+  resurrect a flyout without a fresh gesture. Fixed: a `collapsed` effect clears both
+  flyout states. +1 regression test (collapse → expand leaves no flyout).
+- ✅ **MED — `client/src` still spelled `annotation-orange` / `Orange`** (negative
+  test assertions + README), violating AC1's grep-clean guard. Fixed: the swatch
+  tests now assert an exact count of 5 (`.color-swatch` length) instead of naming the
+  removed token; README reworded ("trimmed to five"). `grep -rn` for orange in
+  `client/src` is now CLEAN.
+- ⏸️ **MED — `activeColor` optional with a default (dismissed, with rationale):**
+  Codex suggested making it required on `Reader`/`AnnotationInteraction`. Dismissed:
+  `activeColor` deliberately mirrors its sibling `armedTool`, which is also optional
+  (`armedTool?: … = null`) and defaulted — App always threads both. Making one
+  required and not the other breaks the established prop pattern and would churn ~15
+  test mounts for no real safety gain (the create-reads-activeColor path is covered
+  by an explicit test). Keeping the sibling-consistent shape.
+- ⏸️ **LOW — live smoke ran at DPR 1.0, story text mentioned DPR>1 (accepted):** this
+  story changes NO rect/anchor/glyph geometry (contract + `anchor/` byte-identical);
+  the only new surfaces are DOM rail chrome (the flyout) and a mark's token color, so
+  DPR>1 is not a risk surface here (unlike selection/geometry features, where the
+  memory mandates it). The smoke verified the flyout + the green-mark color at DPR 1.0;
+  rationale recorded in the Completion Notes.
+
+Post-review: client 254 tests pass, typecheck clean, contract byte-identical,
+`no-raw-values` green, orange grep clean.
+
 ## Change Log
 
 - 2026-06-29: Implemented Story 2.6 (arm-time color quick-pick + 5-color palette).
@@ -294,3 +325,8 @@ covered in jsdom.
   Highlight tool's color sub-toolbox (twin of the pointer flyout) setting App-owned
   `activeColor`; the create path now reads `activeColor` instead of a hardcoded
   default. Client-only; API/anchor/store contract byte-identical. Status → review.
+- 2026-06-29: Addressed Codex review — clear rail flyout state on collapse (+test);
+  swatch tests assert an exact count of 5 instead of naming the removed token + README
+  reworded (grep-clean guard restored). Two findings accepted/dismissed with rationale
+  (sibling-consistent optional `activeColor`; DPR not a risk surface this story). Client
+  254 pass, contract byte-identical.

@@ -35,7 +35,7 @@ Story 2.3 (highlight tool) adds the first real tool on this foundation:
   whether just-created or clicked later). Cursor-mode drag keeps the 2.2
   single-action proof button, which also selects the mark after it creates (the
   cursor tool-type picker is Story 2.12).
-- `ColorSwatchRow`: the shared 5-color swatch row (Orange removed in Story 2.6).
+- `ColorSwatchRow`: the shared 5-color swatch row (Story 2.6 trimmed it to five).
   Exported from the barrel and reused by BOTH the overlay's selection recolor
   (2.5) AND the rail's Highlight color sub-toolbox (2.6's arm-time picker).
 
@@ -53,7 +53,7 @@ create path reads it instead of a hardcoded `annotation-default`). The Highlight
 button mirrors the pointer button: arming it from another tool is one click and
 opens NO flyout (AC4); a click on the already-active Highlight button toggles its
 color sub-toolbox (the same `ColorSwatchRow`). The post-create recolor row (2.3/2.5)
-is unchanged. The accent palette dropped Orange → five colors (yellow default /
+is unchanged. The accent palette was trimmed to five colors (yellow default /
 green / pink / blue / purple), edited in `DESIGN.md` (the token source) and
 regenerated into `tokens.css`.
 

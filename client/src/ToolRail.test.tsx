@@ -159,11 +159,11 @@ describe("ToolRail", () => {
     fireEvent.click(screen.getByTestId("tool-highlight-button"));
     const flyout = screen.getByTestId("highlight-color-flyout");
     expect(flyout).toBeTruthy();
-    // 5 swatches (Orange removed); the active color is armed.
+    // Exactly 5 swatches (trimmed palette); the active color is armed.
+    expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
     expect(screen.getByTestId("color-swatch-annotation-green").className).toContain(
       "color-swatch--armed",
     );
-    expect(screen.queryByTestId("color-swatch-annotation-orange")).toBeNull();
   });
 
   it("picking a swatch sets the active color (onPickColor) and closes the flyout (Story 2.6 AC4)", () => {
@@ -197,6 +197,34 @@ describe("ToolRail", () => {
     rerender(
       <ToolRail
         activeTool="cursor"
+        onSelectTool={vi.fn()}
+        activeColor="annotation-default"
+        onPickColor={vi.fn()}
+        collapsed={false}
+        onToggleCollapse={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+  });
+
+  it("clears an open color sub-toolbox when the rail collapses (Codex review MED)", () => {
+    const { rerender } = renderRail({ activeTool: "highlight" });
+    fireEvent.click(screen.getByTestId("tool-highlight-button"));
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
+    // Collapse, then expand: the flyout must NOT resurrect without a new gesture.
+    rerender(
+      <ToolRail
+        activeTool="highlight"
+        onSelectTool={vi.fn()}
+        activeColor="annotation-default"
+        onPickColor={vi.fn()}
+        collapsed={true}
+        onToggleCollapse={vi.fn()}
+      />,
+    );
+    rerender(
+      <ToolRail
+        activeTool="highlight"
         onSelectTool={vi.fn()}
         activeColor="annotation-default"
         onPickColor={vi.fn()}

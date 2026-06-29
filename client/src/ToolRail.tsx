@@ -112,6 +112,15 @@ export default function ToolRail({
   useEffect(() => {
     if (!highlightActive) setColorOpen(false);
   }, [highlightActive]);
+
+  // Collapsing the rail unmounts the buttons; clear both flyouts so expanding
+  // later never resurrects a flyout without a fresh secondary gesture (Codex review).
+  useEffect(() => {
+    if (collapsed) {
+      setOpen(false);
+      setColorOpen(false);
+    }
+  }, [collapsed]);
   // The pointer sub-mode the button shows + commits to in one click: the active
   // pointer tool when one is active, else cursor (the default, AC4).
   const pointerMode: PointerTool = isPointerTool(activeTool) ? activeTool : "cursor";
