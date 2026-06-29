@@ -188,9 +188,11 @@ export interface PageCardRef {
  * measures only glyph line boxes — never an element box — so the result is the
  * actual selected text on each page.
  *
- * Falls back to the raw range rects only when the range exposes no text nodes
- * (e.g. a synthetic range in a non-layout test environment); a real text
- * selection always yields text nodes.
+ * Never falls back to the whole range's rects: that is exactly the leak this
+ * exists to prevent (the constraint is "selection geometry MUST measure text
+ * nodes, never the whole range"). A range with no text nodes yields `[]` → no
+ * highlight, which is correct (a text highlight needs text). A real text
+ * selection always exposes text nodes.
  *
  * DOM-touching (jsdom zeroes real client rects); the per-node decomposition is
  * unit-tested by injecting `rectsOf` (the rect reader) so the test never has to
@@ -201,32 +203,24 @@ export function collectTextRects(
   rectsOf: (r: Range) => ArrayLike<DOMRect> = (r) => r.getClientRects(),
 ): DOMRect[] {
   const out: DOMRect[] = [];
-  try {
-    const root = range.commonAncestorContainer;
-    const doc = root.ownerDocument ?? document;
-    const measure = (node: Node) => {
-      if (node.nodeType !== Node.TEXT_NODE || !range.intersectsNode(node)) return;
-      const sub = doc.createRange();
-      sub.selectNodeContents(node);
-      // Clip the first/last text node to the selection's offsets; interior text
-      // nodes are fully selected.
-      if (node === range.startContainer) sub.setStart(node, range.startOffset);
-      if (node === range.endContainer) sub.setEnd(node, range.endOffset);
-      if (sub.collapsed) return;
-      for (const cr of Array.from(rectsOf(sub))) out.push(cr);
-    };
-    if (root.nodeType === Node.TEXT_NODE) {
-      measure(root);
-    } else {
-      const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      for (let n = walker.nextNode(); n; n = walker.nextNode()) measure(n);
-    }
-  } catch {
-    // A synthetic / non-layout range without real text nodes (e.g. a test fake)
-    // — fall through to the raw range rects below.
-  }
-  if (out.length === 0) {
-    for (const cr of Array.from(rectsOf(range))) out.push(cr);
+  const root = range.commonAncestorContainer;
+  const doc = root.ownerDocument ?? document;
+  const measure = (node: Node) => {
+    if (node.nodeType !== Node.TEXT_NODE || !range.intersectsNode(node)) return;
+    const sub = doc.createRange();
+    sub.selectNodeContents(node);
+    // Clip the first/last text node to the selection's offsets; interior text
+    // nodes are fully selected.
+    if (node === range.startContainer) sub.setStart(node, range.startOffset);
+    if (node === range.endContainer) sub.setEnd(node, range.endOffset);
+    if (sub.collapsed) return;
+    for (const cr of Array.from(rectsOf(sub))) out.push(cr);
+  };
+  if (root.nodeType === Node.TEXT_NODE) {
+    measure(root);
+  } else {
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) measure(n);
   }
   return out;
 }
@@ -241,12 +235,16 @@ export function collectTextRects(
  * for an empty/collapsed selection.
  *
  * DOM-touching (so jsdom can't exercise it — its rects are zeroed); the pure
- * math underneath (`normalizeRect`, `pickPage`) carries the unit tests.
+ * math underneath (`normalizeRect`, `pickPage`) carries the unit tests. The
+ * `rectsOf` reader (how a text-node sub-range yields client rects) is injectable
+ * so component tests can drive it without real layout — production uses the real
+ * `getClientRects`.
  */
 export function rectsFromSelection(
   selection: Selection | null,
   pages: PageCardRef[],
   scale: number,
+  rectsOf: (r: Range) => ArrayLike<DOMRect> = (r) => r.getClientRects(),
 ): PageSelection[] {
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return [];
   const cardBoxes: ClientBox[] = pages.map((p) => p.cardEl.getBoundingClientRect());
@@ -259,7 +257,7 @@ export function rectsFromSelection(
     // cross-page range encloses page block elements whose full-page border boxes
     // would otherwise leak in and paint as full-page highlights (see
     // `collectTextRects`).
-    for (const cr of collectTextRects(range)) {
+    for (const cr of collectTextRects(range, rectsOf)) {
       if (cr.width <= 0 || cr.height <= 0) continue;
       const idx = pickPage({ left: cr.left, top: cr.top, right: cr.right, bottom: cr.bottom }, cardBoxes);
       if (idx < 0) continue;

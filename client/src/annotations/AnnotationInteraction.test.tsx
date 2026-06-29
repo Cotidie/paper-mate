@@ -15,12 +15,35 @@ function fakeCard(pageIndex: number, top: number): PageCardRef {
   return { pageIndex, cardEl: el, box };
 }
 
-/** Stub a non-collapsed selection whose client rects fall on the given y bands.
- *  Stateful: `removeAllRanges()` actually collapses it, so a follow-up pointerup
- *  reads an empty selection (proves dismiss can't re-pop the quick-box). */
+// The injected rect reader the component uses (no real layout in jsdom). Each
+// stubSelection sets the bands; `reader` is a stable fn passed as the
+// `rectReader` prop that always delegates to the latest.
+let currentBands: DOMRect[] = [];
+const reader = (): DOMRect[] => currentBands;
+const stubNodes: HTMLElement[] = [];
+
+/** Stub a non-collapsed selection whose TEXT-node rects fall on the given y
+ *  bands. Built on a REAL text node (the anchor layer measures text nodes, not
+ *  the whole range — collectTextRects); the injected `reader` supplies the bands
+ *  for the node's sub-range. Stateful: `removeAllRanges()` collapses it, so a
+ *  follow-up pointerup reads an empty selection (proves no re-pop / no re-create). */
 function stubSelection(rects: { left: number; top: number; right: number; bottom: number }[]) {
-  const domRects = rects.map((r) => ({ ...r, width: r.right - r.left, height: r.bottom - r.top }));
-  const range = { getClientRects: () => domRects } as unknown as Range;
+  currentBands = rects.map(
+    (r) =>
+      ({
+        ...r,
+        width: r.right - r.left,
+        height: r.bottom - r.top,
+        x: r.left,
+        y: r.top,
+      }) as DOMRect,
+  );
+  const span = document.createElement("span");
+  span.appendChild(document.createTextNode("selected text"));
+  document.body.appendChild(span);
+  stubNodes.push(span);
+  const range = document.createRange();
+  range.selectNodeContents(span.firstChild as Text);
   const removeAllRanges = vi.fn();
   const selection = {
     get rangeCount() {
@@ -41,6 +64,8 @@ beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedI
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  stubNodes.splice(0).forEach((n) => n.remove());
+  currentBands = [];
 });
 
 /** A stored text highlight (the selection target). */
@@ -62,7 +87,7 @@ describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
   it("a single-page text drag pops the quick-box, whose action stores a highlight", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
 
     // No quick-box until a selection releases.
     expect(screen.queryByTestId("quick-box")).toBeNull();
@@ -87,7 +112,7 @@ describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
       { left: 10, top: 900, right: 200, bottom: 920 },
     ]);
     const pages = [fakeCard(0, 0), fakeCard(1, 820)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
 
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     fireEvent.click(await screen.findByTestId("quick-box-highlight"));
@@ -102,7 +127,7 @@ describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
   it("Escape dismisses, clears the selection, and cannot re-pop from it (AC-4/AC-7)", async () => {
     const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
 
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     await screen.findByTestId("quick-box");
@@ -120,7 +145,7 @@ describe("AnnotationInteraction proof path (AC-3, AC-4, AC-5, AC-7)", () => {
   it("dismisses the quick-box on scroll (transient overlay, #1)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     await screen.findByTestId("quick-box");
     // Scrolling the canvas pins-detaches the popup, so it dismisses.
@@ -142,7 +167,7 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="highlight" />,
     );
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
 
@@ -164,7 +189,7 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="highlight" />,
     );
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     fireEvent.click(await screen.findByTestId("color-swatch-annotation-green"));
@@ -184,7 +209,7 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     ]);
     const pages = [fakeCard(0, 0), fakeCard(1, 820)];
     render(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="highlight" />,
     );
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     let all = useAnnotationStore.getState().all();
@@ -200,7 +225,7 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
   it("is sticky: a second drag lands another highlight (tool stays armed)", async () => {
     const pages = [fakeCard(0, 0)];
     const { rerender } = render(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="highlight" />,
     );
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
@@ -208,7 +233,7 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
 
     rerender(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="highlight" />,
     );
     stubSelection([{ left: 10, top: 300, right: 200, bottom: 320 }]);
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 310 });
@@ -219,7 +244,7 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="highlight" />,
     );
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     // One mark landed + selected; the live text selection was cleared.
@@ -234,21 +259,21 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     const { rerender } = render(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="highlight" />,
     );
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     const id = useAnnotationStore.getState().selectedId;
     expect(id).not.toBeNull();
     await screen.findByTestId("selection-quick-box");
     // V disarms in App → armedTool null. The selected mark stays selected.
-    rerender(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool={null} />);
+    rerender(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool={null} />);
     expect(useAnnotationStore.getState().selectedId).toBe(id);
   });
 
   it("cursor mode (no armed tool) keeps the 2.2 proof button, not the swatch row", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool={null} />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool={null} />);
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     await screen.findByTestId("quick-box-highlight");
     expect(screen.queryByTestId("color-swatch-annotation-default")).toBeNull();
@@ -262,7 +287,7 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
   function setup(marks: Annotation[], selectId: string) {
     marks.forEach((m) => useAnnotationStore.getState().addAnnotation(m));
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
     act(() => useAnnotationStore.getState().select(selectId));
   }
 
@@ -273,6 +298,34 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     const armed = screen.getByTestId("color-swatch-annotation-green");
     expect(armed.getAttribute("aria-checked")).toBe("true");
     expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
+  });
+
+  it("moves focus INTO the box on open and RESTORES it on close", async () => {
+    // Focus a sentinel before selecting, so we can assert focus returns to it.
+    const sentinel = document.createElement("button");
+    document.body.appendChild(sentinel);
+    sentinel.focus();
+    expect(document.activeElement).toBe(sentinel);
+
+    setup([textMark("m1", "annotation-green")], "m1");
+    const box = await screen.findByTestId("selection-quick-box");
+    // Focus moved into the box (its first control).
+    expect(box.contains(document.activeElement)).toBe(true);
+
+    // Closing (Esc clears the selection) restores focus to the prior element.
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    expect(document.activeElement).toBe(sentinel);
+    sentinel.remove();
+  });
+
+  it("does NOT open the box for a selected mark whose text anchor has no rects (guard)", () => {
+    const empty = textMark("m1");
+    empty.anchor = { kind: "text", page_index: 0, rects: [], text: "x" };
+    setup([empty], "m1");
+    // Selected, but no rects → no box (would crash denormalizeRect otherwise).
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
   });
 
   it("picking a swatch recolors the selected mark and dismisses the box; the selection stays", async () => {
@@ -390,7 +443,7 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     useAnnotationStore.getState().addAnnotation(textMark("m1"));
     const pages = [fakeCard(0, 0)];
     const { rerender } = render(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />,
     );
     act(() => useAnnotationStore.getState().select("m1"));
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
@@ -403,7 +456,7 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     const pages = [fakeCard(0, 0)];
     useAnnotationStore.getState().addAnnotation(textMark("m1"));
     render(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="highlight" />,
     );
     act(() => useAnnotationStore.getState().select("m1"));
     // A drag over EMPTY text: pointerdown on empty space deselects (AC1), then

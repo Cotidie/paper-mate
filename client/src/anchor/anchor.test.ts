@@ -173,12 +173,17 @@ describe("collectTextRects (cross-page selection bug — Range.getClientRects le
     document.body.removeChild(container);
   });
 
-  it("falls back to the raw range rects when the range exposes no text nodes (synthetic range)", () => {
-    // jsdom-style fake range: no real text nodes, just a rect reader.
-    const fake = { commonAncestorContainer: undefined } as unknown as Range;
-    const oneRect = [{ width: 30, height: 12, left: 0, top: 0, right: 30, bottom: 12, x: 0, y: 0 } as DOMRect];
-    const rects = collectTextRects(fake, () => oneRect);
-    expect(rects).toHaveLength(1);
-    expect(rects[0].height).toBe(12);
+  it("returns [] (never the whole-range rects) when the range exposes no text nodes", () => {
+    // A range whose content is an element with no text node → no text to measure.
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const range = document.createRange();
+    range.selectNode(el);
+    // Even if the (whole-range) reader would report a box, collectTextRects must
+    // NOT use it — the cross-page leak is exactly the whole-range rects.
+    const wholeRangeReader = () => [PAGE];
+    const rects = collectTextRects(range, wholeRangeReader);
+    expect(rects).toHaveLength(0);
+    document.body.removeChild(el);
   });
 });

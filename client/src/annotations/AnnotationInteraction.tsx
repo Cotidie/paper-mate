@@ -48,6 +48,7 @@ export default function AnnotationInteraction({
   scale,
   enabled,
   armedTool = null,
+  rectReader,
 }: {
   docId: string;
   /** Current page cards (element + scale-1.0 box + 0-based index). Called at
@@ -60,6 +61,10 @@ export default function AnnotationInteraction({
   /** The armed annotation tool (single source in App; null = cursor mode). The
    *  machine carries it through so the quick-box knows its mode and stays sticky. */
   armedTool?: AnnotationTool | null;
+  /** Test seam: how a text-node sub-range yields client rects. Omit in
+   *  production (uses the real `getClientRects`); jsdom tests inject a reader
+   *  since they have no layout. */
+  rectReader?: (r: Range) => ArrayLike<DOMRect>;
 }) {
   const [state, dispatch] = useReducer(overlayReducer, initialOverlayState);
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation);
@@ -74,6 +79,8 @@ export default function AnnotationInteraction({
   const quickBoxRef = useRef<HTMLDivElement | null>(null);
   // The selection quick-box (separate render path off `selectedId`, Decision B).
   const selectionBoxRef = useRef<HTMLDivElement | null>(null);
+  // The element focused before the selection box opened, restored on close.
+  const restoreSelectionFocusRef = useRef<HTMLElement | null>(null);
   // The selection quick-box opens when a NEW mark is selected and closes on a
   // pick (the 2.3 pick-is-dismiss feel) while the ring stays — so its visibility
   // is its own bit, not just `selectedId != null`.
@@ -89,6 +96,8 @@ export default function AnnotationInteraction({
   getPagesRef.current = getPages;
   const armedToolRef = useRef(armedTool);
   armedToolRef.current = armedTool;
+  const rectReaderRef = useRef(rectReader);
+  rectReaderRef.current = rectReader;
 
   const pending = state.status === "pending" ? state : null;
   // Readable from the disarm effect below without making `pending` a dep.
@@ -120,7 +129,12 @@ export default function AnnotationInteraction({
     const onPointerUp = (e: PointerEvent) => {
       if (e.button !== 0 || isExempt(e.target)) return;
       const selection = window.getSelection();
-      const pages = rectsFromSelection(selection, getPagesRef.current(), scaleRef.current);
+      const pages = rectsFromSelection(
+        selection,
+        getPagesRef.current(),
+        scaleRef.current,
+        rectReaderRef.current,
+      );
       if (pages.length === 0) return;
       if (armedToolRef.current === "highlight") {
         // Create-on-release at the default color (AC-2), then select the new mark:
@@ -333,13 +347,21 @@ export default function AnnotationInteraction({
     };
   }, [enabled, selectedAnno, clearSelection, deleteAnnotation]);
 
+  // Require at least one anchor rect: the box anchors at the mark's first rect,
+  // and a text anchor with an empty `rects` array (the generated type allows it)
+  // would crash `denormalizeRect`. A real highlight always has rects.
   const showSelectionBox =
-    selectionBoxOpen && selectedAnno !== null && selectedAnno.anchor.kind === "text";
+    selectionBoxOpen &&
+    selectedAnno !== null &&
+    selectedAnno.anchor.kind === "text" &&
+    selectedAnno.anchor.rects.length > 0;
 
   // Project the selected mark's first rect to a viewport point (the box anchor),
   // re-derived from the anchor service so it tracks zoom. clamped in layout.
   const selectionPoint = (): { x: number; y: number } => {
-    if (!selectedAnno || selectedAnno.anchor.kind !== "text") return { x: 0, y: 0 };
+    if (!selectedAnno || selectedAnno.anchor.kind !== "text" || selectedAnno.anchor.rects.length === 0) {
+      return { x: 0, y: 0 };
+    }
     const page = getPagesRef.current().find((p) => p.pageIndex === selectedAnno.anchor.page_index);
     if (!page) return { x: 0, y: 0 };
     const pos = denormalizeRect(selectedAnno.anchor.rects[0], page.box, scaleRef.current);
@@ -347,17 +369,30 @@ export default function AnnotationInteraction({
     return { x: cardRect.left + pos.left, y: cardRect.top + pos.top };
   };
 
-  // Nudge the selection box on-screen once measured (mirrors the create box).
+  // Focus moves INTO the selection box on open and RETURNS to the prior element
+  // on close (same accessibility floor as the create box). Also nudges the box
+  // on-screen once measured. Focus only on the OPEN transition (guarded by
+  // `restoreSelectionFocusRef`), so a re-run (zoom) re-clamps without stealing
+  // focus back to the first swatch.
   useLayoutEffect(() => {
-    if (!showSelectionBox) return;
-    const el = selectionBoxRef.current;
-    if (!el) return;
-    const { x, y } = selectionPoint();
-    const rect = el.getBoundingClientRect();
-    const c = clampToViewport(x, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
-    el.style.left = `${c.x}px`;
-    el.style.top = `${c.y}px`;
-    // Re-run on open and on zoom (rect re-derives).
+    if (showSelectionBox) {
+      const el = selectionBoxRef.current;
+      if (!el) return;
+      if (!restoreSelectionFocusRef.current) {
+        // First open: remember where focus was, move it into the box.
+        restoreSelectionFocusRef.current = (document.activeElement as HTMLElement | null) ?? document.body;
+        el.querySelector<HTMLElement>("button")?.focus();
+      }
+      const { x, y } = selectionPoint();
+      const rect = el.getBoundingClientRect();
+      const c = clampToViewport(x, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
+      el.style.left = `${c.x}px`;
+      el.style.top = `${c.y}px`;
+    } else if (restoreSelectionFocusRef.current) {
+      restoreSelectionFocusRef.current.focus?.();
+      restoreSelectionFocusRef.current = null;
+    }
+    // Re-run on open/close and on zoom (rect re-derives).
   }, [showSelectionBox, selectedId, scale]);
 
   if (!pending && !showSelectionBox) return null;
