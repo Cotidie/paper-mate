@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
  * secondary picker that opens beside a rail button: its position (anchored to the
  * owning `.tool-rail__item` button), box style (surface, hairline, radius, shadow),
  * and vertical column layout. EVERY tool's sub-toolbar renders its controls inside
- * this — the pointer cursor/hand/box options, the Highlight color swatches, and the
- * future underline/pen/memo/comment pickers — so they all share identical placement
+ * this — the pointer cursor/hand options, the Highlight color swatches + box-mode
+ * toggle, and the future underline/pen/memo/comment pickers — so they share placement
  * and item sizing instead of each tool re-styling its own flyout.
  *
  * Contents are tool-specific (icons vs swatches), but the shell + the 36px item

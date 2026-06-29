@@ -82,9 +82,9 @@ export default function AnnotationInteraction({
   /** The armed annotation tool (single source in App; null = cursor mode). The
    *  machine carries it through so the quick-box knows its mode and stays sticky. */
   armedTool?: AnnotationTool | null;
-  /** True when the box-select pointer tool is active (`activeTool === "box"`).
-   *  Box is a POINTER tool so `armedTool` is null while it is active; this
-   *  separate signal lets the box drag gesture gate on it (Decision 5). */
+  /** True when box-highlight mode is on (Highlight active + box mode). Box is a
+   *  MODE of Highlight, not its own tool; this separate signal lets the box-drag
+   *  gesture gate on it (the armed tool is "highlight", but a box drag, not text). */
   boxActive?: boolean;
   /** Test seam: how a text-node sub-range yields client rects. Omit in
    *  production (uses the real `getClientRects`); jsdom tests inject a reader
@@ -118,13 +118,9 @@ export default function AnnotationInteraction({
   const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
-  // Story 2.11: flip a kind=rect mark's type between highlight and comment.
-  const retypeRegion = useAnnotationStore((s) => s.retypeRegion);
   const quickBoxRef = useRef<HTMLDivElement | null>(null);
   // The selection quick-box (separate render path off `selectedId`, Decision B).
   const selectionBoxRef = useRef<HTMLDivElement | null>(null);
-  // The region tool-type picker ref (for outside-click dismiss).
-  const regionPickerRef = useRef<HTMLDivElement | null>(null);
   // The element focused before the selection box opened, restored on close.
   const restoreSelectionFocusRef = useRef<HTMLElement | null>(null);
   // The selection quick-box opens when a NEW mark is selected and closes on a
@@ -133,9 +129,6 @@ export default function AnnotationInteraction({
   const [selectionBoxOpen, setSelectionBoxOpen] = useState(false);
   // The element focused before the quick-box opened, restored on dismiss.
   const restoreFocusRef = useRef<HTMLElement | null>(null);
-  // Region tool-type picker: which annotation's picker is showing (null = closed).
-  // Set immediately after a box drag commits a region; cleared on pick/dismiss.
-  const [regionPickerForId, setRegionPickerForId] = useState<string | null>(null);
 
   // ── Pen freehand gesture (Story 2.8) ─────────────────────────────────────
   // The in-progress stroke's CLIENT-space points. `penDraftRef` is the
@@ -479,12 +472,13 @@ export default function AnnotationInteraction({
     return () => document.removeEventListener("pointerdown", onDown);
   }, [enabled, docId, addAnnotation, select]);
 
-  // Box-select drag gesture (Story 2.11, Decision 1 + 5): a pointer DRAG while
-  // box-select is the active tool. Gates on `boxActiveRef.current` (a pointer tool
-  // → `armedTool` is null; the gate must use the explicit `boxActive` signal).
-  // Clone of the pen gesture: document-level (AP-1), page-gated, draft→preview→
-  // commit, abort. On commit: canonicalized rect → normalizeRect → buildRegionAnnotation
-  // → addAnnotation → select → open region picker.
+  // Box-highlight drag gesture (Story 2.11): a pointer DRAG while box-highlight
+  // mode is on (Highlight active + box mode). Gates on `boxActiveRef.current` (the
+  // armed tool is "highlight", but this is a rectangle drag, not a text selection,
+  // so it needs the explicit `boxActive` signal). Clone of the pen gesture:
+  // document-level (AP-1), page-gated, draft→preview→commit, abort. On commit:
+  // canonicalized rect → normalizeRect → buildRegionAnnotation → addAnnotation →
+  // select (the 2.5 selection quick-box takes over — recolor + delete).
   useEffect(() => {
     if (!enabled) return;
     const abort = () => {
@@ -561,7 +555,6 @@ export default function AnnotationInteraction({
       });
       addAnnotation(created);
       select(created.id);
-      setRegionPickerForId(created.id);
       e.preventDefault();
     };
     document.addEventListener("pointerdown", onDown);
@@ -580,7 +573,7 @@ export default function AnnotationInteraction({
     };
   }, [enabled, docId, addAnnotation, select]);
 
-  // Abort an in-progress box draft the moment the box tool is switched away —
+  // Abort an in-progress box draft the moment box mode is switched off —
   // so a stranded draft can't keep a stale preview or persist after disarm
   // (mirrors the pen abort-on-disarm pattern, Codex HIGH).
   useEffect(() => {
@@ -605,36 +598,6 @@ export default function AnnotationInteraction({
     const m = annotations.get(prev);
     if (m && m.type === "memo" && (m.body ?? "").trim() === "") deleteAnnotation(prev);
   }, [selectedId, annotations, deleteAnnotation]);
-
-  // Region picker dismiss: Esc and outside-click. Separate from the selection-box
-  // dismiss so the region picker's Esc doesn't also deselect the annotation.
-  useEffect(() => {
-    if (!regionPickerForId) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        setRegionPickerForId(null);
-      }
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      if (regionPickerRef.current && !regionPickerRef.current.contains(e.target as Node)) {
-        setRegionPickerForId(null);
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => {
-      document.removeEventListener("keydown", onKey, true);
-      document.removeEventListener("pointerdown", onPointerDown, true);
-    };
-  }, [regionPickerForId]);
-
-  // Clear the region picker when the selection clears (e.g. empty-space click),
-  // so the picker never lingers without a selected annotation.
-  useEffect(() => {
-    if (selectedId === null) setRegionPickerForId(null);
-  }, [selectedId]);
 
   // Dismiss the quick-box AND clear the browser selection. Clearing is required:
   // otherwise the still-live selection is re-read by the global pointerup handler
@@ -873,13 +836,10 @@ export default function AnnotationInteraction({
   // A COMMENT shows the comment-bubble (in AnnotationLayer), NOT the generic
   // selection quick-box (UX-DR5: comment mode → bubble directly; Decision 4). So
   // the shared box is gated to exclude `type === "comment"` — both kinds.
-  // A region with the picker open (regionPickerForId) also suppresses the selection
-  // quick-box until the user picks Highlight/Comment (Decision 2).
   const showSelectionBox =
     selectionBoxOpen &&
     selectedAnno !== null &&
     selectedAnno.type !== "comment" &&
-    regionPickerForId !== selectedId &&
     ((selectedAnno.anchor.kind === "text" && selectedAnno.anchor.rects.length > 0) ||
       (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0) ||
       selectedAnno.anchor.kind === "rect");
@@ -972,8 +932,7 @@ export default function AnnotationInteraction({
     // Re-run on open/close and on zoom (rect re-derives).
   }, [showSelectionBox, selectedId, scale]);
 
-  const showRegionPicker = regionPickerForId !== null && regionPickerForId === selectedAnno?.id;
-  if (!pending && !showSelectionBox && !penPreview && !boxPreview && !showRegionPicker) return null;
+  if (!pending && !showSelectionBox && !penPreview && !boxPreview) return null;
 
   const selInit = showSelectionBox ? selectionPoint() : { x: 0, y: 0 };
 
@@ -984,10 +943,6 @@ export default function AnnotationInteraction({
     penPreview && penPreview.length > 0
       ? svgPathFromOutline(strokeOutline(penPreview, activeStrokeWidth * scale))
       : "";
-
-  // Region picker position: below the region rect, left-aligned (same anchor as
-  // the selection box for kind=rect marks, reusing selectionPoint()).
-  const regionPickerInit = showRegionPicker ? selectionPoint() : { x: 0, y: 0 };
 
   return (
     <>
@@ -1009,38 +964,6 @@ export default function AnnotationInteraction({
             borderColor: `var(--color-${activeColor})`,
           }}
         />
-      )}
-      {showRegionPicker && selectedAnno && (
-        <div
-          ref={regionPickerRef}
-          className="quick-box"
-          role="menu"
-          aria-label="Region type"
-          data-testid="region-quick-box"
-          style={{ left: regionPickerInit.x, top: regionPickerInit.y }}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            className="quick-box__action"
-            data-testid="region-picker-highlight"
-            onClick={() => setRegionPickerForId(null)}
-          >
-            Highlight
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="quick-box__action"
-            data-testid="region-picker-comment"
-            onClick={() => {
-              retypeRegion(regionPickerForId!, "comment", new Date().toISOString());
-              setRegionPickerForId(null);
-            }}
-          >
-            Comment
-          </button>
-        </div>
       )}
       {pending && (
         // Cursor-mode proof box only: a single action that creates the highlight

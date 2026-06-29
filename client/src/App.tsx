@@ -37,6 +37,15 @@ export default function App() {
   // of this (below), never stored siblings. Lives in App state (not the store,
   // which is the annotation working copy, AD-9). Sticky until V/Esc/another tool.
   const [activeTool, setActiveTool] = useState<ActiveTool>("cursor");
+  // Box-highlight is a MODE of the Highlight tool, not its own tool (AD-11 stays
+  // intact — one active tool). When true AND Highlight is active, a rectangle drag
+  // makes a region highlight instead of a text-run highlight. Reset whenever the
+  // active tool leaves Highlight (below) so re-arming Highlight always starts in
+  // plain text mode; the Highlight flyout's toggle (or M) turns it back on.
+  const [boxHighlight, setBoxHighlight] = useState(false);
+  useEffect(() => {
+    if (activeTool !== "highlight") setBoxHighlight(false);
+  }, [activeTool]);
   // The active/default annotation color (Story 2.6) lives in the annotation store,
   // not App state: it is written from two unrelated subtrees (the rail's color
   // sub-toolbox AND the overlay's recolor-a-mark), and the create path reads it.
@@ -131,9 +140,11 @@ export default function App() {
         setActiveTool("comment");
       } else if (e.key === "m" || e.key === "M") {
         e.preventDefault();
-        // Arm box-select (UX-DR15: M = box-select). Box is a pointer tool; setting
-        // it disarms any armed annotation tool via the single `activeTool` (AD-11).
-        setActiveTool("box");
+        // M = box-highlight: arm Highlight AND switch on its box mode. (Box is a
+        // mode of Highlight, not a tool — the reset effect leaves it untouched
+        // because activeTool becomes "highlight".)
+        setActiveTool("highlight");
+        setBoxHighlight(true);
       } else if (e.key === "[") {
         e.preventDefault();
         setRailCollapsed((c) => !c);
@@ -225,9 +236,9 @@ export default function App() {
           // `activeTool` (AD-11) — no stored siblings to keep in sync.
           panArmed={activeTool === "hand"}
           armedTool={isAnnotationTool(activeTool) ? activeTool : null}
-          // Box is a pointer tool (armedTool=null while active); thread the signal
-          // separately so the overlay's box gesture can gate on it (Decision 5).
-          boxActive={activeTool === "box"}
+          // Box-highlight is a mode of Highlight; the overlay's box-drag gesture
+          // gates on this signal (true only while Highlight is active + box mode on).
+          boxActive={activeTool === "highlight" && boxHighlight}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
           onOutline={setToc}
@@ -241,6 +252,9 @@ export default function App() {
           // and sets it via `onPickColor` (the default for new marks).
           activeColor={activeColor}
           onPickColor={setActiveColor}
+          // Box-highlight mode lives under the Highlight tool's flyout (a toggle).
+          boxHighlight={boxHighlight}
+          onToggleBoxHighlight={() => setBoxHighlight((b) => !b)}
           // Story 2.8: the Pen tool's sub-toolbox reads activeStrokeWidth and
           // sets it via onPickStrokeWidth (the default new strokes land in).
           activeStrokeWidth={activeStrokeWidth}

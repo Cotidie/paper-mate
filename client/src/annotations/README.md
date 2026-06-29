@@ -229,38 +229,40 @@ genuinely new pieces are a `body` param, a pin button, and a `CommentBubble`.
   contract already carries `type:"comment"`/`kind=text`/`kind=rect`/`body`, so the
   tracked OpenAPI + generated TS types stay byte-identical.
 
-## Story 2.11 -- box-select a region (fill highlight or comment)
+## Story 2.11 -- box-highlight a region
 
-Story 2.11 adds the box-select tool (`activeTool === "box"`, key `M`): a pointer
-DRAG over a page creates a `type=highlight` / `kind=rect` region annotation with a
-fill (not text-based). After commit, a region picker quick-box appears to let the
-user flip the mark to a comment.
+Box-highlight is a MODE of the Highlight tool, not its own tool: a `boxHighlight`
+flag App threads down. While Highlight is active AND box mode is on, a pointer DRAG
+over a page creates a `type=highlight` / `kind=rect` region annotation with a fill
+(not text-based). The region lands as a highlight and the 2.5 selection quick-box
+(recolor + delete) takes over. There is no region tool-type picker and no
+box-comment (removed): a box drag always makes a highlight.
 
-- Box is a POINTER TOOL (`armedTool` is null while active). Decision 5: an explicit
-  `boxActive?: boolean` prop is threaded from App through Reader to AnnotationInteraction
-  so the box gesture can gate on it without relying on `armedTool`.
+- Box mode lives UNDER the Highlight tool's flyout (a `highlight-box-toggle` button
+  beside the color row), keyed `M`. It is NOT a pointer sub-mode and NOT a top-level
+  rail tool. App resets `boxHighlight` to false whenever the active tool leaves
+  Highlight, so re-arming Highlight always starts in plain text mode.
+- The overlay's box-drag gesture gates on an explicit `boxActive?: boolean` prop
+  (`activeTool === "highlight" && boxHighlight`), threaded App → Reader →
+  AnnotationInteraction. The armed tool is `highlight`, but a box drag is a rectangle,
+  not a text selection, so it needs this separate signal.
 - `buildRegionAnnotation` in `create.ts` is the factory (parallel to `buildPenAnnotation`,
   `buildMemoAnnotation`, `buildCommentPin`): `type=highlight`, `kind=rect`, `body=null`,
   `stroke_width=null`.
-- `retypeRegion` in the store flips `type` between `highlight` and `comment` on a
-  `kind=rect` mark, setting `body=""` or `null` accordingly. Guards `anchor.kind === "rect"`.
 - The box drag gesture is document-level (AP-1), gated on `boxActiveRef.current`,
   with an 8px commit threshold (`BOX_DRAG_THRESHOLD`). It builds a canonicalized
   normalized rect via `normalizeRect` (handles up-left drags and off-card overshoot),
-  then calls `buildRegionAnnotation`, `addAnnotation`, `select`, and `setRegionPickerForId`.
-- The region picker (`region-quick-box`) is a small Highlight/Comment picker (no
-  Snapshot, Phase 2). It gates `showSelectionBox` off while visible via
-  `regionPickerForId !== selectedId`, so the two boxes never co-render.
-- The `kind=rect` FILL BRANCH in `AnnotationLayer` renders both `type=highlight` AND
-  `type=comment` `kind=rect` marks as fill divs in a `.annotation-regions` group
-  (sibling of `.annotation-highlights`). This closes the 2.10 gap: `kind=rect`
-  comments now render a fill AND a pin (not only a pin). The `.annotation-highlight`
-  base class keeps the 2.5 selection seam (hover/selected classes, hit-tests) working.
+  then calls `buildRegionAnnotation`, `addAnnotation`, and `select`.
+- The `kind=rect` FILL BRANCH in `AnnotationLayer` renders `kind=rect` marks as fill
+  divs in a `.annotation-regions` group (sibling of `.annotation-highlights`). It also
+  still covers `type=comment` `kind=rect` (the Story 2.10 comment pins). The
+  `.annotation-highlight` base class keeps the 2.5 selection seam (hover/selected
+  classes, hit-tests) working.
 - Rubber-band preview: `boxPreview` state in client coordinates renders as a
   `.box-preview` fixed div (dashed border, `pointer-events:none`, `z-index:40`).
-- `M` / `m` arms box-select (UX-DR15); `V`/`Esc` return to cursor (AD-11).
-- No API/contract change: `RectAnchor`, `type:"highlight"|"comment"`, `body` already
-  exist (AR-5); the tracked OpenAPI + generated TS types stay byte-identical.
+- `M` / `m` arms Highlight with box mode on (UX-DR15); `V`/`Esc` return to cursor (AD-11).
+- No API/contract change: `RectAnchor`, `type:"highlight"`, `body` already exist
+  (AR-5); the tracked OpenAPI + generated TS types stay byte-identical.
 
 Still later stories: the cursor-mode drag-to-change-tool picker (2.12), pen alpha
 (2.13), and editing/undo/persistence (Epic 3).

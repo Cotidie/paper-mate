@@ -349,25 +349,31 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(comment().className).not.toContain("tool-button--armed");
   });
 
-  it("'M' arms box-select; 'V'/'Escape' return to cursor (Story 2.11, UX-DR15)", async () => {
+  it("'M' arms Highlight with box mode on; 'V'/'Escape' return to cursor (Story 2.11, UX-DR15)", async () => {
     await openReader();
     const cursor = () => screen.getByTestId("tool-cursor-button");
+    const highlight = () => screen.getByTestId("tool-highlight-button");
     expect(cursor().className).toContain("tool-button--armed");
     fireEvent.keyDown(document, { key: "m" });
-    // Box-select is a pointer tool; the cursor button shows it in the pointer flyout.
-    // Its class becomes armed (pointer tools share the cursor button).
-    expect(cursor().className).toContain("tool-button--armed");
-    // No annotation tool button becomes armed.
-    expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
+    // Box-highlight is a MODE of Highlight: M arms Highlight (its button armed, the
+    // cursor button is not) and switches the box toggle on (the flyout opens by the
+    // open-on-tool-change effect).
+    expect(highlight().className).toContain("tool-button--armed");
+    expect(cursor().className).not.toContain("tool-button--armed");
+    expect(screen.getByTestId("highlight-box-toggle").getAttribute("aria-checked")).toBe("true");
     fireEvent.keyDown(document, { key: "v" });
-    // V returns to plain cursor — still cursor-button armed, all annotation tools off.
-    expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
+    // V returns to plain cursor — cursor armed, Highlight off.
+    expect(cursor().className).toContain("tool-button--armed");
+    expect(highlight().className).not.toContain("tool-button--armed");
     fireEvent.keyDown(document, { key: "M" });
     // Capital M also works.
-    expect(cursor().className).toContain("tool-button--armed");
+    expect(highlight().className).toContain("tool-button--armed");
     fireEvent.keyDown(document, { key: "Escape" });
-    // Escape returns to cursor (AD-11).
-    expect(screen.getByTestId("tool-highlight-button").className).not.toContain("tool-button--armed");
+    // Escape returns to cursor (AD-11); re-arming Highlight starts in plain mode.
+    expect(cursor().className).toContain("tool-button--armed");
+    expect(highlight().className).not.toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "h" });
+    expect(screen.getByTestId("highlight-box-toggle").getAttribute("aria-checked")).toBe("false");
   });
 
   it("'H' over a focused button/select does NOT arm (handler exempts controls)", async () => {

@@ -21,20 +21,19 @@ import ToolFlyout from "./ToolFlyout";
  * The cursor-family (pointer) options, in flyout order. `Icon` is the Phosphor
  * (regular) monochrome glyph — it paints with `currentColor`, so it inherits the
  * button's token color (body, or ink when armed). `hint` is the hover tooltip
- * (native `title`); `label` is the accessible name (aria-label). `box` is
- * armable for parity but its drag is Story 2.11 (does nothing this story).
+ * (native `title`); `label` is the accessible name (aria-label).
  */
 const OPTIONS: { value: PointerTool; label: string; hint: string; Icon: Icon }[] = [
   { value: "cursor", label: "Cursor", hint: "Cursor: select & read text (V)", Icon: Cursor },
   { value: "hand", label: "Hand", hint: "Hand: drag to pan, or hold Space", Icon: Hand },
-  { value: "box", label: "Box select", hint: "Box select", Icon: Selection },
 ];
 
 /**
  * `{component.tool-rail}` — the floating left toolbar (overlay, never reflows the
- * canvas; NFR-1). The shell carries the pointer button + its cursor/hand/box
- * flyout, the Highlight button, and the `[` collapse affordance. The remaining
- * tool buttons (underline/pen/memo/comment/ToC) arrive with their own stories.
+ * canvas; NFR-1). The shell carries the pointer button + its cursor/hand flyout,
+ * the Highlight button (its flyout holds the color row AND the box-highlight mode
+ * toggle), and the `[` collapse affordance. The remaining tool buttons
+ * (underline/pen/memo/comment/ToC) arrive with their own stories.
  *
  * Presentational, mirroring `ZoomControl`: `App` holds the single `activeTool`
  * (AD-11), subscribes to the store-backed `activeColor`, and wires the callbacks.
@@ -48,6 +47,8 @@ export default function ToolRail({
   onSelectTool,
   activeColor,
   onPickColor,
+  boxHighlight,
+  onToggleBoxHighlight,
   activeStrokeWidth,
   onPickStrokeWidth,
   activeMemoSize,
@@ -66,6 +67,12 @@ export default function ToolRail({
   activeColor: string;
   /** Set the active color (the default new marks land in). */
   onPickColor: (token: string) => void;
+  /** Whether box-highlight mode is on (a mode of the Highlight tool). The Highlight
+   *  flyout shows a toggle reflecting this; while on, a rectangle drag makes a region
+   *  highlight instead of a text-run highlight. */
+  boxHighlight: boolean;
+  /** Flip box-highlight mode on/off (the Highlight flyout's toggle). */
+  onToggleBoxHighlight: () => void;
   /** The active pen stroke width (store-backed; Story 2.8). The Pen tool's
    *  sub-toolbox shows this armed and sets it via `onPickStrokeWidth`. */
   activeStrokeWidth: number;
@@ -239,6 +246,25 @@ export default function ToolRail({
                 setFlyoutOpen(false);
               }}
             />
+            {/* Box-highlight mode (Story 2.11, relocated): a toggle that lives UNDER
+                the Highlight tool, not as its own rail tool. While on, a rectangle
+                drag makes a region highlight instead of a text-run highlight. A mode
+                toggle, so it does NOT close the flyout (the user may still pick a
+                color). `aria-checked` reflects the mode. */}
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={boxHighlight}
+              className={
+                boxHighlight ? "tool-button tool-button--armed" : "tool-button"
+              }
+              aria-label="Box highlight"
+              title="Box highlight: drag a region (M)"
+              data-testid="highlight-box-toggle"
+              onClick={onToggleBoxHighlight}
+            >
+              <Selection aria-hidden />
+            </button>
           </ToolFlyout>
         )}
       </div>

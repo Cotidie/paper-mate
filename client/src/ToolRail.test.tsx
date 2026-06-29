@@ -9,6 +9,7 @@ afterEach(cleanup);
 type RailProps = {
   activeTool: ActiveTool;
   activeColor: string;
+  boxHighlight: boolean;
   activeStrokeWidth: number;
   activeMemoSize: MemoSize;
   collapsed: boolean;
@@ -20,12 +21,14 @@ type RailProps = {
 function renderRail(over: Partial<RailProps> = {}) {
   const onSelectTool = vi.fn();
   const onPickColor = vi.fn();
+  const onToggleBoxHighlight = vi.fn();
   const onPickStrokeWidth = vi.fn();
   const onPickMemoSize = vi.fn();
   const onToggleCollapse = vi.fn();
   let props: RailProps = {
     activeTool: "cursor",
     activeColor: "annotation-default",
+    boxHighlight: false,
     activeStrokeWidth: 4,
     activeMemoSize: DEFAULT_MEMO_SIZE,
     collapsed: false,
@@ -37,6 +40,8 @@ function renderRail(over: Partial<RailProps> = {}) {
       onSelectTool={onSelectTool}
       activeColor={p.activeColor}
       onPickColor={onPickColor}
+      boxHighlight={p.boxHighlight}
+      onToggleBoxHighlight={onToggleBoxHighlight}
       activeStrokeWidth={p.activeStrokeWidth}
       onPickStrokeWidth={onPickStrokeWidth}
       activeMemoSize={p.activeMemoSize}
@@ -50,7 +55,7 @@ function renderRail(over: Partial<RailProps> = {}) {
     props = { ...props, ...next };
     utils.rerender(el(props));
   };
-  return { ...utils, onSelectTool, onPickColor, onPickStrokeWidth, onPickMemoSize, onToggleCollapse, update };
+  return { ...utils, onSelectTool, onPickColor, onToggleBoxHighlight, onPickStrokeWidth, onPickMemoSize, onToggleCollapse, update };
 }
 
 // Arm Pen (Story 2.8): start on cursor, switch to pen so the open-on-tool-change
@@ -102,7 +107,7 @@ describe("ToolRail", () => {
     expect(screen.queryByTestId("tool-flyout")).toBeNull();
   });
 
-  it("opens the flyout with cursor / hand / box on the cursor button when a pointer tool is active", () => {
+  it("opens the flyout with cursor / hand on the cursor button when a pointer tool is active", () => {
     renderRail({ activeTool: "cursor" });
     const btn = screen.getByTestId("tool-cursor-button");
     expect(btn.getAttribute("aria-expanded")).toBe("false");
@@ -111,7 +116,8 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-flyout")).toBeTruthy();
     expect(screen.getByTestId("tool-option-cursor")).toBeTruthy();
     expect(screen.getByTestId("tool-option-hand")).toBeTruthy();
-    expect(screen.getByTestId("tool-option-box")).toBeTruthy();
+    // Box-select is no longer a pointer sub-mode — it moved under Highlight.
+    expect(screen.queryByTestId("tool-option-box")).toBeNull();
   });
 
   it("picking a pointer sub-mode switches the tool; the flyout stays open showing it (unified mechanism)", () => {
@@ -168,7 +174,7 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-rail-collapse").getAttribute("title")).toBeTruthy();
     // Each flyout option has a descriptive tooltip.
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
-    for (const v of ["cursor", "hand", "box"]) {
+    for (const v of ["cursor", "hand"]) {
       expect(screen.getByTestId(`tool-option-${v}`).getAttribute("title")).toBeTruthy();
     }
     // The hand tooltip mentions panning + the Space shortcut.
@@ -193,6 +199,8 @@ describe("ToolRail", () => {
         onSelectTool={vi.fn()}
         activeColor="annotation-default"
         onPickColor={vi.fn()}
+        boxHighlight={false}
+        onToggleBoxHighlight={vi.fn()}
         activeStrokeWidth={4}
         onPickStrokeWidth={vi.fn()}
         activeMemoSize={DEFAULT_MEMO_SIZE}
@@ -262,6 +270,32 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
     fireEvent.pointerDown(document.body);
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+  });
+
+  // ── Box-highlight: a MODE toggle under the Highlight tool (relocated 2.11) ──
+  it("the highlight flyout carries a box-highlight toggle reflecting boxHighlight", () => {
+    armHighlight({ boxHighlight: false });
+    const toggle = screen.getByTestId("highlight-box-toggle");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.className).not.toContain("tool-button--armed");
+    // Lives inside the highlight color flyout, not as a top-level rail tool.
+    expect(screen.getByTestId("highlight-color-flyout").contains(toggle)).toBe(true);
+    expect(screen.queryByTestId("tool-option-box")).toBeNull();
+  });
+
+  it("shows the box-highlight toggle armed when boxHighlight is on", () => {
+    armHighlight({ boxHighlight: true });
+    const toggle = screen.getByTestId("highlight-box-toggle");
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(toggle.className).toContain("tool-button--armed");
+  });
+
+  it("clicking the box-highlight toggle calls onToggleBoxHighlight and keeps the flyout open", () => {
+    const { onToggleBoxHighlight } = armHighlight({ boxHighlight: false });
+    fireEvent.click(screen.getByTestId("highlight-box-toggle"));
+    expect(onToggleBoxHighlight).toHaveBeenCalledTimes(1);
+    // A mode toggle, NOT a pick — the flyout stays open (unlike a color swatch).
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
   });
 
   it("the color sub-toolbox closes when the active tool switches away from highlight", () => {

@@ -166,10 +166,9 @@ export interface BuildRegionOptions {
 
 /**
  * Build ONE region highlight `Annotation` (AD-5: `highlight → rect`, AR-5).
- * The first mark built from a free rectangle drag (pen drags a path; box-select
+ * The first mark built from a free rectangle drag (pen drags a path; box-highlight
  * builds a bounding rect). Always single-page (`group_id` null); `stroke_width`
- * is path-only, so null; `body` is null (highlight default — the region picker
- * can retype it to a comment via `retypeRegion`).
+ * is path-only, so null; `body` is null (a region highlight has no body).
  */
 export function buildRegionAnnotation(
   region: RegionPlacement,

@@ -1074,7 +1074,7 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     return surf;
   }
 
-  it("a box drag with boxActive=true creates a region highlight with kind=rect, canonical rect, selected, opens region picker", async () => {
+  it("a box drag with boxActive=true creates a region highlight with kind=rect, canonical rect, selected, opens the selection quick-box", async () => {
     const surf = pageSurface();
     const pages = [fakeCard(0, 0)];
     useAnnotationStore.getState().setActiveColor("annotation-green");
@@ -1104,11 +1104,11 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
       expect(all[0].anchor.rect.y1).toBeCloseTo(0.2, 5);
     }
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
-    await screen.findByTestId("region-quick-box");
-    expect(screen.getByTestId("region-picker-highlight")).toBeTruthy();
-    expect(screen.getByTestId("region-picker-comment")).toBeTruthy();
-    // Selection quick-box suppressed while region picker is open.
-    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+    // No region tool-type picker any more (box-comment removed): the region lands as
+    // a highlight and the 2.5 selection quick-box (recolor + delete) takes over.
+    expect(screen.queryByTestId("region-quick-box")).toBeNull();
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
   });
 
   it("a box drag canonicalizes the rect when dragged up-left (x0>x1, y0>y1)", () => {
@@ -1186,60 +1186,6 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 200 });
 
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
-  });
-
-  it("region picker: picking Comment retypes the region to comment, closes picker", async () => {
-    const surf = pageSurface();
-    const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
-
-    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
-    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
-    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
-
-    await screen.findByTestId("region-quick-box");
-    fireEvent.click(screen.getByTestId("region-picker-comment"));
-
-    const all = useAnnotationStore.getState().all();
-    expect(all).toHaveLength(1);
-    expect(all[0].type).toBe("comment");
-    expect(all[0].body).toBe("");
-    // Picker closed.
-    expect(screen.queryByTestId("region-quick-box")).toBeNull();
-  });
-
-  it("region picker: picking Highlight keeps the region as highlight, closes picker", async () => {
-    const surf = pageSurface();
-    const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
-
-    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
-    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
-    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
-
-    await screen.findByTestId("region-quick-box");
-    fireEvent.click(screen.getByTestId("region-picker-highlight"));
-
-    const all = useAnnotationStore.getState().all();
-    expect(all[0].type).toBe("highlight");
-    expect(screen.queryByTestId("region-quick-box")).toBeNull();
-  });
-
-  it("Escape closes the region picker (keeps mark selected)", async () => {
-    const surf = pageSurface();
-    const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
-
-    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
-    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
-    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
-
-    await screen.findByTestId("region-quick-box");
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    await waitFor(() => expect(screen.queryByTestId("region-quick-box")).toBeNull());
-    // Mark is still selected (ring stays).
-    expect(useAnnotationStore.getState().selectedId).not.toBeNull();
   });
 
   it("a stored region highlight is click-selectable and opens the 2.5 selection quick-box (recolor+delete)", async () => {

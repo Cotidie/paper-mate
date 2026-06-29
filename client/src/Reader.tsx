@@ -75,9 +75,9 @@ export default function Reader({
   /** The armed annotation tool (App owns it; null = cursor). Passed straight to
    * the overlay interaction; the Reader itself does no annotation logic (AD-9). */
   armedTool?: AnnotationTool | null;
-  /** True when the box-select pointer tool is active. Box is a pointer tool so
-   * armedTool is null while it is active; this is the explicit signal the
-   * overlay's box gesture needs (Decision 5). Passed straight to the overlay. */
+  /** True when box-highlight mode is on (Highlight active + box mode). Box is a
+   * MODE of Highlight, not its own tool; this is the explicit signal the overlay's
+   * box-drag gesture gates on. Passed straight to the overlay. */
   boxActive?: boolean;
   /** Reports the 1-based page currently in view, for the top-bar indicator. */
   onVisiblePageChange?: (page: number) => void;
