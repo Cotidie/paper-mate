@@ -203,13 +203,13 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     expect(all.map((a) => a.anchor.page_index).sort()).toEqual([0, 1]);
   });
 
-  it("click on empty page area pops a Comment+Memo picker (no highlight/underline)", async () => {
+  it("double-click on empty page area pops a Comment+Memo picker (no highlight/underline)", async () => {
     const card = fakeCard(0, 0);
     const surface = setupPageSurface(card);
     render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
 
-    // Fire pointerup against the surface element (so .closest('.page-surface') matches).
-    fireEvent.pointerUp(surface, { button: 0, clientX: 100, clientY: 100 });
+    // Fire dblclick against the surface (so .closest('.page-surface') matches).
+    fireEvent.dblClick(surface, { button: 0, clientX: 100, clientY: 100 });
 
     await screen.findByTestId("quick-box");
     expect(screen.getByTestId("quick-box-comment")).toBeTruthy();
@@ -219,13 +219,13 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     surface.remove();
   });
 
-  it("click-mode: picking Comment creates a comment pin at the click point", async () => {
+  it("double-click mode: picking Comment creates a comment pin at the click point", async () => {
     const card = fakeCard(0, 0);
     const surface = setupPageSurface(card);
     render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
 
     // clientX=120, clientY=200 → card-local x0=120, y0=200 → normalized x0=120/600, y0=200/800
-    fireEvent.pointerUp(surface, { button: 0, clientX: 120, clientY: 200 });
+    fireEvent.dblClick(surface, { button: 0, clientX: 120, clientY: 200 });
     fireEvent.click(await screen.findByTestId("quick-box-comment"));
 
     const all = useAnnotationStore.getState().all();
@@ -241,13 +241,13 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     surface.remove();
   });
 
-  it("click-mode: picking Memo creates a memo at the click point", async () => {
+  it("double-click mode: picking Memo creates a memo at the click point", async () => {
     const card = fakeCard(0, 0);
     const surface = setupPageSurface(card);
     render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
 
     // clientX=60, clientY=160 → card-local x0=60, y0=160
-    fireEvent.pointerUp(surface, { button: 0, clientX: 60, clientY: 160 });
+    fireEvent.dblClick(surface, { button: 0, clientX: 60, clientY: 160 });
     fireEvent.click(await screen.findByTestId("quick-box-memo"));
 
     const all = useAnnotationStore.getState().all();

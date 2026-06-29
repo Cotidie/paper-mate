@@ -293,19 +293,6 @@ export default function AnnotationInteraction({
           });
           addAnnotation(created);
           select(created.id);
-        } else if (tool === null) {
-          // Cursor mode click: pop the Comment+Memo picker when over a real page area.
-          const clickEl = e.target as Element | null;
-          if (
-            clickEl?.closest?.(".page-surface") &&
-            !clickEl.closest?.(".quick-box") &&
-            !clickEl.closest?.(
-              ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble",
-            )
-          ) {
-            restoreFocusRef.current = document.activeElement as HTMLElement | null;
-            dispatch({ type: "present", selection: [], at: { x: e.clientX, y: e.clientY } });
-          }
         }
         return;
       }
@@ -323,11 +310,39 @@ export default function AnnotationInteraction({
       restoreFocusRef.current = document.activeElement as HTMLElement | null;
       dispatch({ type: "present", selection: pages, at: { x: e.clientX, y: e.clientY } });
     };
+    // Double-click on empty page area (cursor mode): pop the Comment+Memo picker.
+    // Single clicks don't trigger it; double-clicking on text selects a word and
+    // the second pointerup's rectsFromSelection produces pages.length>0, which pops
+    // the H/U/C picker instead (both behave like text drag — user request).
+    const onDblClick = (e: MouseEvent) => {
+      if (e.button !== 0 || isExempt(e.target) || armedToolRef.current !== null) return;
+      const selection = window.getSelection();
+      const pages = rectsFromSelection(
+        selection,
+        getPagesRef.current(),
+        scaleRef.current,
+        rectReaderRef.current,
+      );
+      if (pages.length > 0) return; // text selected — pointerup already handled it
+      const el = e.target as Element | null;
+      if (
+        el?.closest?.(".page-surface") &&
+        !el.closest?.(".quick-box") &&
+        !el.closest?.(
+          ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble",
+        )
+      ) {
+        restoreFocusRef.current = document.activeElement as HTMLElement | null;
+        dispatch({ type: "present", selection: [], at: { x: e.clientX, y: e.clientY } });
+      }
+    };
     document.addEventListener("pointerdown", onPointerDownCandidate);
     document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("dblclick", onDblClick);
     return () => {
       document.removeEventListener("pointerdown", onPointerDownCandidate);
       document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("dblclick", onDblClick);
     };
   }, [enabled, docId, addAnnotation, select, createTextTool]);
 
