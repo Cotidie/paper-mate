@@ -30,13 +30,12 @@ const OPTIONS: { value: PointerTool; label: string; hint: string; Icon: Icon }[]
  * flyout, the Highlight button, and the `[` collapse affordance. The remaining
  * tool buttons (underline/pen/memo/comment/ToC) arrive with their own stories.
  *
- * Presentational, mirroring `ZoomControl`: it owns no tool state — `App` holds
- * the single `activeTool` (AD-11) + `activeColor` (Story 2.6) and `collapsed` and
- * wires the callbacks. The rail reads `activeTool` for its active/armed styling
- * and calls `onSelectTool` to switch (always one click; mutual exclusion is
- * intrinsic to `activeTool`). Pan itself lives in the Reader (it owns the scroll
- * container). The rail's only local state is which flyout (pointer / highlight
- * color) is open.
+ * Presentational, mirroring `ZoomControl`: `App` holds the single `activeTool`
+ * (AD-11), subscribes to the store-backed `activeColor`, and wires the callbacks.
+ * The rail reads `activeTool` for its active/armed styling and calls
+ * `onSelectTool` to switch (always one click; mutual exclusion is intrinsic to
+ * `activeTool`). Pan itself lives in the Reader (it owns the scroll container).
+ * The rail's only local state is which flyout (pointer / highlight color) is open.
  */
 export default function ToolRail({
   activeTool,
@@ -48,11 +47,12 @@ export default function ToolRail({
 }: {
   /** The single active tool (App owns it; AD-11). */
   activeTool: ActiveTool;
-  /** Commit a tool switch. One click always switches; never opens a sub-toolbox
-   *  in place of the switch (AC4), so Story 2.6's arm-time picker is safe. */
+  /** Commit a tool switch. One click always switches; Story 2.6 opens the
+   *  Highlight color picker after the parent makes Highlight active. */
   onSelectTool: (t: ActiveTool) => void;
-  /** The active annotation color (App owns it; Story 2.6). The Highlight tool's
-   *  color sub-toolbox shows this armed and sets it via `onPickColor`. */
+  /** The active annotation color (store-backed; App subscribes and passes it down).
+   *  The Highlight tool's color sub-toolbox shows this armed and sets it via
+   *  `onPickColor`. */
   activeColor: string;
   /** Set the active color (the default new marks land in). */
   onPickColor: (token: string) => void;
@@ -105,12 +105,14 @@ export default function ToolRail({
     if (!pointerActive) setOpen(false);
   }, [pointerActive]);
 
-  // Symmetric guard for the highlight color flyout: close it whenever highlight
-  // is no longer the active tool, so a switch away never leaves the color sub-
-  // toolbox stranded (AC3, the inverse path the 2.4 review flagged).
+  // The highlight color flyout opens automatically when highlight becomes the
+  // active tool (switching to a tool reveals its sub-toolbox by default — user
+  // request) and closes when highlight is no longer active (the inverse path the
+  // 2.4 review flagged). Keyed on the highlight-active TRANSITION, so a later
+  // pick / re-click / collapse that closes it does not re-open on re-render.
   const highlightActive = activeTool === "highlight";
   useEffect(() => {
-    if (!highlightActive) setColorOpen(false);
+    setColorOpen(highlightActive);
   }, [highlightActive]);
 
   // Collapsing the rail unmounts the buttons; clear both flyouts so expanding
@@ -193,11 +195,10 @@ export default function ToolRail({
       {/* Annotation tools (Story 2.3 adds Highlight; later stories add the rest
           below it in DESIGN.md#tool-rail order). One model: arming is just
           `onSelectTool("highlight")`. Re-clicking an already-active tool does NOT
-          cancel it — it stays armed (idempotent). Story 2.6: it now mirrors the
-          pointer button exactly — a click that ARMS highlight (from another tool)
-          switches in one click and opens NO flyout (AC4); a click on the ALREADY-
-          active button toggles the color sub-toolbox. To leave Highlight, pick
-          another tool or press V/Esc. */}
+          cancel it — it stays armed (idempotent). Story 2.6: ARMING highlight (from
+          another tool) auto-opens its color sub-toolbox (the effect above, on the
+          active transition); a click on the ALREADY-active button toggles that
+          sub-toolbox. To leave Highlight, pick another tool or press V/Esc. */}
       {/* Relative wrapper so the color flyout aligns to the Highlight button
           (not the rail's top like the pointer flyout). */}
       <div className="tool-rail__item">

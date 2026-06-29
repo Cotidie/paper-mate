@@ -16,7 +16,14 @@ function mark(id: string, color: string, createdAt: string, groupId: string | nu
   };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
+beforeEach(() =>
+  useAnnotationStore.setState({
+    annotations: new Map(),
+    selectedId: null,
+    hoveredId: null,
+    activeColor: "annotation-default",
+  }),
+);
 
 describe("annotation store (Story 2.2 + 2.3)", () => {
   it("addAnnotation keys by id; all() orders by created_at ascending", () => {
@@ -108,5 +115,15 @@ describe("selection + delete (Story 2.5)", () => {
     useAnnotationStore.getState().select("b");
     useAnnotationStore.getState().deleteAnnotation("a");
     expect(useAnnotationStore.getState().selectedId).toBe("b");
+  });
+});
+
+describe("active/default color (Story 2.6)", () => {
+  it("defaults to annotation-default and setActiveColor remembers the last choice", () => {
+    expect(useAnnotationStore.getState().activeColor).toBe("annotation-default");
+    useAnnotationStore.getState().setActiveColor("annotation-pink");
+    expect(useAnnotationStore.getState().activeColor).toBe("annotation-pink");
+    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    expect(useAnnotationStore.getState().activeColor).toBe("annotation-blue");
   });
 });

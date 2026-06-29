@@ -62,7 +62,6 @@ export default function Reader({
   doc,
   panArmed,
   armedTool,
-  activeColor,
   onVisiblePageChange,
   onZoomChange,
   onOutline,
@@ -75,9 +74,6 @@ export default function Reader({
   /** The armed annotation tool (App owns it; null = cursor). Passed straight to
    * the overlay interaction; the Reader itself does no annotation logic (AD-9). */
   armedTool?: AnnotationTool | null;
-  /** The active annotation color (App owns it; Story 2.6). Passed straight to the
-   * overlay so the create path lands new marks in the chosen default color. */
-  activeColor?: string;
   /** Reports the 1-based page currently in view, for the top-bar indicator. */
   onVisiblePageChange?: (page: number) => void;
   /** Reports the live zoom percent (rounded) for the top-bar zoom control. */
@@ -571,7 +567,6 @@ export default function Reader({
           scale={scale}
           enabled={phase === "ready"}
           armedTool={armedTool ?? null}
-          activeColor={activeColor ?? "annotation-default"}
         />
       )}
     </div>

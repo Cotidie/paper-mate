@@ -130,33 +130,51 @@ describe("ToolRail", () => {
     expect(onSelectTool).toHaveBeenCalledWith("highlight");
   });
 
-  // ── Story 2.6: arm = one-click switch, opens NO sub-toolbox (AC3) ──────────
-  it("arming highlight from another tool switches in one click and opens NO color flyout (AC3)", () => {
+  // ── Story 2.6: arm = one-click switch; active transition opens the picker ───
+  it("arming highlight from another tool requests the switch in one click", () => {
     const { onSelectTool } = renderRail({ activeTool: "cursor" });
     fireEvent.click(screen.getByTestId("tool-highlight-button"));
     expect(onSelectTool).toHaveBeenCalledWith("highlight");
-    // The arming switch must not open the color sub-toolbox (pointer symmetry).
+    // The parent owns activeTool; this click only requests the switch. The flyout
+    // opens after the parent rerenders with activeTool="highlight".
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+  });
+
+  it("the highlight color flyout opens when highlight becomes active", () => {
+    const { rerender } = renderRail({ activeTool: "cursor" });
+    expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+    rerender(
+      <ToolRail
+        activeTool="highlight"
+        onSelectTool={vi.fn()}
+        activeColor="annotation-default"
+        onPickColor={vi.fn()}
+        collapsed={false}
+        onToggleCollapse={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
+    expect(screen.getByTestId("tool-highlight-button").getAttribute("aria-expanded")).toBe("true");
   });
 
   it("re-clicking the ALREADY-active Highlight tool toggles its color sub-toolbox, never disarms (Story 2.6)", () => {
     const { onSelectTool } = renderRail({ activeTool: "highlight" });
     const btn = screen.getByTestId("tool-highlight-button");
-    expect(btn.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(btn);
-    // Opens the color flyout; does NOT call onSelectTool (stays armed, idempotent).
-    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
     expect(btn.getAttribute("aria-expanded")).toBe("true");
-    expect(onSelectTool).not.toHaveBeenCalled();
-    // A second click closes it again.
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
     fireEvent.click(btn);
+    // Closes the color flyout; does NOT call onSelectTool (stays armed, idempotent).
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
+    expect(btn.getAttribute("aria-expanded")).toBe("false");
+    expect(onSelectTool).not.toHaveBeenCalled();
+    // A second click opens it again.
+    fireEvent.click(btn);
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
   });
 
   // ── Story 2.6: the color sub-toolbox itself ────────────────────────────────
   it("the highlight color sub-toolbox shows the 5-color swatch row with activeColor armed", () => {
     renderRail({ activeTool: "highlight", activeColor: "annotation-green" });
-    fireEvent.click(screen.getByTestId("tool-highlight-button"));
     const flyout = screen.getByTestId("highlight-color-flyout");
     expect(flyout).toBeTruthy();
     // Exactly 5 swatches (trimmed palette); the active color is armed.
@@ -168,7 +186,6 @@ describe("ToolRail", () => {
 
   it("picking a swatch sets the active color (onPickColor) and closes the flyout (Story 2.6 AC4)", () => {
     const { onPickColor } = renderRail({ activeTool: "highlight", activeColor: "annotation-default" });
-    fireEvent.click(screen.getByTestId("tool-highlight-button"));
     fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
     expect(onPickColor).toHaveBeenCalledWith("annotation-blue");
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
@@ -176,7 +193,6 @@ describe("ToolRail", () => {
 
   it("Escape closes the open color sub-toolbox (Story 2.6)", () => {
     renderRail({ activeTool: "highlight" });
-    fireEvent.click(screen.getByTestId("tool-highlight-button"));
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
@@ -184,7 +200,6 @@ describe("ToolRail", () => {
 
   it("an outside pointer-down closes the open color sub-toolbox (Story 2.6)", () => {
     renderRail({ activeTool: "highlight" });
-    fireEvent.click(screen.getByTestId("tool-highlight-button"));
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
     fireEvent.pointerDown(document.body);
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
@@ -192,7 +207,6 @@ describe("ToolRail", () => {
 
   it("the color sub-toolbox closes when the active tool switches away from highlight (AC3 inverse path)", () => {
     const { rerender } = renderRail({ activeTool: "highlight" });
-    fireEvent.click(screen.getByTestId("tool-highlight-button"));
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
     rerender(
       <ToolRail
@@ -209,7 +223,6 @@ describe("ToolRail", () => {
 
   it("clears an open color sub-toolbox when the rail collapses (Codex review MED)", () => {
     const { rerender } = renderRail({ activeTool: "highlight" });
-    fireEvent.click(screen.getByTestId("tool-highlight-button"));
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
     // Collapse, then expand: the flyout must NOT resurrect without a new gesture.
     rerender(

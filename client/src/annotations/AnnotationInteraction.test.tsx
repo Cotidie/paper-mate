@@ -60,7 +60,14 @@ function stubSelection(rects: { left: number; top: number; right: number; bottom
   return { removeAllRanges };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
+beforeEach(() =>
+  useAnnotationStore.setState({
+    annotations: new Map(),
+    selectedId: null,
+    hoveredId: null,
+    activeColor: "annotation-default",
+  }),
+);
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -188,6 +195,7 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
   it("Story 2.6: a drag-release lands the mark in the ACTIVE color (create reads activeColor, not a hardcode)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("annotation-blue");
     render(
       <AnnotationInteraction
         docId="doc-1"
@@ -196,7 +204,6 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
         enabled
         rectReader={reader}
         armedTool="highlight"
-        activeColor="annotation-blue"
       />,
     );
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
@@ -361,6 +368,15 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     // Pick dismisses the box but the mark stays selected (ring persists).
     await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
+  });
+
+  it("Story 2.6 req3: recoloring an existing mark also updates the active/default color (remember last choice)", async () => {
+    setup([textMark("m1", "annotation-default")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    expect(useAnnotationStore.getState().activeColor).toBe("annotation-default");
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-purple"));
+    // Editing a highlight's color carries into the session default for new marks.
+    expect(useAnnotationStore.getState().activeColor).toBe("annotation-purple");
   });
 
   it("recolors the whole group together (two-page highlight)", async () => {

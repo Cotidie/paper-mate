@@ -45,7 +45,6 @@ export default function AnnotationInteraction({
   scale,
   enabled,
   armedTool = null,
-  activeColor = "annotation-default",
   rectReader,
 }: {
   docId: string;
@@ -59,10 +58,6 @@ export default function AnnotationInteraction({
   /** The armed annotation tool (single source in App; null = cursor mode). The
    *  machine carries it through so the quick-box knows its mode and stays sticky. */
   armedTool?: AnnotationTool | null;
-  /** The active color token (Story 2.6): new marks land in this. App owns it,
-   *  set via the Highlight tool's color sub-toolbox; the create path reads it
-   *  instead of a hardcoded default. */
-  activeColor?: string;
   /** Test seam: how a text-node sub-range yields client rects. Omit in
    *  production (uses the real `getClientRects`); jsdom tests inject a reader
    *  since they have no layout. */
@@ -75,6 +70,11 @@ export default function AnnotationInteraction({
   // reads it to render the selected-mark quick-box (recolor + delete).
   const annotations = useAnnotationStore((s) => s.annotations);
   const selectedId = useAnnotationStore((s) => s.selectedId);
+  // Story 2.6: the active/default color lives in the store (two writers — this
+  // overlay's recolor AND the rail's color sub-toolbox — plus the create path
+  // reads it). Recoloring a mark also updates this default (remember-last-choice).
+  const activeColor = useAnnotationStore((s) => s.activeColor);
+  const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
@@ -299,9 +299,12 @@ export default function AnnotationInteraction({
   const recolorSelected = useCallback(
     (color: string) => {
       recolorAnnotation(selectedGroupIds(), color, new Date().toISOString());
+      // Remember the choice: recoloring an existing mark also sets the default for
+      // the next new mark (Story 2.6 request 3 — last-choice-wins, either path).
+      setActiveColor(color);
       setSelectionBoxOpen(false); // pick dismisses the box; the mark stays selected/ringed
     },
-    [recolorAnnotation, selectedGroupIds],
+    [recolorAnnotation, selectedGroupIds, setActiveColor],
   );
 
   // Delete via the store (removes id + group siblings AND clears `selectedId`).

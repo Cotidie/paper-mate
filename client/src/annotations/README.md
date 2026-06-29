@@ -42,20 +42,21 @@ Story 2.3 (highlight tool) adds the first real tool on this foundation:
 Story 2.4 unified the tool state into one `activeTool` FSM (AD-11): mutual
 exclusion is by construction (no `mode`+`armedTool` pair to keep in sync), pan
 derives from `activeTool === "hand"`, and a rail click switches the tool in a
-single click — a per-tool quick-box only opens on drag-release or when the tool
-is already active, never in place of a switch. That is what lets Story 2.6 add an
-arm-time color picker and Story 2.5 add click-to-select safely on this one model.
+single click. Story 2.6 uses the active-tool transition to show the Highlight color
+picker after the switch lands; Story 2.5 adds click-to-select safely on this one
+model.
 
 Story 2.6 (arm-time color + 5-color palette): the active color is a DEFAULT new
-marks land in, owned by App as `activeColor` (sibling of `activeTool`) and threaded
-to the rail (the Highlight color sub-toolbox sets it) and down to this overlay (the
-create path reads it instead of a hardcoded `annotation-default`). The Highlight
-button mirrors the pointer button: arming it from another tool is one click and
-opens NO flyout (AC4); a click on the already-active Highlight button toggles its
-color sub-toolbox (the same `ColorSwatchRow`). The post-create recolor row (2.3/2.5)
-is unchanged. The accent palette was trimmed to five colors (yellow default /
-green / pink / blue / purple), edited in `DESIGN.md` (the token source) and
-regenerated into `tokens.css`.
+marks land in. It lives in the annotation store as `activeColor` because the rail's
+Highlight color sub-toolbox and this overlay's recolor row both update it; App
+subscribes only to pass it into the rail, and the create path reads it directly
+from the store instead of a hardcoded `annotation-default`. The Highlight button
+still arms in one click; once highlight becomes active, its color sub-toolbox opens
+with the same `ColorSwatchRow`, and clicking the already-active Highlight button
+toggles that sub-toolbox. The post-create recolor row still recolors the selected
+mark and now also updates the session default. The accent palette was trimmed to
+five colors (yellow default / green / pink / blue / purple), edited in `DESIGN.md`
+(the token source) and regenerated into `tokens.css`.
 
 Story 2.5 adds the selection seam (AD-12) — the first way to act on an EXISTING
 mark, decoupled from the create machine and the Epic-3 command stack:

@@ -5,6 +5,7 @@ import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
 import ToolRail from "./ToolRail";
 import { type ActiveTool, isAnnotationTool } from "./tools";
+import { useAnnotationStore } from "./store";
 import ZoomControl from "./ZoomControl";
 import TocPanel from "./TocPanel";
 import Toast from "./Toast";
@@ -36,12 +37,13 @@ export default function App() {
   // of this (below), never stored siblings. Lives in App state (not the store,
   // which is the annotation working copy, AD-9). Sticky until V/Esc/another tool.
   const [activeTool, setActiveTool] = useState<ActiveTool>("cursor");
-  // The active annotation color (Story 2.6): the DEFAULT color new marks land in,
-  // chosen via the Highlight tool's color sub-toolbox. Sibling of `activeTool` —
-  // App owns it and threads it to the rail (sub-toolbox reads/sets it) and down
-  // to the overlay (the create path reads it instead of a hardcoded default). A
-  // bare token name (DESIGN.md `{colors.annotation-*}`); persists for the session.
-  const [activeColor, setActiveColor] = useState<string>("annotation-default");
+  // The active/default annotation color (Story 2.6) lives in the annotation store,
+  // not App state: it is written from two unrelated subtrees (the rail's color
+  // sub-toolbox AND the overlay's recolor-a-mark), and the create path reads it.
+  // App subscribes only to pass it (and its setter) to the rail; the overlay reads
+  // the store directly. It remembers the last color chosen for the session.
+  const activeColor = useAnnotationStore((s) => s.activeColor);
+  const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
@@ -192,7 +194,6 @@ export default function App() {
           // `activeTool` (AD-11) — no stored siblings to keep in sync.
           panArmed={activeTool === "hand"}
           armedTool={isAnnotationTool(activeTool) ? activeTool : null}
-          activeColor={activeColor}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
           onOutline={setToc}

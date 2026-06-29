@@ -223,6 +223,13 @@
   z-index: 6;
 }
 
+/* The highlight color sub-toolbox stacks its swatches VERTICALLY, matching the
+   pointer flyout's column (Story 2.6 request). Scoped to the rail flyout so the
+   overlay's selection recolor row stays horizontal. */
+.tool-flyout .color-swatch-row {
+  flex-direction: column;
+}
+
 /* Pan cursor + selection suppression while the hand is armed or Space is held
    (Reader sets data-pan on the .pdf-canvas). grab when pannable, grabbing during
    the drag; user-select off so a hand-drag never starts a text selection. Token-
