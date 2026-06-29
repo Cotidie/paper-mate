@@ -4,7 +4,7 @@ baseline_commit: 85945fb61a414eb85353e23a78ba3c81943bd51a
 
 # Story 2.4: Unify tool state (single activeTool FSM)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
