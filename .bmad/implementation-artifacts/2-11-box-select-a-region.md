@@ -16,6 +16,15 @@ so that I can mark a region, not just text.
 
 > **Box-select is a region HIGHLIGHT (box-highlight), NOT a marquee that group-selects existing marks.** A drag draws a rectangle over the page (a figure, a table, an equation), and on release the area is marked. It is the FIRST mark built from a free RECTANGLE DRAG (pen drags a freehand path; memo places a box by a single click; highlight/underline/comment read a text selection). Box-select reuses the pen drag-gesture shape (pointerdown → pointermove preview → pointerup commit) but builds a `kind=rect` BOUNDING rect from the two drag corners instead of a path. The created mark is a region highlight (`type=highlight`, `kind=rect`) — a ~0.4 fill over the area — and the region quick-box is a TOOL-TYPE picker that can switch it to a region comment (`type=comment`, `kind=rect`: the area gets a pin + bubble). Snapshot is the third region action, reserved for Phase 2 — do NOT build it. The contract ALREADY carries both pairings (AR-5: `highlight → text|rect`, `comment → text|rect`), so this is CLIENT-ONLY with the tracked contract byte-identical.
 
+> **⚠️ POST-REVIEW REVISION (2026-06-30, supersedes the design below).** After the first implementation (commit `fbc4b15`) the user redirected the design. The decisions, ACs, tasks, and Dev Agent Record below describe the AS-FIRST-BUILT shape and are kept as history; the SHIPPED behavior is now:
+> - **Box-highlight is a MODE of the Highlight tool, NOT a pointer tool.** `box` was REMOVED from `POINTER_TOOLS` (`tools.ts` now `cursor`/`hand` only). It is a `boxHighlight` flag App threads down, gated `boxActive = activeTool === "highlight" && boxHighlight`. AD-11 (single `activeTool` source of truth) is preserved — box-highlight is not a competing `ActiveTool` value. App resets `boxHighlight` to false whenever the active tool leaves Highlight.
+> - **The control lives INSIDE the Highlight flyout** (`highlight-box-toggle`, `role="menuitemcheckbox"`), positioned FIRST (above the color swatches) with a hairline divider (`.tool-flyout__divider`) between. Icon is Phosphor `BoundingBox`. Toggling does NOT close the flyout. There is no cursor-flyout "Box select" entry.
+> - **`M` arms Highlight + box mode** (`setActiveTool("highlight"); setBoxHighlight(true)`), not a `box` tool.
+> - **box-comment and the region tool-type picker are REMOVED.** No region quick-box, no `retypeRegion` (deleted from the store). A box drag always creates a `type=highlight` / `kind=rect` region; it lands selected and the Story 2.5 selection quick-box (recolor + delete) takes over. The `kind=rect` fill branch in `AnnotationLayer` still also serves the Story 2.10 `type=comment` rect pins.
+> - **Version:** PATCH bumped again to `0.1.9` for the relocation fix.
+> - **Revision commits:** `f97881d` (relocate + drop box-comment), `3c3e4af` (flyout reorder + divider + `BoundingBox` icon). Live-smoked at DPR>1 (drag region → selection box, no picker; `M`/`H`/`Esc` paths; flyout order). 391 client tests green, typecheck + build clean.
+> - **Revision file touch (beyond the as-built File List):** `tools.ts`, `App.tsx`, `Reader.tsx`, `ToolRail.tsx` (+test), `ToolFlyout.tsx`, `App.css`, `AnnotationInteraction.tsx` (+test), `store/index.ts` (+test), `create.ts` (+test), `tools.test.ts`, `App.test.tsx`, `annotations/README.md`.
+
 ## The decisions that define this story (read before coding)
 
 **1. Box-select is a DRAG that builds a bounding rect — clone the pen gesture, emit a rect not a path.** The pen gesture (`AnnotationInteraction.tsx`, gated `armedTool === "pen"`) is the template: document-level (AP-1), pointerdown over a `.page-surface` starts a draft, pointermove accumulates + drives a live preview, pointerup commits. Box-select is the same shape gated on the POINTER tool `activeTool === "box"` (not an `armedTool` — `box` is a `PointerTool`, see Decision 5): pointerdown records the start corner, pointermove rubber-bands a preview rect (start corner → current point), pointerup builds the rect from the two corners, **canonicalized** (`x0 ≤ x1, y0 ≤ y1` — a negative/up-left drag normalizes, PRD#Anchor "negative drags normalized"), clamped to the page the pointerdown landed on, `normalizeRect` against that page box. Single-page (one `page_index`, `group_id` null — a region is one page by definition, no cross-page split). A too-small drag (below a small px threshold, the pen's same abort guard) commits NOTHING (a stray click while box is armed is not a zero-area region).
@@ -157,6 +166,7 @@ Resist: a contract field/new `type` for "region" (a region is just `kind=rect`);
 ### Versioning
 
 - PATCH +1 at done: `server/pyproject.toml` `0.1.7 → 0.1.8` (single source). Bump once at done.
+- Post-review revision (2026-06-30): `0.1.8 → 0.1.9` for the box-highlight relocation fix (see the POST-REVIEW REVISION note at the top).
 
 ### References
 
@@ -243,3 +253,4 @@ None — no major debugging detours. One pre-existing test expectation updated: 
 
 - 2026-06-30: Story created (ready-for-dev) via bmad-create-story.
 - 2026-06-30: Implementation complete (all tasks done except live smoke); status → review.
+- 2026-06-30: Post-review revision per user redirect — box-highlight relocated to a MODE of the Highlight tool (removed from POINTER_TOOLS); box-comment + region picker + `retypeRegion` removed; `M` arms Highlight + box mode; flyout toggle ordered first with a divider + `BoundingBox` icon. Version `0.1.8 → 0.1.9`. Commits `f97881d`, `3c3e4af`. See the POST-REVIEW REVISION note at the top.
