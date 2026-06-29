@@ -28,11 +28,82 @@
 // `hoveredId`/`selectedId` and lights any mark that matches by id OR shares a
 // non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
 
+import { useLayoutEffect, useRef } from "react";
 import type { Annotation } from "../api/client";
 import { useAnnotationStore } from "../store";
-import { denormalizeRect, denormalizePoint, type PageBox } from "../anchor";
+import { denormalizeRect, denormalizePoint, type PageBox, type ScreenRect } from "../anchor";
 import { strokeOutline, svgPathFromOutline } from "./pen";
 import "./Annotations.css";
+
+/** One on-page memo box (Story 2.9): an interactive `<textarea>` positioned via
+ *  the denormalized rect. Extracted so each box owns a ref + a layout effect that
+ *  re-fits its height to the content — auto-grow must re-run on body/scale change
+ *  (zoom, remount), not only on the user's keystroke (`onInput`), or long notes
+ *  clip after a re-render (Codex MED). Height is DERIVED, never persisted (NFR-3). */
+function MemoBox({
+  anno,
+  pos,
+  cls,
+  selected,
+  onRetext,
+  onSelect,
+  onHover,
+  onClearSelection,
+}: {
+  anno: Annotation;
+  pos: ScreenRect;
+  cls: string;
+  selected: boolean;
+  onRetext: (id: string, body: string) => void;
+  onSelect: (id: string) => void;
+  onHover: (id: string | null) => void;
+  onClearSelection: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const body = anno.body ?? "";
+  // Re-fit height to content whenever the text OR the box geometry changes (the
+  // min-height/width ride the scale, so a zoom re-wraps the text). jsdom has no
+  // layout (scrollHeight = 0) → the guard keeps it a no-op there.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
+  }, [body, pos.width, pos.height]);
+  return (
+    <textarea
+      ref={ref}
+      className={cls}
+      data-testid={`annotation-mark-${anno.id}`}
+      aria-label="Memo"
+      value={body}
+      autoFocus={selected}
+      onChange={(e) => onRetext(anno.id, e.target.value)}
+      onKeyDown={(e) => {
+        // Esc blurs + deselects the memo from INSIDE the textarea (it is exempt
+        // from the document-level tool/selection keys, so Esc would otherwise be
+        // swallowed and leave the memo focused — Codex MED). A non-empty memo
+        // survives; an empty one is removed by the deselect cleanup.
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.blur();
+          onClearSelection();
+        }
+      }}
+      onPointerEnter={() => onHover(anno.id)}
+      onPointerLeave={() => onHover(null)}
+      onClick={() => onSelect(anno.id)}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        minHeight: pos.height,
+        borderColor: `var(--color-${anno.style.color})`,
+      }}
+    />
+  );
+}
 
 /** Is `a` part of the active set named by `activeId`? True when it IS that mark,
  *  or shares a non-null `group_id` with it — so a two-page highlight's sibling on
@@ -69,6 +140,7 @@ export default function AnnotationLayer({
   const selectedId = useAnnotationStore((s) => s.selectedId);
   const hoveredId = useAnnotationStore((s) => s.hoveredId);
   const select = useAnnotationStore((s) => s.select);
+  const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const setHovered = useAnnotationStore((s) => s.setHovered);
   const retextAnnotation = useAnnotationStore((s) => s.retextAnnotation);
   const marks = [...annotations.values()]
@@ -167,33 +239,17 @@ export default function AnnotationLayer({
       "annotation-memo" +
       (hovered ? " annotation-memo--hovered" : "") +
       (selected ? " annotation-memo--selected" : "");
-    const pos = denormalizeRect(a.anchor.rect, box, scale);
     return (
-      <textarea
+      <MemoBox
         key={a.id}
-        className={cls}
-        data-testid={`annotation-mark-${a.id}`}
-        aria-label="Memo"
-        value={a.body ?? ""}
-        autoFocus={selected}
-        onChange={(e) => retextAnnotation(a.id, e.target.value, new Date().toISOString())}
-        onInput={(e) => {
-          // Auto-grow with content (Decision 1): expand past the preset min-height
-          // so a long note isn't clipped. No-op in jsdom (scrollHeight = 0).
-          const el = e.currentTarget;
-          el.style.height = "auto";
-          el.style.height = `${el.scrollHeight}px`;
-        }}
-        onPointerEnter={() => setHovered(a.id)}
-        onPointerLeave={() => setHovered(null)}
-        onClick={() => select(a.id)}
-        style={{
-          left: pos.left,
-          top: pos.top,
-          width: pos.width,
-          minHeight: pos.height,
-          borderColor: `var(--color-${a.style.color})`,
-        }}
+        anno={a}
+        pos={denormalizeRect(a.anchor.rect, box, scale)}
+        cls={cls}
+        selected={selected}
+        onRetext={(id, body) => retextAnnotation(id, body, new Date().toISOString())}
+        onSelect={select}
+        onHover={setHovered}
+        onClearSelection={clearSelection}
       />
     );
   };

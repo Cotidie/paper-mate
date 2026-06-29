@@ -28,7 +28,7 @@ import {
   pickPage,
   type PageCardRef,
 } from "../anchor";
-import { useAnnotationStore, type MemoSize } from "../store";
+import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "../store";
 import { newId } from "../uuid";
 import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation } from "./create";
 import { strokeOutline, svgPathFromOutline, type StrokeInputPoint } from "./pen";
@@ -666,6 +666,23 @@ export default function AnnotationInteraction({
     return { x: 0, y: 0 };
   };
 
+  // The size step the memo size picker shows ARMED: the SELECTED memo's OWN size
+  // (its rect, the single source per AD-5), NOT the session default — otherwise an
+  // older memo shows the wrong step after the default changed (Codex LOW). Convert
+  // the rect width back to scale-1.0 px against the memo's page box and match the
+  // nearest preset; fall back to the active default when the page isn't resolvable.
+  const selectedMemoSize = (): MemoSize => {
+    if (!selectedAnno || selectedAnno.anchor.kind !== "rect") return activeMemoSize;
+    const page = getPagesRef.current().find((p) => p.pageIndex === selectedAnno.anchor.page_index);
+    if (!page || page.box.width <= 0) return activeMemoSize;
+    const widthPx = (selectedAnno.anchor.rect.x1 - selectedAnno.anchor.rect.x0) * page.box.width;
+    let best = MEMO_SIZES[0];
+    for (const s of MEMO_SIZES) {
+      if (Math.abs(s.width - widthPx) < Math.abs(best.width - widthPx)) best = s;
+    }
+    return best;
+  };
+
   // Focus moves INTO the selection box on open and RETURNS to the prior element
   // on close (same accessibility floor as the create box). Also nudges the box
   // on-screen once measured. Focus only on the OPEN transition (guarded by
@@ -761,7 +778,7 @@ export default function AnnotationInteraction({
           )}
           {/* A memo gets the collapsible size row (resize), armed to the session
               default (memos store size as their rect, not a style field). */}
-          {isMemoSelected && <SizeRow value={activeMemoSize} onPick={resizeSelected} />}
+          {isMemoSelected && <SizeRow value={selectedMemoSize()} onPick={resizeSelected} />}
           <span className="quick-box__divider" aria-hidden="true" />
           <button
             type="button"

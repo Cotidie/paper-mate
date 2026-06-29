@@ -910,6 +910,24 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     expect(useAnnotationStore.getState().annotations.get("m1")!.style.color).toBe("annotation-blue");
   });
 
+  it("the size picker shows the SELECTED memo's own size, not the session default (Codex LOW)", async () => {
+    // A memo sized to the SMALL preset (160px on a 600-wide box → frac 0.2667).
+    const smallMemo: Annotation = {
+      ...memoMark("m1"),
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.1 + 160 / 600, y1: 0.3 } },
+    };
+    useAnnotationStore.getState().addAnnotation(smallMemo);
+    // Session default is LARGE — the picker must still show SMALL armed for this memo.
+    useAnnotationStore.getState().setActiveMemoSize(MEMO_SIZES.find((s) => s.key === "large")!);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("memo-size-trigger"));
+    expect(screen.getByTestId("memo-size-small").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByTestId("memo-size-large").getAttribute("aria-checked")).toBe("false");
+  });
+
   it("Del deletes the selected memo", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
     const pages = [fakeCard(0, 0)];

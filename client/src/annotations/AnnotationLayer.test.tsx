@@ -303,6 +303,18 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--hovered");
   });
 
+  it("Esc inside the memo textarea blurs + clears the selection (Codex MED)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    const mark = screen.getByTestId("annotation-mark-m1") as HTMLTextAreaElement;
+    mark.focus();
+    fireEvent.keyDown(mark, { key: "Escape" });
+    // Selection cleared; the (non-empty) memo survives.
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
+  });
+
   it("does not render the memos group when there are no memo marks", () => {
     useAnnotationStore.getState().addAnnotation(textMark("h1", 0));
     const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
