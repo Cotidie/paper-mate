@@ -119,7 +119,11 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
       const next = new Map(state.annotations);
       for (const id of ids) {
         const a = next.get(id);
-        if (a) next.set(id, { ...a, style: { ...a.style, stroke_width: width }, updated_at: now });
+        // stroke_width is path-only style (AR-5): never write it onto a text/region
+        // mark, even if a stale id is passed (Codex MED).
+        if (a && a.anchor.kind === "path") {
+          next.set(id, { ...a, style: { ...a.style, stroke_width: width }, updated_at: now });
+        }
       }
       return { annotations: next };
     }),

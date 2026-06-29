@@ -224,8 +224,10 @@ export default function AnnotationInteraction({
     const onDown = (e: PointerEvent) => {
       if (armedToolRef.current !== "pen" || e.button !== 0 || isExempt(e.target)) return;
       const el = e.target as Element | null;
-      // Only start over a page; ignore clicks on chrome / the quick-box.
-      if (!el?.closest?.(".pdf-canvas") || el.closest?.(".quick-box")) return;
+      // Only start over an actual page CARD (not the gutter/margin/chrome or the
+      // quick-box): a draft over empty canvas would show a preview + suppress
+      // default, then drop the mark on release (pickPage = -1). Require a page.
+      if (!el?.closest?.(".page-surface") || el.closest?.(".quick-box")) return;
       penDrawingRef.current = true;
       penDraftRef.current = [{ x: e.clientX, y: e.clientY }];
       setPenPreview([{ x: e.clientX, y: e.clientY }]);
@@ -253,6 +255,9 @@ export default function AnnotationInteraction({
       const pts = penDraftRef.current;
       penDraftRef.current = [];
       setPenPreview(null);
+      // Inverse path (Codex HIGH): if the pen was disarmed mid-drag (V/Esc → tool
+      // switch), do NOT persist a stroke after pen is no longer the armed tool.
+      if (armedToolRef.current !== "pen") return;
       // A click with no real drag (< 2 points) makes no mark.
       if (pts.length < 2) return;
       const pages = getPagesRef.current();
@@ -293,6 +298,18 @@ export default function AnnotationInteraction({
       window.removeEventListener("blur", abort);
     };
   }, [enabled, docId, addAnnotation, select]);
+
+  // Abort an in-progress pen draft the moment the pen tool is switched away (V/Esc
+  // or another tool) — so a stranded draft can't keep a stale preview on screen and
+  // the next pointerup can't persist a mark after disarm (Codex HIGH; the twin of
+  // the Reader's canPan tear-down). Pure cleanup of the draft state.
+  useEffect(() => {
+    if (armedTool !== "pen" && penDrawingRef.current) {
+      penDrawingRef.current = false;
+      penDraftRef.current = [];
+      setPenPreview(null);
+    }
+  }, [armedTool]);
 
   // Dismiss the quick-box AND clear the browser selection. Clearing is required:
   // otherwise the still-live selection is re-read by the global pointerup handler

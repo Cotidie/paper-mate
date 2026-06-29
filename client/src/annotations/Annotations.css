@@ -249,6 +249,23 @@
   border-radius: var(--radius-pill);
 }
 
+/* Dot diameter previews the stroke weight; sizes come from the --pen-stroke-*
+   token layer (no raw px in the component, Codex MED). */
+.stroke-width-step__dot--thin {
+  width: var(--pen-stroke-thin);
+  height: var(--pen-stroke-thin);
+}
+
+.stroke-width-step__dot--medium {
+  width: var(--pen-stroke-medium);
+  height: var(--pen-stroke-medium);
+}
+
+.stroke-width-step__dot--thick {
+  width: var(--pen-stroke-thick);
+  height: var(--pen-stroke-thick);
+}
+
 .stroke-width-step--armed {
   outline: var(--color-swatch-ring-width) solid var(--color-ink);
   outline-offset: var(--color-swatch-ring-offset);

@@ -264,6 +264,9 @@
 .pdf-canvas[data-draw] {
   cursor: crosshair;
   user-select: none;
+  /* Suppress browser touch panning/zoom so a touch/stylus freehand drag draws the
+     stroke instead of scrolling or being cancelled (Codex HIGH). */
+  touch-action: none;
 }
 
 /* toc-panel: the table-of-contents overlay (Story 1.9). A right-edge floating

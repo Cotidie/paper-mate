@@ -4,7 +4,7 @@ baseline_commit: a1887e070d90ed9e3fb370b6de50b7395b42cc54
 
 # Story 2.8: Pen / freehand
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -360,6 +360,25 @@ the live geometry risk (stroke shape + zoom-thickening) was verified at DPR>1.
 - .bmad/implementation-artifacts/2-8-pen-freehand.md (this story)
 - .bmad/implementation-artifacts/sprint-status.yaml (status tracking)
 
+## Code Review (cross-model: Codex via `codex exec --sandbox read-only`)
+
+Ran the BMad code-review method (Blind Hunter / Edge Case Hunter / Acceptance
+Auditor, merged) through `codex exec --sandbox read-only` against `a1887e07..HEAD`.
+No BLOCKER. Verdict: Changes-Requested. All 6 findings triaged as PATCH (none
+decision-needed, none deferred) and fixed:
+
+### Review Findings
+
+- [x] [Review][Patch] HIGH — disarm mid-drag could still persist a stroke [client/src/annotations/AnnotationInteraction.tsx]. Switching tool (V/Esc) mid-draft left the draft live, so a late `pointerup` persisted a pen mark after pen was no longer armed. Fixed: a disarm-abort effect clears the draft + preview the moment `armedTool !== "pen"`, and `onUp` re-guards `armedToolRef.current === "pen"` before finalizing. +1 regression test.
+- [x] [Review][Patch] HIGH — touch/stylus freehand could scroll instead of draw [client/src/App.css]. `data-draw` suppressed text selection but not browser touch panning. Fixed: added `touch-action: none` to `.pdf-canvas[data-draw]`.
+- [x] [Review][Patch] MED — `restrokeAnnotation` wrote `stroke_width` onto any mark, incl. text anchors (AR-5 path-only) [client/src/store/index.ts]. Fixed: guard `a.anchor.kind === "path"` before mutating.
+- [x] [Review][Patch] MED — `StrokeWidthRow` emitted raw `px` from component code (token-only-outside-theme spirit) [client/src/annotations/StrokeWidthRow.tsx]. Fixed: the dot size now comes from `--pen-stroke-*` via `.stroke-width-step__dot--{thin,medium,thick}` classes; no px literal in the component.
+- [x] [Review][Patch] LOW — a draft could start over the gutter/margin (inside `.pdf-canvas` but no page), showing a preview then dropping the mark on release (pickPage = -1) [client/src/annotations/AnnotationInteraction.tsx]. Fixed: the draft only starts when the pointerdown hits a `.page-surface`.
+- [x] [Review][Patch] LOW — `perfect-freehand` declared with a caret despite the AD-2 pin requirement [client/package.json]. Fixed: exact `"perfect-freehand": "1.2.3"` + lockfile resynced.
+
+Post-review: client 310 tests pass (+1), typecheck clean, server pytest 38 pass,
+tracked `schema.d.ts` byte-identical, `no-raw-values` green.
+
 ## Change Log
 
 - 2026-06-29: Story created (ready-for-dev) via bmad-create-story.
@@ -372,3 +391,8 @@ the live geometry risk (stroke shape + zoom-thickening) was verified at DPR>1.
   2.5 selection seam extended to recolor / restroke / delete a stroke. Client-only;
   tracked contract byte-identical. Live-smoked on own fresh servers incl. zoom-glue
   (×1.25 exact) + thickening at DPR 1.25. Version 0.1.4 → 0.1.5. Status → review.
+- 2026-06-29: Cross-model code review (Codex, read-only) over `a1887e07..HEAD`. No
+  BLOCKER; verdict Changes-Requested. Fixed all 6 findings (2 HIGH: disarm-mid-drag
+  abort + `touch-action:none`; 2 MED: restroke path-only guard + token-backed
+  stroke-width dots; 2 LOW: draft requires a page card + exact-pin perfect-freehand)
+  with +1 regression test. Client 310 pass, contract byte-identical. Status → done.

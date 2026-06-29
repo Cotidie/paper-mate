@@ -11,16 +11,19 @@
 import "./Annotations.css";
 
 interface Step {
-  /** Stroke diameter in scale-1.0 CSS px (mirrors --pen-stroke-*). */
+  /** Stroke diameter in scale-1.0 CSS px (the value stored on the mark). */
   width: number;
+  /** Token key — the dot size comes from `--pen-stroke-<key>` via a CSS class, so
+   *  no raw px lives in this component (the token layer owns the px). */
+  key: "thin" | "medium" | "thick";
   /** Accessible name + hover tooltip (no em-dash; plain word). */
   label: string;
 }
 
 const STEPS: Step[] = [
-  { width: 2, label: "Thin" },
-  { width: 4, label: "Medium" },
-  { width: 8, label: "Thick" },
+  { width: 2, key: "thin", label: "Thin" },
+  { width: 4, key: "medium", label: "Medium" },
+  { width: 8, key: "thick", label: "Thick" },
 ];
 
 export default function StrokeWidthRow({
@@ -50,11 +53,8 @@ export default function StrokeWidthRow({
           >
             {/* A black ink dot whose diameter previews the stroke weight. The CELL
                 is a uniform footprint (like the color swatch) so the dots align;
-                the dot grows per step. */}
-            <span
-              className="stroke-width-step__dot"
-              style={{ width: `${s.width}px`, height: `${s.width}px` }}
-            />
+                the dot size is the `--pen-stroke-<key>` token (no raw px here). */}
+            <span className={`stroke-width-step__dot stroke-width-step__dot--${s.key}`} />
           </button>
         );
       })}

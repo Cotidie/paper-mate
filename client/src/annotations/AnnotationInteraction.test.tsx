@@ -370,14 +370,18 @@ describe("AnnotationInteraction underline tool (Story 2.7 — AC1,2,3)", () => {
 });
 
 describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
-  /** A .pdf-canvas element so the pen pointerdown's closest() check passes (the
-   *  draw gesture only starts over a page, not on chrome). */
+  /** A .page-surface element (inside a .pdf-canvas) so the pen pointerdown's
+   *  closest(".page-surface") check passes — the draw gesture only starts over an
+   *  actual page CARD, not the gutter/chrome. */
   function canvasTarget(): HTMLElement {
-    const c = document.createElement("div");
-    c.className = "pdf-canvas";
-    document.body.appendChild(c);
-    stubNodes.push(c);
-    return c;
+    const canvas = document.createElement("div");
+    canvas.className = "pdf-canvas";
+    const surf = document.createElement("div");
+    surf.className = "page-surface";
+    canvas.appendChild(surf);
+    document.body.appendChild(canvas);
+    stubNodes.push(canvas);
+    return surf;
   }
 
   it("with pen armed, a pointer drag stores ONE kind=path mark and selects it", async () => {
@@ -462,6 +466,23 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
     fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
     fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("disarming pen mid-draft aborts the stroke: no mark + preview cleared on release (Codex HIGH)", () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    const { rerender } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />,
+    );
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    expect(screen.queryByTestId("pen-preview")).toBeTruthy();
+    // Tool switches away (V/Esc in App) → armedTool null mid-draft.
+    rerender(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool={null} />);
+    expect(screen.queryByTestId("pen-preview")).toBeNull(); // draft aborted, preview gone
+    // A late pointerup must NOT persist a stroke after disarm.
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    expect(useAnnotationStore.getState().all().filter((a) => a.type === "pen")).toHaveLength(0);
   });
 
   it("does not draw with a non-pen tool armed (the gesture is pen-gated)", () => {
