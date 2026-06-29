@@ -16,7 +16,7 @@ function mark(id: string, color: string, createdAt: string, groupId: string | nu
   };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null }));
+beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
 
 describe("annotation store (Story 2.2 + 2.3)", () => {
   it("addAnnotation keys by id; all() orders by created_at ascending", () => {

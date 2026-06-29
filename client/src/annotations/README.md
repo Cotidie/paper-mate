@@ -56,12 +56,18 @@ mark, decoupled from the create machine and the Epic-3 command stack:
 - The highlight marks are now pointer-interactive (Decision A): each mark rect IS
   the page-normalized anchor rect (`denormalizeRect`), so `pointer-events:auto` +
   `cursor:pointer` make it the hit surface. Hovering outlines the WHOLE annotation
-  (a per-layer transient `hoveredId`) and shows the pointer cursor (NOT the text
-  I-beam) — so you cannot start a new highlight over an existing one. Clicking
-  selects it (a `--selected` ring, stronger than the hover outline). Recent-wins:
-  marks render sorted by `created_at` ascending (newest on top wins overlap). The
-  rest of the layer sheet stays `pointer-events:none`, so non-highlighted text
-  stays selectable (trade-off: you cannot text-select over a highlight).
+  and shows the pointer cursor (NOT the text I-beam) — so you cannot start a new
+  highlight over an existing one. Clicking selects it (a `--selected` ring,
+  stronger than the hover outline). Recent-wins: marks render sorted by
+  `created_at` ascending (newest on top wins overlap). The rest of the layer sheet
+  stays `pointer-events:none`, so non-highlighted text stays selectable (trade-off:
+  you cannot text-select over a highlight).
+- Hover AND selection are GROUP-AWARE and both live in the store (`hoveredId` +
+  `selectedId`). A two-page highlight is two annotations in two per-page layers, so
+  each layer reads the shared ids and lights any mark that matches by id OR shares
+  a non-null `group_id` (`inActiveGroup`) — both pages outline on hover and ring on
+  select as one. Hover is store state (not per-layer `useState`) precisely so the
+  sibling on the other page's layer sees it.
 - The selection quick-box is a SEPARATE render path off `selectedId` (Decision B,
   NOT `machine.ts`): it reuses `ColorSwatchRow` (armed to the mark's current
   color → `store.recolorAnnotation`, reused from 2.3) + a Delete action, reusing

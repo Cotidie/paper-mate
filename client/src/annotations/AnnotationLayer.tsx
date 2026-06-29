@@ -8,17 +8,31 @@
 // Story 2.5: the highlight marks become pointer-interactive (the selection hit
 // surface, AD-12 Decision A). Each mark rect IS the page-normalized anchor rect
 // (positioned by `denormalizeRect`), so `pointer-events:auto` + `cursor:pointer`
-// turn it into the hit target: hovering outlines the WHOLE annotation (a per-
-// layer transient `hoveredId`), clicking selects it (store `select`), and the
-// `selectedId` mark shows a persistent ring. Recent-wins: marks render sorted by
-// `created_at` ascending so the newest paints last (on top) and wins on overlap.
-// The rest of the layer sheet stays `pointer-events:none` so non-highlighted
-// text stays selectable (NFR-1).
+// turn it into the hit target: hovering outlines the WHOLE annotation, clicking
+// selects it (store `select`), and the selected mark shows a persistent ring.
+// Recent-wins: marks render sorted by `created_at` ascending so the newest paints
+// last (on top) and wins on overlap. The rest of the layer sheet stays
+// `pointer-events:none` so non-highlighted text stays selectable (NFR-1).
+//
+// Hover AND selection are GROUP-AWARE and live in the store: a two-page highlight
+// is two annotations in two per-page layers, so each layer reads the shared
+// `hoveredId`/`selectedId` and lights any mark that matches by id OR shares a
+// non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
 
-import { useState } from "react";
+import type { Annotation } from "../api/client";
 import { useAnnotationStore } from "../store";
 import { denormalizeRect, type PageBox } from "../anchor";
 import "./Annotations.css";
+
+/** Is `a` part of the active set named by `activeId`? True when it IS that mark,
+ *  or shares a non-null `group_id` with it — so a two-page highlight's sibling on
+ *  another page lights together (hover outline + selected ring). */
+function inActiveGroup(a: Annotation, activeId: string | null, all: Map<string, Annotation>): boolean {
+  if (!activeId) return false;
+  if (a.id === activeId) return true;
+  const active = all.get(activeId);
+  return active != null && active.group_id != null && active.group_id === a.group_id;
+}
 
 export default function AnnotationLayer({
   docId,
@@ -43,14 +57,12 @@ export default function AnnotationLayer({
   // pointer on overlap, matching the opacity-group "topmost wins on shared text".
   const annotations = useAnnotationStore((s) => s.annotations);
   const selectedId = useAnnotationStore((s) => s.selectedId);
+  const hoveredId = useAnnotationStore((s) => s.hoveredId);
   const select = useAnnotationStore((s) => s.select);
+  const setHovered = useAnnotationStore((s) => s.setHovered);
   const marks = [...annotations.values()]
     .filter((a) => a.doc_id === docId && a.anchor.page_index === pageIndex)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
-
-  // Transient hover state — local to this layer, never written to the store
-  // (selection is the store's job). Outlines the WHOLE hovered annotation.
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   return (
     // The layer sheet stays decorative (aria-hidden): the marks duplicate the
@@ -69,8 +81,8 @@ export default function AnnotationLayer({
           // Render off the anchor KIND, not the annotation type. Story 2.2 paints
           // the `text` kind (highlight); rect/path kinds arrive in 2.6–2.10.
           if (a.anchor.kind !== "text") return null;
-          const hovered = a.id === hoveredId;
-          const selected = a.id === selectedId;
+          const hovered = inActiveGroup(a, hoveredId, annotations);
+          const selected = inActiveGroup(a, selectedId, annotations);
           const cls =
             "annotation-highlight" +
             (hovered ? " annotation-highlight--hovered" : "") +
@@ -82,8 +94,8 @@ export default function AnnotationLayer({
                 key={`${a.id}-${i}`}
                 className={cls}
                 data-testid={`annotation-mark-${a.id}`}
-                onPointerEnter={() => setHoveredId(a.id)}
-                onPointerLeave={() => setHoveredId((h) => (h === a.id ? null : h))}
+                onPointerEnter={() => setHovered(a.id)}
+                onPointerLeave={() => setHovered(null)}
                 onClick={() => select(a.id)}
                 style={{
                   left: pos.left,

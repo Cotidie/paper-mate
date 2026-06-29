@@ -37,7 +37,7 @@ function stubSelection(rects: { left: number; top: number; right: number; bottom
   return { removeAllRanges };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null }));
+beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
