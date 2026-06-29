@@ -4,7 +4,7 @@ baseline_commit: 43b54ce560e2e53000b0f71964470b2acf3c67a2
 
 # Story 2.6: Arm-time color quick-pick (highlight sub-toolbox) + 5-color palette
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
