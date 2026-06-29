@@ -22,6 +22,14 @@
   isolation: isolate;
 }
 
+/* The underline group: full opacity (a crisp 2px line, unlike the 0.4-opacity
+   highlight group). Same absolutely-positioned, pointer-transparent sheet; the
+   underline marks opt back into pointer events via .annotation-highlight. */
+.annotation-underlines {
+  position: absolute;
+  inset: 0;
+}
+
 .annotation-highlight {
   position: absolute;
   /* Opaque: the .annotation-highlights group carries the opacity, so overlaps
@@ -49,6 +57,16 @@
 .annotation-highlight--selected {
   outline: var(--focus-ring-width) solid var(--color-ink);
   outline-offset: var(--color-swatch-ring-offset);
+}
+
+/* Underline paint variant (style-on-type, AD-5): no fill, just a 2px accent line
+   under the run. The border COLOR comes from the mark's style.color (inline, like
+   the highlight fill); this rule supplies width + position only. The full rect
+   stays the hit/hover/select surface (the base .annotation-highlight rules). */
+.annotation-highlight--underline {
+  background-color: transparent;
+  border-radius: 0;
+  border-bottom: var(--annotation-underline-width) solid;
 }
 
 /* quick-box: floating popup at the drag-release point. position:fixed keeps it

@@ -140,15 +140,19 @@ export default function AnnotationInteraction({
         rectReaderRef.current,
       );
       if (pages.length === 0) return;
-      if (armedToolRef.current === "highlight") {
-        // Create-on-release at the active color (Story 2.6 — chosen via the
-        // Highlight sub-toolbox, not a hardcode), then select the new mark: the
-        // selection quick-box recolors/deletes it (the whole group together).
-        // Clear the live text selection so it cannot re-pop on the next pointerup.
+      const tool = armedToolRef.current;
+      if (tool === "highlight" || tool === "underline") {
+        // Create-on-release for either text-anchor tool: same path, the tool's
+        // `type` is the only difference (highlight paints a fill, underline a 2px
+        // line — that branch lives in AnnotationLayer, keyed off `type` per AD-5).
+        // Color is the active color (Story 2.6 — chosen via the tool's color
+        // sub-toolbox, not a hardcode). Then select the new mark so the selection
+        // quick-box recolors/deletes it (the whole group together). Clear the live
+        // text selection so it cannot re-pop on the next pointerup.
         const created = buildAnnotations(pages, docId, {
           now: new Date().toISOString(),
           newId,
-          type: "highlight",
+          type: tool,
           color: activeColorRef.current,
         });
         created.forEach(addAnnotation);

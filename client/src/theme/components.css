@@ -95,6 +95,9 @@
   /* annotation-highlight: the default-color fill painted over a text run at
      reduced opacity (DESIGN.md components.annotation-highlight). */
   --annotation-highlight-opacity: 0.4;
+  /* annotation-underline: the 2px accent line painted under a text run
+     (DESIGN.md components.annotation-underline). */
+  --annotation-underline-width: 2px;
 
   /* shared chrome */
   --hairline-width: 1px;

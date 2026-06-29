@@ -4,6 +4,7 @@ import {
   Hand,
   Selection,
   Highlighter,
+  TextUnderline,
   CaretDoubleLeft,
   CaretDoubleRight,
   type Icon,
@@ -68,6 +69,7 @@ export default function ToolRail({
 
   const pointerActive = isPointerTool(activeTool);
   const highlightActive = activeTool === "highlight";
+  const underlineActive = activeTool === "underline";
 
   // ONE consistent mechanism (Story 2.6 refinement): switching to ANY tool opens
   // that tool's sub-toolbar by default. Detect a real CHANGE of `activeTool`
@@ -209,6 +211,43 @@ export default function ToolRail({
                 (= activeColor) shows the 2px ink ring. Picking sets the default
                 color for new marks and closes the flyout (pick-is-dismiss; color is
                 not a tool change, so the open-on-switch effect won't reopen). */}
+            <ColorSwatchRow
+              value={activeColor}
+              onPick={(token) => {
+                onPickColor(token);
+                setFlyoutOpen(false);
+              }}
+            />
+          </ToolFlyout>
+        )}
+      </div>
+
+      {/* Underline — twin of Highlight: a text-anchor color tool. Switching to it
+          arms in one click and opens its color sub-toolbox (the activeTool-change
+          effect); a click on the already-active button toggles it. Shares the one
+          `activeColor` with Highlight. */}
+      <div className="tool-rail__item">
+        <button
+          type="button"
+          className={
+            activeTool === "underline" ? "tool-button tool-button--armed" : "tool-button"
+          }
+          aria-label="Underline"
+          title="Underline (U)"
+          aria-pressed={activeTool === "underline"}
+          aria-haspopup="menu"
+          aria-expanded={underlineActive && flyoutOpen}
+          data-testid="tool-underline-button"
+          onClick={() => {
+            if (underlineActive) setFlyoutOpen((o) => !o);
+            else onSelectTool("underline");
+          }}
+        >
+          <TextUnderline aria-hidden />
+        </button>
+
+        {underlineActive && flyoutOpen && (
+          <ToolFlyout testId="underline-color-flyout">
             <ColorSwatchRow
               value={activeColor}
               onPick={(token) => {

@@ -103,6 +103,10 @@ export default function App() {
         // disarms whatever pointer/annotation tool was active (one tool active),
         // so a still-armed hand/box pan can't eat the highlight drag.
         setActiveTool("highlight");
+      } else if (e.key === "u" || e.key === "U") {
+        e.preventDefault();
+        // Arm underline (UX-DR15). Same single-field switch as highlight.
+        setActiveTool("underline");
       } else if (e.key === "[") {
         e.preventDefault();
         setRailCollapsed((c) => !c);

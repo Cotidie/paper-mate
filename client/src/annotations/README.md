@@ -97,6 +97,28 @@ mark, decoupled from the create machine and the Epic-3 command stack:
   a pointer affordance with document-level Del/Esc — a keyboard-reachable list
   comes with the Epic-3 Annotation Bank.
 
-Still later stories: underline/pen/memo/comment tools + box-select drag (2.6-2.11),
+Story 2.7 (underline tool) is the second tool, and mostly a PAINT variant of
+highlight — no new machinery:
+
+- The create path no longer hardcodes `type: "highlight"`. `AnnotationInteraction`'s
+  create-on-release fires for highlight OR underline and passes `type: armedTool`,
+  so a drag while underline is armed lands a `type=underline` mark through the SAME
+  text-anchor path (`rectsFromSelection` → `buildAnnotations`, incl. the two-page
+  `group_id` split) at the active color. The new mark is selected, so the same 2.5
+  selection quick-box (recolor + delete) takes over (no new quick-box).
+- Rendering follows AD-5 strictly: GEOMETRY keys off `anchor.kind` (shared by every
+  text tool), STYLE keys off `type`. `AnnotationLayer` splits marks into the
+  `.annotation-highlights` opacity group (highlights, ~0.4 fill) and a full-opacity
+  `.annotation-underlines` group (underlines). An underline mark keeps the
+  `.annotation-highlight` base class — so the 2.5 selection hit-test, hover outline,
+  and selected ring all work unchanged — plus an `.annotation-highlight--underline`
+  modifier that swaps the fill for a 2px accent `border-bottom` in the mark's own
+  `style.color` (width from `--annotation-underline-width`).
+- The rail has an Underline button (twin of Highlight) with its own color
+  sub-toolbox (reusing `ToolFlyout` + `ColorSwatchRow` + the shared `flyoutOpen` +
+  the open-on-tool-change effect); `U` arms it. Underline shares the one
+  `activeColor` with highlight.
+
+Still later stories: pen/memo/comment tools + box-select drag (2.8-2.11),
 the cursor-mode drag-to-change-tool picker (2.12), and editing/undo/persistence
 (Epic 3).

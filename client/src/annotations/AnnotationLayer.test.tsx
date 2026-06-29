@@ -146,6 +146,40 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(screen.getByTestId("annotation-mark-a1").className).not.toContain("annotation-highlight--selected");
   });
 
+  it("renders a type=underline mark in the underline group with the underline paint class (Story 2.7)", () => {
+    const u = { ...textMark("u1", 0), type: "underline" as const, style: { color: "annotation-green", stroke_width: null } };
+    useAnnotationStore.getState().addAnnotation(u);
+    useAnnotationStore.getState().addAnnotation(textMark("h1", 0)); // a highlight, for contrast
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+
+    const mark = screen.getByTestId("annotation-mark-u1");
+    // Style-on-type (AD-5): underline paints a line, not a fill.
+    expect(mark.className).toContain("annotation-highlight--underline");
+    expect(mark.style.borderBottomColor).toBe("var(--color-annotation-green)");
+    expect(mark.style.backgroundColor).toBe(""); // no fill
+    // It lives in the full-opacity underline group, NOT the 0.4 highlight group.
+    expect(container.querySelector(".annotation-underlines")!.contains(mark)).toBe(true);
+    expect(container.querySelector(".annotation-highlights")!.contains(mark)).toBe(false);
+    // The highlight is unchanged: fill, in the highlight group, no underline class.
+    const h = screen.getByTestId("annotation-mark-h1");
+    expect(h.className).not.toContain("annotation-highlight--underline");
+    expect(h.style.backgroundColor).toBe("var(--color-annotation-default)");
+    expect(container.querySelector(".annotation-highlights")!.contains(h)).toBe(true);
+  });
+
+  it("an underline mark keeps the 2.5 hit surface: click selects, hover/selected classes apply", () => {
+    const u = { ...textMark("u1", 0), type: "underline" as const };
+    useAnnotationStore.getState().addAnnotation(u);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const mark = screen.getByTestId("annotation-mark-u1");
+    fireEvent.click(mark);
+    expect(useAnnotationStore.getState().selectedId).toBe("u1");
+    act(() => useAnnotationStore.getState().select("u1"));
+    expect(screen.getByTestId("annotation-mark-u1").className).toContain("annotation-highlight--selected");
+    fireEvent.pointerEnter(screen.getByTestId("annotation-mark-u1"));
+    expect(screen.getByTestId("annotation-mark-u1").className).toContain("annotation-highlight--hovered");
+  });
+
   it("renders marks sorted by created_at (newest last in DOM, recent-wins)", () => {
     useAnnotationStore.getState().addAnnotation(textMark("late", 0, "doc-1", "2026-06-29T00:00:09+00:00"));
     useAnnotationStore.getState().addAnnotation(textMark("early", 0, "doc-1", "2026-06-29T00:00:01+00:00"));
