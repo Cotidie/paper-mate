@@ -227,6 +227,19 @@ function inActiveGroup(a: Annotation, activeId: string | null, all: Map<string, 
   return active != null && active.group_id != null && active.group_id === a.group_id;
 }
 
+/** Build a mark's class string from its base + hover/selected modifiers (Story 5.0:
+ *  the one helper for the hover/selected suffixing that was copy-pasted into all
+ *  five render funcs). `classList` is the full static class (may carry extra classes
+ *  like `annotation-region`/`--underline`); `modifierRoot` is the BEM root the
+ *  `--hovered`/`--selected` suffixes attach to (often a prefix of `classList`). */
+function markClass(classList: string, modifierRoot: string, hovered: boolean, selected: boolean): string {
+  return (
+    classList +
+    (hovered ? ` ${modifierRoot}--hovered` : "") +
+    (selected ? ` ${modifierRoot}--selected` : "")
+  );
+}
+
 export default function AnnotationLayer({
   docId,
   pageIndex,
@@ -306,6 +319,13 @@ export default function AnnotationLayer({
     return ids;
   };
 
+  // A mark's hover/selected state, group-aware (a two-page mark lights as one).
+  // The shared preamble every render func used to recompute inline (Story 5.0).
+  const markState = (a: Annotation) => ({
+    hovered: inActiveGroup(a, hoveredId, annotations),
+    selected: inActiveGroup(a, selectedId, annotations),
+  });
+
   // Render one region mark as a single positioned fill div (geometry-on-kind = rect,
   // style-on-type: both highlight and comment get the ~0.4 fill from the highlights
   // opacity group; the comment's pin is rendered separately in renderComment).
@@ -313,12 +333,8 @@ export default function AnnotationLayer({
   // and selected ring, so recolor/delete from the selection quick-box work for free.
   const renderRegion = (a: Annotation) => {
     if (a.anchor.kind !== "rect") return null;
-    const hovered = inActiveGroup(a, hoveredId, annotations);
-    const selected = inActiveGroup(a, selectedId, annotations);
-    const cls =
-      "annotation-highlight annotation-region" +
-      (hovered ? " annotation-highlight--hovered" : "") +
-      (selected ? " annotation-highlight--selected" : "");
+    const { hovered, selected } = markState(a);
+    const cls = markClass("annotation-highlight annotation-region", "annotation-highlight", hovered, selected);
     const pos = denormalizeRect(a.anchor.rect, box, scale);
     return (
       <div
@@ -345,13 +361,13 @@ export default function AnnotationLayer({
   // 2.5 selection hit-test / hover / selected ring work identically.
   const renderMark = (a: Annotation, underline: boolean) => {
     if (a.anchor.kind !== "text") return null;
-    const hovered = inActiveGroup(a, hoveredId, annotations);
-    const selected = inActiveGroup(a, selectedId, annotations);
-    const cls =
-      "annotation-highlight" +
-      (underline ? " annotation-highlight--underline" : "") +
-      (hovered ? " annotation-highlight--hovered" : "") +
-      (selected ? " annotation-highlight--selected" : "");
+    const { hovered, selected } = markState(a);
+    const cls = markClass(
+      "annotation-highlight" + (underline ? " annotation-highlight--underline" : ""),
+      "annotation-highlight",
+      hovered,
+      selected,
+    );
     return a.anchor.rects.map((r, i) => {
       const pos = denormalizeRect(r, box, scale);
       const paint = underline
@@ -379,12 +395,8 @@ export default function AnnotationLayer({
   // pointer events + hover/select handlers; hover/selected add an ink SVG stroke.
   const renderPen = (a: Annotation) => {
     if (a.anchor.kind !== "path") return null;
-    const hovered = inActiveGroup(a, hoveredId, annotations);
-    const selected = inActiveGroup(a, selectedId, annotations);
-    const cls =
-      "annotation-pen" +
-      (hovered ? " annotation-pen--hovered" : "") +
-      (selected ? " annotation-pen--selected" : "");
+    const { hovered, selected } = markState(a);
+    const cls = markClass("annotation-pen", "annotation-pen", hovered, selected);
     const pts = a.anchor.points.map((p) => denormalizePoint(p, box, scale));
     const width = (a.style.stroke_width ?? 0) * scale;
     const d = svgPathFromOutline(strokeOutline(pts, width));
@@ -413,12 +425,8 @@ export default function AnnotationLayer({
   // is the selected memo so a just-placed box is ready to type into.
   const renderMemo = (a: Annotation) => {
     if (a.anchor.kind !== "rect") return null;
-    const hovered = inActiveGroup(a, hoveredId, annotations);
-    const selected = inActiveGroup(a, selectedId, annotations);
-    const cls =
-      "annotation-memo" +
-      (hovered ? " annotation-memo--hovered" : "") +
-      (selected ? " annotation-memo--selected" : "");
+    const { hovered, selected } = markState(a);
+    const cls = markClass("annotation-memo", "annotation-memo", hovered, selected);
     return (
       <MemoBox
         key={a.id}
@@ -449,12 +457,8 @@ export default function AnnotationLayer({
       anchor = denormalizeRect(a.anchor.rect, box, scale);
     }
     if (!anchor) return null;
-    const hovered = inActiveGroup(a, hoveredId, annotations);
-    const selected = inActiveGroup(a, selectedId, annotations);
-    const cls =
-      "annotation-comment-pin" +
-      (hovered ? " annotation-comment-pin--hovered" : "") +
-      (selected ? " annotation-comment-pin--selected" : "");
+    const { hovered, selected } = markState(a);
+    const cls = markClass("annotation-comment-pin", "annotation-comment-pin", hovered, selected);
     return (
       <div key={a.id} className="annotation-comment" data-comment-id={a.id}>
         <button

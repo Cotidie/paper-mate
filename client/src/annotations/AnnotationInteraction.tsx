@@ -35,6 +35,7 @@ import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildComment
 import { strokeOutline, svgPathFromOutline, type StrokeInputPoint } from "./pen";
 import { clampToViewport } from "./position";
 import { initialOverlayState, overlayReducer, type AnnotationTool } from "./machine";
+import { quickBoxSpec } from "./marks";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";
@@ -936,15 +937,21 @@ export default function AnnotationInteraction({
   // A box needs anchor geometry to position against: a text mark with >=1 rect,
   // a pen path with >=1 point, or a memo/region rect (always present). A real mark
   // always has geometry.
-  const isPenSelected = selectedAnno?.anchor.kind === "path";
+  // A memo owns its own focus (its textarea autofocuses for typing), so the box
+  // must not steal focus to the first swatch on open — the focus effect checks this.
   const isMemoSelected = selectedAnno?.anchor.kind === "rect" && selectedAnno.type === "memo";
+  // Story 5.0: the selected mark's quick-box capability comes from the descriptor
+  // registry (one source per tool), replacing the inline `isPen`/`isMemo`/comment
+  // booleans that drove the rows + aria-label + the comment-exclusion gate.
+  const selectedSpec = selectedAnno ? quickBoxSpec(selectedAnno) : null;
   // A COMMENT shows the comment-bubble (in AnnotationLayer), NOT the generic
   // selection quick-box (UX-DR5: comment mode → bubble directly; Decision 4). So
-  // the shared box is gated to exclude `type === "comment"` — both kinds.
+  // the shared box is gated off when the descriptor routes to the bubble.
   const showSelectionBox =
     selectionBoxOpen &&
     selectedAnno !== null &&
-    selectedAnno.type !== "comment" &&
+    selectedSpec !== null &&
+    !selectedSpec.usesBubble &&
     ((selectedAnno.anchor.kind === "text" && selectedAnno.anchor.rects.length > 0) ||
       (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0) ||
       selectedAnno.anchor.kind === "rect");
@@ -1149,12 +1156,12 @@ export default function AnnotationInteraction({
         </div>
       )}
 
-      {showSelectionBox && selectedAnno && (
+      {showSelectionBox && selectedAnno && selectedSpec && (
         <div
           ref={selectionBoxRef}
           className="quick-box"
           role="menu"
-          aria-label={isMemoSelected ? "Memo actions" : isPenSelected ? "Pen actions" : "Highlight actions"}
+          aria-label={selectedSpec.ariaLabel}
           data-testid="selection-quick-box"
           style={{ left: selInit.x, top: selInit.y }}
         >
@@ -1162,19 +1169,16 @@ export default function AnnotationInteraction({
               the row shows the mark's CURRENT color armed. For a memo it tints the
               box accent (border). */}
           <ColorSwatchRow value={selectedAnno.style.color} onPick={recolorSelected} />
-          {/* A pen mark also gets the stroke-width row (restroke), armed to its
-              current width. Text marks (highlight/underline) have no width. */}
-          {isPenSelected && (
+          {/* Rows come from the mark's descriptor (Story 5.0): pen → stroke-width +
+              alpha, memo → size, text marks → none. Armed to each mark's current
+              value (memos store size as their rect, not a style field). */}
+          {selectedSpec.strokeWidth && (
             <StrokeWidthRow value={selectedAnno.style.stroke_width ?? activeStrokeWidth} onPick={restrokeSelected} />
           )}
-          {/* A pen mark also gets the alpha row (realpha), armed to its current
-              transparency (Story 2.13). Slots right after the stroke-width row. */}
-          {isPenSelected && (
+          {selectedSpec.alpha && (
             <AlphaRow value={selectedAnno.style.alpha ?? activeAlpha} onPick={realphaSelected} />
           )}
-          {/* A memo gets the collapsible size row (resize), armed to the session
-              default (memos store size as their rect, not a style field). */}
-          {isMemoSelected && <SizeRow value={selectedMemoSize()} onPick={resizeSelected} />}
+          {selectedSpec.size && <SizeRow value={selectedMemoSize()} onPick={resizeSelected} />}
           <span className="quick-box__divider" aria-hidden="true" />
           <button
             type="button"

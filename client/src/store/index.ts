@@ -128,6 +128,30 @@ export interface AnnotationStore {
   all: () => Annotation[];
 }
 
+/** Apply a per-id patch across a set of annotations, returning a fresh Map (so
+ *  Zustand re-renders). For each id present in the map, `apply` either returns the
+ *  next annotation (which the helper stamps with `updated_at`) or `null` to skip it
+ *  (a failed kind/type guard, e.g. restroke on a non-pen mark — the mark is left
+ *  untouched, not bumped). Unknown ids are ignored. This is the shared shape of the
+ *  creation-time restyle/resize twins (recolor/restroke/realpha/resize); retext and
+ *  delete keep their own shapes (single-id early-return / group-gather). Story 5.0:
+ *  consolidates the five near-identical guard-then-map `set()` blocks into one. */
+function patchAnnotations(
+  annotations: Map<string, Annotation>,
+  ids: string[],
+  now: string,
+  apply: (a: Annotation) => Annotation | null,
+): Map<string, Annotation> {
+  const next = new Map(annotations);
+  for (const id of ids) {
+    const a = next.get(id);
+    if (!a) continue;
+    const updated = apply(a);
+    if (updated) next.set(id, { ...updated, updated_at: now });
+  }
+  return next;
+}
+
 export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
   annotations: new Map(),
   selectedId: null,
@@ -171,40 +195,30 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
       return { annotations: next };
     }),
   recolorAnnotation: (ids, color, now) =>
-    set((state) => {
-      const next = new Map(state.annotations);
-      for (const id of ids) {
-        const a = next.get(id);
-        if (a) next.set(id, { ...a, style: { ...a.style, color }, updated_at: now });
-      }
-      return { annotations: next };
-    }),
+    set((state) => ({
+      // Recolor has no kind guard — every mark type carries a color.
+      annotations: patchAnnotations(state.annotations, ids, now, (a) => ({
+        ...a,
+        style: { ...a.style, color },
+      })),
+    })),
   restrokeAnnotation: (ids, width, now) =>
-    set((state) => {
-      const next = new Map(state.annotations);
-      for (const id of ids) {
-        const a = next.get(id);
-        // stroke_width is path-only style (AR-5): never write it onto a text/region
-        // mark, even if a stale id is passed (Codex MED).
-        if (a && a.anchor.kind === "path") {
-          next.set(id, { ...a, style: { ...a.style, stroke_width: width }, updated_at: now });
-        }
-      }
-      return { annotations: next };
-    }),
+    set((state) => ({
+      // stroke_width is path-only style (AR-5): never write it onto a text/region
+      // mark, even if a stale id is passed (Codex MED). The guard returns null
+      // (skip, no updated_at bump) for a non-path mark.
+      annotations: patchAnnotations(state.annotations, ids, now, (a) =>
+        a.anchor.kind === "path" ? { ...a, style: { ...a.style, stroke_width: width } } : null,
+      ),
+    })),
   realphaAnnotation: (ids, alpha, now) =>
-    set((state) => {
-      const next = new Map(state.annotations);
-      for (const id of ids) {
-        const a = next.get(id);
-        // alpha is path-only style (AR-5): never write it onto a text/region
-        // mark, even if a stale id is passed.
-        if (a && a.anchor.kind === "path") {
-          next.set(id, { ...a, style: { ...a.style, alpha }, updated_at: now });
-        }
-      }
-      return { annotations: next };
-    }),
+    set((state) => ({
+      // alpha is path-only style (AR-5): never write it onto a text/region mark,
+      // even if a stale id is passed. Guard skips a non-path mark untouched.
+      annotations: patchAnnotations(state.annotations, ids, now, (a) =>
+        a.anchor.kind === "path" ? { ...a, style: { ...a.style, alpha } } : null,
+      ),
+    })),
   retextAnnotation: (id, body, now) =>
     set((state) => {
       const a = state.annotations.get(id);
@@ -214,20 +228,17 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
       return { annotations: next };
     }),
   resizeMemoAnnotation: (ids, size, now) =>
-    set((state) => {
-      const next = new Map(state.annotations);
-      for (const id of ids) {
-        const a = next.get(id);
-        // Size is memo-only geometry (AR-5): only a rect-anchored memo has a box
-        // to regrow, even if a stale text/path id is passed.
-        if (a && a.anchor.kind === "rect" && a.type === "memo") {
-          const { x0, y0 } = a.anchor.rect;
-          const rect = { x0, y0, x1: Math.min(1, x0 + size.w), y1: Math.min(1, y0 + size.h) };
-          next.set(id, { ...a, anchor: { ...a.anchor, rect }, updated_at: now });
-        }
-      }
-      return { annotations: next };
-    }),
+    set((state) => ({
+      // Size is memo-only geometry (AR-5): only a rect-anchored memo has a box to
+      // regrow, even if a stale text/path id is passed. Guard skips others; the
+      // top-left anchor is kept and the rect regrown, clamped to the page (<=1).
+      annotations: patchAnnotations(state.annotations, ids, now, (a) => {
+        if (a.anchor.kind !== "rect" || a.type !== "memo") return null;
+        const { x0, y0 } = a.anchor.rect;
+        const rect = { x0, y0, x1: Math.min(1, x0 + size.w), y1: Math.min(1, y0 + size.h) };
+        return { ...a, anchor: { ...a.anchor, rect } };
+      }),
+    })),
   all: () =>
     [...get().annotations.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)),
 }));

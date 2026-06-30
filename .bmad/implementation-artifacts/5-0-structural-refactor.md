@@ -34,11 +34,17 @@ so that adding a tool or an edit is one registration, not edits across five `if`
   - [x] ~~Replace the `activeColor`/… fields + setters in `store/index.ts` with one object~~ Consolidate the `active*Ref` mirrors in `AnnotationInteraction.tsx` into one `defaultsRef` object. **Store/App/ToolRail public `active*` API kept (Option 1, user decision):** consolidating the store-public fields forces rewriting direct assertions in `store/index.test.ts`, which the "tests change by import-path only" guardrail forbids. Store-public-API consolidation deferred out of 5.0 (Story 5.2 reshapes that surface per-tool anyway). See Completion Notes.
   - [x] Route bare point/rect literals through the existing `anchor/` `Point`/`Rect` helpers; no new geometry math (adopt-stable, AP-4). → merged the three identical `{page_index, rect}` placements (`MemoPlacement`/`CommentPinPlacement`/`RegionPlacement`) into one `RectPlacement`; placements/strokes keep the contract `Rect`/`Point` types; no new math.
   - [x] Suite green, contract byte-identical, typecheck clean. PR 1. → 415 client tests green (unchanged), typecheck clean, `git diff --stat` on openapi.json + schema.d.ts empty.
-- [ ] **Task 2 — Per-kind/per-tool descriptor registry (AC: #1).**
-  - [ ] Define a descriptor interface keyed on `anchor.kind` + `type` (e.g. `{ kind, type, build, render, quickBoxRows, hitSelector }`); one entry per tool.
-  - [ ] Route `create.ts` (the 5 `build*`), `AnnotationLayer` (the 6 group filters + 5 `render*`), the `store` mutation twins (`recolor`/`restroke`/`realpha`/`retext`/`resize`/`retype`/`delete` guard-then-map blocks), and `AnnotationInteraction`'s `pointerup` create branch through the registry. Delete the now-dead twins.
-  - [ ] Keep each store action's SHAPE a direct mutation (do NOT wrap in a command stack — zundo/commands are Epic 3 Story 3.2; 5.0 only consolidates, so 3.1/3.2 can wrap one clean seam, AE-1/AE-3).
-  - [ ] Suite green, contract byte-identical. PR 2.
+- [x] **Task 2 — Per-kind/per-tool descriptor registry (AC: #1).**
+  - [x] Define a descriptor interface keyed on `anchor.kind` + `type`; one entry per tool. → `annotations/marks.ts`: `MARK_DESCRIPTORS: Record<AnnotationTool, MarkDescriptor>` (`{ type, kind, quickBox }`), AD-9-clean (imports only `api/` + `tools.ts`). `quickBoxSpec(anno)` is the single source for the selection quick-box's rows + aria-label + bubble routing.
+  - [x] Route the consolidatable sites through the registry / a shared helper:
+    - **store mutation twins** → one `patchAnnotations(map, ids, now, apply)` combinator (recolor/restroke/realpha/resizeMemo); `retext` (single-id early-return) + `delete` (group-gather) keep their distinct shapes. The five near-twin guard-then-map `set()` blocks are gone.
+    - **`AnnotationInteraction` per-tool quick-box branches** → `quickBoxSpec(selectedAnno)` drives the rows (`strokeWidth`/`alpha`/`size`), the aria-label, and the comment→bubble exclusion. The inline `isPenSelected`/`type === "comment"` booleans are gone (`isMemoSelected` kept: the focus effect needs it).
+    - **`AnnotationLayer` 5 render funcs** → the copy-pasted hover/selected/`cls` preamble is extracted to `markState(a)` + a pure `markClass(classList, modifierRoot, hovered, selected)`. Class strings byte-identical.
+  - [x] **Scope calls (behavior-byte-identical bar wins over AC-1's letter; story permits "final shape is the dev's call" + "leave a clean seam, don't implement"):**
+    - `create.ts` build dispatch NOT forced behind the registry: the five builders have heterogeneous inputs (`PageSelection[]` → `Annotation[]` vs `PenStroke`/`RectPlacement` → one `Annotation`); a uniform `build()` would need an input union + return normalization = MORE indirection, not less. Task 1 already consolidated their shared CONTRACTS, which is the real win.
+    - `AnnotationLayer` opacity-group DOM containers + kind/type group filters KEPT: they encode COMPOSITING (the isolated highlight opacity group) + the comment DUAL-render (a text comment paints in the fill group AND the pin group), not a clean (kind,type)→render partition. Collapsing them into one render table would change paint behavior. `marks.ts` is the clean seam for the future cross-type hit-layer (deferred-work) without restructuring the DOM.
+  - [x] Each store action's SHAPE stays a direct mutation (no command stack — zundo is Epic 3 Story 3.2; 5.0 leaves one clean seam, AE-1/AE-3).
+  - [x] Suite green (422: 415 baseline unchanged + 7 new `marks.test.ts`), contract byte-identical, typecheck clean. PR 2.
 - [ ] **Task 3 — Overlay FSM consolidation (AC: #3).** Highest behavioral risk; do after the registry.
   - [ ] Extend `machine.ts` to own the full overlay lifecycle (armed → annotating → pending → selected → editing → dismissed, plus pen-draft and memo/comment edit sub-states).
   - [ ] Migrate the `AnnotationInteraction` state islands (`selectionBoxOpen`, `penDraftRef`/`penPreview`, `boxDrawingRef`/`boxPreview`, `commentDownRef`, dismiss/Esc effects) into named transitions. Preserve EVERY current behavior exactly (see "What must NOT change").
@@ -119,6 +125,8 @@ claude-opus-4-8 (Claude Code, bmad-dev-story).
 ### Debug Log References
 
 - Baseline (commit `b45880f`): client 415 tests / 27 files green; server 43 tests green; contract (`openapi.json` + `schema.d.ts`) byte-clean.
+- Observed flake (NOT introduced by this story): `Reader.test.tsx > zooms on Ctrl+wheel even when the pointer is off the canvas` failed once in a full parallel run, passed in isolation (26/26) and in 2/2 subsequent full runs. Pre-existing test-isolation sensitivity in that wheel test; this story touches zero Reader/render code and the annotations document-listener set is unchanged. Left as-is (out of scope for a refactor).
+- Note: run the client suite as `npm test` from `client/` (loads `vite.config.ts` → jsdom). `npx vitest run <paths>` from `client/src` runs WITHOUT the config → `document is not defined` false failures.
 
 ### Completion Notes List
 
@@ -126,11 +134,18 @@ claude-opus-4-8 (Claude Code, bmad-dev-story).
 
 **Task 1 (PR 1) — Data contracts.** `create.ts`: five `Build*Options` interfaces → `CreateBase` (now/newId/color) + `TextCreateRequest`/`PenCreateRequest` extensions; three identical `{page_index, rect}` placements → one `RectPlacement`. Builder bodies byte-identical (same `Annotation` shape). `AnnotationInteraction.tsx`: four `active*Ref` scalar mirrors → one `defaultsRef` object (same values, same per-render refresh). No behavior/contract change. Verified: typecheck clean, 415 client tests green (unchanged), contract diff empty.
 
+**Task 2 (PR 2) — Descriptor registry + dedup.** Added `annotations/marks.ts` (`MARK_DESCRIPTORS` + `quickBoxSpec`) as the single per-mark dispatch source. `store/index.ts`: five guard-then-map twins → one `patchAnnotations` combinator (recolor/restroke/realpha/resizeMemo; retext+delete keep distinct shapes). `AnnotationInteraction.tsx`: quick-box rows + aria-label + bubble-exclusion now read `quickBoxSpec`. `AnnotationLayer.tsx`: 5 render-func preambles → `markState` + `markClass` (class strings byte-identical). create-build registry + layer opacity-group DOM intentionally NOT collapsed (see Tasks/Subtasks scope calls). Verified: typecheck clean, 422 client tests green (415 unchanged + 7 new), contract diff empty.
+
 ### File List
 
-- `client/src/annotations/create.ts` (modified — contract consolidation)
-- `client/src/annotations/AnnotationInteraction.tsx` (modified — `defaultsRef` consolidation)
+- `client/src/annotations/create.ts` (modified — Task 1 contract consolidation)
+- `client/src/annotations/AnnotationInteraction.tsx` (modified — Task 1 `defaultsRef`; Task 2 `quickBoxSpec` wiring)
+- `client/src/store/index.ts` (modified — Task 2 `patchAnnotations` combinator)
+- `client/src/annotations/AnnotationLayer.tsx` (modified — Task 2 `markState`/`markClass` dedup)
+- `client/src/annotations/marks.ts` (new — descriptor registry)
+- `client/src/annotations/marks.test.ts` (new — registry unit tests)
 
 ### Change Log
 
 - Task 1 (PR 1): consolidate create-request data contracts + active-default refs (no behavior/contract change). 2026-06-30.
+- Task 2 (PR 2): descriptor registry (`marks.ts`) + store twin combinator (`patchAnnotations`) + layer render-preamble dedup (`markState`/`markClass`); quick-box reads the registry. No behavior/contract change. 2026-06-30.
