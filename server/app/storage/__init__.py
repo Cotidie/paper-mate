@@ -94,9 +94,18 @@ def _fsync_dir(directory: Path) -> None:
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
-    """Write ``data`` to ``path`` atomically (temp in same dir + rename)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=path.suffix)
+    """Write ``data`` to ``path`` atomically (temp in same dir + rename).
+
+    Filesystem failures (disk full, permissions, ...) are wrapped as
+    ``StorageError`` so every caller's existing ``except StorageError``
+    mapping (the API's single ``{ detail }`` envelope, AR-11) catches them
+    instead of letting a raw ``OSError`` bypass it.
+    """
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=path.suffix)
+    except OSError as exc:
+        raise StorageError(f"could not prepare write to {path}: {exc}") from exc
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
@@ -104,8 +113,14 @@ def _atomic_write(path: Path, data: bytes) -> None:
             os.fsync(fh.fileno())
         os.replace(tmp_name, path)
         _fsync_dir(path.parent)
-    except BaseException:
+    except OSError as exc:
         # Never leave a partial temp file behind.
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
+        raise StorageError(f"could not write {path}: {exc}") from exc
+    except BaseException:
         try:
             os.unlink(tmp_name)
         except FileNotFoundError:

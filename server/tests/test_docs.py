@@ -170,3 +170,21 @@ def test_put_annotations_malformed_body_returns_422_string_detail(data_root):
     resp = client.put(f"/api/docs/{doc_id}/annotations", json=[{"id": "not-a-full-annotation"}])
     assert resp.status_code == 422
     assert isinstance(resp.json()["detail"], str)
+
+
+def test_put_annotations_disk_failure_returns_500_envelope(data_root, monkeypatch):
+    """Codex review (Story 3.4): a filesystem failure during the atomic write
+    must still answer the single { detail } envelope (AR-11), not bypass it."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id = client.post("/api/docs", files={"file": ("d.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("app.storage.os.replace", boom)
+
+    resp = client.put(f"/api/docs/{doc_id}/annotations", json=[])
+    assert resp.status_code == 500
+    assert isinstance(resp.json()["detail"], str)
