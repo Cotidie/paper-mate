@@ -776,14 +776,3 @@
   cursor: move;
 }
 
-/* Pen draw mode: existing marks do NOT intercept the pointer, so a stroke that
-   STARTS on an existing mark passes through to the page and begins a NEW stroke
-   instead of selecting/acting on that mark (user fix 2026-06-30). `data-draw` is
-   set on `.pdf-canvas` while the pen is armed (App.css). Pointer-events keyword
-   only (no raw values). */
-.pdf-canvas[data-draw] .annotation-highlight,
-.pdf-canvas[data-draw] .annotation-pen,
-.pdf-canvas[data-draw] .annotation-memo,
-.pdf-canvas[data-draw] .annotation-comment-pin {
-  pointer-events: none;
-}

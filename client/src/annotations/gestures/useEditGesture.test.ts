@@ -89,6 +89,27 @@ describe("useEditGesture (move/resize drag, Story 3.1)", () => {
     if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.625, y1: 0.625 });
   });
 
+  it("remembers a memo's RESIZED size as the session default (last-adjusted-size-wins)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    down(handle("se", "m"), 100, 100);
+    move(225, 225); // SE +0.125 → new rect 0.25..0.625 → 0.375 of the 1000px box = 375px
+    up();
+    const size = useAnnotationStore.getState().activeMemoSize;
+    expect(size.width).toBeCloseTo(375, 4);
+    expect(size.height).toBeCloseTo(375, 4);
+  });
+
+  it("a MOVE does not change the remembered memo size (only resize does)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    const before = useAnnotationStore.getState().activeMemoSize;
+    mountGesture();
+    down(handle("move", "m"), 100, 100);
+    move(350, 350);
+    up();
+    expect(useAnnotationStore.getState().activeMemoSize).toBe(before);
+  });
+
   it("aborts on Escape WITHOUT committing (preview cleared, mark unchanged)", () => {
     useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
     mountGesture();

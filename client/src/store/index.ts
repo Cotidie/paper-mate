@@ -34,8 +34,13 @@ export const MEMO_SIZES: MemoSize[] = [
   { key: "large", width: 300, height: 120 },
 ];
 
-/** The default memo size new memos land in (`activeMemoSize` seed) = medium. */
-export const DEFAULT_MEMO_SIZE: MemoSize = MEMO_SIZES[1];
+/** The SEED default memo size new memos land in: a small SQUARE (Story 3.1 — the
+ *  preset SizeRow chooser was removed; memos resize via the edit frame's corner
+ *  handles, so the default is just a compact starting box). Once the user resizes a
+ *  memo, that size becomes the session default (`activeMemoSize`, last-resize-wins),
+ *  so this is only the very first box. `key` stays "medium" for back-compat with
+ *  `MemoSize`; the dimensions are independent of the legacy `MEMO_SIZES` presets. */
+export const DEFAULT_MEMO_SIZE: MemoSize = { key: "medium", width: 112, height: 112 };
 
 export interface AnnotationStore {
   /** All annotations, keyed by `id` (AD-7). */

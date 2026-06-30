@@ -41,7 +41,6 @@ import { useSelection } from "./gestures/useSelection";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";
-import SizeRow from "./SizeRow";
 import "./Annotations.css";
 
 /** Max pointer travel (px) between a comment pointerdown and its release for the
@@ -162,11 +161,9 @@ export default function AnnotationInteraction({
     selectedSpec,
     showSelectionBox,
     selectionBoxRef,
-    selectedMemoSize,
     recolorSelected,
     restrokeSelected,
     realphaSelected,
-    resizeSelected,
     deleteSelected,
   } = selection;
 
@@ -621,7 +618,6 @@ export default function AnnotationInteraction({
           {selectedSpec.alpha && (
             <AlphaRow value={selectedAnno.style.alpha ?? activeAlpha} onPick={realphaSelected} />
           )}
-          {selectedSpec.size && <SizeRow value={selectedMemoSize()} onPick={resizeSelected} />}
           <span className="quick-box__divider" aria-hidden="true" />
           <button
             type="button"

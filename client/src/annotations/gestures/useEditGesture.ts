@@ -54,6 +54,7 @@ export function useEditGesture(opts: {
   const { enabled, getPagesRef, scaleRef } = opts;
   const setDragPreview = useAnnotationStore((s) => s.setDragPreview);
   const setAnnotationGeometry = useAnnotationStore((s) => s.setAnnotationGeometry);
+  const setActiveMemoSize = useAnnotationStore((s) => s.setActiveMemoSize);
   const dragRef = useRef<DragState | null>(null);
 
   useEffect(() => {
@@ -119,6 +120,19 @@ export function useEditGesture(opts: {
       // press with no real drag changes nothing → no commit, no updated_at bump.
       if (d.moved && d.lastAnchor) {
         setAnnotationGeometry(d.id, d.lastAnchor, new Date().toISOString());
+        // Remember a memo's last RESIZED size as the session default, so the next
+        // new memo lands at it (user request: last-adjusted-size-wins). Only on a
+        // corner resize (not a move) of a memo; size is scale-1.0 px = normalized
+        // rect * the page box (which is the scale-1.0 box).
+        const anno = useAnnotationStore.getState().annotations.get(d.id);
+        if (d.handle !== "move" && anno?.type === "memo" && d.lastAnchor.kind === "rect") {
+          const r = d.lastAnchor.rect;
+          setActiveMemoSize({
+            key: "medium",
+            width: (r.x1 - r.x0) * d.box.width,
+            height: (r.y1 - r.y0) * d.box.height,
+          });
+        }
       }
     };
     const onKey = (e: KeyboardEvent) => {

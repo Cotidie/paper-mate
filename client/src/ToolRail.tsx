@@ -13,8 +13,7 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { type ActiveTool, type PointerTool, isPointerTool } from "./tools";
-import { type MemoSize } from "./store";
-import { ColorSwatchRow, StrokeWidthRow, AlphaRow, SizeRow } from "./annotations";
+import { ColorSwatchRow, StrokeWidthRow, AlphaRow } from "./annotations";
 import ToolFlyout from "./ToolFlyout";
 
 /**
@@ -53,8 +52,6 @@ export default function ToolRail({
   onPickStrokeWidth,
   activeAlpha,
   onPickAlpha,
-  activeMemoSize,
-  onPickMemoSize,
   collapsed,
   onToggleCollapse,
 }: {
@@ -85,11 +82,6 @@ export default function ToolRail({
   activeAlpha: number;
   /** Set the active pen alpha (the default new strokes land in). */
   onPickAlpha: (alpha: number) => void;
-  /** The active memo box size (store-backed; Story 2.9). The Memo tool's
-   *  sub-toolbox shows this armed and sets it via `onPickMemoSize`. */
-  activeMemoSize: MemoSize;
-  /** Set the active memo size (the default new memos land in). */
-  onPickMemoSize: (size: MemoSize) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
@@ -356,9 +348,9 @@ export default function ToolRail({
       </div>
 
       {/* Memo — a click-to-place kind=rect text box (Story 2.9), below Pen in the
-          DESIGN.md#tool-rail order. Same arm-in-one-click model; its sub-toolbox
-          carries a color row (the box accent) AND the collapsible size row. Color
-          is the shared activeColor; size is the shared activeMemoSize. */}
+          DESIGN.md#tool-rail order. Same arm-in-one-click model; its sub-toolbox is
+          a color row (the box accent) only. Story 3.1 removed the size picker — a
+          memo lands at a small default square and resizes via its corner handles. */}
       <div className="tool-rail__item">
         <button
           type="button"
@@ -383,13 +375,6 @@ export default function ToolRail({
               value={activeColor}
               onPick={(token) => {
                 onPickColor(token);
-                setFlyoutOpen(false);
-              }}
-            />
-            <SizeRow
-              value={activeMemoSize}
-              onPick={(size) => {
-                onPickMemoSize(size);
                 setFlyoutOpen(false);
               }}
             />

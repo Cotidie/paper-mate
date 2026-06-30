@@ -29,6 +29,9 @@ export function usePenGesture(
   // captured for the gesture, so the canvas can't scroll mid-draw.
   const penDraftRef = useRef<StrokeInputPoint[]>([]);
   const penDrawingRef = useRef(false);
+  // Set true after a stroke is committed so the click that may follow (a scribble
+  // that started + ended on an existing mark) is swallowed instead of selecting it.
+  const suppressClickRef = useRef(false);
   const [penPreview, setPenPreview] = useState<StrokeInputPoint[] | null>(null);
 
   useEffect(() => {
@@ -36,9 +39,15 @@ export function usePenGesture(
     const abort = () => {
       penDrawingRef.current = false;
       penDraftRef.current = [];
+      suppressClickRef.current = false;
       setPenPreview(null);
     };
     const onDown = (e: PointerEvent) => {
+      // A fresh gesture clears any stale click-suppression: a drag-draw sets the flag
+      // but (because the pointer moved) NO click follows it, so without this reset the
+      // flag would persist and wrongly swallow the user's NEXT click — e.g. a later
+      // click-to-select an idle stroke (caught in live smoke).
+      suppressClickRef.current = false;
       if (armedToolRef.current !== "pen" || e.button !== 0 || isExempt(e.target)) return;
       const el = e.target as Element | null;
       // Only start over an actual page CARD (not the gutter/margin/chrome or the
@@ -49,13 +58,12 @@ export function usePenGesture(
       penDraftRef.current = [{ x: e.clientX, y: e.clientY }];
       setPenPreview([{ x: e.clientX, y: e.clientY }]);
       e.preventDefault();
-      // Best-effort capture so a drag leaving the canvas still finishes (mirrors
-      // the Reader pan); document listeners are the real mechanism either way.
-      try {
-        (el as Element & { setPointerCapture?: (id: number) => void }).setPointerCapture?.(e.pointerId);
-      } catch {
-        /* capture refused (e.g. synthetic event) — the drag still works */
-      }
+      // NOTE: do NOT setPointerCapture on the target. Capturing to the mark under
+      // the pointer made the browser fire a `click` on that mark when a DRAG that
+      // started on it released → it got selected instead of a new stroke landing
+      // (user bug). Without capture, document listeners still drive move/up within
+      // the window, and a drag's release fires no click on the start mark. A plain
+      // CLICK on a mark (no drag) still reaches the mark's own onClick → selects it.
     };
     const onMove = (e: PointerEvent) => {
       if (!penDrawingRef.current) return;
@@ -103,12 +111,26 @@ export function usePenGesture(
       // is a repeated gesture, so popping the selection quick-box + edit frame after
       // every stroke would interrupt drawing the next one. The stroke lands
       // unselected; click it later to select + edit (restroke/alpha/move/resize).
+      // A stroke WAS drawn → swallow the click this gesture may synthesize (a short
+      // scribble that started + ended on an existing mark), so it can't ALSO select
+      // that mark. A plain click (no stroke, < 2 points) leaves this false, so the
+      // mark's own onClick still selects it (click-to-select an idle stroke).
+      suppressClickRef.current = true;
+    };
+    // Swallow exactly one click after a stroke is drawn (see onUp). Capture phase +
+    // registered before the mark's React click handling so it wins.
+    const onClick = (e: MouseEvent) => {
+      if (!suppressClickRef.current) return;
+      suppressClickRef.current = false;
+      e.preventDefault();
+      e.stopPropagation();
     };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
     document.addEventListener("pointercancel", abort);
     document.addEventListener("keydown", onKey);
+    document.addEventListener("click", onClick, true);
     window.addEventListener("blur", abort);
     return () => {
       document.removeEventListener("pointerdown", onDown);
@@ -116,6 +138,7 @@ export function usePenGesture(
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", abort);
       document.removeEventListener("keydown", onKey);
+      document.removeEventListener("click", onClick, true);
       window.removeEventListener("blur", abort);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

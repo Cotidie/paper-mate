@@ -192,6 +192,12 @@ claude-opus-4-8 (Claude Code, bmad-dev-story).
 - **B. Memo click-away deselects, never double-places.** `useMemoPlacement` now SKIPS placing when a mark is selected — the empty-space click deselects (via `useSelection`) instead of dropping a second memo. Its listener moved to CAPTURE phase (registered at mount, before `useSelection`'s capture clear) so it reads the pre-clear `selectedId`. Test: with a memo selected, an empty-space click keeps the count at 1 and clears selection. Live-smoked: placed + typed memo, clicked away → kept (count 1), no 2nd memo.
 - **C. Pen starting on an existing mark creates a new stroke (no select).** CSS: under `.pdf-canvas[data-draw]` (pen armed) the mark hit-surfaces (`.annotation-highlight/-pen/-memo/-comment-pin`) become `pointer-events:none`, so a pointerdown ON an existing mark passes through to the page → a NEW stroke starts and the existing mark is neither hit-tested, pointer-captured, nor click-selected. Live-smoked: `elementFromPoint` on an existing stroke returns `textLayer` (not the path); drawing there made a 2nd stroke with nothing selected. (CSS hit-testing isn't exercised by jsdom → live-smoke is the coverage.)
 
+**Post-review user fixes (2026-06-30, all live-smoked):**
+- **D. Memo size chooser removed.** The preset `SizeRow` is gone from BOTH the rail memo flyout (`ToolRail`) + the selection quick-box (`AnnotationInteraction`); descriptor `memo.quickBox.size=false`. A memo now resizes only via the edit-frame corner handles. App/ToolRail `activeMemoSize`/`onPickMemoSize` props dropped. (The store's preset-resize plumbing — `resizeMemoAnnotation`, `MEMO_SIZES`, `selectedMemoSize`, `SizeRow.tsx` — is left unwired/dead, flagged for a later cleanup; free corner-resize via `setAnnotationGeometry` supersedes it.)
+- **E. Pen click-select vs drag-draw.** Removed `setPointerCapture(e.target)` from `usePenGesture` (capturing to the mark synthesized a click→select on a drag that started on a stroke — the real cause of the earlier bug) and removed the fix-C `pointer-events:none` CSS. Now: a single CLICK on an idle stroke (pen armed) selects it (the mark's own onClick); a DRAG starting on a stroke creates a NEW stroke and selects nothing. A `suppressClickRef` (reset each pointerdown) swallows the click a scribble-that-drew would otherwise fire, preventing a draw from also selecting. Live-smoked: click-selects, drag-on-stroke makes a 2nd stroke.
+- **F. Default memo 20% smaller** → 112×112 square (was 140).
+- **G. Remember last memo size.** A memo corner-resize records its new scale-1.0 px size as `activeMemoSize`, so the next placed memo lands at it (last-adjusted-wins; move does not change it). Live-smoked: resized a memo to 162², the next memo placed at 162².
+
 **Cross-model Codex review (AE-6) — done, 1 Med resolved.** Codex 0.142.4 verdict Changes Requested, 1 Med: pen resize (a) no-op'd 1-D (horizontal/vertical) strokes and (b) clipped points flat on an overscale drag instead of clamping the scale factor. Fixed in `useEditGesture.computeAnchor` with a per-axis `axisScale(moving, origin, delta)`: zero-extent axis → scale 1 (resize the other axis), and the factor is derived from the page-clamped moving edge (floored at `MIN_PEN_SCALE`) so shape is preserved on overscale. 4 new `useEditGesture.test.ts` cases (horizontal, vertical, overscale-shape-preserved, no-flip). Live-smoked: a horizontal stroke widened 136→236px on SE-drag (was a no-op pre-fix). Report + resolution: `.bmad/implementation-artifacts/3-1-code-review-codex.md`.
 
 ### File List
@@ -211,8 +217,12 @@ Modified:
 - `server/pyproject.toml` (version `0.2.1 → 0.2.2`)
 - `server/uv.lock` (synced to 0.2.2)
 
-- `client/src/annotations/gestures/usePenGesture.ts` (pen no longer auto-selects on release — user fix A)
+- `client/src/annotations/gestures/usePenGesture.ts` (no auto-select on release — fix A; no setPointerCapture + suppress-click-after-draw for click-select vs drag-draw — fix E)
 - `client/src/annotations/gestures/useMemoPlacement.ts` (skip place when a mark is selected → deselect; capture-phase listener — user fix B)
+- `client/src/annotations/gestures/useEditGesture.ts` (pen resize per-axis axisScale — review fix; remember memo resize as default — fix G)
+- `client/src/annotations/marks.ts` + `marks.test.ts` (memo quickBox.size:false — fix D)
+- `client/src/ToolRail.tsx` + `ToolRail.test.tsx` (drop memo SizeRow + activeMemoSize/onPickMemoSize props — fix D)
+- `client/src/App.tsx` (drop memo-size wiring to ToolRail — fix D)
 
 New:
 - `client/src/annotations/gestures/useEditGesture.ts` (the move/resize gesture)
@@ -221,5 +231,6 @@ New:
 ### Change Log
 
 - 2026-06-30: Story 3.1 implemented (Tasks 1-4 + close-out). anchor/ edit transforms + `pointsBounds`; store `setAnnotationGeometry` + transient `dragPreview` (the one move/resize command-path action, AD-7/AE-3, no zundo); `useEditGesture` + the on-page edit frame (move grip + corner handles) for selected pen/rect/region marks with live drag preview and zoom-glue (NFR-3); memo double-click re-edit. Move/resize scoped to pen + rect (text → 3.8); cross-type hit-layer deferred (AC #4). Contract byte-identical; version 0.2.1 → 0.2.2. Client 464 + server 43 green; live-smoked on own servers incl. 250% zoom. Cross-model Codex review pending.
+- 2026-06-30 (post-review user fixes D-G): removed the preset memo SizeRow chooser (rail flyout + selection quick-box; resize via corner handles only); pen single-click selects an idle stroke while a drag-on-stroke draws a new one (dropped mark-targeted setPointerCapture + the fix-C CSS, added suppress-click-after-draw); default memo 20% smaller (112² square); a memo corner-resize is remembered as the default size for new memos. Tests added/updated; all 4 live-smoked. Client 470 green.
 - 2026-06-30 (Codex review fix): pen corner-resize reworked to per-axis `axisScale` — 1-D (horizontal/vertical) strokes now resize on their non-zero axis (were a no-op), and an overscale drag clamps the scale FACTOR (shape preserved) instead of clipping points flat at the page edge. 4 new gesture tests; live-smoked. Resolves the single Med from the cross-model review. Client 469 (468 + flake).
 - 2026-06-30 (user fixes A/B/C): (A) pen no longer auto-selects on release (`usePenGesture`) so consecutive strokes draw uninterrupted; (B) memo click-away deselects instead of placing a 2nd box (`useMemoPlacement`, capture-phase + selectedId gate); (C) a pen stroke starting ON an existing mark creates a new stroke instead of selecting it (`Annotations.css` `data-draw` → marks `pointer-events:none`). Tests added/updated; all three live-smoked. Client 465 green.

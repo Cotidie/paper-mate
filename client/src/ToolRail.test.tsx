@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import ToolRail from "./ToolRail";
 import type { ActiveTool } from "./tools";
-import { DEFAULT_MEMO_SIZE, MEMO_SIZES, type MemoSize } from "./store";
 
 afterEach(cleanup);
 
@@ -12,7 +11,6 @@ type RailProps = {
   boxHighlight: boolean;
   activeStrokeWidth: number;
   activeAlpha: number;
-  activeMemoSize: MemoSize;
   collapsed: boolean;
 };
 
@@ -25,7 +23,6 @@ function renderRail(over: Partial<RailProps> = {}) {
   const onToggleBoxHighlight = vi.fn();
   const onPickStrokeWidth = vi.fn();
   const onPickAlpha = vi.fn();
-  const onPickMemoSize = vi.fn();
   const onToggleCollapse = vi.fn();
   let props: RailProps = {
     activeTool: "cursor",
@@ -33,7 +30,6 @@ function renderRail(over: Partial<RailProps> = {}) {
     boxHighlight: false,
     activeStrokeWidth: 4,
     activeAlpha: 0.4,
-    activeMemoSize: DEFAULT_MEMO_SIZE,
     collapsed: false,
     ...over,
   };
@@ -49,8 +45,6 @@ function renderRail(over: Partial<RailProps> = {}) {
       onPickStrokeWidth={onPickStrokeWidth}
       activeAlpha={p.activeAlpha}
       onPickAlpha={onPickAlpha}
-      activeMemoSize={p.activeMemoSize}
-      onPickMemoSize={onPickMemoSize}
       collapsed={p.collapsed}
       onToggleCollapse={onToggleCollapse}
     />
@@ -60,7 +54,7 @@ function renderRail(over: Partial<RailProps> = {}) {
     props = { ...props, ...next };
     utils.rerender(el(props));
   };
-  return { ...utils, onSelectTool, onPickColor, onToggleBoxHighlight, onPickStrokeWidth, onPickAlpha, onPickMemoSize, onToggleCollapse, update };
+  return { ...utils, onSelectTool, onPickColor, onToggleBoxHighlight, onPickStrokeWidth, onPickAlpha, onToggleCollapse, update };
 }
 
 // Arm Pen (Story 2.8): start on cursor, switch to pen so the open-on-tool-change
@@ -210,8 +204,6 @@ describe("ToolRail", () => {
         onPickStrokeWidth={vi.fn()}
         activeAlpha={0.4}
         onPickAlpha={vi.fn()}
-        activeMemoSize={DEFAULT_MEMO_SIZE}
-        onPickMemoSize={vi.fn()}
         collapsed={false}
         onToggleCollapse={vi.fn()}
       />,
@@ -478,23 +470,13 @@ describe("ToolRail", () => {
     expect(btn.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("the memo sub-toolbox shows the color swatch row AND the collapsible size picker", () => {
+  it("the memo sub-toolbox shows the color swatch row only (Story 3.1 dropped the size picker)", () => {
     armMemo({ activeColor: "annotation-green" });
     const flyout = screen.getByTestId("memo-flyout");
     expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
     expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
-    // The size control is collapsed (a single trigger), not a 3-step row.
-    expect(screen.getByTestId("memo-size-trigger")).toBeTruthy();
-    expect(screen.queryByTestId("memo-size-small")).toBeNull();
-  });
-
-  it("picking a memo size calls onPickMemoSize and closes the flyout", () => {
-    const { onPickMemoSize } = armMemo({ activeMemoSize: DEFAULT_MEMO_SIZE });
-    fireEvent.click(screen.getByTestId("memo-size-trigger"));
-    const large = MEMO_SIZES.find((s) => s.key === "large")!;
-    fireEvent.click(screen.getByTestId("memo-size-large"));
-    expect(onPickMemoSize).toHaveBeenCalledWith(large);
-    expect(screen.queryByTestId("memo-flyout")).toBeNull();
+    // No size control: a memo lands at a default square and resizes via corner handles.
+    expect(screen.queryByTestId("memo-size-trigger")).toBeNull();
   });
 
   it("picking a memo color calls onPickColor and closes the flyout", () => {
