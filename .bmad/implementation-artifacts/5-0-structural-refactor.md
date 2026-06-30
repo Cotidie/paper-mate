@@ -4,7 +4,7 @@ baseline_commit: b45880fab7b8daf36c33b6d7ed3fde86005e7efa
 
 # Story 5.0: Codebase structural refactor (data contracts + conditional/FSM unification + src split)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
