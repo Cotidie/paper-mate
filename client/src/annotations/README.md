@@ -273,8 +273,11 @@ the picker has two shapes, keyed off whether there is a text selection:
 - **Text drag** (selection.length > 0) pops a three-tool picker: Highlight,
   Underline, Comment. Picking a tool creates the mark on the current
   selection. No Memo here (a memo is a rect box, not a text-anchor mark).
-- **Empty-area double-click** (selection.length === 0) pops a two-tool
+- **Right-click** (contextmenu, selection.length === 0) pops a two-tool
   picker: Comment, Memo. The mark is placed at the click point (`pending.at`).
+  The handler `preventDefault`s the native browser menu and clears any live
+  selection first. Right-click works over text too (place-at-point, not on a
+  word).
 
 Picking creates the mark without a trip to the left rail. `activeTool` is
 unchanged (one-shot create, not a sticky arm). The buttons are icon-only
@@ -283,8 +286,15 @@ unchanged (one-shot create, not a sticky arm). The buttons are icon-only
 > Deviates from the original story spec (which proposed one four-tool
 > text-drag picker incl. Memo at the selection start). Approved user fixes:
 > icon-only buttons, Memo dropped from the text-drag picker, and the
-> Comment/Memo picker moved onto an empty-area double-click. Double-click on
-> text selects a word, so it still routes through the text-drag (H/U/C) path.
+> Comment/Memo place-at-point picker bound to RIGHT-CLICK.
+>
+> **Story 5.0 follow-up (behavior change):** the Comment/Memo picker was
+> originally on an empty-area DOUBLE-CLICK. On a dense PDF the pdf.js text
+> layer covers nearly the whole page, so almost every double-click selected a
+> word and popped the H/U/C picker instead — the Comment/Memo picker was
+> effectively unreachable, and a "Comment" pick anchored to the word rather
+> than dropping a pin at the click. Moved to right-click so "place a
+> comment/memo here" is a distinct, reliable gesture.
 
 - The picker lives entirely inside the existing `pending` quick-box state
   (Decision 1): the machine (`machine.ts`), the shell, the position/clamp,

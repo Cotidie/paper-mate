@@ -304,39 +304,38 @@ export default function AnnotationInteraction({
       restoreFocusRef.current = document.activeElement as HTMLElement | null;
       dispatch({ type: "present", selection: pages, at: { x: e.clientX, y: e.clientY } });
     };
-    // Double-click on empty page area (cursor mode): pop the Comment+Memo picker.
-    // Single clicks don't trigger it; double-clicking on text selects a word and
-    // the second pointerup's rectsFromSelection produces pages.length>0, which pops
-    // the H/U/C picker instead (both behave like text drag — user request).
-    const onDblClick = (e: MouseEvent) => {
-      if (e.button !== 0 || isExempt(e.target) || armedToolRef.current !== null) return;
-      const selection = window.getSelection();
-      const pages = rectsFromSelection(
-        selection,
-        getPagesRef.current(),
-        scaleRef.current,
-        rectReaderRef.current,
-      );
-      if (pages.length > 0) return; // text selected — pointerup already handled it
+    // Right-click (context menu) on a page in cursor mode: pop the Comment+Memo
+    // place-at-point picker at the click, and suppress the native browser menu.
+    // This is the deliberate "place a comment/memo here" gesture; a text DRAG still
+    // pops the H/U/C picker (act-on-text), so the two are cleanly separated. Right-
+    // click works over text too (place-at-point, not on a word). Replaces the old
+    // empty-area double-click trigger, which a dense PDF's text layer made
+    // unreachable — almost every double-click selected a word and popped H/U/C.
+    const onContextMenu = (e: MouseEvent) => {
+      if (isExempt(e.target) || armedToolRef.current !== null) return;
       const el = e.target as Element | null;
       if (
-        el?.closest?.(".page-surface") &&
-        !el.closest?.(".quick-box") &&
-        !el.closest?.(
+        !el?.closest?.(".page-surface") ||
+        el.closest?.(".quick-box") ||
+        el.closest?.(
           ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble",
         )
-      ) {
-        restoreFocusRef.current = document.activeElement as HTMLElement | null;
-        dispatch({ type: "present", selection: [], at: { x: e.clientX, y: e.clientY } });
-      }
+      )
+        return;
+      // Suppress the native menu + any lingering selection (so the pointerup text
+      // path can't also fire), then present the picker at the click point.
+      e.preventDefault();
+      window.getSelection()?.removeAllRanges();
+      restoreFocusRef.current = document.activeElement as HTMLElement | null;
+      dispatch({ type: "present", selection: [], at: { x: e.clientX, y: e.clientY } });
     };
     document.addEventListener("pointerdown", onPointerDownCandidate);
     document.addEventListener("pointerup", onPointerUp);
-    document.addEventListener("dblclick", onDblClick);
+    document.addEventListener("contextmenu", onContextMenu);
     return () => {
       document.removeEventListener("pointerdown", onPointerDownCandidate);
       document.removeEventListener("pointerup", onPointerUp);
-      document.removeEventListener("dblclick", onDblClick);
+      document.removeEventListener("contextmenu", onContextMenu);
     };
   }, [enabled, docId, addAnnotation, select, createTextTool]);
 

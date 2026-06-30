@@ -203,13 +203,13 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     expect(all.map((a) => a.anchor.page_index).sort()).toEqual([0, 1]);
   });
 
-  it("double-click on empty page area pops a Comment+Memo picker (no highlight/underline)", async () => {
+  it("right-click on a page pops a Comment+Memo picker (no highlight/underline)", async () => {
     const card = fakeCard(0, 0);
     const surface = setupPageSurface(card);
     render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
 
-    // Fire dblclick against the surface (so .closest('.page-surface') matches).
-    fireEvent.dblClick(surface, { button: 0, clientX: 100, clientY: 100 });
+    // Fire contextmenu against the surface (so .closest('.page-surface') matches).
+    fireEvent.contextMenu(surface, { clientX: 100, clientY: 100 });
 
     await screen.findByTestId("quick-box");
     expect(screen.getByTestId("quick-box-comment")).toBeTruthy();
@@ -219,13 +219,24 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     surface.remove();
   });
 
-  it("double-click mode: picking Comment creates a comment pin at the click point", async () => {
+  it("right-click suppresses the native context menu (preventDefault)", () => {
+    const card = fakeCard(0, 0);
+    const surface = setupPageSurface(card);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
+
+    // fireEvent returns false when a handler called preventDefault.
+    const notPrevented = fireEvent.contextMenu(surface, { clientX: 100, clientY: 100 });
+    expect(notPrevented).toBe(false);
+    surface.remove();
+  });
+
+  it("right-click: picking Comment creates a comment pin at the click point", async () => {
     const card = fakeCard(0, 0);
     const surface = setupPageSurface(card);
     render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
 
     // clientX=120, clientY=200 → card-local x0=120, y0=200 → normalized x0=120/600, y0=200/800
-    fireEvent.dblClick(surface, { button: 0, clientX: 120, clientY: 200 });
+    fireEvent.contextMenu(surface, { clientX: 120, clientY: 200 });
     fireEvent.click(await screen.findByTestId("quick-box-comment"));
 
     const all = useAnnotationStore.getState().all();
@@ -241,13 +252,13 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     surface.remove();
   });
 
-  it("double-click mode: picking Memo creates a memo at the click point", async () => {
+  it("right-click: picking Memo creates a memo at the click point", async () => {
     const card = fakeCard(0, 0);
     const surface = setupPageSurface(card);
     render(<AnnotationInteraction docId="doc-1" getPages={() => [card]} scale={1} enabled rectReader={reader} />);
 
     // clientX=60, clientY=160 → card-local x0=60, y0=160
-    fireEvent.dblClick(surface, { button: 0, clientX: 60, clientY: 160 });
+    fireEvent.contextMenu(surface, { clientX: 60, clientY: 160 });
     fireEvent.click(await screen.findByTestId("quick-box-memo"));
 
     const all = useAnnotationStore.getState().all();
