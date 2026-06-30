@@ -4,7 +4,7 @@
 baseline_commit: c2587f690b5c82ad6b338c81330cb665d6f1016e
 ---
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -197,3 +197,4 @@ None — no HALT conditions triggered; all tasks completed in one execution.
 - 2026-06-29: Story created (ready-for-dev) via correct-course + create-story (user feature request: pen stroke alpha).
 - 2026-06-30: Re-created (staleness review). Stories 2.9–2.12 had shipped since the first draft. Updated: version target `0.1.5 → 0.1.6` corrected to `0.1.10 → 0.1.11`; added the Story 2.9 precedent (`SizeRow`/`activeMemoSize`/`resizeMemoAnnotation`) and the now-current quick-box conditional-row pattern (`isPenSelected`, Decision 5); pinned verified integration points to current symbols/line numbers. Architecture/ACs unchanged (still match epics.md#Story-2.13; `Style` is still `{color, stroke_width}`, so alpha remains the first Epic-2 contract change).
 - 2026-06-30: Implemented by claude-sonnet-4-6. All 8 tasks complete. 413/413 client tests, 43/43 server tests, typecheck clean, no-raw-values green, live smoke confirmed. Status → review.
+- 2026-06-30: Pen-picker UI follow-up (user fix requests, PR #23): collapse Thickness/Opacity into icon-only pickers (weight-bar + opacity-ring, toolrail-sized, no caret); step menu opens right in the rail flyout, drops down in the quick-box; picking a step keeps the picker open (only its step menu collapses); stroke widths rescaled 2/4/8 → 4/8/16 px (default 8). 415/415 client tests, typecheck, no-raw-values green, live smoke confirmed both surfaces. Version 0.1.11 → 0.1.12. Status → done (PR #23 merged).
