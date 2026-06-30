@@ -102,9 +102,9 @@
      stroke widths offered by the pen quick-box, in scale-1.0 CSS px (the renderer
      multiplies by the current zoom). --pen-stroke-medium is the store default
      (activeStrokeWidth). The width-step preview dot sizes mirror these. */
-  --pen-stroke-thin: 2px;
-  --pen-stroke-medium: 4px;
-  --pen-stroke-thick: 8px;
+  --pen-stroke-thin: 4px;
+  --pen-stroke-medium: 8px;
+  --pen-stroke-thick: 16px;
   /* The ink hairline a hovered/selected pen stroke gets (drawn as an SVG stroke
      around the filled path, since the rect outline ring does not fit a stroke). */
   --annotation-pen-selected-width: 1.5px;

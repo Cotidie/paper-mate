@@ -345,20 +345,12 @@ export default function ToolRail({
                 setFlyoutOpen(false);
               }}
             />
-            <StrokeWidthRow
-              value={activeStrokeWidth}
-              onPick={(width) => {
-                onPickStrokeWidth(width);
-                setFlyoutOpen(false);
-              }}
-            />
-            <AlphaRow
-              value={activeAlpha}
-              onPick={(alpha) => {
-                onPickAlpha(alpha);
-                setFlyoutOpen(false);
-              }}
-            />
+            {/* Thickness / Opacity pickers keep the pen flyout OPEN on pick (only
+                their own step menu collapses), so the user can adjust both axes
+                without re-opening the flyout. Color, like every other tool, closes
+                it. */}
+            <StrokeWidthRow value={activeStrokeWidth} onPick={onPickStrokeWidth} />
+            <AlphaRow value={activeAlpha} onPick={onPickAlpha} />
           </ToolFlyout>
         )}
       </div>

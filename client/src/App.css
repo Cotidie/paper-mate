@@ -245,6 +245,30 @@
   background: var(--color-surface-strong);
 }
 
+/* The pen Thickness/Opacity triggers match the color swatches in the rail flyout:
+   the same 36px tool-button cell + hover wash, so the pen sub-toolbox reads as one
+   uniform icon column (the icons themselves live in Annotations.css). */
+.tool-flyout .pen-picker__trigger {
+  width: var(--tool-button-size);
+  height: var(--tool-button-size);
+  border-radius: var(--radius-md);
+}
+
+.tool-flyout .pen-picker__trigger:hover {
+  background: var(--color-surface-strong);
+}
+
+/* In the rail flyout (a vertical column) the pen step menu flies out to the RIGHT
+   as a horizontal row, so it clears the tools stacked below it (the quick-box keeps
+   the default drop-DOWN column from Annotations.css). */
+.tool-flyout .pen-picker__menu {
+  top: 0;
+  left: 100%;
+  margin-top: 0;
+  margin-left: var(--space-xxs);
+  flex-direction: row;
+}
+
 /* Horizontal hairline separating a mode toggle (e.g. the Highlight flyout's
    box-highlight toggle) from the color swatches below it. Inset left/right so it
    reads as a divider, not a full-width border. */

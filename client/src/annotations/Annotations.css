@@ -233,14 +233,112 @@
   outline-offset: var(--color-swatch-ring-offset);
 }
 
-/* stroke-width row: the pen quick-box width steps (Story 2.8). Mirrors the
-   color-swatch row — a uniform-footprint cell wrapping an ink dot whose diameter
-   previews the line weight; the armed (current) step gets the 2px ink ring. */
-.stroke-width-row {
-  display: flex;
-  gap: var(--space-xxs);
+/* pen-picker (Story 2.13 follow-up): the COLLAPSIBLE pen Thickness + Opacity
+   pickers. Each is an ICON-ONLY SizeRow-style disclosure — a compact trigger
+   (current-value chip + caret, no text label) that expands a small floating step
+   menu to the RIGHT (horizontally), so the rail stays icon-only and the steps fly
+   out beside the trigger instead of pushing the column down. The two rows
+   (.stroke-width-row, .alpha-row) share this shell; the step cells keep their own
+   .stroke-width-step / .alpha-step classes (below). The menu floats (absolute), so
+   it is container-agnostic: it works in the vertical rail flyout AND the horizontal
+   quick-box without reflowing either. */
+.stroke-width-row,
+.alpha-row {
+  position: relative;
+  display: inline-flex;
 }
 
+/* The trigger is a uniform icon CELL mirroring .color-swatch (transparent, no
+   border; the rail flyout upsizes it to the 36px tool-button footprint via the
+   .tool-flyout override in App.css, so it lines up with the color swatches and the
+   toolrail glyphs). It holds ONE value icon (thickness bar / opacity ring) and no
+   caret — the cell + hover is the affordance. */
+.pen-picker__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--color-swatch-size);
+  height: var(--color-swatch-size);
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.pen-picker__trigger:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+/* Thickness icon: a horizontal ink bar whose HEIGHT previews the current stroke
+   weight (the --pen-stroke-* token). A bar (not a dot) reads as line weight and
+   never reads as a color swatch. */
+.pen-thickness-icon {
+  width: var(--pill-icon-size);
+  background-color: var(--color-ink);
+  border-radius: var(--radius-pill);
+}
+
+.pen-thickness-icon--thin {
+  height: var(--pen-stroke-thin);
+}
+
+.pen-thickness-icon--medium {
+  height: var(--pen-stroke-medium);
+}
+
+.pen-thickness-icon--thick {
+  height: var(--pen-stroke-thick);
+}
+
+/* Opacity icon: an ink disc filled at the current alpha, WRAPPED in a hairline ring
+   (the constant circle frame) so the fade reads as opacity. The ring is the icon;
+   the inner fill opacity is the value (mirrors the --pen-alpha-* tokens). */
+.pen-opacity-icon {
+  position: relative;
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  border: var(--color-swatch-border) solid var(--color-hairline-strong);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.pen-opacity-icon__fill {
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-ink);
+}
+
+.pen-opacity-icon__fill--low  { opacity: var(--pen-alpha-low);  }
+.pen-opacity-icon__fill--mid  { opacity: var(--pen-alpha-mid);  }
+.pen-opacity-icon__fill--high { opacity: var(--pen-alpha-high); }
+.pen-opacity-icon__fill--full { opacity: var(--pen-alpha-full); }
+
+/* The expanded step menu floats above the marks. It opens PERPENDICULAR to its
+   container so it clears the neighboring controls: the DEFAULT here is the
+   quick-box case — the quick-box is a horizontal row, so the menu drops DOWN as a
+   vertical column. The rail flyout (a vertical column) overrides this to a
+   right-side horizontal row (`.tool-flyout .pen-picker__menu` in App.css). Tokens
+   only. */
+.pen-picker__menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--space-xxs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+  padding: var(--space-xxs);
+  background-color: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  z-index: 60;
+}
+
+/* stroke-width step: a uniform-footprint cell wrapping an ink dot whose diameter
+   previews the line weight; the armed (current) step gets the 2px ink ring. */
 .stroke-width-step {
   display: inline-flex;
   align-items: center;
@@ -286,15 +384,10 @@
   outline-offset: var(--color-swatch-ring-offset);
 }
 
-/* alpha row: the pen quick-box alpha steps (Story 2.13). Mirrors the
-   stroke-width row — a uniform-footprint cell wrapping an ink square whose
-   opacity previews the transparency; the armed (current) step gets the 2px
-   ink ring. */
-.alpha-row {
-  display: flex;
-  gap: var(--space-xxs);
-}
-
+/* alpha step: a uniform-footprint cell wrapping an ink square whose opacity
+   previews the transparency; the armed (current) step gets the 2px ink ring.
+   The collapsible shell + trigger/menu are the shared .pen-picker rules above
+   (.alpha-row reuses them). */
 .alpha-step {
   display: inline-flex;
   align-items: center;
