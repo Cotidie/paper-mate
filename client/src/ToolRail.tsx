@@ -337,6 +337,10 @@ export default function ToolRail({
                 setFlyoutOpen(false);
               }}
             />
+            {/* Hairline between the color picks and the thickness/opacity pickers,
+                so the two control groups read as distinct (same divider the
+                Highlight flyout uses above its color row). */}
+            <div className="tool-flyout__divider" data-testid="pen-picker-divider" />
             {/* Thickness / Opacity pickers keep the pen flyout OPEN on pick (only
                 their own step menu collapses), so the user can adjust both axes
                 without re-opening the flyout. Color, like every other tool, closes
