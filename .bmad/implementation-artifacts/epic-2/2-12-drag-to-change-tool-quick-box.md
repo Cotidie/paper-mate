@@ -158,9 +158,9 @@ Resist: a new overlay state / second machine (reuse `pending`); changing `active
 - [Source: ARCHITECTURE-SPINE.md#NFR-1] — overlay never reflows the canvas.
 - [Source: EXPERIENCE.md / UX-DR5] — contextual quick-box: selection→tool-type picker (highlight/underline/comment/memo); dismiss on pick/outside-click/`Esc`; positioned at selection; never shifts canvas.
 - [Source: DESIGN.md#quick-box] — the quick-box shell + `.quick-box__action` (the picker buttons reuse it, tokens only).
-- [Source: .bmad/implementation-artifacts/2-11-box-select-a-region.md] — flagged THIS story as the TEXT-drag tool-type picker (the region picker was its smaller cousin); the create-then-select spine.
-- [Source: .bmad/implementation-artifacts/2-9-textbox-memo.md] — `buildMemoAnnotation` + `activeMemoSize` placement; the memo textarea autofocus + empty-memo cleanup the Memo pick reuses.
-- [Source: .bmad/implementation-artifacts/2-10-comment-highlight-pin-bubble.md] — the comment bubble (selected `type:"comment"`) the Comment pick lands in; the shared selection box already excludes comments.
+- [Source: .bmad/implementation-artifacts/epic-2/2-11-box-select-a-region.md] — flagged THIS story as the TEXT-drag tool-type picker (the region picker was its smaller cousin); the create-then-select spine.
+- [Source: .bmad/implementation-artifacts/epic-2/2-9-textbox-memo.md] — `buildMemoAnnotation` + `activeMemoSize` placement; the memo textarea autofocus + empty-memo cleanup the Memo pick reuses.
+- [Source: .bmad/implementation-artifacts/epic-2/2-10-comment-highlight-pin-bubble.md] — the comment bubble (selected `type:"comment"`) the Comment pick lands in; the shared selection box already excludes comments.
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions, #Versioning].
 
 ## Previous Story Intelligence

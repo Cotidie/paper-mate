@@ -112,7 +112,7 @@ Four independent PRs (Tasks 1-4), low-risk → high-risk, each suite-green + con
 
 - [Source: .bmad/planning-artifacts/epics.md#Story-5.0] — the 4 ACs + the "before 3.1" sequencing note.
 - [Source: .bmad/implementation-artifacts/deferred-work.md] — three refactor items that ARE this story: "lean on data classes / abstracted types"; "unify conditional logic + FSM-isolated state" (the registry + per-tool-descriptor candidate, the `active*` fans, the FSM consolidation — with exact file paths); "src folder and module structural refactoring" (the bulletproof-react split + guardrails).
-- [Source: .bmad/implementation-artifacts/epic-2-retro-2026-06-30.md] — AE-2 (do 5.0 before 3.1), AE-3 (Epic-2 edits converge on the 3.1 command path; 5.0 makes that seam clean), the "conditional sprawl" recurring-problem entry.
+- [Source: .bmad/implementation-artifacts/epic-2/epic-2-retro-2026-06-30.md] — AE-2 (do 5.0 before 3.1), AE-3 (Epic-2 edits converge on the 3.1 command path; 5.0 makes that seam clean), the "conditional sprawl" recurring-problem entry.
 - [Source: CLAUDE.md#Engineering-principles] — AD-9 layering, AP-2 render mock-barrel sync, `no-raw-values` (raw values only in `theme/**`), AD-3 contract generated never hand-authored.
 - [Source: CLAUDE.md#Versioning] — PATCH +1 per story (`0.2.0 → 0.2.1`).
 - Architecture ARs: AD-3 (Pydantic → OpenAPI → generated TS, never shadow), AD-5 (geometry-on-kind / style-on-type = the dispatch key), AD-9 (layer boundaries), AD-11 (one FSM, the "design the state machine once" principle / Epic-1 PREP-3).

@@ -152,7 +152,7 @@ Live verification (Docker available: v29.6.0, compose v5.2.0; host uid/gid 1000:
 - `.env.example` (modified) — added `PAPER_MATE_UID` / `PAPER_MATE_GID`.
 - `README.md` (modified) — added "Development" section (host two-process canonical, Docker prod-like boot, data-dir pre-create, ownership, optional in-container reload).
 - `CLAUDE.md` (modified) — updated "Single-command boot" line (host-user run, pre-create, no-hot-reload caveat, dev override).
-- `.bmad/implementation-artifacts/2-1-dev-infra-enabler.md` (modified) — story tracking (frontmatter, checkboxes, Dev Agent Record, Change Log, Status).
+- `.bmad/implementation-artifacts/epic-2/2-1-dev-infra-enabler.md` (modified) — story tracking (frontmatter, checkboxes, Dev Agent Record, Change Log, Status).
 - `.bmad/implementation-artifacts/sprint-status.yaml` (modified) — story status transitions.
 
 ## Change Log

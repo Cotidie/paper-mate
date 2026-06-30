@@ -2,14 +2,41 @@
 
 Items surfaced during review that are real but intentionally not actioned now.
 
+## Promoted to epics (2026-06-30 correct-course)
+
+> `sprint-change-proposal-2026-06-30.md` grouped these into POST-v1 (Phase-1.5) epics + Epic-3 additions. The detail below each item stays here as the source spec; the epic/story is the tracked home.
+
+| Deferred item | Promoted to |
+| --- | --- |
+| Copied text loses spaces at line breaks | Epic 4 Story 4.1 |
+| Trailing-punctuation thick selection band | Epic 4 Story 4.1 |
+| Flaky `Reader.test.tsx` Ctrl+wheel test | Epic 4 Story 4.1 (co-located de-flake) |
+| Highlights join across the gutter (`mergeRects`) | Epic 4 Story 4.2 |
+| Multi-column selection controller | Epic 4 Story 4.2 |
+| Text-comment must read differently from highlight | Epic 4 Story 4.3 |
+| Memo transparent bg / drop color row (visual) | Epic 4 Story 4.3 |
+| Memo movable + corner drag-resize | Epic 3 Story 3.1 |
+| Route memo/comment text re-edit through command path | Epic 3 Story 3.1 |
+| Cross-type recent-wins / unified hit-layer | Epic 3 Story 3.1 + Epic 5 Story 5.0 |
+| Convert highlight ↔ comment | Epic 3 Story 3.7 |
+| Adjust an annotation's text range | Epic 3 Story 3.8 |
+| Lean on data classes / abstracted types | Epic 5 Story 5.0 |
+| Unify conditional logic + FSM-isolated state | Epic 5 Story 5.0 |
+| src folder / module structural refactoring | Epic 5 Story 5.0 |
+| Settings modal + hotkey rebinding | Epic 5 Story 5.1 |
+| Per-tool remembered default color | Epic 5 Story 5.2 |
+| Custom color slots + picker | Epic 5 Story 5.2 |
+| Hide/show all annotations toggle | Epic 5 Story 5.3 |
+| Layered Esc | Epic 5 Story 5.4 |
+| Confirm (check) on memo + comment editors | Epic 5 Story 5.4 |
+| Collapse pen stroke-width into a dropdown | Epic 5 Story 5.4 |
+| Dim ToC panel until hovered | Epic 5 Story 5.5 |
+
+**Not promoted (stay out of v1 / the new epics):** upload size cap (backend hardening, only if multi-user) · ToC synthesis + persist + schema bump (Phase 2) · directly edit PDF text + style (Phase 2/3, needs a feasibility spike).
+
 ## Deferred from: code review of story-1-2-open-a-pdf-from-disk (2026-06-28)
 
 - **Upload size cap** [server/app/routes/docs.py:21] — `POST /api/docs` reads the entire PDF into memory (`await file.read()`) with no size limit, so a very large upload could exhaust server memory before validation. Deferred: the deployment is localhost single-user with no auth (AD-1/AD-10), no size limit is specified, and papers are small. Revisit if the app is ever exposed to multiple/untrusted users — add a max-size guard returning 413, or a storage-owned streaming hash path.
-
-## Deferred from: code review of 1-5-zoom (2026-06-28)
-
-- ~~**Text layer scale variables outside pdf.js viewer wrapper**~~ **(RESOLVED 2026-06-28)** — `renderPage` now explicitly sets `--scale-factor` and `--total-scale-factor` on the swapped `.textLayer`, instead of relying on a `.pdfViewer .page` wrapper or the copied `cssText` alone. Live-verified after a zoom: `--scale-factor` = scale, `--total-scale-factor` = scale × DPR, spans aligned.
-- ~~**Scroll-away render cancellation**~~ **(PROMOTED 2026-06-28 → Story 1.7)** [client/src/Reader.tsx] — `PageCard` marks a page visible once and disconnects the observer, so in-flight page renders cancel on unmount or scale change but not when the card leaves the viewport. Now tracked as Story 1.7 (render perf — windowing & viewport unification) via correct-course; see `.bmad/planning-artifacts/sprint-change-proposal-2026-06-28-render.md`.
 
 ## Deferred from: story 1-9-table-of-contents (2026-06-29) — Phase 2
 
@@ -28,9 +55,10 @@ Items surfaced during review that are real but intentionally not actioned now.
 
 ## Deferred from: story 2-5-select-highlight-recolor-delete (2026-06-29) — color system
 
-> Surfaced while building the selection recolor row (which reuses `ColorSwatchRow` + the 6-token palette). Both items extend the COLOR model, not the selection model, so they ride with Story 2.6 (arm-time color pick) and/or an Epic-3 polish pass rather than 2.5. Today the palette is a fixed 6 tokens (`ColorSwatchRow.tsx` `PALETTE`) and the default highlight color is the hardcoded `DEFAULT_COLOR = "annotation-default"` in `AnnotationInteraction.tsx`.
+> Surfaced while building the selection recolor row (which reuses `ColorSwatchRow` + the palette). This item extends the COLOR model, not the selection model. The palette is a fixed set of accent tokens (`ColorSwatchRow.tsx`); the create default now lives in the store as `activeColor`/`setActiveColor` (the old hardcoded `DEFAULT_COLOR` was removed by Story 2.6).
+>
+> (Done: the arm-time default-color pick that set the highlight tool's default was DELIVERED by Story 2.6 — the create path reads `activeColor` from the store instead of a hardcoded `annotation-default`.)
 
-- **Arm-time default-color pick sets the highlight tool's default** [client/src/annotations/AnnotationInteraction.tsx `DEFAULT_COLOR`; ColorSwatchRow] — the Highlight tool's sub-toolbox (the arm-time swatch row, Story 2.6) should let the user choose which palette color is the DEFAULT applied to new highlights on create-on-release, not just recolor after the fact. I.e. the arm-time pick is sticky and becomes the tool's current color; create-on-release uses it instead of the hardcoded `annotation-default`. Largely subsumed by Story 2.6 — call it out there so 2.6 wires "armed color → default create color" (the store/app needs to hold the current highlight color, replacing the `DEFAULT_COLOR` constant), and the 2.5 selection recolor row keeps showing the selected mark's own color (unchanged). Confirm 2.6's scope covers this when it's picked up.
 - **Custom color slot(s) + color picker, cached in the browser** [client/src/annotations/ColorSwatchRow.tsx; client/src/theme] — beyond the 6 fixed accent tokens, add one or two CUSTOM color slots the user fills via a color picker, persisted in browser storage (localStorage) so they survive reloads.
   - **UX spec (user, 2026-06-29, with screenshot):** add a "More colors" affordance (a palette icon, like the screenshot — a small swatch/palette glyph with a "More colors" tooltip) at the TAIL of every color sub-toolrail that shows `ColorSwatchRow` (the Highlight / Underline / Pen / memo flyouts AND the selection quick-box). Clicking it opens a color picker pre-seeded with suggestions = the current 5 default accent colors. When the user picks a custom color, it SLIDES INTO THE TAIL of the 5-swatch row as a sliding window: the row keeps a fixed count, the newest custom color is appended and the oldest swatch slides off (FIFO). So the visible row is "recent/active palette," not the immutable 5. Decide: how many slots the window holds, whether the 5 named defaults can ever slide off or only custom colors rotate, and the persistence of the window (localStorage, per the storage note below). This is the concrete UI for the custom-color slots described here — fold the two together when this is picked up. Open design points: (a) the annotation model stores `style.color` as a token NAME today (`annotation-green`) painted via `var(--color-<name>)` — a custom hex breaks that contract, so either store a raw hex for custom slots (model/anchor implication: `style.color` becomes "token name OR hex", a small schema/Pydantic widening → contract regen, AD-3) or map custom slots to runtime CSS vars (`--color-annotation-custom-1`) seeded from localStorage at boot (keeps the token contract, client-only). The token-var path is preferred (no contract break, stays in `theme/` + `annotations/`). (b) `no-raw-values.test.ts` forbids raw hex outside `src/theme/**` — a custom-hex picker UI must route the value through a CSS var / theme layer, not inline it in a component. (c) localStorage is per-browser, not per-`~/.paper-mate` doc data (AD-8) — it is a UI preference, so that is acceptable, but note it does NOT sync across machines. Needs its own story (color-system extension); likely an Epic-3 polish item once core annotate/persist lands.
 
@@ -52,19 +80,6 @@ Items surfaced during review that are real but intentionally not actioned now.
 3. **Selection is implemented on top of the controller's emitted positions**, not by steering the browser's contiguous range. This likely means building the selection geometry/paint from the (anchor-line to focus-line within the same column) span directly, rather than relying on `window.getSelection()` to be column-correct.
 
 Plan this thoroughly before coding (own story / correct-course): decide how selection, copy, and the existing highlight create-on-release (`rectsFromSelection`) consume the controller, and how cross-column selection is expressed (e.g. reading-order, column by column). Keep it in ONE module with a narrow contract so it does not spread across `render/`, `anchor/`, and `annotations/` the way the dropped attempts did.
-
-## Deferred from: local Docker dev experience (2026-06-29)
-
-> **PROMOTED 2026-06-29 → Story 2.1 (Dev-infra enabler)** via correct-course (`sprint-change-proposal-2026-06-29.md`): both items below are now the AC of Epic 2 Story 2.1, sequenced first so Epic 2's heavy iteration isn't blocked by the dev-experience friction. Kept here for the root-cause detail.
-
-> Surfaced while running `docker compose up` for local testing. Both are dev-environment/infra, not product behavior — but they block comfortable local iteration as the backend grows. Coupled (both stem from how the container runs), so fix them together; a single dev-compose override can address both.
-
-- **Bind-mounted `/data` is root-owned; the host user can't edit/delete it** [Dockerfile, docker-compose.yml] — the runtime image has no `USER`, so the container runs as **root (uid 0)**. Everything it writes to the bind-mounted `/data` (host `~/.paper-mate`, AD-8 storage root) lands `root:root` — the host user (uid 1000) can read (dirs are 0755) but not write or delete (the lock badges in the file manager). It **re-occurs on every `docker compose up`**, not a one-time glitch.
-  - **Immediate unblock for already-created files:** `sudo chown -R "$USER":"$USER" ~/.paper-mate`.
-  - **Proper fix:** run the container as the host user — add `user: "${PAPER_MATE_UID:-1000}:${PAPER_MATE_GID:-1000}"` to the compose service so new files land owned by the user. The image's venv/app dirs stay root-owned but world-readable, and at runtime the app only writes `/data`, so running as an arbitrary uid is fine. Pre-create the host dir before the first mount so its own ownership is the user's. (Alternative: bake a fixed-uid non-root `USER` into the Dockerfile, but that still mismatches if the host uid differs — the compose `user:` form is more portable for single-user local.) Touches AD-10 (single-container) packaging.
-- **Backend does not hot-reload in Docker; the container goes stale on every change** [Dockerfile, docker-compose.yml] — the Dockerfile **COPYs** `server/app` at build time (baked in, not mounted) and the CMD runs `uvicorn` with **no `--reload`**; compose mounts no source. So any backend edit needs a full `docker compose up --build`, and a forgotten rebuild silently serves stale code (a real footgun once backend churn picks up — note the v2 backend-growth thread above). Front-end in the image is built static (no HMR) too, so true in-container hot dev would also need Vite — i.e. basically the host two-process flow, containerized.
-  - **Decision to make:** (a) declare **local dev = the host two-process flow** (`uvicorn --reload` + `vite dev`, per CLAUDE.md) and **Docker = prod-like single-command boot**; document this clearly so a stale container is never mistaken for a bug. OR (b) add a **dev compose override** (`compose.dev.yaml` / override file / `dev` profile) that bind-mounts `server/app` → `/app/app` and runs `uvicorn --reload` (and can also set the `user:` from the item above). Recommendation: (a) as the documented default + (b) as an optional override for anyone iterating in-container. Touches the dev-docs (README/CLAUDE.md) and compose.
-  - **Decision to make:** (a) declare **local dev = the host two-process flow** (`uvicorn --reload` + `vite dev`, per CLAUDE.md) and **Docker = prod-like single-command boot**; document this clearly so a stale container is never mistaken for a bug. OR (b) add a **dev compose override** (`compose.dev.yaml` / override file / `dev` profile) that bind-mounts `server/app` → `/app/app` and runs `uvicorn --reload` (and can also set the `user:` from the item above). Recommendation: (a) as the documented default + (b) as an optional override for anyone iterating in-container. Touches the dev-docs (README/CLAUDE.md) and compose.
 
 ## Deferred from: Story 2.7 underline (2026-06-29) — cross-type recent-wins / unified hit-layer
 
@@ -225,3 +240,11 @@ Plan this thoroughly before coding (own story / correct-course): decide how sele
 - **Architectural note — the keymap must become DATA before this is buildable.** Today the hotkeys are HARD-CODED as literal `e.key === "h"` branches in `App.tsx`'s document-level keydown (and a few elsewhere). Rebinding requires first refactoring the keymap into a single data structure (action → key) that the keydown handler reads, so the Settings UI can edit it. That refactor is the real cost; the modal UI is secondary. Likely seams: a new `keymap` store slice (action→binding) + a `useKeymap`-style lookup the `App.tsx` keydown consults instead of literals; a `SettingsModal` component (focus-trapped, `Esc`-dismissable, keyboard-reachable — UX-DR17); a toolbox/tool-rail Settings button (Phosphor `Gear`/`Sliders`).
 - **Persistence question to resolve:** where do user preferences live? Annotations persist to `~/.paper-mate` per-doc (AD-8); settings are app-global, not per-doc. Decide: `localStorage` (client-only, simplest, fits "no auth, single user, localhost") vs a new server-side prefs file + endpoint (breaks the "backend is a dumb store" posture lightly, but durable across browsers). Recommend `localStorage` for v1 unless cross-browser durability is wanted.
 - **Guardrails:** conflict detection (two actions can't hold the same key); a reset-to-defaults; reserve browser/OS-critical combos; keep the modal token-driven (no raw values, no em-dash in copy/labels/aria); the editor must capture a keypress to assign (a "press a key" capture field), exempt from the global tool keys while capturing. No contract change for the localStorage route. Build the keymap-as-data refactor as its own enabler before (or as task 1 of) the Settings story.
+
+## Feature request: dim the Table-of-Contents panel until hovered (2026-06-30)
+
+> Requested by the user. Product/UX polish (not a bug), backlog. The ToC panel/popup should recede when not in use and come fully forward on hover, in keeping with the "immersive, non-distracting reading" principle (CLAUDE.md#Design-conventions). Slot at sprint planning; small `annotations/` (or wherever the ToC panel lives) + theme change.
+
+- **As a reader, I want the Table-of-Contents panel to be 40% transparent by default and become fully opaque + interactable on hover, so it stays out of the way while reading but is there when I reach for it.** Default resting state = ~0.4 opacity (60% transparent); on `:hover` (and on keyboard focus-within, for accessibility) it animates to full opacity (1.0) and is fully interactable.
+  - **Likely seams:** the ToC panel component (`TocPanel`, Story 1.9) + its CSS. Add a resting `opacity` token (e.g. `--toc-panel-resting-opacity: 0.4`) and a `:hover`/`:focus-within` rule that lifts it to 1.0 with a short transition; respect `prefers-reduced-motion` (degrade the fade to instant, per UX-DR17). Token-driven (no raw values); no contract/store change -- pure presentation.
+  - **Clarify when picked up:** whether the dim applies to the ToC PANEL (the docked drawer) or only a transient popup; whether at-rest the panel should still accept clicks or be reveal-then-interact. Default read: dim-at-rest, full-on-hover, always clickable.

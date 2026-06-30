@@ -172,8 +172,8 @@ With interactive marks (Decision A), a pointerdown that STARTS on a highlight is
 - [Source: .bmad/planning-artifacts/sprint-change-proposal-2026-06-29-select-highlight.md] — the gap (highlights not selectable), the chosen slice (selection seam + lightweight recolor/delete in Epic 2; heavy edits in 3.1), AD-12 text.
 - [Source: .bmad/planning-artifacts/epics.md#Story-2.5] — story statement + 5 ACs + scope guard.
 - [Source: EXPERIENCE.md IP-6] — lightweight click-select + restyle/recolor + delete (2.5) split from heavy drag-handle move/resize + re-edit (3.1).
-- [Source: .bmad/implementation-artifacts/2-4-unify-tool-state-fsm.md] — the `activeTool` FSM (done); the create machine + quick-box behaviors to preserve.
-- [Source: .bmad/implementation-artifacts/2-3-highlight-text-via-drag.md] — `ColorSwatchRow`, `recolorAnnotation`, create-on-release, the re-pop fix to preserve.
+- [Source: .bmad/implementation-artifacts/epic-2/2-4-unify-tool-state-fsm.md] — the `activeTool` FSM (done); the create machine + quick-box behaviors to preserve.
+- [Source: .bmad/implementation-artifacts/epic-2/2-3-highlight-text-via-drag.md] — `ColorSwatchRow`, `recolorAnnotation`, create-on-release, the re-pop fix to preserve.
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions] — document-level handlers, adopt-stable, render-mock-barrel sync, token rules, no em-dash, test incantations.
 
 ## Previous Story Intelligence
@@ -237,7 +237,7 @@ Implemented the selection seam (AD-12) entirely client-side; no contract/anchor/
 - client/src/annotations/AnnotationInteraction.test.tsx (selection quick-box tests)
 - client/src/annotations/Annotations.css (interactive mark + --hovered/--selected classes)
 - client/src/annotations/README.md (selection model docs)
-- .bmad/implementation-artifacts/2-5-select-highlight-recolor-delete.md (this story)
+- .bmad/implementation-artifacts/epic-2/2-5-select-highlight-recolor-delete.md (this story)
 - .bmad/implementation-artifacts/sprint-status.yaml (status tracking)
 
 ### Code Review (cross-model: Codex gpt-5.5, read-only)

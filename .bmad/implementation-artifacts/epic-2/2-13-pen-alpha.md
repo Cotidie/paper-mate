@@ -145,8 +145,8 @@ Resist: a group-level pen opacity (must be per-stroke, Decision 4); hand-editing
 - [Source: ARCHITECTURE-SPINE.md#AD-5] — `type`/`style` vs `anchor.kind`; `style` is field-scoped (alpha is a style axis, geometry unchanged).
 - [Source: ARCHITECTURE-SPINE.md#AD-3] — Pydantic is the single contract source; client types generated, never hand-authored.
 - [Source: ARCHITECTURE-SPINE.md#AD-8] — additive optional field is backward-compatible (no persisted-format break / MAJOR bump).
-- [Source: .bmad/implementation-artifacts/2-8-pen-freehand.md] — the pen create/render/sub-toolbox/selection seams alpha extends; `restrokeAnnotation`/`StrokeWidthRow`/`activeStrokeWidth` are the exact twins.
-- [Source: .bmad/implementation-artifacts/2-9-textbox-memo.md] — the more-recent twin: `SizeRow`/`activeMemoSize`/`resizeMemoAnnotation` established the step-row + sticky-default + guarded-restyle + rail/quick-box wiring this story copies.
+- [Source: .bmad/implementation-artifacts/epic-2/2-8-pen-freehand.md] — the pen create/render/sub-toolbox/selection seams alpha extends; `restrokeAnnotation`/`StrokeWidthRow`/`activeStrokeWidth` are the exact twins.
+- [Source: .bmad/implementation-artifacts/epic-2/2-9-textbox-memo.md] — the more-recent twin: `SizeRow`/`activeMemoSize`/`resizeMemoAnnotation` established the step-row + sticky-default + guarded-restyle + rail/quick-box wiring this story copies.
 - [Source: CLAUDE.md#Versioning, #Contract-types, #Design-conventions, #Engineering-principles].
 
 ## Dev Agent Record

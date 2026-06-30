@@ -179,8 +179,8 @@ Resist: a contract field/new `type` for "region" (a region is just `kind=rect`);
 - [Source: ARCHITECTURE-SPINE.md#AD-9, #AD-3] — layering; contract stability (no API/Pydantic/generated-type change; `RectAnchor`/`type`/`body` already exist).
 - [Source: DESIGN.md#annotation-highlight, #quick-box, #tool-rail] — region fill (highlight ~0.4 + accent); quick-box shell; cursor flyout (cursor/hand/box-select).
 - [Source: UX-DR4/DR5/DR15] — tool rail + cursor flyout box-select; contextual quick-box (box-select → region picker); `M` = box-select.
-- [Source: .bmad/implementation-artifacts/2-9-textbox-memo.md] — the first `kind=rect` mark; the create-then-select-into-quick-box flow; the store-action twin pattern (`retext`/`resize`); `denormalizeRect` zoom-glue; the editable-field exemption.
-- [Source: .bmad/implementation-artifacts/2-10-comment-highlight-pin-bubble.md] — the comment pin + bubble (already rect-aware: `AnnotationLayer` denormalizes `anchor.rect` for the pin); a `kind=text` comment fills "for free" via `highlightMarks` but a `kind=rect` comment does NOT — the gap this story's rect-fill branch closes; the doc-scoped group-id guard.
+- [Source: .bmad/implementation-artifacts/epic-2/2-9-textbox-memo.md] — the first `kind=rect` mark; the create-then-select-into-quick-box flow; the store-action twin pattern (`retext`/`resize`); `denormalizeRect` zoom-glue; the editable-field exemption.
+- [Source: .bmad/implementation-artifacts/epic-2/2-10-comment-highlight-pin-bubble.md] — the comment pin + bubble (already rect-aware: `AnnotationLayer` denormalizes `anchor.rect` for the pin); a `kind=text` comment fills "for free" via `highlightMarks` but a `kind=rect` comment does NOT — the gap this story's rect-fill branch closes; the doc-scoped group-id guard.
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions, #Versioning].
 
 ## Previous Story Intelligence

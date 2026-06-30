@@ -161,7 +161,7 @@ AR-7 routes **edits of existing annotations** through the Epic-3 command stack. 
 
 - [Source: .bmad/planning-artifacts/epics.md#Story-2.3-Highlight-text-via-drag] — story statement + 6 ACs.
 - [Source: .bmad/planning-artifacts/epics.md#Epic-2 (restructure note, lines 368-372)] — 2.3 is a thin feature on the 2.2 foundation; adopt-stable principle.
-- [Source: .bmad/implementation-artifacts/2-2-annotation-foundation.md] — the foundation this reuses: anchor service, entity, store, overlay, machine, quick-box shell, cursor-mode proof; decisions #2 (proof trigger) + #3 (overlay mount seam).
+- [Source: .bmad/implementation-artifacts/epic-2/2-2-annotation-foundation.md] — the foundation this reuses: anchor service, entity, store, overlay, machine, quick-box shell, cursor-mode proof; decisions #2 (proof trigger) + #3 (overlay mount seam).
 - [Source: ARCHITECTURE-SPINE.md#AD-4] — spatial-anchor model: normalized `[0,1]`, top-left y-down, canonical rect, `kind` discriminator, one-anchor-one-page + `group_id` split.
 - [Source: ARCHITECTURE-SPINE.md#AD-5] — `Annotation` entity; `type` vs `anchor.kind`; highlight→text|rect pairing; style field-scoping.
 - [Source: ARCHITECTURE-SPINE.md#AD-3] — Pydantic → OpenAPI → generated TS; never hand-author client API types.
