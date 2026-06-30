@@ -156,14 +156,22 @@ export default function AnnotationInteraction({
   getPagesRef.current = getPages;
   const armedToolRef = useRef(armedTool);
   armedToolRef.current = armedTool;
-  const activeColorRef = useRef(activeColor);
-  activeColorRef.current = activeColor;
-  const activeStrokeWidthRef = useRef(activeStrokeWidth);
-  activeStrokeWidthRef.current = activeStrokeWidth;
-  const activeAlphaRef = useRef(activeAlpha);
-  activeAlphaRef.current = activeAlpha;
-  const activeMemoSizeRef = useRef(activeMemoSize);
-  activeMemoSizeRef.current = activeMemoSize;
+  // Story 5.0: the four active-default mirrors (color, stroke width, alpha, memo
+  // size) collapse into ONE object ref the document-level listeners read without
+  // re-binding. Same values, refreshed every render exactly like the prior scalar
+  // refs — internal-only (the store's public `active*` API is unchanged).
+  const defaultsRef = useRef({
+    color: activeColor,
+    strokeWidth: activeStrokeWidth,
+    alpha: activeAlpha,
+    memoSize: activeMemoSize,
+  });
+  defaultsRef.current = {
+    color: activeColor,
+    strokeWidth: activeStrokeWidth,
+    alpha: activeAlpha,
+    memoSize: activeMemoSize,
+  };
   const rectReaderRef = useRef(rectReader);
   rectReaderRef.current = rectReader;
   // Box-select gesture (Story 2.11): gates on boxActive (a pointer tool), NOT
@@ -196,7 +204,7 @@ export default function AnnotationInteraction({
         now: new Date().toISOString(),
         newId,
         type: tool,
-        color: activeColorRef.current,
+        color: defaultsRef.current.color,
         ...(tool === "comment" ? { body: "" } : {}),
       });
       created.forEach(addAnnotation);
@@ -298,7 +306,7 @@ export default function AnnotationInteraction({
           const created = buildCommentPin({ page_index: page.pageIndex, rect }, docId, {
             now: new Date().toISOString(),
             newId,
-            color: activeColorRef.current,
+            color: defaultsRef.current.color,
           });
           addAnnotation(created);
           select(created.id);
@@ -426,9 +434,9 @@ export default function AnnotationInteraction({
       const created = buildPenAnnotation({ page_index: page.pageIndex, points }, docId, {
         now: new Date().toISOString(),
         newId,
-        color: activeColorRef.current,
-        strokeWidth: activeStrokeWidthRef.current,
-        alpha: activeAlphaRef.current,
+        color: defaultsRef.current.color,
+        strokeWidth: defaultsRef.current.strokeWidth,
+        alpha: defaultsRef.current.alpha,
       });
       addAnnotation(created);
       select(created.id);
@@ -488,7 +496,7 @@ export default function AnnotationInteraction({
       const page = pages[idx];
       const cardRect = cardBoxes[idx];
       const scale = scaleRef.current;
-      const size = activeMemoSizeRef.current;
+      const size = defaultsRef.current.memoSize;
       // Card-local px at the CURRENT scale (size is scale-1.0 px, so multiply by
       // scale); normalizeRect divides by box*scale → a scale-independent rect.
       const x0 = e.clientX - cardRect.left;
@@ -501,7 +509,7 @@ export default function AnnotationInteraction({
       const created = buildMemoAnnotation({ page_index: page.pageIndex, rect }, docId, {
         now: new Date().toISOString(),
         newId,
-        color: activeColorRef.current,
+        color: defaultsRef.current.color,
       });
       addAnnotation(created);
       select(created.id);
@@ -591,7 +599,7 @@ export default function AnnotationInteraction({
       const created = buildRegionAnnotation({ page_index: page.pageIndex, rect }, docId, {
         now: new Date().toISOString(),
         newId,
-        color: activeColorRef.current,
+        color: defaultsRef.current.color,
       });
       addAnnotation(created);
       select(created.id);
@@ -739,14 +747,14 @@ export default function AnnotationInteraction({
           const created = buildCommentPin({ page_index: page.pageIndex, rect }, docId, {
             now,
             newId,
-            color: activeColorRef.current,
+            color: defaultsRef.current.color,
           });
           addAnnotation(created);
           window.getSelection()?.removeAllRanges();
           dispatch({ type: "commit" });
           select(created.id);
         } else if (tool === "memo") {
-          const size = activeMemoSizeRef.current;
+          const size = defaultsRef.current.memoSize;
           const rect = normalizeRect(
             { x0, y0, x1: x0 + size.width * scale, y1: y0 + size.height * scale },
             page.box,
@@ -755,7 +763,7 @@ export default function AnnotationInteraction({
           const created = buildMemoAnnotation({ page_index: page.pageIndex, rect }, docId, {
             now,
             newId,
-            color: activeColorRef.current,
+            color: defaultsRef.current.color,
           });
           addAnnotation(created);
           window.getSelection()?.removeAllRanges();

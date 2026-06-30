@@ -1,6 +1,10 @@
+---
+baseline_commit: b45880fab7b8daf36c33b6d7ed3fde86005e7efa
+---
+
 # Story 5.0: Codebase structural refactor (data contracts + conditional/FSM unification + src split)
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -25,11 +29,11 @@ so that adding a tool or an edit is one registration, not edits across five `if`
 
 > Land as a SEQUENCE of independent PRs (one per thread), each suite-green + contract-byte-identical, so a regression is bisectable and review stays small. Order is low-risk → high-risk.
 
-- [ ] **Task 1 — Data contracts (AC: #2).** Lowest risk; sets the types the registry consumes.
-  - [ ] Consolidate the five `Build*Options` interfaces in `create.ts` into one discriminated "create request" per tool (or a single tagged union), each carrying only its tool's fields; keep `newId`/`now` injection (deterministic tests).
-  - [ ] Replace the `activeColor`/`activeStrokeWidth`/`activeAlpha`/`activeMemoSize` scalar fields + their `setActive*` setters in `store/index.ts` with one "active-tool defaults" object (shape only; do NOT make it per-tool — that is Story 5.2). Update the `active*Ref` mirrors in `AnnotationInteraction.tsx` to read the one object.
-  - [ ] Route bare point/rect literals through the existing `anchor/` `Point`/`Rect` helpers; no new geometry math (adopt-stable, AP-4).
-  - [ ] Suite green, contract byte-identical, typecheck clean. PR 1.
+- [x] **Task 1 — Data contracts (AC: #2).** Lowest risk; sets the types the registry consumes.
+  - [x] Consolidate the five `Build*Options` interfaces in `create.ts` into one discriminated "create request" per tool (or a single tagged union), each carrying only its tool's fields; keep `newId`/`now` injection (deterministic tests). → `CreateBase` (now/newId/color) + `TextCreateRequest` (type/body) + `PenCreateRequest` (strokeWidth/alpha); memo/region/comment use `CreateBase` directly.
+  - [x] ~~Replace the `activeColor`/… fields + setters in `store/index.ts` with one object~~ Consolidate the `active*Ref` mirrors in `AnnotationInteraction.tsx` into one `defaultsRef` object. **Store/App/ToolRail public `active*` API kept (Option 1, user decision):** consolidating the store-public fields forces rewriting direct assertions in `store/index.test.ts`, which the "tests change by import-path only" guardrail forbids. Store-public-API consolidation deferred out of 5.0 (Story 5.2 reshapes that surface per-tool anyway). See Completion Notes.
+  - [x] Route bare point/rect literals through the existing `anchor/` `Point`/`Rect` helpers; no new geometry math (adopt-stable, AP-4). → merged the three identical `{page_index, rect}` placements (`MemoPlacement`/`CommentPinPlacement`/`RegionPlacement`) into one `RectPlacement`; placements/strokes keep the contract `Rect`/`Point` types; no new math.
+  - [x] Suite green, contract byte-identical, typecheck clean. PR 1. → 415 client tests green (unchanged), typecheck clean, `git diff --stat` on openapi.json + schema.d.ts empty.
 - [ ] **Task 2 — Per-kind/per-tool descriptor registry (AC: #1).**
   - [ ] Define a descriptor interface keyed on `anchor.kind` + `type` (e.g. `{ kind, type, build, render, quickBoxRows, hitSelector }`); one entry per tool.
   - [ ] Route `create.ts` (the 5 `build*`), `AnnotationLayer` (the 6 group filters + 5 `render*`), the `store` mutation twins (`recolor`/`restroke`/`realpha`/`retext`/`resize`/`retype`/`delete` guard-then-map blocks), and `AnnotationInteraction`'s `pointerup` create branch through the registry. Delete the now-dead twins.
@@ -110,8 +114,23 @@ Four independent PRs (Tasks 1-4), low-risk → high-risk, each suite-green + con
 
 ### Agent Model Used
 
+claude-opus-4-8 (Claude Code, bmad-dev-story).
+
 ### Debug Log References
+
+- Baseline (commit `b45880f`): client 415 tests / 27 files green; server 43 tests green; contract (`openapi.json` + `schema.d.ts`) byte-clean.
 
 ### Completion Notes List
 
+**AC-2 scope decision (user, Option 1 — "internal-only, keep public API"):** AC-2 ("replace the `active*` fields in `store/index.ts` with one defaults object") directly conflicts with the story guardrail "tests change by import-path only, never by assertion" — `store/index.test.ts` asserts on `getState().activeColor` etc. directly, and `active*` is also threaded App → ToolRail → ToolFlyout as props (~73 test reads across 4 files). Per the user's decision, the store/App/ToolRail public `active*` API is KEPT as-is (zero test-assertion changes), and the defaults-object consolidation is applied INTERNALLY only: the create-request contracts in `create.ts` and the `active*Ref` mirrors in `AnnotationInteraction.tsx`. The store-public-API + props consolidation is deferred out of 5.0; Story 5.2 (per-tool color) reshapes that surface anyway, so deferring avoids double churn. Net: AC-2's contract-consolidation intent is met; its store-shape clause is consciously deferred.
+
+**Task 1 (PR 1) — Data contracts.** `create.ts`: five `Build*Options` interfaces → `CreateBase` (now/newId/color) + `TextCreateRequest`/`PenCreateRequest` extensions; three identical `{page_index, rect}` placements → one `RectPlacement`. Builder bodies byte-identical (same `Annotation` shape). `AnnotationInteraction.tsx`: four `active*Ref` scalar mirrors → one `defaultsRef` object (same values, same per-render refresh). No behavior/contract change. Verified: typecheck clean, 415 client tests green (unchanged), contract diff empty.
+
 ### File List
+
+- `client/src/annotations/create.ts` (modified — contract consolidation)
+- `client/src/annotations/AnnotationInteraction.tsx` (modified — `defaultsRef` consolidation)
+
+### Change Log
+
+- Task 1 (PR 1): consolidate create-request data contracts + active-default refs (no behavior/contract change). 2026-06-30.

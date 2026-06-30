@@ -2,21 +2,46 @@
 // so the two-page `group_id` split (AC-5) and the entity shape are unit-testable
 // without a live selection. The TS shape comes from the generated type (AD-3);
 // this module never hand-authors it.
+//
+// Story 5.0: the five near-twin `Build*Options` interfaces collapse onto ONE
+// `CreateBase` (the shared `now`/`newId`/`color` every tool injects) plus per-tool
+// extensions that carry ONLY that tool's extra fields (text → `type`/`body`, pen →
+// `strokeWidth`/`alpha`). The three identical `{ page_index, rect }` placements
+// (memo, comment-pin, region) collapse onto one `RectPlacement`. No behavior or
+// contract change: the builders assemble the same `Annotation` shape as before.
 
 import type { Annotation, Point, Rect } from "../api/client";
 import type { PageSelection } from "../anchor";
 import type { AnnotationTool } from "./machine";
 
-export interface BuildOptions {
+/** The fields every create request shares: the injected clock + id factory
+ *  (deterministic tests) and the resolved style color (a token name). Each tool's
+ *  request extends this with only its own extra fields. */
+export interface CreateBase {
   /** ISO-8601 UTC timestamp for created_at/updated_at (`new Date().toISOString()`). */
   now: string;
   /** UUID factory (the `newId` util — `crypto.randomUUID` with an insecure-context
    *  `getRandomValues` fallback); injectable for deterministic tests. */
   newId: () => string;
-  /** The annotation type (a text-anchor tool: highlight / underline / comment). */
-  type: AnnotationTool;
   /** Resolved style color (a token name; e.g. the default highlight). */
   color: string;
+}
+
+/** A single page's rect placement (memo box, comment pin, region) — the page it
+ *  landed on + its normalized `[0,1]` rect (AD-4). Feeds a `RectAnchor`. The three
+ *  rect tools share this exact shape; what differs is the built `type`/`body`. For
+ *  a memo the rect dimensions ARE the box size (the `SizeRow` preset, baked at
+ *  placement — there is no separate size field, AD-5); a comment pin uses a
+ *  degenerate (point) rect; a region uses the canonicalized drag bounds. */
+export interface RectPlacement {
+  page_index: number;
+  rect: Rect;
+}
+
+/** The text-anchor create request (highlight / underline / comment via drag). */
+export interface TextCreateRequest extends CreateBase {
+  /** The annotation type (a text-anchor tool: highlight / underline / comment). */
+  type: AnnotationTool;
   /** Optional `body` for the built marks (Story 2.10). Highlight/underline omit it
    *  (→ null); the comment DRAG path passes `""` so a `kind=text` comment carries a
    *  non-null body (AD-5: `body` non-null for comment) the bubble then edits. */
@@ -29,7 +54,7 @@ export interface BuildOptions {
  * (UUIDv4); a single-page selection has `group_id = null` (AC-5). `body` defaults
  * to null (highlight/underline); a comment drag passes `""` (Story 2.10).
  */
-export function buildAnnotations(pages: PageSelection[], docId: string, opts: BuildOptions): Annotation[] {
+export function buildAnnotations(pages: PageSelection[], docId: string, opts: TextCreateRequest): Annotation[] {
   const { now, newId, type, color, body } = opts;
   const groupId = pages.length > 1 ? newId() : null;
   return pages.map((page) => ({
@@ -57,13 +82,8 @@ export interface PenStroke {
   points: Point[];
 }
 
-export interface BuildPenOptions {
-  /** ISO-8601 UTC timestamp for created_at/updated_at. */
-  now: string;
-  /** UUID factory (injectable for deterministic tests). */
-  newId: () => string;
-  /** Resolved style color (a token name). */
-  color: string;
+/** The pen create request: the shared base + the path-only style fields. */
+export interface PenCreateRequest extends CreateBase {
   /** Stroke diameter in scale-1.0 CSS px (the renderer multiplies by scale). */
   strokeWidth: number;
   /** Stroke transparency 0..1 (Story 2.13). Default = highlighter opacity. */
@@ -76,7 +96,7 @@ export interface BuildPenOptions {
  * two-page split (that is the text-selection path's concern, AR-4). `stroke_width`
  * and `alpha` are path-only style; `body` is null.
  */
-export function buildPenAnnotation(stroke: PenStroke, docId: string, opts: BuildPenOptions): Annotation {
+export function buildPenAnnotation(stroke: PenStroke, docId: string, opts: PenCreateRequest): Annotation {
   const { now, newId, color, strokeWidth, alpha } = opts;
   return {
     id: newId(),
@@ -91,24 +111,6 @@ export function buildPenAnnotation(stroke: PenStroke, docId: string, opts: Build
   };
 }
 
-/** One memo placed on a single page: the page it landed on + its normalized
- *  `[0,1]` box (AD-4). Feeds a `RectAnchor`. The box dimensions ARE the memo's
- *  size (the `SizeRow` preset, baked into the rect at placement) — there is no
- *  separate size field (AD-5: geometry-on-kind, no contract field for size). */
-export interface MemoPlacement {
-  page_index: number;
-  rect: Rect;
-}
-
-export interface BuildMemoOptions {
-  /** ISO-8601 UTC timestamp for created_at/updated_at. */
-  now: string;
-  /** UUID factory (injectable for deterministic tests). */
-  newId: () => string;
-  /** Resolved accent color (a token name) — tints the memo border. */
-  color: string;
-}
-
 /**
  * Build ONE memo `Annotation` (AD-5: `memo → rect`). The FIRST `kind=rect` mark
  * and the FIRST mark with a non-null `body`: it starts as `""` and updates as the
@@ -116,7 +118,7 @@ export interface BuildMemoOptions {
  * `page_index`), so `group_id` is null. `stroke_width` is path-only style, so it
  * stays null; the size lives in the rect, not in style.
  */
-export function buildMemoAnnotation(memo: MemoPlacement, docId: string, opts: BuildMemoOptions): Annotation {
+export function buildMemoAnnotation(memo: RectPlacement, docId: string, opts: CreateBase): Annotation {
   const { now, newId, color } = opts;
   return {
     id: newId(),
@@ -131,52 +133,13 @@ export function buildMemoAnnotation(memo: MemoPlacement, docId: string, opts: Bu
   };
 }
 
-/** One comment PIN placed by a CLICK (no text selection): the page + a small
- *  normalized anchor rect at the click point (the pin renders at its top-left).
- *  Feeds a `RectAnchor`. */
-export interface CommentPinPlacement {
-  page_index: number;
-  rect: Rect;
-}
-
-export interface BuildCommentPinOptions {
-  /** ISO-8601 UTC timestamp for created_at/updated_at. */
-  now: string;
-  /** UUID factory (injectable for deterministic tests). */
-  newId: () => string;
-  /** Resolved accent color (a token name) — tints the pin (and would tint a fill,
-   *  but a clicked pin has none). */
-  color: string;
-}
-
-/** A region dragged with the box-select tool: one page + a normalized `[0,1]`
- *  bounding rect from the two drag corners (canonicalized in `normalizeRect`).
- *  Feeds a `RectAnchor` as a region highlight (`type=highlight`, `kind=rect`). */
-export interface RegionPlacement {
-  page_index: number;
-  rect: Rect;
-}
-
-export interface BuildRegionOptions {
-  /** ISO-8601 UTC timestamp for created_at/updated_at. */
-  now: string;
-  /** UUID factory (injectable for deterministic tests). */
-  newId: () => string;
-  /** Resolved accent color (a token name). */
-  color: string;
-}
-
 /**
  * Build ONE region highlight `Annotation` (AD-5: `highlight → rect`, AR-5).
  * The first mark built from a free rectangle drag (pen drags a path; box-highlight
  * builds a bounding rect). Always single-page (`group_id` null); `stroke_width`
  * is path-only, so null; `body` is null (a region highlight has no body).
  */
-export function buildRegionAnnotation(
-  region: RegionPlacement,
-  docId: string,
-  opts: BuildRegionOptions,
-): Annotation {
+export function buildRegionAnnotation(region: RectPlacement, docId: string, opts: CreateBase): Annotation {
   const { now, newId, color } = opts;
   return {
     id: newId(),
@@ -198,7 +161,7 @@ export function buildRegionAnnotation(
  * updates as the user types into the bubble (via `retextAnnotation`). Always
  * single-page, so `group_id` is null; `stroke_width` is path-only, so it stays null.
  */
-export function buildCommentPin(pin: CommentPinPlacement, docId: string, opts: BuildCommentPinOptions): Annotation {
+export function buildCommentPin(pin: RectPlacement, docId: string, opts: CreateBase): Annotation {
   const { now, newId, color } = opts;
   return {
     id: newId(),
