@@ -23,7 +23,6 @@ import {
   rectsFromSelection,
   denormalizeRect,
   denormalizePoint,
-  normalizePoint,
   normalizeRect,
   pickPage,
   type PageCardRef,
@@ -31,11 +30,15 @@ import {
 } from "../anchor";
 import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "../store";
 import { newId } from "../uuid";
-import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildCommentPin, buildRegionAnnotation } from "./create";
-import { strokeOutline, svgPathFromOutline, type StrokeInputPoint } from "./pen";
+import { buildAnnotations, buildMemoAnnotation, buildCommentPin } from "./create";
+import { strokeOutline, svgPathFromOutline } from "./pen";
 import { clampToViewport } from "./position";
 import { initialOverlayState, overlayReducer, type AnnotationTool } from "./machine";
 import { quickBoxSpec } from "./marks";
+import { isExempt, type GestureContext } from "./gestures/shared";
+import { usePenGesture } from "./gestures/usePenGesture";
+import { useBoxGesture } from "./gestures/useBoxGesture";
+import { useMemoPlacement } from "./gestures/useMemoPlacement";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";
@@ -49,21 +52,6 @@ const QUICK_BOX_GAP = 6;
 /** Max pointer travel (px) between a comment pointerdown and its release for the
  *  release to still count as a CLICK (drops a pin). Beyond this it was a drag. */
 const COMMENT_CLICK_SLOP = 5;
-
-/** Minimum pointer travel (px) for a box-select drag to commit a region. Below
- *  this the drag is treated as a stray click and no mark is created. */
-const BOX_DRAG_THRESHOLD = 8;
-
-/** Skip editable fields + buttons so the global handlers never eat a control's
- *  own keys/clicks (mirrors the Reader's hold-Space `isExempt`). */
-function isExempt(t: EventTarget | null): boolean {
-  const el = t as HTMLElement | null;
-  if (!el || !el.tagName) return false;
-  const tag = el.tagName;
-  return (
-    tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || el.isContentEditable
-  );
-}
 
 export default function AnnotationInteraction({
   docId,
@@ -139,16 +127,6 @@ export default function AnnotationInteraction({
   // The element focused before the quick-box opened, restored on dismiss.
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
-  // ── Pen freehand gesture (Story 2.8) ─────────────────────────────────────
-  // The in-progress stroke's CLIENT-space points. `penDraftRef` is the
-  // authoritative list (read at pointerup to build the mark); `penPreview` mirrors
-  // it as state so the live preview SVG re-renders as the pointer moves. Both clear
-  // on pointerup/abort. Client space is safe for one stroke: the pointer is
-  // captured for the gesture, so the canvas can't scroll mid-draw.
-  const penDraftRef = useRef<StrokeInputPoint[]>([]);
-  const penDrawingRef = useRef(false);
-  const [penPreview, setPenPreview] = useState<StrokeInputPoint[] | null>(null);
-
   // Latest values for the document-level listeners (bound once) to read without
   // re-binding on every scale / tool change.
   const scaleRef = useRef(scale);
@@ -175,19 +153,31 @@ export default function AnnotationInteraction({
   };
   const rectReaderRef = useRef(rectReader);
   rectReaderRef.current = rectReader;
-  // Box-select gesture (Story 2.11): gates on boxActive (a pointer tool), NOT
-  // armedTool (which is null while box is active, Decision 5).
-  const boxActiveRef = useRef(boxActive);
-  boxActiveRef.current = boxActive;
-  const boxDrawingRef = useRef(false);
-  const boxStartRef = useRef<{ x: number; y: number } | null>(null);
-  // Client-space rubber-band preview rect, cleared on commit/abort.
-  const [boxPreview, setBoxPreview] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   // Comment CLICK candidate (Codex MED): the pointerdown origin of a potential
   // comment-pin click, so a FAILED text drag (down, move far, release with an
   // empty selection) does NOT drop an accidental pin — the release must be within
   // click slop of its own pointerdown. Null = no candidate this gesture.
   const commentDownRef = useRef<{ x: number; y: number } | null>(null);
+
+  // The shared, synchronously-readable context every per-gesture hook (Story 5.0)
+  // consumes. The dynamic values are reached through stable refs, so a fresh ctx
+  // object each render is safe (the hooks' effects don't depend on its identity).
+  const gestureCtx: GestureContext = {
+    enabled,
+    docId,
+    armedToolRef,
+    getPagesRef,
+    scaleRef,
+    defaultsRef,
+    addAnnotation,
+    select,
+  };
+  // Pen freehand gesture (Story 2.8) + box-highlight drag (Story 2.11), each
+  // encapsulated as its own hook (Story 5.0). The hooks own their synchronous
+  // draft refs + live-preview state and bind their own document handlers.
+  const { penPreview } = usePenGesture(gestureCtx, armedTool);
+  const { boxPreview } = useBoxGesture(gestureCtx, boxActive);
+  useMemoPlacement(gestureCtx);
 
   const pending = state.status === "pending" ? state : null;
   // Readable from the disarm effect below without making `pending` a dep.
@@ -363,275 +353,6 @@ export default function AnnotationInteraction({
       document.removeEventListener("dblclick", onDblClick);
     };
   }, [enabled, docId, addAnnotation, select, createTextTool]);
-
-  // Pen freehand gesture (Story 2.8, Decision A): a pointer DRAG (not a text
-  // selection) while pen is armed. pointerdown over a page starts a draft,
-  // pointermove accumulates client points (and drives the preview), pointerup
-  // resolves the page, normalizes the points, and stores ONE kind=path mark. Bound
-  // on document (AP-1), phase-gated; only acts while pen is armed. `preventDefault`
-  // on down/move suppresses native text-selection + image drag. Document-level
-  // move/up catch the whole in-window drag; pointercancel/blur abort a half-stroke
-  // so an interrupted gesture can't strand a draft (the recurring held-state bug).
-  useEffect(() => {
-    if (!enabled) return;
-    const abort = () => {
-      penDrawingRef.current = false;
-      penDraftRef.current = [];
-      setPenPreview(null);
-    };
-    const onDown = (e: PointerEvent) => {
-      if (armedToolRef.current !== "pen" || e.button !== 0 || isExempt(e.target)) return;
-      const el = e.target as Element | null;
-      // Only start over an actual page CARD (not the gutter/margin/chrome or the
-      // quick-box): a draft over empty canvas would show a preview + suppress
-      // default, then drop the mark on release (pickPage = -1). Require a page.
-      if (!el?.closest?.(".page-surface") || el.closest?.(".quick-box")) return;
-      penDrawingRef.current = true;
-      penDraftRef.current = [{ x: e.clientX, y: e.clientY }];
-      setPenPreview([{ x: e.clientX, y: e.clientY }]);
-      e.preventDefault();
-      // Best-effort capture so a drag leaving the canvas still finishes (mirrors
-      // the Reader pan); document listeners are the real mechanism either way.
-      try {
-        (el as Element & { setPointerCapture?: (id: number) => void }).setPointerCapture?.(e.pointerId);
-      } catch {
-        /* capture refused (e.g. synthetic event) — the drag still works */
-      }
-    };
-    const onMove = (e: PointerEvent) => {
-      if (!penDrawingRef.current) return;
-      penDraftRef.current.push({ x: e.clientX, y: e.clientY });
-      setPenPreview([...penDraftRef.current]);
-      e.preventDefault();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && penDrawingRef.current) abort();
-    };
-    const onUp = () => {
-      if (!penDrawingRef.current) return;
-      penDrawingRef.current = false;
-      const pts = penDraftRef.current;
-      penDraftRef.current = [];
-      setPenPreview(null);
-      // Inverse path (Codex HIGH): if the pen was disarmed mid-drag (V/Esc → tool
-      // switch), do NOT persist a stroke after pen is no longer the armed tool.
-      if (armedToolRef.current !== "pen") return;
-      // A click with no real drag (< 2 points) makes no mark.
-      if (pts.length < 2) return;
-      const pages = getPagesRef.current();
-      const cardBoxes = pages.map((p) => p.cardEl.getBoundingClientRect());
-      // The stroke binds to the page its pointerdown landed on (single-page, AD-5).
-      const startIdx = pickPage(
-        { left: pts[0].x, top: pts[0].y, right: pts[0].x, bottom: pts[0].y },
-        cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
-      );
-      if (startIdx < 0) return;
-      const page = pages[startIdx];
-      const cardRect = cardBoxes[startIdx];
-      const scale = scaleRef.current;
-      const points = pts.map((p) =>
-        normalizePoint({ x: p.x - cardRect.left, y: p.y - cardRect.top }, page.box, scale),
-      );
-      const created = buildPenAnnotation({ page_index: page.pageIndex, points }, docId, {
-        now: new Date().toISOString(),
-        newId,
-        color: defaultsRef.current.color,
-        strokeWidth: defaultsRef.current.strokeWidth,
-        alpha: defaultsRef.current.alpha,
-      });
-      addAnnotation(created);
-      select(created.id);
-    };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("pointermove", onMove);
-    document.addEventListener("pointerup", onUp);
-    document.addEventListener("pointercancel", abort);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("blur", abort);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      document.removeEventListener("pointermove", onMove);
-      document.removeEventListener("pointerup", onUp);
-      document.removeEventListener("pointercancel", abort);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("blur", abort);
-    };
-  }, [enabled, docId, addAnnotation, select]);
-
-  // Abort an in-progress pen draft the moment the pen tool is switched away (V/Esc
-  // or another tool) — so a stranded draft can't keep a stale preview on screen and
-  // the next pointerup can't persist a mark after disarm (Codex HIGH; the twin of
-  // the Reader's canPan tear-down). Pure cleanup of the draft state.
-  useEffect(() => {
-    if (armedTool !== "pen" && penDrawingRef.current) {
-      penDrawingRef.current = false;
-      penDraftRef.current = [];
-      setPenPreview(null);
-    }
-  }, [armedTool]);
-
-  // Memo placement gesture (Story 2.9, Decision 1): with memo armed, a single
-  // primary-button pointerdown on a page CARD places a default-size box at that
-  // point (NOT a drag, NOT a text selection), selects it, and the layer focuses
-  // its textarea. Document-level (AP-1), phase-gated; only acts while memo is
-  // armed. The box rect = the activeMemoSize preset (scale-1.0 px) at the click,
-  // normalized against the page. Clicking an EXISTING memo selects it (handled by
-  // the layer + selection seam) — gate placement off `.annotation-memo` so a
-  // second overlapping box isn't dropped on it.
-  useEffect(() => {
-    if (!enabled) return;
-    const onDown = (e: PointerEvent) => {
-      if (armedToolRef.current !== "memo" || e.button !== 0 || isExempt(e.target)) return;
-      const el = e.target as Element | null;
-      // Only over an actual page card; never the gutter/chrome, the quick-box, or
-      // an existing memo (that click selects/edits it, not places a new one).
-      if (!el?.closest?.(".page-surface") || el.closest?.(".quick-box") || el.closest?.(".annotation-memo"))
-        return;
-      const pages = getPagesRef.current();
-      const cardBoxes = pages.map((p) => p.cardEl.getBoundingClientRect());
-      const idx = pickPage(
-        { left: e.clientX, top: e.clientY, right: e.clientX, bottom: e.clientY },
-        cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
-      );
-      if (idx < 0) return;
-      const page = pages[idx];
-      const cardRect = cardBoxes[idx];
-      const scale = scaleRef.current;
-      const size = defaultsRef.current.memoSize;
-      // Card-local px at the CURRENT scale (size is scale-1.0 px, so multiply by
-      // scale); normalizeRect divides by box*scale → a scale-independent rect.
-      const x0 = e.clientX - cardRect.left;
-      const y0 = e.clientY - cardRect.top;
-      const rect = normalizeRect(
-        { x0, y0, x1: x0 + size.width * scale, y1: y0 + size.height * scale },
-        page.box,
-        scale,
-      );
-      const created = buildMemoAnnotation({ page_index: page.pageIndex, rect }, docId, {
-        now: new Date().toISOString(),
-        newId,
-        color: defaultsRef.current.color,
-      });
-      addAnnotation(created);
-      select(created.id);
-      // Don't let the click start a text selection / fall through to another path.
-      e.preventDefault();
-    };
-    document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
-  }, [enabled, docId, addAnnotation, select]);
-
-  // Box-highlight drag gesture (Story 2.11): a pointer DRAG while box-highlight
-  // mode is on (Highlight active + box mode). Gates on `boxActiveRef.current` (the
-  // armed tool is "highlight", but this is a rectangle drag, not a text selection,
-  // so it needs the explicit `boxActive` signal). Clone of the pen gesture:
-  // document-level (AP-1), page-gated, draft→preview→commit, abort. On commit:
-  // canonicalized rect → normalizeRect → buildRegionAnnotation → addAnnotation →
-  // select (the 2.5 selection quick-box takes over — recolor + delete).
-  useEffect(() => {
-    if (!enabled) return;
-    const abort = () => {
-      boxDrawingRef.current = false;
-      boxStartRef.current = null;
-      setBoxPreview(null);
-    };
-    const onDown = (e: PointerEvent) => {
-      if (!boxActiveRef.current || e.button !== 0 || isExempt(e.target)) return;
-      const el = e.target as Element | null;
-      // Reject chrome, quick-box, and existing marks (a click on a mark selects it,
-      // not starts a new region). Require a real page card.
-      if (
-        !el?.closest?.(".page-surface") ||
-        el.closest?.(".quick-box") ||
-        el.closest?.(".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin")
-      )
-        return;
-      boxDrawingRef.current = true;
-      boxStartRef.current = { x: e.clientX, y: e.clientY };
-      setBoxPreview({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY });
-      e.preventDefault();
-      try {
-        (el as Element & { setPointerCapture?: (id: number) => void }).setPointerCapture?.(e.pointerId);
-      } catch {
-        /* capture refused on synthetic events */
-      }
-    };
-    const onMove = (e: PointerEvent) => {
-      if (!boxDrawingRef.current || !boxStartRef.current) return;
-      const { x, y } = boxStartRef.current;
-      setBoxPreview({ x0: x, y0: y, x1: e.clientX, y1: e.clientY });
-      e.preventDefault();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && boxDrawingRef.current) abort();
-    };
-    const onUp = (e: PointerEvent) => {
-      if (!boxDrawingRef.current || !boxStartRef.current) return;
-      boxDrawingRef.current = false;
-      const start = boxStartRef.current;
-      boxStartRef.current = null;
-      setBoxPreview(null);
-      // Disarm mid-drag (tool switched): do not persist.
-      if (!boxActiveRef.current) return;
-      // Below-threshold drag → stray click, no region.
-      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) < BOX_DRAG_THRESHOLD) return;
-      const pages = getPagesRef.current();
-      const cardBoxes = pages.map((p) => p.cardEl.getBoundingClientRect());
-      const startIdx = pickPage(
-        { left: start.x, top: start.y, right: start.x, bottom: start.y },
-        cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
-      );
-      if (startIdx < 0) return;
-      const page = pages[startIdx];
-      const cardRect = cardBoxes[startIdx];
-      const scale = scaleRef.current;
-      // Card-local corners; normalizeRect canonicalizes (x0≤x1, y0≤y1) and clamps
-      // to [0,1] — handles an up-left drag (negative delta) and off-card overshoot.
-      const rect = normalizeRect(
-        {
-          x0: start.x - cardRect.left,
-          y0: start.y - cardRect.top,
-          x1: e.clientX - cardRect.left,
-          y1: e.clientY - cardRect.top,
-        },
-        page.box,
-        scale,
-      );
-      const created = buildRegionAnnotation({ page_index: page.pageIndex, rect }, docId, {
-        now: new Date().toISOString(),
-        newId,
-        color: defaultsRef.current.color,
-      });
-      addAnnotation(created);
-      select(created.id);
-      e.preventDefault();
-    };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("pointermove", onMove);
-    document.addEventListener("pointerup", onUp);
-    document.addEventListener("pointercancel", abort);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("blur", abort);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      document.removeEventListener("pointermove", onMove);
-      document.removeEventListener("pointerup", onUp);
-      document.removeEventListener("pointercancel", abort);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("blur", abort);
-    };
-  }, [enabled, docId, addAnnotation, select]);
-
-  // Abort an in-progress box draft the moment box mode is switched off —
-  // so a stranded draft can't keep a stale preview or persist after disarm
-  // (mirrors the pen abort-on-disarm pattern, Codex HIGH).
-  useEffect(() => {
-    if (!boxActive && boxDrawingRef.current) {
-      boxDrawingRef.current = false;
-      boxStartRef.current = null;
-      setBoxPreview(null);
-    }
-  }, [boxActive]);
 
   // Empty-memo cleanup (Story 2.9, Decision 5): a memo placed but never typed into
   // is a no-op, not a stray box — remove it when it loses selection with an empty
