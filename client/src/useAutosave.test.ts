@@ -167,4 +167,53 @@ describe("useAutosave (Story 3.4)", () => {
     await tick(DEBOUNCE_MS * 2);
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it("a stale in-flight PUT from a previous doc cannot corrupt the new doc's single-flight state (Codex High, H6 across doc switches)", async () => {
+    const dA = deferred<void>();
+    const dB = deferred<void>();
+    const spy = vi
+      .spyOn(api, "putAnnotations")
+      .mockImplementationOnce(() => dA.promise)
+      .mockImplementationOnce(() => dB.promise)
+      .mockImplementationOnce(() => Promise.resolve());
+
+    const { rerender } = renderHook(({ docId }) => useAutosave(docId), {
+      initialProps: { docId: "doc-A" },
+    });
+
+    act(() => useAnnotationStore.getState().addAnnotation(mark("a1", "doc-A")));
+    await tick(DEBOUNCE_MS);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenNthCalledWith(1, "doc-A", expect.anything());
+
+    // Switch docs while A's PUT is still unresolved (in flight).
+    rerender({ docId: "doc-B" });
+
+    act(() => useAnnotationStore.getState().addAnnotation(mark("b1", "doc-B")));
+    await tick(DEBOUNCE_MS);
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy).toHaveBeenNthCalledWith(2, "doc-B", expect.anything());
+
+    // The stale doc-A PUT resolves now. It must not fire a new call and must
+    // not clear the single-flight flag doc-B's own PUT (dB) is relying on.
+    await act(async () => {
+      dA.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+
+    // A further doc-B change while dB is still genuinely in flight must be
+    // coalesced, not start an overlapping third PUT (single-flight, H6).
+    act(() => useAnnotationStore.getState().addAnnotation(mark("b2", "doc-B")));
+    await tick(DEBOUNCE_MS);
+    expect(spy).toHaveBeenCalledTimes(2);
+
+    // Once dB resolves, the coalesced doc-B change flushes for real.
+    await act(async () => {
+      dB.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(spy).toHaveBeenCalledTimes(3);
+    expect(spy).toHaveBeenNthCalledWith(3, "doc-B", expect.anything());
+  });
 });
