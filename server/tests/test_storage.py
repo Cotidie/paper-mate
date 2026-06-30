@@ -10,7 +10,29 @@ import json
 import pytest
 
 from app import storage
+from app.models import Annotation
 from tests.conftest import make_pdf_bytes, sha256_hex
+
+
+def make_annotation(doc_id: str, ann_id: str = "11111111-1111-1111-1111-111111111111") -> Annotation:
+    return Annotation.model_validate(
+        {
+            "id": ann_id,
+            "doc_id": doc_id,
+            "type": "highlight",
+            "group_id": None,
+            "anchor": {
+                "kind": "text",
+                "page_index": 0,
+                "rects": [{"x0": 0, "y0": 0, "x1": 1, "y1": 1}],
+                "text": "hi",
+            },
+            "style": {"color": "annotation-default"},
+            "body": None,
+            "created_at": "2026-07-01T00:00:00+00:00",
+            "updated_at": "2026-07-01T00:00:00+00:00",
+        }
+    )
 
 
 def test_import_writes_source_and_meta(data_root):
@@ -132,3 +154,60 @@ def test_source_path_corrupt_meta_raises_storage_error(data_root):
     (data_root / "library" / doc_id / "meta.json").write_text("{ corrupt")
     with pytest.raises(storage.StorageError):
         storage.source_path(doc_id)
+
+
+def test_write_annotations_round_trips_envelope(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "w.pdf")
+    ann = make_annotation(doc_id)
+
+    storage.write_annotations(doc_id, [ann])
+
+    on_disk = json.loads((data_root / "library" / doc_id / "annotations.json").read_text())
+    assert on_disk["schema_version"] == storage.ANNOTATIONS_SCHEMA_VERSION
+    assert len(on_disk["annotations"]) == 1
+    assert on_disk["annotations"][0]["id"] == ann.id
+    assert on_disk["annotations"][0]["anchor"]["kind"] == "text"
+
+
+def test_write_annotations_overwrites_full_set(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "w2.pdf")
+    storage.write_annotations(doc_id, [make_annotation(doc_id, "11111111-1111-1111-1111-111111111111")])
+
+    # A second PUT with a different (smaller) set REPLACES, never merges (AC-3).
+    storage.write_annotations(doc_id, [make_annotation(doc_id, "22222222-2222-2222-2222-222222222222")])
+
+    on_disk = json.loads((data_root / "library" / doc_id / "annotations.json").read_text())
+    ids = [a["id"] for a in on_disk["annotations"]]
+    assert ids == ["22222222-2222-2222-2222-222222222222"]
+
+
+def test_write_annotations_empty_list_round_trips(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "empty.pdf")
+    storage.write_annotations(doc_id, [])
+    on_disk = json.loads((data_root / "library" / doc_id / "annotations.json").read_text())
+    assert on_disk == {"schema_version": storage.ANNOTATIONS_SCHEMA_VERSION, "annotations": []}
+
+
+def test_write_annotations_atomic_no_tmp_left(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "clean2.pdf")
+    storage.write_annotations(doc_id, [make_annotation(doc_id)])
+    doc_dir = data_root / "library" / doc_id
+    leftovers = [p.name for p in doc_dir.iterdir() if ".tmp" in p.name or p.name.endswith("~")]
+    assert leftovers == []
+
+
+def test_write_annotations_unknown_doc_raises_not_found(data_root):
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.write_annotations("0" * 64, [])
+
+
+def test_write_annotations_without_meta_raises_not_found(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "nometa.pdf")
+    (data_root / "library" / doc_id / "meta.json").unlink()
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.write_annotations(doc_id, [])

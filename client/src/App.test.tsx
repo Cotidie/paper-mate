@@ -1,8 +1,11 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
-import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
 import App from "./App";
 import * as api from "./api/client";
+import type { Annotation } from "./api/client";
 import * as renderLayer from "./render";
+import { useAnnotationStore } from "./store";
+import { DEBOUNCE_MS } from "./useAutosave";
 
 // The S1 Reader pulls in pdf.js, which can't run under jsdom. These App tests
 // only care about the S0↔S1 shell, so stub the render layer; loadDocument stays
@@ -463,5 +466,58 @@ describe("upload failure → toast, stay S0 (AC-5)", () => {
     );
     expect(screen.getByTestId("empty-dropzone")).toBeTruthy();
     expect(screen.queryByTestId("reader-backdrop")).toBeNull();
+  });
+});
+
+function mark(id: string, docId: string): Annotation {
+  return {
+    id,
+    doc_id: docId,
+    type: "highlight",
+    group_id: null,
+    anchor: { kind: "text", page_index: 0, rects: [], text: "x" },
+    style: { color: "annotation-default", stroke_width: null, alpha: null },
+    body: null,
+    created_at: "2026-07-01T00:00:01Z",
+    updated_at: "2026-07-01T00:00:01Z",
+  };
+}
+
+describe("autosave save-failure toast (Story 3.4, AC-5)", () => {
+  afterEach(() => {
+    useAnnotationStore.setState({ annotations: new Map() });
+    useAnnotationStore.temporal.getState().clear();
+  });
+
+  it("shows the exact save-failure copy with no em-dash, keeping the change on screen", async () => {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "putAnnotations").mockRejectedValue(new Error("network down"));
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        useAnnotationStore.getState().addAnnotation(mark("a1", fakeDoc.doc_id));
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Couldn't save. Changes kept in this session."),
+      ).toBeTruthy(),
+    );
+    expect(screen.getByTestId("toast").textContent).not.toContain("—");
+    // The change stays in the working copy (not rolled back on failure).
+    expect(useAnnotationStore.getState().annotations.has("a1")).toBe(true);
   });
 });

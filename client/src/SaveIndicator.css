@@ -1,0 +1,32 @@
+/* save-indicator: text-only, caption type, top bar adjacent to the filename.
+   Tokens only (CLAUDE.md design rule). */
+
+.save-indicator {
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+  color: var(--color-muted);
+}
+
+/* Settled state (and the reduced-motion fallback): muted, same as Saving…. */
+.save-indicator--saved {
+  color: var(--color-muted);
+}
+
+/* The "flash to success then settle" motion is CSS-only, decoupled from the
+   hook's settle timer (which only governs when the text itself clears). */
+@media (prefers-reduced-motion: no-preference) {
+  .save-indicator--saved {
+    animation: save-indicator-flash 1.2s ease-out forwards;
+  }
+}
+
+@keyframes save-indicator-flash {
+  from {
+    color: var(--color-semantic-success);
+  }
+  to {
+    color: var(--color-muted);
+  }
+}

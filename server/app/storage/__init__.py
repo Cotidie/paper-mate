@@ -21,10 +21,13 @@ from pathlib import Path
 from pydantic import ValidationError
 from pypdf import PdfReader
 
-from app.models import DocMeta
+from app.models import Annotation, DocMeta
 
 #: Current ``meta.json`` schema version. Unknown versions are rejected, not guessed.
 META_SCHEMA_VERSION = 1
+
+#: Current ``annotations.json`` schema version (H9: disk envelope, API body is bare).
+ANNOTATIONS_SCHEMA_VERSION = 1
 
 
 class StorageError(Exception):
@@ -208,3 +211,25 @@ def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
     )
     _write_meta(doc_dir, meta)
     return doc_id, meta
+
+
+def write_annotations(doc_id: str, annotations: list[Annotation]) -> None:
+    """Overwrite ``library/{doc_id}/annotations.json`` with the full given set.
+
+    AR-7 / H9: the disk file carries the envelope ``{schema_version,
+    annotations}``; the API body (caller's ``annotations`` list) is bare. No
+    history, merge, or partial update — every call replaces the whole file.
+    Raises ``DocumentNotFoundError`` for a doc_id with no valid ``meta.json``,
+    so a never-imported document never gets an annotations file.
+    """
+    try:
+        doc_dir = _doc_dir(doc_id)
+    except StorageError as exc:
+        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
+    if _read_meta(doc_dir) is None:
+        raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
+    payload = {
+        "schema_version": ANNOTATIONS_SCHEMA_VERSION,
+        "annotations": [a.model_dump(mode="json") for a in annotations],
+    }
+    _atomic_write(doc_dir / "annotations.json", json.dumps(payload, indent=2).encode("utf-8"))

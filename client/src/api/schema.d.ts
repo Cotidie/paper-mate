@@ -67,10 +67,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/docs/{doc_id}/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Annotations
+         * @description Overwrite the document's full annotation set, atomically (AR-7, H6).
+         *
+         *     The request/response body is the bare list (H9); the on-disk envelope
+         *     is added/stripped only inside storage. No history, undo, or merge here:
+         *     this overwrites with exactly what it received.
+         */
+        put: operations["put_annotations_api_docs__doc_id__annotations_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Annotation
+         * @description One annotation (AD-5). Stored keyed by ``id`` in the client store and,
+         *     in Epic 3, persisted to ``annotations.json``. ``group_id`` ties the split
+         *     halves of a two-page selection together (``None`` for a single-page mark).
+         *     ``body`` is non-null only for memo/comment.
+         */
+        Annotation: {
+            /** Id */
+            id: string;
+            /** Doc Id */
+            doc_id: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "highlight" | "underline" | "pen" | "memo" | "comment";
+            /** Group Id */
+            group_id?: string | null;
+            /** Anchor */
+            anchor: components["schemas"]["TextAnchor"] | components["schemas"]["RectAnchor"] | components["schemas"]["PathAnchor"];
+            style: components["schemas"]["Style"];
+            /** Body */
+            body?: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
         /** Body_upload_doc_api_docs_post */
         Body_upload_doc_api_docs_post: {
             /** File */
@@ -113,11 +166,6 @@ export interface components {
             status: "ok";
             /** Version */
             version: string;
-        };
-        /** ErrorEnvelope */
-        ErrorEnvelope: {
-            /** Detail */
-            detail: string;
         };
         /**
          * PathAnchor
@@ -183,16 +231,10 @@ export interface components {
         Style: {
             /** Color */
             color: string;
-            /**
-             * Stroke Width
-             * @default null
-             */
-            stroke_width: number | null;
-            /**
-             * Alpha
-             * @default null
-             */
-            alpha: number | null;
+            /** Stroke Width */
+            stroke_width?: number | null;
+            /** Alpha */
+            alpha?: number | null;
         };
         /**
          * TextAnchor
@@ -212,40 +254,10 @@ export interface components {
             /** Text */
             text: string;
         };
-        /**
-         * Annotation
-         * @description One annotation (AD-5). Stored keyed by ``id`` in the client store and,
-         *     in Epic 3, persisted to ``annotations.json``. ``group_id`` ties the split
-         *     halves of a two-page selection together (``None`` for a single-page mark).
-         *     ``body`` is non-null only for memo/comment.
-         */
-        Annotation: {
-            /** Id */
-            id: string;
-            /** Doc Id */
-            doc_id: string;
-            /**
-             * Type
-             * @enum {string}
-             */
-            type: "highlight" | "underline" | "pen" | "memo" | "comment";
-            /**
-             * Group Id
-             * @default null
-             */
-            group_id: string | null;
-            /** Anchor */
-            anchor: components["schemas"]["TextAnchor"] | components["schemas"]["RectAnchor"] | components["schemas"]["PathAnchor"];
-            style: components["schemas"]["Style"];
-            /**
-             * Body
-             * @default null
-             */
-            body: string | null;
-            /** Created At */
-            created_at: string;
-            /** Updated At */
-            updated_at: string;
+        /** ErrorEnvelope */
+        ErrorEnvelope: {
+            /** Detail */
+            detail: string;
         };
     };
     responses: never;
@@ -348,6 +360,59 @@ export interface operations {
                 };
             };
             /** @description The stored document is unreadable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    put_annotations_api_docs__doc_id__annotations_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Annotation"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"][];
+                };
+            };
+            /** @description No document with this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The annotation set could not be saved. */
             500: {
                 headers: {
                     [name: string]: unknown;

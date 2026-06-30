@@ -92,14 +92,17 @@ def test_pen_annotation_null_alpha_backward_compatible() -> None:
     assert ann.style.alpha is None
 
 
-def test_annotation_surfaced_in_openapi_without_endpoints() -> None:
-    """AD-3: the Annotation schema is generated into the contract; AD-5/Reserved:
-    its /annotations endpoints stay Epic 3 (not present yet)."""
+def test_annotation_surfaced_in_openapi_via_put_route() -> None:
+    """AD-3: the real PUT /annotations route emits the Annotation schema (Story
+    3.4); the manual injection is gone. GET stays Reserved (Story 3.5)."""
     schema = app.openapi()
     schemas = schema["components"]["schemas"]
     assert "Annotation" in schemas
-    # The hoisted $defs resolve (no dangling refs).
+    # The $defs resolve as components (no dangling refs).
     for name in ("TextAnchor", "RectAnchor", "PathAnchor", "Rect", "Point", "Style"):
         assert name in schemas
-    # No annotations endpoint yet.
-    assert not any("annotations" in path for path in schema["paths"])
+    annotations_paths = [p for p in schema["paths"] if "annotations" in p]
+    assert len(annotations_paths) == 1
+    operations = schema["paths"][annotations_paths[0]]
+    assert "put" in operations
+    assert "get" not in operations

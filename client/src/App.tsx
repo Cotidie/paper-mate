@@ -11,6 +11,8 @@ import TocPanel from "./TocPanel";
 import Toast from "./Toast";
 import { uploadDoc, fetchHealth, type Doc } from "./api/client";
 import type { TocEntry } from "./render";
+import { useAutosave } from "./useAutosave";
+import SaveIndicator from "./SaveIndicator";
 
 /**
  * App shell. Holds the current-doc state and switches between:
@@ -88,6 +90,18 @@ export default function App() {
       live = false;
     };
   }, []);
+
+  // Autosave (Story 3.4): a passive observer of the annotation store, keyed on
+  // the open doc. Always called (hooks must be unconditional); it no-ops while
+  // `doc` is null (empty docId). `saveErrorDismissed` is local UI state ONLY
+  // (hides the toast on dismiss) — it does NOT touch the hook's retry-on-next-
+  // change behavior, and resets whenever a NEW failure occurs (status flips
+  // back to "error" only after passing through "saving" again).
+  const saveStatus = useAutosave(doc?.doc_id ?? "");
+  const [saveErrorDismissed, setSaveErrorDismissed] = useState(false);
+  useEffect(() => {
+    if (saveStatus.status === "error") setSaveErrorDismissed(false);
+  }, [saveStatus.status]);
 
   // Document-level tool keys (UX-DR15), mirroring the Reader's zoom-key effect:
   // `V`/`Esc` → cursor, `[` → toggle the rail. Only active while a doc is open.
@@ -170,7 +184,18 @@ export default function App() {
     }
   }
 
-  const toast = error ? <Toast message={error} onDismiss={() => setError(null)} /> : null;
+  // One Toast at a time: load error (S0-only) takes precedence over a save
+  // error (S1-only) — they never actually coexist (load-failure keeps `doc`
+  // null, and autosave can't fire without a `doc_id`), but precedence is
+  // explicit so that invariant isn't load-bearing.
+  const toast = error ? (
+    <Toast message={error} onDismiss={() => setError(null)} />
+  ) : saveStatus.status === "error" && !saveErrorDismissed ? (
+    <Toast
+      message="Couldn't save. Changes kept in this session."
+      onDismiss={() => setSaveErrorDismissed(true)}
+    />
+  ) : null;
 
   if (!doc) {
     return (
@@ -187,6 +212,7 @@ export default function App() {
     <div className="app">
       <header className="top-bar" role="banner">
         <span className="top-bar__title">{doc.filename}</span>
+        <SaveIndicator status={saveStatus.status} />
         <span className="top-bar__page-status" role="status" aria-live="polite">
           Page {currentPage} of {doc.page_count}
         </span>
