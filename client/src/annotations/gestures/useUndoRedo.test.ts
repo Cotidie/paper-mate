@@ -97,6 +97,18 @@ describe("useUndoRedo (Story 3.2, AC-1, AC-5, AC-6)", () => {
     expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
   });
 
+  it("Ctrl+Z while a quick-box button has focus STILL undoes (buttons are not exempt)", () => {
+    // After a create, the selection quick-box opens and focus lands on its first
+    // swatch <button>; undo must still fire (a button has no native text-undo).
+    renderHook(() => useUndoRedo({ enabled: true }));
+    useAnnotationStore.getState().addAnnotation(mark("a"));
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.focus();
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(false);
+  });
+
   it("handler is NOT active when enabled=false (phase gate)", () => {
     renderHook(() => useUndoRedo({ enabled: false }));
     useAnnotationStore.getState().addAnnotation(mark("a"));

@@ -2,18 +2,32 @@
 // A standalone handler (NOT folded into useSelection) because useSelection
 // early-returns on e.ctrlKey and requires a current selection; undo must work
 // with nothing selected and IS a ctrl chord (per AP-1 + CLAUDE.md).
-// Phase-gated (`enabled`), editable/buttons exempt (isExempt), so Ctrl+Z inside
-// a memo or comment textarea does the browser's native text undo, not annotation undo.
+// Phase-gated (`enabled`). Only EDITABLE fields are exempt (not buttons), so
+// Ctrl+Z inside a memo/comment textarea does the browser's native text undo,
+// while Ctrl+Z right after a create — when the selection quick-box has focused
+// its first swatch <button> — still undoes the annotation.
 
 import { useEffect } from "react";
 import { useAnnotationStore } from "../../store";
-import { isExempt } from "./shared";
+
+/** Exempt ONLY editable text fields, NOT buttons. Unlike the shared `isExempt`
+ *  (which also skips BUTTON so gestures don't eat a control's clicks), undo/redo
+ *  must still fire when focus sits on a button: right after a create, the
+ *  selection quick-box opens and focus lands on its first swatch <button>, and a
+ *  button has no native text-undo to defer to. Editable fields stay exempt so
+ *  Ctrl+Z inside a memo/comment textarea does the browser's text undo. */
+function isEditable(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+}
 
 export function useUndoRedo({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
-      if (isExempt(e.target)) return;
+      if (isEditable(e.target)) return;
       const ctrl = e.ctrlKey || e.metaKey;
       if (!ctrl) return;
       const isZ = e.key === "z" || e.key === "Z";
