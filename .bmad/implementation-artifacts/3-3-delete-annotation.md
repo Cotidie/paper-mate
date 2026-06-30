@@ -4,7 +4,7 @@ baseline_commit: 969abfef092eedf011ea873594305d31ac6ff50f
 
 # Story 3.3: Delete annotation
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
