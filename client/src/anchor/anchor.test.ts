@@ -8,6 +8,11 @@ import {
   pickPage,
   mergeRects,
   collectTextRects,
+  translateRect,
+  translatePoints,
+  resizeRectCorner,
+  scalePoints,
+  pointsBounds,
   type PageBox,
 } from "./index";
 
@@ -218,5 +223,100 @@ describe("collectTextRects (cross-page selection bug — Range.getClientRects le
     const rects = collectTextRects(range, wholeRangeReader);
     expect(rects).toHaveLength(0);
     document.body.removeChild(el);
+  });
+});
+
+// Binary-clean fractions (0.25/0.125/0.5/0.75) keep `toEqual` exact: the helpers
+// do pure float math (no rounding), so 0.05-style increments would trip float drift.
+describe("translateRect (move a rect mark, Story 3.1)", () => {
+  it("shifts both corners by the delta, preserving size", () => {
+    expect(translateRect({ x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }, 0.125, 0.125)).toEqual({
+      x0: 0.375,
+      y0: 0.375,
+      x1: 0.625,
+      y1: 0.625,
+    });
+  });
+  it("clamps the delta (not the corners) at the page edge so size is preserved", () => {
+    // dx wants +0.5 but x1 is 0.75, so dx is clamped to 0.25; width stays 0.25.
+    expect(translateRect({ x0: 0.5, y0: 0.5, x1: 0.75, y1: 0.75 }, 0.5, 0.5)).toEqual({
+      x0: 0.75,
+      y0: 0.75,
+      x1: 1,
+      y1: 1,
+    });
+  });
+  it("clamps a negative delta at the top-left edge", () => {
+    expect(translateRect({ x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }, -0.5, -0.5)).toEqual({
+      x0: 0,
+      y0: 0,
+      x1: 0.25,
+      y1: 0.25,
+    });
+  });
+});
+
+describe("translatePoints (move a pen stroke, Story 3.1)", () => {
+  it("shifts every point by the delta, preserving the stroke shape", () => {
+    expect(
+      translatePoints([{ x: 0.25, y: 0.25 }, { x: 0.5, y: 0.5 }], 0.125, 0),
+    ).toEqual([{ x: 0.375, y: 0.25 }, { x: 0.625, y: 0.5 }]);
+  });
+  it("clamps the delta by the stroke bounding box so the whole stroke stays on-page", () => {
+    // maxX is 0.5; +0.5 keeps it at 1.0, the page edge — applied to ALL points.
+    expect(
+      translatePoints([{ x: 0.25, y: 0.5 }, { x: 0.5, y: 0.5 }], 0.5, 0),
+    ).toEqual([{ x: 0.75, y: 0.5 }, { x: 1, y: 0.5 }]);
+  });
+  it("returns [] for no points", () => {
+    expect(translatePoints([], 0.125, 0.125)).toEqual([]);
+  });
+});
+
+describe("resizeRectCorner (free corner-drag resize, Story 3.1)", () => {
+  const rect = { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 };
+  it("moves the SE corner, growing the rect", () => {
+    expect(resizeRectCorner(rect, "se", 0.125, 0.125)).toEqual({ x0: 0.25, y0: 0.25, x1: 0.625, y1: 0.625 });
+  });
+  it("moves the NW corner, shrinking from the top-left", () => {
+    expect(resizeRectCorner(rect, "nw", 0.125, 0.125)).toEqual({ x0: 0.375, y0: 0.375, x1: 0.5, y1: 0.5 });
+  });
+  it("moves the NE corner (x1, y0)", () => {
+    expect(resizeRectCorner(rect, "ne", 0.125, -0.125)).toEqual({ x0: 0.25, y0: 0.125, x1: 0.625, y1: 0.5 });
+  });
+  it("canonicalizes when a corner is dragged past the opposite edge", () => {
+    // SE dragged far up-left flips so the result stays canonical (x0<=x1, y0<=y1).
+    expect(resizeRectCorner(rect, "se", -0.5, -0.5)).toEqual({ x0: 0, y0: 0, x1: 0.25, y1: 0.25 });
+  });
+  it("clamps a corner to the page bounds", () => {
+    expect(resizeRectCorner(rect, "se", 0.75, 0.75)).toEqual({ x0: 0.25, y0: 0.25, x1: 1, y1: 1 });
+  });
+});
+
+describe("scalePoints (resize a pen stroke about an origin, Story 3.1)", () => {
+  it("scales every point about the origin corner", () => {
+    expect(
+      scalePoints([{ x: 0.25, y: 0.25 }, { x: 0.5, y: 0.5 }], 2, 2, 0.25, 0.25),
+    ).toEqual([{ x: 0.25, y: 0.25 }, { x: 0.75, y: 0.75 }]);
+  });
+  it("clamps scaled points to [0,1]", () => {
+    expect(scalePoints([{ x: 0.5, y: 0.5 }], 3, 3, 0, 0)).toEqual([{ x: 1, y: 1 }]);
+  });
+  it("returns [] for no points", () => {
+    expect(scalePoints([], 2, 2, 0, 0)).toEqual([]);
+  });
+});
+
+describe("pointsBounds (pen stroke bounding box, Story 3.1)", () => {
+  it("returns the min/max corners of the points", () => {
+    expect(pointsBounds([{ x: 0.2, y: 0.3 }, { x: 0.5, y: 0.1 }, { x: 0.4, y: 0.6 }])).toEqual({
+      x0: 0.2,
+      y0: 0.1,
+      x1: 0.5,
+      y1: 0.6,
+    });
+  });
+  it("returns a zero rect for no points", () => {
+    expect(pointsBounds([])).toEqual({ x0: 0, y0: 0, x1: 0, y1: 0 });
   });
 });

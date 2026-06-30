@@ -552,7 +552,7 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
     return surf;
   }
 
-  it("with pen armed, a pointer drag stores ONE kind=path mark and selects it", async () => {
+  it("with pen armed, a pointer drag stores ONE kind=path mark and does NOT auto-select it", async () => {
     const canvas = canvasTarget();
     const pages = [fakeCard(0, 0)];
     useAnnotationStore.getState().setActiveColor("annotation-blue");
@@ -576,11 +576,12 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
       expect(all[0].anchor.points[0].x).toBeCloseTo(0.1, 5);
       expect(all[0].anchor.points[0].y).toBeCloseTo(0.1, 5);
     }
-    // The mark is selected → the pen selection quick-box (color + width + delete).
-    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
-    await screen.findByTestId("selection-quick-box");
-    fireEvent.click(screen.getByTestId("stroke-width-trigger"));
-    expect(screen.getByTestId("stroke-width-8")).toBeTruthy();
+    // Pen does NOT auto-select on release (user fix 2026-06-30): drawing is a
+    // repeated gesture, so the stroke lands unselected and the selection quick-box
+    // does NOT pop — the user can draw the next stroke uninterrupted. (Clicking the
+    // stroke later selects it; that path is covered by the pen selection-box tests.)
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
   });
 
   it("uses the active stroke width for a new stroke", () => {
@@ -1068,6 +1069,19 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     fireEvent.pointerDown(memoEl, { button: 0, clientX: 60, clientY: 160 });
     // Still just the one memo (no overlapping second box placed on top of it).
     expect(useAnnotationStore.getState().all().filter((a) => a.type === "memo")).toHaveLength(1);
+  });
+
+  it("with a memo selected, an empty-space click DESELECTS it instead of placing a new memo (user fix)", () => {
+    const surf = canvasTarget();
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "a note")); // non-empty so it survives deselect
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="memo" rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    // Click empty page space while a memo is selected (memo still armed).
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
+    // No second memo placed; the selection cleared (first click deselects).
+    expect(useAnnotationStore.getState().all().filter((a) => a.type === "memo")).toHaveLength(1);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
   });
 
   it("an empty memo is removed when it loses selection (Decision 5)", () => {

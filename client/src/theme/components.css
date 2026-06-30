@@ -136,6 +136,10 @@
   --comment-bubble-width: 220px;
   --comment-bubble-text-min-height: 48px;
 
+  /* edit frame (Story 3.1): the move grip + corner resize handles shown on a
+     selected pen/memo/region mark. A small square nub; the grip reuses it. */
+  --edit-handle-size: 10px;
+
   /* shared chrome */
   --hairline-width: 1px;
   --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);

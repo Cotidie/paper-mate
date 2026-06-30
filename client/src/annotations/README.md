@@ -398,4 +398,46 @@ group — and the comment DUAL-render — a text comment paints in the fill grou
 the pin group — not a clean (kind,type)→render partition; collapsing them would
 change paint). `marks.ts` is the clean seam for the future cross-type hit-layer.
 
-Still later: editing/undo/persistence (Epic 3).
+## Story 3.1 (edit annotations): the command path + drag-handle move/resize
+
+3.1 is the convergence story: every annotation mutation now routes through ONE
+surface (the store actions), nothing mutates around it (AD-7, AE-3), and the
+missing geometry edits land. NO command STACK yet — that is Story 3.2 (zundo wraps
+this surface). NO autosave (3.4).
+
+- **`setAnnotationGeometry(id, anchor, now)` (store).** The move/resize command-path
+  action, shared by `kind=rect` (memo/region/comment-pin) and `kind=path` (pen). It
+  replaces the anchor's VALUES and bumps `updated_at`; a kind CHANGE is rejected as a
+  no-op (a geometry edit never rewrites the discriminator, AC-8). The GESTURE computes
+  the new anchor with the `anchor/` helpers — the store does no coordinate math
+  (AD-9: it still imports `api/` only). `resizeMemoAnnotation` (the preset SizeRow)
+  stays as-is; free corner-resize goes through `setAnnotationGeometry`.
+- **anchor/ edit transforms.** `translateRect` / `translatePoints` (move; the DELTA is
+  clamped so size/shape is preserved at the page edge), `resizeRectCorner` (free
+  corner drag → canonicalized rect), `scalePoints` (pen resize about the opposite
+  bbox corner; geometry only, `stroke_width` unchanged), `pointsBounds` (pen bbox →
+  frame position + resize origin). All pure, in normalized `[0,1]` space, DPR-invariant.
+- **`gestures/useEditGesture.ts`.** A document-level gesture (AP-1) on the edit-frame
+  handles (`data-edit-handle` + `data-edit-id`). Draft ref + live preview via the
+  transient store `dragPreview` (no per-pointermove commit); commits ONE
+  `setAnnotationGeometry` on release (so 3.2's zundo records one undo step). Aborts on
+  Esc / pointercancel / blur WITHOUT committing.
+- **The edit frame (`AnnotationLayer`).** For the selected pen/memo/region mark: a move
+  grip (a pill above the frame, so it never fights a memo's textarea) + four corner
+  handles, positioned via the anchor service so they ride zoom (NFR-3). Handles are
+  `<button>`s → the doc-level deselect/create handlers skip them (`isExempt`), keeping
+  the mark selected during a drag. `dragPreview` makes the mark + frame follow the
+  pointer live. **Text marks get NO frame**: free-moving a text rect would desync
+  `anchor.text` from the glyphs (Story 3.8 re-resolves the run instead); text marks
+  keep restyle + double-click re-edit + delete only.
+- **Re-edit convergence (AE-3).** Memo double-click focuses its textarea; comment
+  re-edit is the existing pin→bubble. Both write `body` via `retextAnnotation`. Audit
+  confirmed every mutation (retext / recolor / restroke / realpha / resize / geometry /
+  delete) goes through a store action — none out of band.
+
+**Deferred out of 3.1 (2026-06-30):** the cross-type unified hit-layer (AC #4) — it
+disambiguates overlapping marks of DIFFERENT types on one spot (mostly text marks,
+not edited in 3.1). Fast-follow / fold into Story 3.8. `marks.ts` stays its seam.
+
+Still later: undo/redo (3.2, zundo), autosave + restore (3.4/3.5), the Annotation
+Bank (3.6), convert highlight↔comment (3.7), text-range adjust (3.8).

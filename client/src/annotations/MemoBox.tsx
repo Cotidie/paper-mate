@@ -64,6 +64,11 @@ export default function MemoBox({
       onPointerEnter={() => onHover(anno.id)}
       onPointerLeave={() => onHover(null)}
       onClick={() => onSelect(anno.id)}
+      // Double-click re-edits the note (Story 3.1, IP-6/UX-DR14): focus the
+      // textarea so typing resumes immediately (e.g. after moving the box via its
+      // edit frame). Edits still write through onChange -> retextAnnotation (the
+      // command path); this only moves focus.
+      onDoubleClick={() => ref.current?.focus()}
       style={{
         left: pos.left,
         top: pos.top,

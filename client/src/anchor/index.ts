@@ -140,6 +140,105 @@ export function denormalizeRect(rect: Rect, box: PageBox, scale: number): Screen
   };
 }
 
+// ── Edit geometry (Story 3.1): move/resize transforms on stored normalized
+//    anchors. Operate in [0,1] page-fraction space (the stored anchor space), so
+//    they are scale-independent and the mark rides zoom unchanged (NFR-3). The
+//    edit gesture converts a screen-px drag delta to a normalized delta via the
+//    same `box * scale` the projection uses, then calls these. kind=text marks are
+//    NOT moved/resized here (that desyncs `anchor.text`; Story 3.8 re-resolves the
+//    run instead) — these serve kind=rect (memo/region/comment-pin) + kind=path (pen).
+
+/**
+ * Shift a normalized rect by (dx, dy) page fractions, PRESERVING its size: the
+ * DELTA is clamped (not the corners) so a move stops at the page edge without the
+ * rect shrinking. Story 3.1 move for kind=rect marks. Assumes a canonical rect.
+ */
+export function translateRect(rect: Rect, dx: number, dy: number): Rect {
+  const cdx = Math.max(-rect.x0, Math.min(1 - rect.x1, dx));
+  const cdy = Math.max(-rect.y0, Math.min(1 - rect.y1, dy));
+  return { x0: rect.x0 + cdx, y0: rect.y0 + cdy, x1: rect.x1 + cdx, y1: rect.y1 + cdy };
+}
+
+/**
+ * Shift every normalized point by (dx, dy), PRESERVING the stroke shape: the
+ * delta is clamped against the stroke's bounding box so the whole stroke stays
+ * on-page (clamping each point independently would distort it). Story 3.1 move
+ * for kind=path marks (pen).
+ */
+export function translatePoints(points: Point[], dx: number, dy: number): Point[] {
+  if (points.length === 0) return [];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  const cdx = Math.max(-minX, Math.min(1 - maxX, dx));
+  const cdy = Math.max(-minY, Math.min(1 - maxY, dy));
+  return points.map((p) => ({ x: p.x + cdx, y: p.y + cdy }));
+}
+
+/**
+ * The normalized bounding box of a pen stroke's points (min/max corners), or a
+ * zero rect for no points. Story 3.1: the edit frame positions a pen's handles on
+ * this box, and the resize gesture scales the points about its opposite corner.
+ */
+export function pointsBounds(points: Point[]): Rect {
+  if (points.length === 0) return { x0: 0, y0: 0, x1: 0, y1: 0 };
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const p of points) {
+    x0 = Math.min(x0, p.x);
+    y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x);
+    y1 = Math.max(y1, p.y);
+  }
+  return { x0, y0, x1, y1 };
+}
+
+/** A rect's corner handle (north/south + west/east). */
+export type RectCorner = "nw" | "ne" | "sw" | "se";
+
+/**
+ * Resize a normalized rect by dragging one CORNER by (dx, dy) page fractions,
+ * then `canonicalize` (so a drag past the opposite edge flips cleanly) and clamp
+ * to [0,1]. Story 3.1 free corner-resize for kind=rect marks (the memo priority).
+ */
+export function resizeRectCorner(rect: Rect, corner: RectCorner, dx: number, dy: number): Rect {
+  let { x0, y0, x1, y1 } = rect;
+  if (corner === "nw") {
+    x0 += dx;
+    y0 += dy;
+  } else if (corner === "ne") {
+    x1 += dx;
+    y0 += dy;
+  } else if (corner === "sw") {
+    x0 += dx;
+    y1 += dy;
+  } else {
+    x1 += dx;
+    y1 += dy;
+  }
+  const c = canonicalize(x0, y0, x1, y1);
+  return { x0: clamp01(c.x0), y0: clamp01(c.y0), x1: clamp01(c.x1), y1: clamp01(c.y1) };
+}
+
+/**
+ * Scale every normalized point about an origin (ox, oy) by (sx, sy), clamped to
+ * [0,1]. Story 3.1 resize for kind=path marks (pen): the gesture passes the
+ * opposite bbox corner as the origin and the drag-derived factors. Geometry only
+ * — `stroke_width` is unchanged (Open Q2).
+ */
+export function scalePoints(points: Point[], sx: number, sy: number, ox: number, oy: number): Point[] {
+  return points.map((p) => ({ x: clamp01(ox + (p.x - ox) * sx), y: clamp01(oy + (p.y - oy) * sy) }));
+}
+
 /**
  * Merge per-line text rects so each line is ONE band (NFR-1, anti-stacking).
  * `Range.getClientRects()` can return several overlapping fragments for the same

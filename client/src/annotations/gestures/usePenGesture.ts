@@ -20,7 +20,7 @@ export function usePenGesture(
   /** The armed tool VALUE (the abort-on-disarm effect keys on it, not the ref). */
   armedTool: AnnotationTool | null,
 ): { penPreview: StrokeInputPoint[] | null } {
-  const { enabled, docId, armedToolRef, getPagesRef, scaleRef, defaultsRef, addAnnotation, select } = ctx;
+  const { enabled, docId, armedToolRef, getPagesRef, scaleRef, defaultsRef, addAnnotation } = ctx;
 
   // The in-progress stroke's CLIENT-space points. `penDraftRef` is the
   // authoritative list (read at pointerup to build the mark); `penPreview` mirrors
@@ -99,7 +99,10 @@ export function usePenGesture(
         alpha: defaultsRef.current.alpha,
       });
       addAnnotation(created);
-      select(created.id);
+      // Pen does NOT auto-select on release (unlike highlight/memo/comment): drawing
+      // is a repeated gesture, so popping the selection quick-box + edit frame after
+      // every stroke would interrupt drawing the next one. The stroke lands
+      // unselected; click it later to select + edit (restroke/alpha/move/resize).
     };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("pointermove", onMove);
@@ -116,7 +119,7 @@ export function usePenGesture(
       window.removeEventListener("blur", abort);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, docId, addAnnotation, select]);
+  }, [enabled, docId, addAnnotation]);
 
   // Abort an in-progress pen draft the moment the pen tool is switched away (V/Esc
   // or another tool) — so a stranded draft can't keep a stale preview on screen and

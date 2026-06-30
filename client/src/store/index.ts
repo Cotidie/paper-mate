@@ -2,10 +2,15 @@
 // are kept in a Map keyed by `id`; the Annotation Bank reads them ordered by
 // `created_at` ascending (AR-12).
 //
-// Scope (Story 2.2): an in-memory keyed map + an add action only. The command
-// stack (do/undo), dirty flag, debounced autosave, and hydrate-on-open are
-// Epic 3 — NOT here. Dependency-clean per AD-9: imports `api/` types only, never
-// `anchor/`, `annotations/`, or `render/`.
+// Scope: an in-memory keyed map + the annotation-mutation action surface (add,
+// delete, recolor/restroke/realpha/retext/resizeMemo, and the Story 3.1 move/resize
+// geometry edit). This IS the single command path every edit routes through (AD-7,
+// AE-3) — no component mutates annotations outside it. The do/undo STACK (zundo,
+// Story 3.2), the dirty flag + debounced autosave (3.4), and hydrate-on-open (3.5)
+// wrap this surface and are NOT here yet. Dependency-clean per AD-9: imports `api/`
+// types only, never `anchor/`, `annotations/`, or `render/` — so coordinate math
+// (the move/resize transforms) is done by the caller (the gesture) with the anchor/
+// helpers, then handed to `setAnnotationGeometry`, never computed here.
 
 import { create } from "zustand";
 import type { Annotation } from "../api/client";
@@ -87,6 +92,15 @@ export interface AnnotationStore {
   clearSelection: () => void;
   /** Set (or clear) the hovered annotation. */
   setHovered: (id: string | null) => void;
+  /** Transient live-drag preview (Story 3.1): while a move/resize gesture is in
+   *  flight, the dragged mark's IN-PROGRESS anchor, so the layer renders it moving
+   *  WITHOUT committing per-pointermove — the commit is ONE `setAnnotationGeometry`
+   *  on release (so Story 3.2's zundo records one undo step, not N). UI-only state,
+   *  never persisted; EXCLUDE from the zundo partialize like `selectedId`/
+   *  `hoveredId`. Null = no drag in flight. */
+  dragPreview: { id: string; anchor: Annotation["anchor"] } | null;
+  /** Set or clear the transient drag preview. */
+  setDragPreview: (preview: { id: string; anchor: Annotation["anchor"] } | null) => void;
   /** Remove an annotation by id AND every annotation sharing its non-null
    *  `group_id` (a two-page highlight deletes both pages together, AR-4). If the
    *  removed set includes `selectedId`, the selection clears. This is the
@@ -124,6 +138,14 @@ export interface AnnotationStore {
    *  so a stale text/path id is never mutated (AR-5). Creation-time edit; no
    *  command stack yet. */
   resizeMemoAnnotation: (ids: string[], size: { w: number; h: number }, now: string) => void;
+  /** Replace a mark's anchor GEOMETRY (a moved/resized rect or points) and bump
+   *  `updated_at` — the Story 3.1 move/resize command-path action, shared by
+   *  kind=rect (memo/region/comment-pin) and kind=path (pen). The CALLER (the edit
+   *  gesture) computes the new anchor with the `anchor/` helpers (AD-9: the store
+   *  does no coordinate math); the discriminator is PRESERVED — a geometry edit
+   *  rewrites VALUES only, so a kind change is rejected as a no-op (AC-8). No-op for
+   *  an unknown id. kind=text marks are not moved here (Story 3.8 re-resolves them). */
+  setAnnotationGeometry: (id: string, anchor: Annotation["anchor"], now: string) => void;
   /** Every annotation, ordered by `created_at` ascending — the Bank order (AR-12). */
   all: () => Annotation[];
 }
@@ -170,6 +192,8 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
   select: (id) => set({ selectedId: id }),
   clearSelection: () => set({ selectedId: null }),
   setHovered: (id) => set({ hoveredId: id }),
+  dragPreview: null,
+  setDragPreview: (preview) => set({ dragPreview: preview }),
   deleteAnnotation: (id) =>
     set((state) => {
       const target = state.annotations.get(id);
@@ -239,6 +263,16 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
         return { ...a, anchor: { ...a.anchor, rect } };
       }),
     })),
+  setAnnotationGeometry: (id, anchor, now) =>
+    set((state) => {
+      const a = state.annotations.get(id);
+      // No-op for an unknown id OR a kind change: a geometry edit rewrites the
+      // anchor's VALUES (rect/points), never its discriminator (AC-8).
+      if (!a || anchor.kind !== a.anchor.kind) return state;
+      const next = new Map(state.annotations);
+      next.set(id, { ...a, anchor, updated_at: now });
+      return { annotations: next };
+    }),
   all: () =>
     [...get().annotations.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)),
 }));
