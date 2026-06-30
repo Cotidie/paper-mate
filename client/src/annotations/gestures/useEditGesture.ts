@@ -153,16 +153,39 @@ function computeAnchor(d: DragState, dx: number, dy: number): Annotation["anchor
   }
   if (a.kind === "path") {
     if (d.handle === "move") return { ...a, points: translatePoints(a.points, dx, dy) };
-    // Resize: scale the points about the FIXED corner opposite the dragged one.
+    // Resize: scale the points about the FIXED corner opposite the dragged one,
+    // PER AXIS. A zero-extent axis (a perfectly horizontal/vertical stroke) keeps
+    // scale 1 on that axis instead of no-op-ing the whole resize; the scale is
+    // clamped so the moving edge lands within [0,1], so an overscale drag clamps
+    // the FACTOR (shape preserved) rather than clipping points flat at the edge.
     const b = pointsBounds(a.points);
-    if (b.x1 - b.x0 <= 0 || b.y1 - b.y0 <= 0) return a; // a dot/straight stroke: nothing to scale
     const ox = d.handle === "ne" || d.handle === "se" ? b.x0 : b.x1;
     const oy = d.handle === "sw" || d.handle === "se" ? b.y0 : b.y1;
     const movingX = d.handle === "ne" || d.handle === "se" ? b.x1 : b.x0;
     const movingY = d.handle === "sw" || d.handle === "se" ? b.y1 : b.y0;
-    const sx = Math.max(MIN_PEN_SCALE, (movingX + dx - ox) / (movingX - ox));
-    const sy = Math.max(MIN_PEN_SCALE, (movingY + dy - oy) / (movingY - oy));
+    const sx = axisScale(movingX, ox, dx);
+    const sy = axisScale(movingY, oy, dy);
+    if (sx === 1 && sy === 1) return a; // a true dot (both extents ~0): nothing to scale
     return { ...a, points: scalePoints(a.points, sx, sy, ox, oy) };
   }
   return null; // text marks are not moved here (Story 3.8 re-resolves their run)
+}
+
+/**
+ * The per-axis scale factor for a pen corner-resize: drag the moving edge by
+ * `delta`, then clamp it to the page [0,1] AND to at least `MIN_PEN_SCALE` of the
+ * original extent from the fixed `origin` (so the stroke can't collapse or flip).
+ * The scale is derived from the CLAMPED edge, so an overscale drag limits the
+ * FACTOR (the stroke keeps its shape) instead of pushing points past the edge to
+ * be clipped flat. A zero-extent axis returns 1 (don't scale that axis) so a 1-D
+ * stroke still resizes on its other axis.
+ */
+function axisScale(moving: number, origin: number, delta: number): number {
+  const extent = moving - origin;
+  if (Math.abs(extent) < 1e-9) return 1;
+  const minEdge = origin + extent * MIN_PEN_SCALE; // closest the edge may get to origin
+  let edge = Math.min(1, Math.max(0, moving + delta)); // keep the edge on the page
+  // Keep the edge on the original side of the origin (no collapse/flip past minEdge).
+  edge = extent > 0 ? Math.max(edge, minEdge) : Math.min(edge, minEdge);
+  return (edge - origin) / extent;
 }

@@ -111,3 +111,85 @@ describe("useEditGesture (move/resize drag, Story 3.1)", () => {
     expect(useAnnotationStore.getState().dragPreview).toBeNull();
   });
 });
+
+function pen(id: string, points: { x: number; y: number }[]): Annotation {
+  return {
+    id,
+    doc_id: "doc-1",
+    type: "pen",
+    group_id: null,
+    anchor: { kind: "path", page_index: 0, points },
+    style: { color: "annotation-default", stroke_width: 8, alpha: 0.4 },
+    body: null,
+    created_at: "2026-06-30T00:00:00Z",
+    updated_at: "2026-06-30T00:00:00Z",
+  };
+}
+
+function penPoints(id: string): { x: number; y: number }[] {
+  const a = useAnnotationStore.getState().annotations.get(id)!;
+  return a.anchor.kind === "path" ? a.anchor.points : [];
+}
+
+describe("useEditGesture pen resize (Codex review fix — 1-D strokes + edge overscale)", () => {
+  it("resizes a perfectly HORIZONTAL stroke (zero y-extent) on its x axis instead of no-op", () => {
+    useAnnotationStore
+      .getState()
+      .addAnnotation(pen("h", [{ x: 0.2, y: 0.5 }, { x: 0.4, y: 0.5 }, { x: 0.6, y: 0.5 }]));
+    mountGesture();
+    down(handle("se", "h"), 100, 100);
+    move(300, 100); // dx = 200/1000 = 0.2, dy = 0
+    up();
+    const pts = penPoints("h");
+    // x scales about x0=0.2 by 1.5 (edge 0.6→0.8); y is the zero-extent axis → unchanged.
+    expect(pts[0].x).toBeCloseTo(0.2, 6);
+    expect(pts[2].x).toBeCloseTo(0.8, 6);
+    expect(pts.every((p) => p.y === 0.5)).toBe(true);
+  });
+
+  it("resizes a perfectly VERTICAL stroke (zero x-extent) on its y axis instead of no-op", () => {
+    useAnnotationStore
+      .getState()
+      .addAnnotation(pen("v", [{ x: 0.5, y: 0.2 }, { x: 0.5, y: 0.4 }, { x: 0.5, y: 0.6 }]));
+    mountGesture();
+    down(handle("se", "v"), 100, 100);
+    move(100, 300); // dx = 0, dy = 0.2
+    up();
+    const pts = penPoints("v");
+    expect(pts[0].y).toBeCloseTo(0.2, 6);
+    expect(pts[2].y).toBeCloseTo(0.8, 6);
+    expect(pts.every((p) => p.x === 0.5)).toBe(true);
+  });
+
+  it("an overscale drag clamps the FACTOR (shape preserved), not each point flat at the edge", () => {
+    useAnnotationStore
+      .getState()
+      .addAnnotation(pen("e", [{ x: 0.2, y: 0.2 }, { x: 0.4, y: 0.4 }, { x: 0.6, y: 0.6 }]));
+    mountGesture();
+    down(handle("se", "e"), 100, 100);
+    move(5100, 5100); // dx = dy = 5 (massively past the page edge)
+    up();
+    const pts = penPoints("e");
+    // Edge clamps to 1.0 → scale 2.0 about (0.2,0.2). The MIDPOINT must stay at 0.6,
+    // proving shape is preserved (the old per-point clip flattened it to 1.0).
+    expect(pts[2].x).toBeCloseTo(1, 6);
+    expect(pts[2].y).toBeCloseTo(1, 6);
+    expect(pts[1].x).toBeCloseTo(0.6, 6);
+    expect(pts[1].y).toBeCloseTo(0.6, 6);
+  });
+
+  it("does not collapse/flip when dragging a corner far past the opposite edge (MIN_PEN_SCALE floor)", () => {
+    useAnnotationStore
+      .getState()
+      .addAnnotation(pen("c", [{ x: 0.3, y: 0.3 }, { x: 0.6, y: 0.6 }]));
+    mountGesture();
+    // Drag the SE corner up-left far past the NW origin (0.3,0.3): the stroke must
+    // keep a positive extent (floored), never invert.
+    down(handle("se", "c"), 500, 500);
+    move(100, 100); // dx = dy = -0.4 → moving edge would go below origin
+    up();
+    const pts = penPoints("c");
+    expect(pts[1].x).toBeGreaterThan(pts[0].x); // still x0 < x1 (no flip)
+    expect(pts[1].y).toBeGreaterThan(pts[0].y);
+  });
+});
