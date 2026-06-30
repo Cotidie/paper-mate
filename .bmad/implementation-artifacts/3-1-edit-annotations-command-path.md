@@ -4,7 +4,7 @@ baseline_commit: bcbec292f5bc2085dd6f3c19c067c4e989630c1e
 
 # Story 3.1: Edit annotations (command path)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
