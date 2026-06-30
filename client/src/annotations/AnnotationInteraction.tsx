@@ -38,6 +38,7 @@ import { useBoxGesture } from "./gestures/useBoxGesture";
 import { useMemoPlacement } from "./gestures/useMemoPlacement";
 import { useEditGesture } from "./gestures/useEditGesture";
 import { useSelection } from "./gestures/useSelection";
+import { useUndoRedo } from "./gestures/useUndoRedo";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";
@@ -78,6 +79,7 @@ export default function AnnotationInteraction({
 }) {
   const [state, dispatch] = useReducer(overlayReducer, initialOverlayState);
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation);
+  const addAnnotations = useAnnotationStore((s) => s.addAnnotations);
   // The store annotations + selection id the component still reads directly: the
   // empty-memo cleanup watches selection transitions (below); the selection
   // QUICK-BOX itself lives in `useSelection` (Story 5.0).
@@ -152,6 +154,7 @@ export default function AnnotationInteraction({
   // level gesture (the edit frame + handles render in AnnotationLayer); it commits
   // ONE setAnnotationGeometry on release via the transient dragPreview.
   useEditGesture({ enabled, getPagesRef, scaleRef });
+  useUndoRedo({ enabled });
   // The selected-mark quick-box (Story 2.5/AD-12), encapsulated as its own hook
   // (Story 5.0). Owns selection state + effects + the recolor/restroke/realpha/
   // resize/delete actions; the component renders the box from what it returns.
@@ -186,11 +189,11 @@ export default function AnnotationInteraction({
         color: defaultsRef.current.color,
         ...(tool === "comment" ? { body: "" } : {}),
       });
-      created.forEach(addAnnotation);
+      addAnnotations(created);
       window.getSelection()?.removeAllRanges();
       select(created[0].id);
     },
-    [docId, addAnnotation, select],
+    [docId, addAnnotations, select],
   );
 
   // Sync the armed tool from App into the machine, so `currentTool(state)` (and

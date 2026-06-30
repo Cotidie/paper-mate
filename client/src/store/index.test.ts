@@ -16,7 +16,7 @@ function mark(id: string, color: string, createdAt: string, groupId: string | nu
   };
 }
 
-beforeEach(() =>
+beforeEach(() => {
   useAnnotationStore.setState({
     annotations: new Map(),
     selectedId: null,
@@ -26,8 +26,10 @@ beforeEach(() =>
     activeStrokeWidth: 4,
     activeMemoSize: DEFAULT_MEMO_SIZE,
     activeAlpha: 0.4,
-  }),
-);
+  });
+  // Reset temporal history so undo/redo state never leaks between tests.
+  useAnnotationStore.temporal.getState().clear();
+});
 
 function memoMark(
   id: string,
@@ -383,5 +385,133 @@ describe("geometry edit — setAnnotationGeometry (move/resize command path, Sto
     expect(m.updated_at).toBe("2026-06-29T00:00:01Z");
     s.setDragPreview(null);
     expect(useAnnotationStore.getState().dragPreview).toBeNull();
+  });
+});
+
+describe("undo/redo — zundo temporal store (Story 3.2)", () => {
+  const t = () => useAnnotationStore.temporal.getState();
+
+  it("addAnnotation then undo() removes the annotation", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
+    t().undo();
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(false);
+  });
+
+  it("undo() then redo() restores the annotation", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    t().undo();
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(false);
+    t().redo();
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
+  });
+
+  it("addAnnotations batch-adds two marks as ONE history entry", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotations([
+      mark("a", "annotation-default", "2026-06-29T00:00:01Z", "g1"),
+      mark("b", "annotation-default", "2026-06-29T00:00:01Z", "g1"),
+    ]);
+    expect(useAnnotationStore.getState().annotations.size).toBe(2);
+    // One undo step removes BOTH.
+    t().undo();
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+    t().redo();
+    expect(useAnnotationStore.getState().annotations.size).toBe(2);
+  });
+
+  it("no-op action (restroke on a text mark) pushes NO history entry", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z")); // text mark
+    const depthAfterAdd = t().pastStates.length;
+    // restroke on a text mark is a no-op — the guard returns `state` unchanged.
+    useAnnotationStore.getState().restrokeAnnotation(["a"], 8, "2026-06-29T12:00:00Z");
+    expect(t().pastStates.length).toBe(depthAfterAdd);
+  });
+
+  it("no-op action (setAnnotationGeometry unknown id) pushes NO history entry", () => {
+    const depthBefore = t().pastStates.length;
+    const dummyRect = { x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.5 };
+    useAnnotationStore
+      .getState()
+      .setAnnotationGeometry("missing", { kind: "rect", page_index: 0, rect: dummyRect }, "2026-06-29T12:00:00Z");
+    expect(t().pastStates.length).toBe(depthBefore);
+  });
+
+  it("partialize: undo after select(id)+addAnnotation does NOT un-select", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.select("a");
+    s.addAnnotation(mark("b", "annotation-default", "2026-06-29T00:00:02Z"));
+    // Undo the addAnnotation("b"); selectedId is NOT part of temporal history.
+    t().undo();
+    expect(useAnnotationStore.getState().annotations.has("b")).toBe(false);
+    // Selection state is unchanged (not rolled back by undo).
+    expect(useAnnotationStore.getState().selectedId).toBe("a");
+  });
+
+  it("empty-stack undo is a safe no-op", () => {
+    expect(() => t().undo()).not.toThrow();
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
+
+  it("empty-stack redo is a safe no-op", () => {
+    expect(() => t().redo()).not.toThrow();
+  });
+
+  it("a new edit after undo clears redo history (linear undo semantics)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    t().undo();
+    expect(t().futureStates.length).toBeGreaterThan(0);
+    // A new edit wipes the redo stack.
+    s.addAnnotation(mark("b", "annotation-default", "2026-06-29T00:00:02Z"));
+    expect(t().futureStates.length).toBe(0);
+  });
+
+  it("pause() suppresses history; commitTextEditSession pushes ONE entry back to pre-session state", () => {
+    const s = useAnnotationStore.getState();
+    // Place a baseline annotation so there is prior state.
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    const depthAfterAdd = t().pastStates.length;
+
+    // Simulate onFocus: save pre-session annotations + pause temporal.
+    const preFocusAnnotations = useAnnotationStore.getState().annotations;
+    t().pause();
+
+    // Multiple retextAnnotation calls during a typing session — none recorded.
+    s.retextAnnotation("a", "h", "2026-06-29T12:00:01Z");
+    s.retextAnnotation("a", "hi", "2026-06-29T12:00:02Z");
+    s.retextAnnotation("a", "hii", "2026-06-29T12:00:03Z");
+    expect(t().pastStates.length).toBe(depthAfterAdd);
+
+    // Simulate onBlur: resume + manually push ONE history entry (pre-session state).
+    t().resume();
+    const currentAnnotations = useAnnotationStore.getState().annotations;
+    // Only push if something actually changed (Map ref differs from pre-session).
+    if (currentAnnotations !== preFocusAnnotations) {
+      const { pastStates } = t();
+      useAnnotationStore.temporal.setState({
+        pastStates: [...pastStates.slice(-99), { annotations: preFocusAnnotations }],
+        futureStates: [],
+      });
+    }
+    expect(t().pastStates.length).toBe(depthAfterAdd + 1);
+
+    // ONE undo step takes us back to the pre-session state (body = null).
+    t().undo();
+    const restored = useAnnotationStore.getState().annotations.get("a")!;
+    expect(restored.body).toBeNull();
+  });
+
+  it("restyle (recolor) is one undo step", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.recolorAnnotation(["a"], "annotation-pink", "2026-06-29T12:00:00Z");
+    t().undo();
+    const a = useAnnotationStore.getState().annotations.get("a")!;
+    expect(a.style.color).toBe("annotation-default");
   });
 });

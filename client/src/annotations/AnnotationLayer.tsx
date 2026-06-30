@@ -28,6 +28,7 @@
 // `hoveredId`/`selectedId` and lights any mark that matches by id OR shares a
 // non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
 
+import { useRef } from "react";
 import type { Annotation } from "../api/client";
 import { useAnnotationStore } from "../store";
 import { denormalizeRect, denormalizePoint, pointsBounds, type PageBox, type ScreenRect } from "../anchor";
@@ -96,6 +97,31 @@ export default function AnnotationLayer({
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const setHovered = useAnnotationStore((s) => s.setHovered);
   const retextAnnotation = useAnnotationStore((s) => s.retextAnnotation);
+  const retextAnnotations = useAnnotationStore((s) => s.retextAnnotations);
+  // Text-edit session coalescing (Story 3.2, AC-4): a memo or comment textarea
+  // editing session (focus→blur) must land as ONE undo step, not one per keystroke.
+  // On focus: pause the temporal store and save the pre-session annotations Map.
+  // On blur: resume + push the pre-session snapshot to pastStates so one undo
+  // returns to the state before the editing session started. If nothing changed
+  // (no keystrokes), the Map ref is unchanged and we skip the push.
+  const textSessionRef = useRef<Map<string, Annotation> | null>(null);
+  const startTextEditSession = () => {
+    textSessionRef.current = useAnnotationStore.getState().annotations;
+    useAnnotationStore.temporal.getState().pause();
+  };
+  const commitTextEditSession = () => {
+    useAnnotationStore.temporal.getState().resume();
+    const pre = textSessionRef.current;
+    textSessionRef.current = null;
+    if (!pre) return;
+    const current = useAnnotationStore.getState().annotations;
+    if (current === pre) return; // nothing changed, skip
+    const { pastStates } = useAnnotationStore.temporal.getState();
+    useAnnotationStore.temporal.setState({
+      pastStates: [...pastStates.slice(-99), { annotations: pre }],
+      futureStates: [],
+    });
+  };
   // Story 2.10: a selected comment's bubble recolors/deletes the comment itself
   // (the bubble REPLACES the generic selection quick-box, Decision 4), so the
   // layer owns those actions for comments. Recolor sets the active default too
@@ -284,6 +310,8 @@ export default function AnnotationLayer({
         onSelect={select}
         onHover={setHovered}
         onClearSelection={clearSelection}
+        onTextFocus={startTextEditSession}
+        onTextBlur={commitTextEditSession}
       />
     );
   };
@@ -329,8 +357,8 @@ export default function AnnotationLayer({
               // Group-aware (Codex HIGH): a two-page comment is grouped siblings;
               // write the same body to ALL of them so reopening the other page's
               // pin shows the note, not a stale/empty one (matches recolor/delete).
-              const now = new Date().toISOString();
-              for (const gid of commentGroupIds(a)) retextAnnotation(gid, body, now);
+              // retextAnnotations batches all group ids in ONE set() (Story 3.2, AC-4).
+              retextAnnotations(commentGroupIds(a), body, new Date().toISOString());
             }}
             onRecolor={(color) => {
               recolorAnnotation(commentGroupIds(a), color, new Date().toISOString());
@@ -338,6 +366,8 @@ export default function AnnotationLayer({
             }}
             onDelete={() => deleteAnnotation(a.id)}
             onClearSelection={clearSelection}
+            onTextFocus={startTextEditSession}
+            onTextBlur={commitTextEditSession}
           />
         )}
       </div>

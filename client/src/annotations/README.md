@@ -439,5 +439,77 @@ this surface). NO autosave (3.4).
 disambiguates overlapping marks of DIFFERENT types on one spot (mostly text marks,
 not edited in 3.1). Fast-follow / fold into Story 3.8. `marks.ts` stays its seam.
 
-Still later: undo/redo (3.2, zundo), autosave + restore (3.4/3.5), the Annotation
-Bank (3.6), convert highlight↔comment (3.7), text-range adjust (3.8).
+Still later: autosave + restore (3.4/3.5), the Annotation Bank (3.6), convert
+highlight to comment (3.7), text-range adjust (3.8).
+
+## Story 3.2 (undo/redo): zundo temporal middleware + Ctrl Z / Ctrl Shift Z
+
+3.2 wraps the Story 3.1 mutation surface (the store actions) with `zundo` temporal
+middleware and binds the keyboard shortcuts. The store actions do not change shape:
+zundo observes the `annotations` Map and records each transition. The result is
+client-only, in-memory undo: discarded on reload, with a 100-step cap (AC-2, AR-7).
+
+**zundo integration.** `zundo 2.3.0` is the Zustand temporal middleware (`temporal`
+from `"zundo"`). The store is wrapped in the curried form:
+
+```ts
+export const useAnnotationStore = create<AnnotationStore>()(
+  temporal(
+    (set, get) => ({ /* existing store body */ }),
+    {
+      partialize: (s) => ({ annotations: s.annotations }),
+      limit: 100,
+      equality: (a, b) => a.annotations === b.annotations,
+    },
+  ),
+);
+```
+
+Only `annotations` is tracked in history (`partialize`). `selectedId`,
+`hoveredId`, `dragPreview`, `active*` defaults, and all actions are excluded (AC-5).
+The equality check uses Map reference equality: a no-op action that returns the same
+Map reference produces no history entry (AC-5 for restroke-on-text, unknown-id
+geometry, etc.). The imperative API hangs off
+`useAnnotationStore.temporal.getState().{undo, redo, clear, pause, resume}`.
+
+**One logical edit = one undo step (AC-4).** Four patterns:
+
+- **Single-action creates/edits:** each store `set()` is one step automatically
+  (highlight, pen, recolor, geometry, delete).
+- **Grouped creates (two-page highlight):** `addAnnotations(created[])` (new batch
+  action) adds all siblings in ONE `set()` call so they land as a single undo step.
+  `AnnotationInteraction` uses this instead of `created.forEach(addAnnotation)`.
+- **Move/resize:** `useEditGesture` commits ONE `setAnnotationGeometry` on release
+  (3.1 design); already one step.
+- **Text-edit sessions:** typing into a memo or comment textarea fires many
+  `retextAnnotation` calls. On focus the temporal store is paused
+  (`temporal.pause()`) and the pre-session `annotations` Map is saved
+  (`textSessionRef`). On blur, `temporal.resume()` is called and the pre-session
+  snapshot is pushed directly to `pastStates` so ONE undo returns to the state
+  before the session started. `AnnotationLayer` owns this via `startTextEditSession`
+  / `commitTextEditSession` passed as `onTextFocus` / `onTextBlur` to `MemoBox` and
+  `CommentBubble`. This gives true "one undo per typing session" without
+  per-keystroke history entries and without a complex separate timer.
+
+**`patchAnnotations` no-op guard.** The internal helper (used by recolor/restroke/
+realpha/resizeMemo) returns the ORIGINAL Map reference when no annotation was
+modified. This lets the zundo equality check (`a.annotations === b.annotations`)
+correctly skip the history entry for no-op calls (e.g. restroking a text mark,
+setting geometry on an unknown id).
+
+**`retextAnnotations` (new batch retext action).** A `CommentBubble` edit writes
+the same body to all group siblings (a two-page comment) in ONE `set()` call,
+so the text-edit session coalescing gives ONE undo step for the whole group.
+
+**Keybindings: `gestures/useUndoRedo.ts`.** A standalone document-level `keydown`
+handler (not folded into `useSelection` which early-returns on `e.ctrlKey`):
+
+- `Ctrl Z` / `Cmd Z`: undo
+- `Ctrl Shift Z` / `Cmd Shift Z`: redo
+- `Ctrl Y`: redo (Windows alternate)
+
+Phase-gated (`enabled`), editable/buttons exempt (`isExempt`) — so `Ctrl Z` inside
+a memo/comment textarea does the browser's native text undo. `e.preventDefault()` on
+handled chords. After undo/redo: if `selectedId` is no longer in `annotations`, the
+selection is cleared (AC-5). Empty-stack calls are silent no-ops (`zundo` handles
+them internally). Consumed in `AnnotationInteraction` alongside the other gesture hooks.

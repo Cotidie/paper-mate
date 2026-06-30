@@ -19,6 +19,8 @@ export default function MemoBox({
   onSelect,
   onHover,
   onClearSelection,
+  onTextFocus,
+  onTextBlur,
 }: {
   anno: Annotation;
   pos: ScreenRect;
@@ -28,6 +30,10 @@ export default function MemoBox({
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
   onClearSelection: () => void;
+  /** Called when the textarea gains focus (start of a text-edit session). */
+  onTextFocus?: () => void;
+  /** Called when the textarea loses focus (end of a text-edit session). */
+  onTextBlur?: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const body = anno.body ?? "";
@@ -49,6 +55,8 @@ export default function MemoBox({
       value={body}
       autoFocus={selected}
       onChange={(e) => onRetext(anno.id, e.target.value)}
+      onFocus={onTextFocus}
+      onBlur={onTextBlur}
       onKeyDown={(e) => {
         // Esc blurs + deselects the memo from INSIDE the textarea (it is exempt
         // from the document-level tool/selection keys, so Esc would otherwise be

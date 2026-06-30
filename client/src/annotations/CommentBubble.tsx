@@ -22,6 +22,8 @@ export default function CommentBubble({
   onRecolor,
   onDelete,
   onClearSelection,
+  onTextFocus,
+  onTextBlur,
 }: {
   anno: Annotation;
   pos: ScreenRect;
@@ -29,6 +31,10 @@ export default function CommentBubble({
   onRecolor: (color: string) => void;
   onDelete: () => void;
   onClearSelection: () => void;
+  /** Called when the textarea gains focus (start of a text-edit session). */
+  onTextFocus?: () => void;
+  /** Called when the textarea loses focus (end of a text-edit session). */
+  onTextBlur?: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -93,6 +99,8 @@ export default function CommentBubble({
         aria-label="Comment"
         value={body}
         onChange={(e) => onRetext(anno.id, e.target.value)}
+        onFocus={onTextFocus}
+        onBlur={onTextBlur}
       />
       <div className="comment-bubble__actions">
         <ColorSwatchRow value={anno.style.color} onPick={onRecolor} ariaLabel="Comment color" />

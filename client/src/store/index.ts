@@ -5,14 +5,25 @@
 // Scope: an in-memory keyed map + the annotation-mutation action surface (add,
 // delete, recolor/restroke/realpha/retext/resizeMemo, and the Story 3.1 move/resize
 // geometry edit). This IS the single command path every edit routes through (AD-7,
-// AE-3) — no component mutates annotations outside it. The do/undo STACK (zundo,
-// Story 3.2), the dirty flag + debounced autosave (3.4), and hydrate-on-open (3.5)
-// wrap this surface and are NOT here yet. Dependency-clean per AD-9: imports `api/`
-// types only, never `anchor/`, `annotations/`, or `render/` — so coordinate math
-// (the move/resize transforms) is done by the caller (the gesture) with the anchor/
-// helpers, then handed to `setAnnotationGeometry`, never computed here.
+// AE-3) — no component mutates annotations outside it. The do/undo STACK is here
+// (Story 3.2): zundo wraps the store, tracking only `annotations` in temporal
+// history. The dirty flag + debounced autosave (3.4) and hydrate-on-open (3.5)
+// are NOT here yet. Dependency-clean per AD-9: imports `api/` types only.
+//
+// zundo (Story 3.2 / AE-1): `temporal` wraps the store and records the `annotations`
+// Map on every mutating `set()`. Partialized to `{ annotations }` only — all other
+// state (selectedId, hoveredId, dragPreview, active* defaults, actions) is excluded.
+// Equality: `Object.is` on the Map reference — no-op actions that return the same
+// `state` object produce no history entry (the existing no-op guards all return
+// `state`, preserving the reference). Limit: 100 entries (cheap; Annotation objects
+// are shared across Map snapshots so memory is bounded). Undo/redo is client-only,
+// in-memory, discarded on reload (AR-7).
+// Access: `useAnnotationStore.temporal.getState().{undo,redo,clear,pause,resume}`.
+// Partialize exclusions: selectedId, hoveredId, dragPreview, activeColor,
+// activeStrokeWidth, activeAlpha, activeMemoSize, and all action functions.
 
 import { create } from "zustand";
+import { temporal } from "zundo";
 import type { Annotation } from "../api/client";
 
 /** A memo box-size preset (Story 2.9). The box dimensions ARE the memo's size:
@@ -113,6 +124,10 @@ export interface AnnotationStore {
   deleteAnnotation: (id: string) => void;
   /** Insert (or replace by id) an annotation. */
   addAnnotation: (annotation: Annotation) => void;
+  /** Insert multiple annotations atomically in a single `set()` so a grouped
+   *  create (e.g. a two-page highlight that produces two annotations) lands as
+   *  exactly ONE undo step (Story 3.2, AC-4). Single-element lists work too. */
+  addAnnotations: (annotations: Annotation[]) => void;
   /** Recolor one or more annotations (by id) and bump `updated_at`. This is the
    *  CREATION-time recolor from the highlight quick-box's swatch row (the mark
    *  was just made in the same gesture), NOT post-hoc editing — so it needs no
@@ -130,11 +145,14 @@ export interface AnnotationStore {
    *  in the UI; do not write it onto text/rect marks). Same creation-time-edit
    *  rationale: no command stack yet (Epic 3 folds it in). */
   realphaAnnotation: (ids: string[], alpha: number, now: string) => void;
-  /** Set a memo's `body` text and bump `updated_at` — the body twin of
-   *  `recolorAnnotation`, called as the user types into the memo's textarea. This
-   *  is CREATION-time editing (the memo was just placed in the same gesture), so
-   *  no command stack yet (Epic 3 folds it in). A no-op for an unknown id. */
+  /** Set a memo's `body` text and bump `updated_at` — called on every keystroke
+   *  via the temporal pause/resume coalescing (Story 3.2) so a full editing session
+   *  collapses to one undo step. A no-op for an unknown id. */
   retextAnnotation: (id: string, body: string, now: string) => void;
+  /** Set `body` on multiple annotations atomically (one `set()`) and bump
+   *  `updated_at` — the batch twin of `retextAnnotation` for group-aware comment
+   *  edits (Story 3.2). Used for the blur-commit when a comment has group siblings. */
+  retextAnnotations: (ids: string[], body: string, now: string) => void;
   /** Resize one or more memos (by id) to a new box size and bump `updated_at` —
    *  the size twin of `restrokeAnnotation`, from the memo selection quick-box's
    *  `SizeRow`. `size` is the new normalized width/height FRACTION of the page box
@@ -155,129 +173,165 @@ export interface AnnotationStore {
   all: () => Annotation[];
 }
 
-/** Apply a per-id patch across a set of annotations, returning a fresh Map (so
- *  Zustand re-renders). For each id present in the map, `apply` either returns the
- *  next annotation (which the helper stamps with `updated_at`) or `null` to skip it
- *  (a failed kind/type guard, e.g. restroke on a non-pen mark — the mark is left
- *  untouched, not bumped). Unknown ids are ignored. This is the shared shape of the
- *  creation-time restyle/resize twins (recolor/restroke/realpha/resize); retext and
- *  delete keep their own shapes (single-id early-return / group-gather). Story 5.0:
- *  consolidates the five near-identical guard-then-map `set()` blocks into one. */
+/** Apply a per-id patch across a set of annotations. For each id present in the
+ *  map, `apply` either returns the next annotation (which the helper stamps with
+ *  `updated_at`) or `null` to skip it (a failed kind/type guard, e.g. restroke on
+ *  a non-pen mark — the mark is left untouched, not bumped). Unknown ids are ignored.
+ *  Returns a NEW Map only when at least one annotation changed; returns the ORIGINAL
+ *  reference when every `apply` returned null (preserving the Map ref so zundo's
+ *  equality check suppresses a spurious history entry, Story 3.2). */
 function patchAnnotations(
   annotations: Map<string, Annotation>,
   ids: string[],
   now: string,
   apply: (a: Annotation) => Annotation | null,
 ): Map<string, Annotation> {
-  const next = new Map(annotations);
+  let next: Map<string, Annotation> | null = null;
   for (const id of ids) {
-    const a = next.get(id);
+    const a = (next ?? annotations).get(id);
     if (!a) continue;
     const updated = apply(a);
-    if (updated) next.set(id, { ...updated, updated_at: now });
+    if (updated) {
+      if (!next) next = new Map(annotations);
+      next.set(id, { ...updated, updated_at: now });
+    }
   }
-  return next;
+  return next ?? annotations;
 }
 
-export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
-  annotations: new Map(),
-  selectedId: null,
-  hoveredId: null,
-  activeColor: "annotation-default",
-  setActiveColor: (color) => set({ activeColor: color }),
-  // Default pen width = the medium step (scale-1.0 px); matches --pen-stroke-medium (8px).
-  activeStrokeWidth: 8,
-  setActiveStrokeWidth: (width) => set({ activeStrokeWidth: width }),
-  // Default memo size = the medium preset (scale-1.0 px); see MEMO_SIZES.
-  activeMemoSize: DEFAULT_MEMO_SIZE,
-  setActiveMemoSize: (size) => set({ activeMemoSize: size }),
-  // Default alpha = highlighter opacity (0.4); mirrors --annotation-highlight-opacity.
-  activeAlpha: 0.4,
-  setActiveAlpha: (alpha) => set({ activeAlpha: alpha }),
-  select: (id) => set({ selectedId: id }),
-  clearSelection: () => set({ selectedId: null }),
-  setHovered: (id) => set({ hoveredId: id }),
-  dragPreview: null,
-  setDragPreview: (preview) => set({ dragPreview: preview }),
-  deleteAnnotation: (id) =>
-    set((state) => {
-      const target = state.annotations.get(id);
-      if (!target) return state;
-      // Gather the id plus every sibling sharing a non-null group_id (AR-4).
-      const doomed = new Set<string>([id]);
-      if (target.group_id) {
-        for (const a of state.annotations.values()) {
-          if (a.group_id === target.group_id) doomed.add(a.id);
-        }
-      }
-      const next = new Map(state.annotations);
-      for (const did of doomed) next.delete(did);
-      const selectedId =
-        state.selectedId && doomed.has(state.selectedId) ? null : state.selectedId;
-      return { annotations: next, selectedId };
+export const useAnnotationStore = create<AnnotationStore>()(
+  temporal(
+    (set, get) => ({
+      annotations: new Map(),
+      selectedId: null,
+      hoveredId: null,
+      activeColor: "annotation-default",
+      setActiveColor: (color) => set({ activeColor: color }),
+      // Default pen width = the medium step (scale-1.0 px); matches --pen-stroke-medium (8px).
+      activeStrokeWidth: 8,
+      setActiveStrokeWidth: (width) => set({ activeStrokeWidth: width }),
+      // Default memo size = the medium preset (scale-1.0 px); see MEMO_SIZES.
+      activeMemoSize: DEFAULT_MEMO_SIZE,
+      setActiveMemoSize: (size) => set({ activeMemoSize: size }),
+      // Default alpha = highlighter opacity (0.4); mirrors --annotation-highlight-opacity.
+      activeAlpha: 0.4,
+      setActiveAlpha: (alpha) => set({ activeAlpha: alpha }),
+      select: (id) => set({ selectedId: id }),
+      clearSelection: () => set({ selectedId: null }),
+      setHovered: (id) => set({ hoveredId: id }),
+      dragPreview: null,
+      setDragPreview: (preview) => set({ dragPreview: preview }),
+      deleteAnnotation: (id) =>
+        set((state) => {
+          const target = state.annotations.get(id);
+          if (!target) return state;
+          // Gather the id plus every sibling sharing a non-null group_id (AR-4).
+          const doomed = new Set<string>([id]);
+          if (target.group_id) {
+            for (const a of state.annotations.values()) {
+              if (a.group_id === target.group_id) doomed.add(a.id);
+            }
+          }
+          const next = new Map(state.annotations);
+          for (const did of doomed) next.delete(did);
+          const selectedId =
+            state.selectedId && doomed.has(state.selectedId) ? null : state.selectedId;
+          return { annotations: next, selectedId };
+        }),
+      addAnnotation: (annotation) =>
+        // New Map each mutation so Zustand sees a fresh reference and re-renders.
+        set((state) => {
+          const next = new Map(state.annotations);
+          next.set(annotation.id, annotation);
+          return { annotations: next };
+        }),
+      addAnnotations: (annotations) =>
+        // Batch add: one new Map, one set() — one undo step for grouped creates (AC-4).
+        set((state) => {
+          const next = new Map(state.annotations);
+          for (const a of annotations) next.set(a.id, a);
+          return { annotations: next };
+        }),
+      recolorAnnotation: (ids, color, now) =>
+        set((state) => ({
+          // Recolor has no kind guard — every mark type carries a color.
+          annotations: patchAnnotations(state.annotations, ids, now, (a) => ({
+            ...a,
+            style: { ...a.style, color },
+          })),
+        })),
+      restrokeAnnotation: (ids, width, now) =>
+        set((state) => ({
+          // stroke_width is path-only style (AR-5): never write it onto a text/region
+          // mark, even if a stale id is passed (Codex MED). The guard returns null
+          // (skip, no updated_at bump) for a non-path mark.
+          annotations: patchAnnotations(state.annotations, ids, now, (a) =>
+            a.anchor.kind === "path" ? { ...a, style: { ...a.style, stroke_width: width } } : null,
+          ),
+        })),
+      realphaAnnotation: (ids, alpha, now) =>
+        set((state) => ({
+          // alpha is path-only style (AR-5): never write it onto a text/region mark,
+          // even if a stale id is passed. Guard skips a non-path mark untouched.
+          annotations: patchAnnotations(state.annotations, ids, now, (a) =>
+            a.anchor.kind === "path" ? { ...a, style: { ...a.style, alpha } } : null,
+          ),
+        })),
+      retextAnnotation: (id, body, now) =>
+        set((state) => {
+          const a = state.annotations.get(id);
+          if (!a) return state;
+          const next = new Map(state.annotations);
+          next.set(id, { ...a, body, updated_at: now });
+          return { annotations: next };
+        }),
+      retextAnnotations: (ids, body, now) =>
+        // Batch retext: one set() for a group of comment siblings (AC-4).
+        set((state) => {
+          const next = new Map(state.annotations);
+          for (const id of ids) {
+            const a = next.get(id);
+            if (a) next.set(id, { ...a, body, updated_at: now });
+          }
+          return { annotations: next };
+        }),
+      resizeMemoAnnotation: (ids, size, now) =>
+        set((state) => ({
+          // Size is memo-only geometry (AR-5): only a rect-anchored memo has a box to
+          // regrow, even if a stale text/path id is passed. Guard skips others; the
+          // top-left anchor is kept and the rect regrown, clamped to the page (<=1).
+          annotations: patchAnnotations(state.annotations, ids, now, (a) => {
+            if (a.anchor.kind !== "rect" || a.type !== "memo") return null;
+            const { x0, y0 } = a.anchor.rect;
+            const rect = { x0, y0, x1: Math.min(1, x0 + size.w), y1: Math.min(1, y0 + size.h) };
+            return { ...a, anchor: { ...a.anchor, rect } };
+          }),
+        })),
+      setAnnotationGeometry: (id, anchor, now) =>
+        set((state) => {
+          const a = state.annotations.get(id);
+          // No-op for an unknown id OR a kind change: a geometry edit rewrites the
+          // anchor's VALUES (rect/points), never its discriminator (AC-8).
+          if (!a || anchor.kind !== a.anchor.kind) return state;
+          const next = new Map(state.annotations);
+          next.set(id, { ...a, anchor, updated_at: now });
+          return { annotations: next };
+        }),
+      all: () =>
+        [...get().annotations.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)),
     }),
-  addAnnotation: (annotation) =>
-    // New Map each mutation so Zustand sees a fresh reference and re-renders.
-    set((state) => {
-      const next = new Map(state.annotations);
-      next.set(annotation.id, annotation);
-      return { annotations: next };
-    }),
-  recolorAnnotation: (ids, color, now) =>
-    set((state) => ({
-      // Recolor has no kind guard — every mark type carries a color.
-      annotations: patchAnnotations(state.annotations, ids, now, (a) => ({
-        ...a,
-        style: { ...a.style, color },
-      })),
-    })),
-  restrokeAnnotation: (ids, width, now) =>
-    set((state) => ({
-      // stroke_width is path-only style (AR-5): never write it onto a text/region
-      // mark, even if a stale id is passed (Codex MED). The guard returns null
-      // (skip, no updated_at bump) for a non-path mark.
-      annotations: patchAnnotations(state.annotations, ids, now, (a) =>
-        a.anchor.kind === "path" ? { ...a, style: { ...a.style, stroke_width: width } } : null,
-      ),
-    })),
-  realphaAnnotation: (ids, alpha, now) =>
-    set((state) => ({
-      // alpha is path-only style (AR-5): never write it onto a text/region mark,
-      // even if a stale id is passed. Guard skips a non-path mark untouched.
-      annotations: patchAnnotations(state.annotations, ids, now, (a) =>
-        a.anchor.kind === "path" ? { ...a, style: { ...a.style, alpha } } : null,
-      ),
-    })),
-  retextAnnotation: (id, body, now) =>
-    set((state) => {
-      const a = state.annotations.get(id);
-      if (!a) return state;
-      const next = new Map(state.annotations);
-      next.set(id, { ...a, body, updated_at: now });
-      return { annotations: next };
-    }),
-  resizeMemoAnnotation: (ids, size, now) =>
-    set((state) => ({
-      // Size is memo-only geometry (AR-5): only a rect-anchored memo has a box to
-      // regrow, even if a stale text/path id is passed. Guard skips others; the
-      // top-left anchor is kept and the rect regrown, clamped to the page (<=1).
-      annotations: patchAnnotations(state.annotations, ids, now, (a) => {
-        if (a.anchor.kind !== "rect" || a.type !== "memo") return null;
-        const { x0, y0 } = a.anchor.rect;
-        const rect = { x0, y0, x1: Math.min(1, x0 + size.w), y1: Math.min(1, y0 + size.h) };
-        return { ...a, anchor: { ...a.anchor, rect } };
-      }),
-    })),
-  setAnnotationGeometry: (id, anchor, now) =>
-    set((state) => {
-      const a = state.annotations.get(id);
-      // No-op for an unknown id OR a kind change: a geometry edit rewrites the
-      // anchor's VALUES (rect/points), never its discriminator (AC-8).
-      if (!a || anchor.kind !== a.anchor.kind) return state;
-      const next = new Map(state.annotations);
-      next.set(id, { ...a, anchor, updated_at: now });
-      return { annotations: next };
-    }),
-  all: () =>
-    [...get().annotations.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)),
-}));
+    {
+      // Track only the annotation set. Excludes selectedId, hoveredId, dragPreview,
+      // active* defaults, and all action functions from undo history (AC-5).
+      partialize: (s) => ({ annotations: s.annotations }),
+      // 100 entries: generous for normal sessions, bounded so the singleton's memory
+      // stays finite (Map snapshots share unchanged Annotation objects, so each entry
+      // is cheap — just one new Map and a few changed object references).
+      limit: 100,
+      // Skip a set() that returns the same Map reference (no-op guard). Every action's
+      // no-op branch returns `state` unchanged, preserving the Map ref, so this
+      // correctly suppresses spurious history entries (e.g. restroke on a text mark).
+      equality: (a, b) => a.annotations === b.annotations,
+    },
+  ),
+);
