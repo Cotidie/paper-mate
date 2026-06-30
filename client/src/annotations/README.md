@@ -273,8 +273,11 @@ the picker has two shapes, keyed off whether there is a text selection:
 - **Text drag** (selection.length > 0) pops a three-tool picker: Highlight,
   Underline, Comment. Picking a tool creates the mark on the current
   selection. No Memo here (a memo is a rect box, not a text-anchor mark).
-- **Empty-area double-click** (selection.length === 0) pops a two-tool
+- **Right-click** (contextmenu, selection.length === 0) pops a two-tool
   picker: Comment, Memo. The mark is placed at the click point (`pending.at`).
+  The handler `preventDefault`s the native browser menu and clears any live
+  selection first. Right-click works over text too (place-at-point, not on a
+  word).
 
 Picking creates the mark without a trip to the left rail. `activeTool` is
 unchanged (one-shot create, not a sticky arm). The buttons are icon-only
@@ -283,8 +286,15 @@ unchanged (one-shot create, not a sticky arm). The buttons are icon-only
 > Deviates from the original story spec (which proposed one four-tool
 > text-drag picker incl. Memo at the selection start). Approved user fixes:
 > icon-only buttons, Memo dropped from the text-drag picker, and the
-> Comment/Memo picker moved onto an empty-area double-click. Double-click on
-> text selects a word, so it still routes through the text-drag (H/U/C) path.
+> Comment/Memo place-at-point picker bound to RIGHT-CLICK.
+>
+> **Story 5.0 follow-up (behavior change):** the Comment/Memo picker was
+> originally on an empty-area DOUBLE-CLICK. On a dense PDF the pdf.js text
+> layer covers nearly the whole page, so almost every double-click selected a
+> word and popped the H/U/C picker instead — the Comment/Memo picker was
+> effectively unreachable, and a "Comment" pick anchored to the word rather
+> than dropping a pin at the click. Moved to right-click so "place a
+> comment/memo here" is a distinct, reliable gesture.
 
 - The picker lives entirely inside the existing `pending` quick-box state
   (Decision 1): the machine (`machine.ts`), the shell, the position/clamp,
@@ -332,5 +342,60 @@ marks store `null` (AR-5).
 - The selection quick-box shows `AlphaRow` when `isPenSelected`, reflecting the
   selected mark's own `style.alpha ?? activeAlpha`. Picking calls
   `realphaAnnotation` + `setActiveAlpha` + closes the box.
+
+## Story 5.0 (structural refactor): module map + the descriptor pattern
+
+A behavior-neutral, contract-neutral refactor that unified the "branch by
+annotation kind/type" sprawl behind data contracts + a descriptor registry + a
+clean module split. No feature change; the Epic-2 suites are the safety net (every
+test stayed green, asserting outcomes, not internals).
+
+**The descriptor registry (`marks.ts`).** The single source for the per-mark
+kind/type facts that used to be re-encoded as `if (type === ...)` / `if (kind ===
+...)` chains. `MARK_DESCRIPTORS: Record<AnnotationTool, MarkDescriptor>` keys on the
+tool (`{ type, kind, quickBox }`); `quickBoxSpec(anno)` is what the selection
+quick-box reads to decide its rows (stroke-width / alpha / size), its aria-label,
+and whether the mark routes to the comment bubble instead. Adding a tool is one
+entry here. AD-9-clean (imports `api/` + `tools.ts` only; pure data).
+
+**Data contracts (`create.ts`).** The five `Build*Options` twins collapsed onto one
+`CreateBase` (now/newId/color) + per-tool extensions (`TextCreateRequest`,
+`PenCreateRequest`); the three identical `{page_index, rect}` placements collapsed
+onto one `RectPlacement`. Builders still assemble the same generated `Annotation`
+shape (AD-3: wrap/derive, never shadow).
+
+**Store combinator (`store/index.ts`).** The five near-twin guard-then-map mutation
+`set()` blocks collapsed onto one `patchAnnotations(map, ids, now, apply)` helper
+(recolor / restroke / realpha / resizeMemo). `retext` (single-id) and `delete`
+(group-gather) keep their own shapes. Each action stays a DIRECT mutation — no
+command stack yet (Epic 3 Story 3.2 wraps this one clean seam with zundo).
+
+**Module split (the OOP/encapsulation answer to the overlay state islands).** Each
+self-contained gesture is now its own cohesive hook under `gestures/`, owning its
+SYNCHRONOUS draft refs + live-preview state and binding its own document-level
+handlers (AP-1). A `useReducer` could not own these (its dispatch is async; the
+document handlers read the drafts synchronously), but a hook can — so the
+encapsulation preserves behavior exactly:
+
+- `gestures/shared.ts` — `GestureContext` (the ref-backed live context every
+  gesture reads) + `isExempt` (shared editable/button skip).
+- `gestures/usePenGesture.ts` — pen freehand draft → preview → commit (Story 2.8).
+- `gestures/useBoxGesture.ts` — box-highlight rubber-band region (Story 2.11).
+- `gestures/useMemoPlacement.ts` — click-to-place memo (Story 2.9).
+- `gestures/useSelection.ts` — the whole selected-mark quick-box concern (Story
+  2.5/AD-12): selection state + open/close/key/dismiss/focus effects + the
+  recolor/restroke/realpha/resize/delete actions (group-aware, AR-4) + box anchor
+  geometry. The component renders the box from its returned API.
+- `MemoBox.tsx` / `CommentBubble.tsx` — the two on-page editable surfaces, split
+  out of `AnnotationLayer` (pure prop-driven components).
+
+After the split, `AnnotationInteraction` (1186 → ~640 lines) is the composition
+core: the create-on-release chain + the cursor-mode tool-type picker
+(`machine.ts`) + the live previews. `AnnotationLayer` (557 → ~390 lines) is the
+render shell: it keeps its opacity-group DOM containers + the kind/type group
+filters DELIBERATELY (they encode COMPOSITING — the isolated highlight opacity
+group — and the comment DUAL-render — a text comment paints in the fill group AND
+the pin group — not a clean (kind,type)→render partition; collapsing them would
+change paint). `marks.ts` is the clean seam for the future cross-type hit-layer.
 
 Still later: editing/undo/persistence (Epic 3).
