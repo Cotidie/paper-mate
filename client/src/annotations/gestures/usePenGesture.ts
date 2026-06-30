@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { normalizePoint, pickPage } from "../../anchor";
+import { useAnnotationStore } from "../../store";
 import { newId } from "../../uuid";
 import { buildPenAnnotation } from "../create";
 import type { StrokeInputPoint } from "../pen";
@@ -149,10 +150,16 @@ export function usePenGesture(
   // the next pointerup can't persist a mark after disarm (Codex HIGH; the twin of
   // the Reader's canPan tear-down). Pure cleanup of the draft state.
   useEffect(() => {
-    if (armedTool !== "pen" && penDrawingRef.current) {
-      penDrawingRef.current = false;
-      penDraftRef.current = [];
-      setPenPreview(null);
+    if (armedTool !== "pen") {
+      // Clear any hover left by drawing over marks: the hover VISUAL is suppressed
+      // while the pen is armed (CSS), so clear the STATE on disarm or a stale ring
+      // would appear on the last-entered mark once draw mode ends.
+      useAnnotationStore.getState().setHovered(null);
+      if (penDrawingRef.current) {
+        penDrawingRef.current = false;
+        penDraftRef.current = [];
+        setPenPreview(null);
+      }
     }
   }, [armedTool]);
 

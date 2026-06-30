@@ -585,6 +585,18 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
     expect(screen.queryByTestId("selection-quick-box")).toBeNull();
   });
 
+  it("clears a stale hover when the pen is disarmed (no hover ring left after draw mode)", () => {
+    const pages = [fakeCard(0, 0)];
+    const { rerender } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />,
+    );
+    // Drawing over a mark sets hoveredId (the visual is CSS-suppressed while pen
+    // armed); disarming must clear the state so no ring shows once draw mode ends.
+    act(() => useAnnotationStore.getState().setHovered("some-mark"));
+    rerender(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool={null} />);
+    expect(useAnnotationStore.getState().hoveredId).toBeNull();
+  });
+
   it("suppresses the click after a stroke is drawn, so a scribble on a mark can't also select it", () => {
     const canvas = canvasTarget();
     const pages = [fakeCard(0, 0)];
@@ -1096,6 +1108,25 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     fireEvent.pointerDown(memoEl, { button: 0, clientX: 60, clientY: 160 });
     // Still just the one memo (no overlapping second box placed on top of it).
     expect(useAnnotationStore.getState().all().filter((a) => a.type === "memo")).toHaveLength(1);
+  });
+
+  it("clicking empty space blurs a focused memo textarea (deselect behaves like Esc)", () => {
+    const surf = canvasTarget();
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "note"));
+    // AnnotationInteraction doesn't render the layer, so stand in a focused memo
+    // textarea to represent the selected+focused memo.
+    const ta = document.createElement("textarea");
+    ta.className = "annotation-memo";
+    surf.appendChild(ta);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [fakeCard(0, 0)]} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    ta.focus();
+    expect(document.activeElement).toBe(ta);
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 400 });
+    // Selection cleared AND the textarea blurred — so its :focus-visible ring can't
+    // persist and look selected (the user-reported black-border-after-deselect bug).
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(document.activeElement).not.toBe(ta);
   });
 
   it("with a memo selected, an empty-space click DESELECTS it instead of placing a new memo (user fix)", () => {

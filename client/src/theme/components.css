@@ -105,9 +105,10 @@
   --pen-stroke-thin: 4px;
   --pen-stroke-medium: 8px;
   --pen-stroke-thick: 16px;
-  /* The ink hairline a hovered/selected pen stroke gets (drawn as an SVG stroke
-     around the filled path, since the rect outline ring does not fit a stroke). */
-  --annotation-pen-selected-width: 1.5px;
+  /* The ink hairline a HOVERED pen stroke gets (SVG stroke around the filled path,
+     since the rect outline ring does not fit a stroke). Lighter than the selected
+     focus weight (--focus-ring-width). Shown only in selection mode. */
+  --annotation-pen-hover-width: 1.5px;
   /* annotation-pen alpha steps (Story 2.13): the four transparency levels the
      AlphaRow offers. --pen-alpha-mid matches --annotation-highlight-opacity (the
      default). The swatch previews use these as CSS opacity values. */

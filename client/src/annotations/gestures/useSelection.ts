@@ -202,7 +202,15 @@ export function useSelection(opts: {
         ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble",
       );
       const inBox = selectionBoxRef.current?.contains(t as Node) ?? false;
-      if (!onMark && !inBox) clearSelection();
+      if (!onMark && !inBox) {
+        // Match ESC: blur a still-focused memo textarea. clearSelection drops the
+        // `--selected` ring, but a focused memo keeps its `:focus-visible` ring (the
+        // SAME 2px ink outline), so it would still LOOK selected. ESC explicitly
+        // blurs (MemoBox); an outside click must too, or deselect looks like a no-op.
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active.classList.contains("annotation-memo")) active.blur();
+        clearSelection();
+      }
     };
     // The box is position:fixed; once the canvas scrolls (incl. zoom recenters) it
     // floats detached, so scrolling CLOSES the box — but the selection (ring) stays,
