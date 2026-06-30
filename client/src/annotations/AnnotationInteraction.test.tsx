@@ -901,10 +901,10 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().selectedId).toBeNull();
   });
 
-  it("Backspace also deletes the selected mark", () => {
+  it("Backspace does NOT delete the selected mark (Del-only, Story 3.3)", () => {
     setup([textMark("m1")], "m1");
     fireEvent.keyDown(document, { key: "Backspace" });
-    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
   });
 
   it("Esc clears the selection without deleting", async () => {

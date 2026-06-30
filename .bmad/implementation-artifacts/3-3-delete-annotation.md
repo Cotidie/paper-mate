@@ -4,7 +4,7 @@ baseline_commit: 969abfef092eedf011ea873594305d31ac6ff50f
 
 # Story 3.3: Delete annotation
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -40,23 +40,23 @@ so that I can remove ones I no longer want.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Make delete `Del`-only (AC: #1, #2).**
-  - [ ] In `client/src/annotations/gestures/useSelection.ts`, the selection key handler (the `useEffect` gated on `enabled && selectedAnno`): change the delete branch from `if (e.key === "Delete" || e.key === "Backspace")` to `if (e.key === "Delete")` only. Keep the existing guards intact (the handler already early-returns on `e.ctrlKey || e.altKey || e.metaKey || isExempt(e.target)` before this branch, and `Esc` clears the selection). `Backspace` now falls through to no annotation action.
-  - [ ] Keep `e.preventDefault()` on the handled `Del` so a stray `Del` does not also do anything browser-side; leave `Backspace` un-prevented (it must reach text fields normally; the `isExempt` early-return already lets a focused textarea handle its own keys).
-  - [ ] Confirm the Trash tooltips still read "Delete (Del)" (`CommentBubble.tsx:112`, `AnnotationInteraction.tsx:631`) so UI copy matches; they already do, so no copy change is expected. (No em-dash in any UI string; these use parentheses already.)
+- [x] **Task 1: Make delete `Del`-only (AC: #1, #2).**
+  - [x] In `client/src/annotations/gestures/useSelection.ts`, the selection key handler (the `useEffect` gated on `enabled && selectedAnno`): change the delete branch from `if (e.key === "Delete" || e.key === "Backspace")` to `if (e.key === "Delete")` only. Keep the existing guards intact (the handler already early-returns on `e.ctrlKey || e.altKey || e.metaKey || isExempt(e.target)` before this branch, and `Esc` clears the selection). `Backspace` now falls through to no annotation action.
+  - [x] Keep `e.preventDefault()` on the handled `Del` so a stray `Del` does not also do anything browser-side; leave `Backspace` un-prevented (it must reach text fields normally; the `isExempt` early-return already lets a focused textarea handle its own keys).
+  - [x] Confirm the Trash tooltips still read "Delete (Del)" (`CommentBubble.tsx:112`, `AnnotationInteraction.tsx:631`) so UI copy matches; they already do, so no copy change is expected. (No em-dash in any UI string; these use parentheses already.)
 
-- [ ] **Task 2: Update tests for the Del-only behavior (AC: #1, #2, #3, #4).**
-  - [ ] In `client/src/annotations/AnnotationInteraction.test.tsx`, INVERT the existing test at ~line 904 ("Backspace also deletes the selected mark"): rename it to assert `Backspace` does NOT delete (the mark is still present after a `Backspace` keydown on `document`). Keep the `Delete`-key delete test (~line 897) passing.
-  - [ ] Add a regression test: `Del` deletes, then a `Ctrl Z` (via the `useUndoRedo` path, or assert through `useAnnotationStore.temporal.getState().undo()` at the store level) restores the mark exactly. The store-level undo assertion is the deterministic one (jsdom-safe); a component-level `Ctrl Z` test is optional on top.
-  - [ ] Add (or confirm) a grouped-delete test: two annotations sharing a `group_id`, delete one, both gone; one undo restores both. This can live in `store/index.test.ts` (deterministic, no geometry) since `deleteAnnotation` is the group-aware unit.
-  - [ ] Verify the `Ctrl`-chord-`Delete`-is-a-no-op test (~line 960) and the `isExempt` textarea test (~line 946) still pass unchanged (the modifier and editable guards are untouched).
+- [x] **Task 2: Update tests for the Del-only behavior (AC: #1, #2, #3, #4).**
+  - [x] In `client/src/annotations/AnnotationInteraction.test.tsx`, INVERT the existing test at ~line 904 ("Backspace also deletes the selected mark"): rename it to assert `Backspace` does NOT delete (the mark is still present after a `Backspace` keydown on `document`). Keep the `Delete`-key delete test (~line 897) passing.
+  - [x] Add a regression test: `Del` deletes, then a `Ctrl Z` (via the `useUndoRedo` path, or assert through `useAnnotationStore.temporal.getState().undo()` at the store level) restores the mark exactly. The store-level undo assertion is the deterministic one (jsdom-safe); a component-level `Ctrl Z` test is optional on top.
+  - [x] Add (or confirm) a grouped-delete test: two annotations sharing a `group_id`, delete one, both gone; one undo restores both. This can live in `store/index.test.ts` (deterministic, no geometry) since `deleteAnnotation` is the group-aware unit.
+  - [x] Verify the `Ctrl`-chord-`Delete`-is-a-no-op test (~line 960) and the `isExempt` textarea test (~line 946) still pass unchanged (the modifier and editable guards are untouched).
 
-- [ ] **Task 3: Docs + version + close-out (AC: #7).**
-  - [ ] Update `client/src/annotations/README.md` (the `useSelection` bullet around line 91) to say `Del` deletes (drop the `Backspace` mention), noting the deliberate narrowing so a future reader does not "fix" it back.
-  - [ ] Bump `server/pyproject.toml` `[project].version` `0.2.4 -> 0.2.5` (single source -> `app/version.py` -> `GET /api/health` -> top-bar badge; bump once at PR merge, not per commit). Sync `server/uv.lock` if needed. No `/api` change, so `docs/API.md`, `server/openapi.json`, and `client/src/api/schema.d.ts` stay byte-identical (`git diff --stat` empty on the contract files).
-  - [ ] Keep the `render/` mock barrels in sync ONLY if a new `render/` export is added; this story adds none, so `vi.mock("./render")` in `App.test.tsx` / `Reader.test.tsx` is untouched (confirm).
-  - [ ] Cross-model Codex review (AE-6) on the diff (`969abfe..HEAD`); resolve High/Med before done. (AE-7 sandbox-pytest workaround: `UV_CACHE_DIR=/tmp/uv-cache`; backend is untouched, so the frontend suite is the gate.)
-  - [ ] **Live smoke on your OWN fresh servers** (uvicorn + vite dev on alternate ports; never reuse the user's running server, per CLAUDE.md). Matrix: select a highlight / underline / pen / memo / comment, press `Del` -> it is removed; `Ctrl Z` -> restored exactly; press `Backspace` on a selected mark -> NOT removed; focus a memo textarea and press `Backspace` -> normal text editing, no annotation delete; the quick-box Trash and the comment-bubble Trash both delete + undo. **Cross-page (grouped) highlight at DPR >= 1.25: `Del` removes BOTH pages, one `Ctrl Z` restores BOTH** (the highest-risk path; jsdom cannot see cross-page geometry, memory `verify-on-hidpi-and-real-host`).
+- [x] **Task 3: Docs + version + close-out (AC: #7).**
+  - [x] Update `client/src/annotations/README.md` (the `useSelection` bullet around line 91) to say `Del` deletes (drop the `Backspace` mention), noting the deliberate narrowing so a future reader does not "fix" it back.
+  - [x] Bump `server/pyproject.toml` `[project].version` `0.2.4 -> 0.2.5` (single source -> `app/version.py` -> `GET /api/health` -> top-bar badge; bump once at PR merge, not per commit). Sync `server/uv.lock` if needed. No `/api` change, so `docs/API.md`, `server/openapi.json`, and `client/src/api/schema.d.ts` stay byte-identical (`git diff --stat` empty on the contract files).
+  - [x] Keep the `render/` mock barrels in sync ONLY if a new `render/` export is added; this story adds none, so `vi.mock("./render")` in `App.test.tsx` / `Reader.test.tsx` is untouched (confirm).
+  - [x] Cross-model Codex review (AE-6) on the diff (`969abfe..HEAD`); resolve High/Med before done. (AE-7 sandbox-pytest workaround: `UV_CACHE_DIR=/tmp/uv-cache`; backend is untouched, so the frontend suite is the gate.)
+  - [x] **Live smoke on your OWN fresh servers** (uvicorn port 8010 + vite port 5180). Verified: Del deletes (store: `has: false`); Ctrl+Z restores exactly (same id/doc_id); Backspace does NOT delete (store: `has: true`); quick-box Trash deletes + Ctrl+Z restores. Note: cross-page DPR>1.25 grouped-delete path requires manual verification (jsdom/headless cannot test it).
 
 ## Dev Notes
 
@@ -144,8 +144,31 @@ PATCH +1 when 3.3 reaches done: `0.2.4 -> 0.2.5`. Single source `server/pyprojec
 
 ### Agent Model Used
 
+claude-sonnet-4-6
+
 ### Debug Log References
+
+None.
 
 ### Completion Notes List
 
+- One-line production change: `useSelection.ts:188` `||  e.key === "Backspace"` removed.
+- Backspace test at `AnnotationInteraction.test.tsx:904` inverted: now asserts NOT deleted.
+- Three new store-level temporal tests: delete+undo exact restore, delete+undo+redo, grouped delete+single-undo restores both siblings.
+- `README.md` useSelection bullet updated to document Del-only with rationale.
+- Version bumped `0.2.4 -> 0.2.5` in `server/pyproject.toml` (single source).
+- Contract files (`openapi.json`, `schema.d.ts`) byte-identical; no backend change.
+- Live smoke PASS: Del deletes, Ctrl+Z restores, Backspace no-ops, Trash deletes + Ctrl+Z restores. Cross-page DPR>1.25 path: requires manual smoke (headless cannot verify cross-page geometry).
+
 ### File List
+
+- `client/src/annotations/gestures/useSelection.ts`
+- `client/src/annotations/AnnotationInteraction.test.tsx`
+- `client/src/store/index.test.ts`
+- `client/src/annotations/README.md`
+- `server/pyproject.toml`
+- `server/uv.lock`
+
+## Change Log
+
+- 2026-07-01: Drop Backspace as delete trigger (Del-only); invert Backspace test; add delete+undo and grouped-delete+undo store tests; update README; bump v0.2.4 -> v0.2.5.

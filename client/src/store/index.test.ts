@@ -514,4 +514,42 @@ describe("undo/redo — zundo temporal store (Story 3.2)", () => {
     const a = useAnnotationStore.getState().annotations.get("a")!;
     expect(a.style.color).toBe("annotation-default");
   });
+
+  it("deleteAnnotation then undo restores the mark exactly (AC-3)", () => {
+    const s = useAnnotationStore.getState();
+    const original = mark("a", "annotation-pink", "2026-06-29T00:00:01Z");
+    s.addAnnotation(original);
+    s.deleteAnnotation("a");
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(false);
+    t().undo();
+    const restored = useAnnotationStore.getState().annotations.get("a")!;
+    expect(restored.id).toBe(original.id);
+    expect(restored.style.color).toBe(original.style.color);
+    expect(restored.anchor).toEqual(original.anchor);
+  });
+
+  it("deleteAnnotation then undo then redo re-deletes (AC-3)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.deleteAnnotation("a");
+    t().undo();
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
+    t().redo();
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(false);
+  });
+
+  it("grouped deleteAnnotation then one undo restores ALL siblings (AC-4)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotations([
+      mark("a", "annotation-default", "2026-06-29T00:00:01Z", "g1"),
+      mark("b", "annotation-default", "2026-06-29T00:00:01Z", "g1"),
+    ]);
+    s.deleteAnnotation("a");
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(false);
+    expect(useAnnotationStore.getState().annotations.has("b")).toBe(false);
+    t().undo();
+    const map = useAnnotationStore.getState().annotations;
+    expect(map.has("a")).toBe(true);
+    expect(map.has("b")).toBe(true);
+  });
 });

@@ -185,7 +185,7 @@ export function useSelection(opts: {
         clearSelection();
         return;
       }
-      if (e.key === "Delete" || e.key === "Backspace") {
+      if (e.key === "Delete") {
         e.preventDefault();
         deleteAnnotation(selectedAnno.id);
       }

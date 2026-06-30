@@ -87,8 +87,10 @@ mark, decoupled from the create machine and the Epic-3 command stack:
   NOT `machine.ts`): it reuses `ColorSwatchRow` (armed to the mark's current
   color → `store.recolorAnnotation`, reused from 2.3) + a Delete action, reusing
   the `.quick-box` shell + `clampToViewport`. A pick dismisses the box but keeps
-  the mark selected/ringed; clicking a mark again reopens its box. `Del`/
-  `Backspace` delete; `Esc` or a pointerdown on empty page content clears the
+  the mark selected/ringed; clicking a mark again reopens its box. `Del`
+  deletes (`Backspace` is intentionally NOT a delete trigger: it is a frequent
+  text-editing key and dropping it prevents accidental annotation loss -- Story
+  3.3); `Esc` or a pointerdown on empty page content clears the
   selection (document-level, phase-gated, editable/buttons/chrome exempt so the
   toolbar/zoom keep it). Scroll (including zoom recenters) only CLOSES the
   floating box — the ring rides the denormalized rect and stays glued (NFR-3). Selection works in cursor mode AND while a highlight
