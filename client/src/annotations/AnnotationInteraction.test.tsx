@@ -901,10 +901,23 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().selectedId).toBeNull();
   });
 
-  it("Backspace also deletes the selected mark", () => {
+  it("Del deletes when focus is on a button INSIDE the quick-box (post-create auto-focus)", async () => {
+    // After a create, selection auto-focuses the box's first swatch BUTTON. Del must
+    // still delete — a button is exempt for its own activation keys, not Delete.
+    setup([textMark("m1")], "m1");
+    const box = await screen.findByTestId("selection-quick-box");
+    const focused = document.activeElement as HTMLElement;
+    expect(box.contains(focused)).toBe(true);
+    expect(focused.tagName).toBe("BUTTON");
+    fireEvent.keyDown(focused, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
+  it("Backspace does NOT delete the selected mark (Del-only, Story 3.3)", () => {
     setup([textMark("m1")], "m1");
     fireEvent.keyDown(document, { key: "Backspace" });
-    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
   });
 
   it("Esc clears the selection without deleting", async () => {
