@@ -177,9 +177,15 @@ export function useSelection(opts: {
   useEffect(() => {
     if (!enabled || !selectedAnno) return;
     const onKey = (e: KeyboardEvent) => {
-      // Same exemption order as the other document-level handlers: skip chords and
-      // editable/button targets BEFORE acting on any key (incl. Esc).
-      if (e.ctrlKey || e.altKey || e.metaKey || isExempt(e.target)) return;
+      // Skip chords first. Then exempt editable/button targets BEFORE acting — EXCEPT
+      // a button INSIDE the selection box: after a create the box auto-focuses its
+      // first swatch button (useLayoutEffect below), so a blanket BUTTON exemption
+      // would swallow the very next Del/Esc (the user's first delete attempt silently
+      // failed). Esc/Delete are not a button's own activation keys (Enter/Space are),
+      // so handling them while the box holds focus is safe.
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const inSelectionBox = selectionBoxRef.current?.contains(e.target as Node) ?? false;
+      if (!inSelectionBox && isExempt(e.target)) return;
       if (e.key === "Escape") {
         // Esc clears the selection (the App-level Esc->cursor also runs).
         clearSelection();
