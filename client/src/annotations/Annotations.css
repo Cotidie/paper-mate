@@ -96,10 +96,13 @@
 
 /* Hover / selected treatment for a stroke: the rect outline ring does not fit a
    vector path, so a hovered/selected stroke gets an ink hairline drawn AROUND the
-   filled outline (SVG stroke). Selected is the stronger 2px focus weight. */
+   filled outline (SVG stroke). Selected is the stronger focus weight. The hover
+   outline is a discoverability affordance in SELECTION mode; while the pen is armed
+   it is suppressed (see the `data-draw` rule below), so drawing over strokes shows
+   no ring. A selected stroke always keeps its outline, pointer on or off. */
 .annotation-pen--hovered {
   stroke: var(--color-ink);
-  stroke-width: var(--annotation-pen-selected-width);
+  stroke-width: var(--annotation-pen-hover-width);
 }
 
 .annotation-pen--selected {
@@ -698,3 +701,101 @@
 .size-row__preview--large {
   width: var(--memo-size-preview-large);
 }
+
+/* edit frame (Story 3.1): the move grip + corner resize handles on a selected
+   pen/memo/region mark. The group + frame are pointer-transparent so they never
+   block page text; each handle opts back in. The frame rides the mark's
+   denormalized bounding box (inline left/top/width/height), so it stays glued on
+   zoom (NFR-3). Above the mark sheet (z 1), below the quick-box (z 50). */
+.annotation-edit-frames {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.annotation-edit-frame {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* A handle: a small ink-bordered nub the user drags. A real <button> so the
+   document-level deselect/create handlers skip it (isExempt) and it is keyboard-
+   reachable. */
+.edit-handle {
+  position: absolute;
+  width: var(--edit-handle-size);
+  height: var(--edit-handle-size);
+  padding: 0;
+  box-sizing: border-box;
+  background-color: var(--color-surface-card);
+  border: var(--focus-ring-width) solid var(--color-ink);
+  border-radius: var(--radius-xs);
+  pointer-events: auto;
+}
+
+.edit-handle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+/* Corner handles: centered on each bbox corner (half outside the frame). */
+.edit-handle--nw {
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  cursor: nwse-resize;
+}
+
+.edit-handle--ne {
+  right: 0;
+  top: 0;
+  transform: translate(50%, -50%);
+  cursor: nesw-resize;
+}
+
+.edit-handle--sw {
+  left: 0;
+  bottom: 0;
+  transform: translate(-50%, 50%);
+  cursor: nesw-resize;
+}
+
+.edit-handle--se {
+  right: 0;
+  bottom: 0;
+  transform: translate(50%, 50%);
+  cursor: nwse-resize;
+}
+
+/* Move grip: a pill centered just ABOVE the frame's top edge, so it never covers
+   a memo's textarea body (which owns the pointer for typing). */
+.edit-handle--move {
+  left: 50%;
+  top: 0;
+  width: var(--comment-pin-size);
+  transform: translate(-50%, calc(-100% - var(--space-xxs)));
+  border-radius: var(--radius-pill);
+  cursor: move;
+}
+
+/* Pen draw mode: suppress the HOVER treatment on ALL mark types. The user is
+   drawing, so an outline ring on whatever the stroke passes over is noise (user
+   fix). Marks stay clickable (click-to-select still works); only the hover VISUAL
+   is hidden, and only hover — the selected ring is left intact. `data-draw` is on
+   `.pdf-canvas` while the pen is armed (App.css). In SELECTION mode (no `data-draw`)
+   the hover outline shows normally. */
+.pdf-canvas[data-draw] .annotation-highlight--hovered,
+.pdf-canvas[data-draw] .annotation-memo--hovered,
+.pdf-canvas[data-draw] .annotation-comment-pin--hovered {
+  outline: none;
+}
+/* `:not(--selected)` so a SELECTED stroke keeps its outline even while the pen is
+   armed and the pointer is over it — without it, this rule (higher specificity)
+   out-specified `--selected` and the selected outline vanished under the pointer
+   (the inversion the user reported). A non-selected hovered stroke still loses its
+   ring while drawing. */
+.pdf-canvas[data-draw] .annotation-pen--hovered:not(.annotation-pen--selected) {
+  stroke: none;
+}
+

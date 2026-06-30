@@ -268,8 +268,9 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     if (all[0].anchor.kind === "rect") {
       expect(all[0].anchor.rect.x0).toBeCloseTo(60 / 600, 5);
       expect(all[0].anchor.rect.y0).toBeCloseTo(160 / 800, 5);
-      expect(all[0].anchor.rect.x1).toBeCloseTo((60 + 220) / 600, 5);
-      expect(all[0].anchor.rect.y1).toBeCloseTo((160 + 88) / 800, 5);
+      // default square 112x112 (Story 3.1; the seed default).
+      expect(all[0].anchor.rect.x1).toBeCloseTo((60 + 112) / 600, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo((160 + 112) / 800, 5);
     }
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
     expect(screen.queryByTestId("quick-box")).toBeNull();
@@ -552,7 +553,7 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
     return surf;
   }
 
-  it("with pen armed, a pointer drag stores ONE kind=path mark and selects it", async () => {
+  it("with pen armed, a pointer drag stores ONE kind=path mark and does NOT auto-select it", async () => {
     const canvas = canvasTarget();
     const pages = [fakeCard(0, 0)];
     useAnnotationStore.getState().setActiveColor("annotation-blue");
@@ -576,11 +577,50 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
       expect(all[0].anchor.points[0].x).toBeCloseTo(0.1, 5);
       expect(all[0].anchor.points[0].y).toBeCloseTo(0.1, 5);
     }
-    // The mark is selected → the pen selection quick-box (color + width + delete).
-    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
-    await screen.findByTestId("selection-quick-box");
-    fireEvent.click(screen.getByTestId("stroke-width-trigger"));
-    expect(screen.getByTestId("stroke-width-8")).toBeTruthy();
+    // Pen does NOT auto-select on release (user fix 2026-06-30): drawing is a
+    // repeated gesture, so the stroke lands unselected and the selection quick-box
+    // does NOT pop — the user can draw the next stroke uninterrupted. (Clicking the
+    // stroke later selects it; that path is covered by the pen selection-box tests.)
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+  });
+
+  it("clears a stale hover when the pen is disarmed (no hover ring left after draw mode)", () => {
+    const pages = [fakeCard(0, 0)];
+    const { rerender } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />,
+    );
+    // Drawing over a mark sets hoveredId (the visual is CSS-suppressed while pen
+    // armed); disarming must clear the state so no ring shows once draw mode ends.
+    act(() => useAnnotationStore.getState().setHovered("some-mark"));
+    rerender(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool={null} />);
+    expect(useAnnotationStore.getState().hoveredId).toBeNull();
+  });
+
+  it("suppresses the click after a stroke is drawn, so a scribble on a mark can't also select it", () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(1); // a stroke landed
+    // The trailing click (a scribble that ended on a mark would synthesize one) is
+    // swallowed: capture-phase preventDefault → dispatchEvent returns false.
+    const dispatched = canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(dispatched).toBe(false);
+  });
+
+  it("does NOT suppress the click when no stroke was drawn (a plain click still selects an idle stroke)", () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
+    // Click with no drag: < 2 points → no stroke, so the click must pass through to
+    // the mark's own onClick (the click-to-select-idle-stroke path, fix 2).
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 60, clientY: 80 });
+    const dispatched = canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(dispatched).toBe(true);
   });
 
   it("uses the active stroke width for a new stroke", () => {
@@ -1014,15 +1054,15 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
       // top-left normalized: (60,160)/(600,800) = (0.1, 0.2)
       expect(all[0].anchor.rect.x0).toBeCloseTo(0.1, 5);
       expect(all[0].anchor.rect.y0).toBeCloseTo(0.2, 5);
-      // medium preset 220x88 → 0.3667 x 0.11 added.
-      expect(all[0].anchor.rect.x1).toBeCloseTo(0.1 + 220 / 600, 5);
-      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2 + 88 / 800, 5);
+      // default square 112x112 (Story 3.1; the seed default) → 112/600 x, 112/800 y.
+      expect(all[0].anchor.rect.x1).toBeCloseTo(0.1 + 112 / 600, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2 + 112 / 800, 5);
     }
-    // Selected → the memo selection quick-box (color + size + delete).
+    // Selected → the memo selection quick-box (color + delete; no size picker since 3.1).
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
     await screen.findByTestId("selection-quick-box");
     expect(screen.getByTestId("color-swatch-annotation-pink").getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByTestId("memo-size-trigger")).toBeTruthy();
+    expect(screen.queryByTestId("memo-size-trigger")).toBeNull();
     expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
   });
 
@@ -1070,6 +1110,38 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     expect(useAnnotationStore.getState().all().filter((a) => a.type === "memo")).toHaveLength(1);
   });
 
+  it("clicking empty space blurs a focused memo textarea (deselect behaves like Esc)", () => {
+    const surf = canvasTarget();
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "note"));
+    // AnnotationInteraction doesn't render the layer, so stand in a focused memo
+    // textarea to represent the selected+focused memo.
+    const ta = document.createElement("textarea");
+    ta.className = "annotation-memo";
+    surf.appendChild(ta);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [fakeCard(0, 0)]} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    ta.focus();
+    expect(document.activeElement).toBe(ta);
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 400 });
+    // Selection cleared AND the textarea blurred — so its :focus-visible ring can't
+    // persist and look selected (the user-reported black-border-after-deselect bug).
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(document.activeElement).not.toBe(ta);
+  });
+
+  it("with a memo selected, an empty-space click DESELECTS it instead of placing a new memo (user fix)", () => {
+    const surf = canvasTarget();
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "a note")); // non-empty so it survives deselect
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="memo" rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    // Click empty page space while a memo is selected (memo still armed).
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
+    // No second memo placed; the selection cleared (first click deselects).
+    expect(useAnnotationStore.getState().all().filter((a) => a.type === "memo")).toHaveLength(1);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
   it("an empty memo is removed when it loses selection (Decision 5)", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", "")); // empty body
     const pages = [fakeCard(0, 0)];
@@ -1089,25 +1161,9 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
   });
 
-  it("a selected memo's quick-box resizes it via the size picker + updates the default, dismisses the box", async () => {
-    useAnnotationStore.getState().addAnnotation(memoMark("m1"));
-    const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
-    act(() => useAnnotationStore.getState().select("m1"));
-    await screen.findByTestId("selection-quick-box");
-    fireEvent.click(screen.getByTestId("memo-size-trigger"));
-    const large = MEMO_SIZES.find((s) => s.key === "large")!;
-    fireEvent.click(screen.getByTestId("memo-size-large"));
-    // The rect regrew to the large preset (normalized against the 600x800 box).
-    const m = useAnnotationStore.getState().annotations.get("m1")!;
-    if (m.anchor.kind === "rect") {
-      expect(m.anchor.rect.x1).toBeCloseTo(m.anchor.rect.x0 + large.width / 600, 5);
-      expect(m.anchor.rect.y1).toBeCloseTo(m.anchor.rect.y0 + large.height / 800, 5);
-    }
-    expect(useAnnotationStore.getState().activeMemoSize).toBe(large);
-    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
-    expect(useAnnotationStore.getState().selectedId).toBe("m1");
-  });
+  // Story 3.1 removed the preset size picker from the memo selection quick-box (a
+  // memo now resizes via the edit frame's corner handles); the old "resize via size
+  // picker" + "picker shows the memo's own size" tests are dropped with it.
 
   it("a selected memo's quick-box recolors it (the box accent)", async () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", "n", "annotation-default"));
@@ -1117,24 +1173,6 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     await screen.findByTestId("selection-quick-box");
     fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
     expect(useAnnotationStore.getState().annotations.get("m1")!.style.color).toBe("annotation-blue");
-  });
-
-  it("the size picker shows the SELECTED memo's own size, not the session default (Codex LOW)", async () => {
-    // A memo sized to the SMALL preset (160px on a 600-wide box → frac 0.2667).
-    const smallMemo: Annotation = {
-      ...memoMark("m1"),
-      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.1 + 160 / 600, y1: 0.3 } },
-    };
-    useAnnotationStore.getState().addAnnotation(smallMemo);
-    // Session default is LARGE — the picker must still show SMALL armed for this memo.
-    useAnnotationStore.getState().setActiveMemoSize(MEMO_SIZES.find((s) => s.key === "large")!);
-    const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
-    act(() => useAnnotationStore.getState().select("m1"));
-    await screen.findByTestId("selection-quick-box");
-    fireEvent.click(screen.getByTestId("memo-size-trigger"));
-    expect(screen.getByTestId("memo-size-small").getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByTestId("memo-size-large").getAttribute("aria-checked")).toBe("false");
   });
 
   it("Del deletes the selected memo", () => {

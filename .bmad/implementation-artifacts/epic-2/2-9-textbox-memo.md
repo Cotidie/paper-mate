@@ -169,7 +169,7 @@ Resist: a contract field for memo size (map size to the rect dims, client-side);
 - [Source: ARCHITECTURE-SPINE.md#AD-12, #AD-9, #AD-3] — selection seam; layering; contract stability (no API/Pydantic/generated-type change; `RectAnchor`/`body`/`type:"memo"` already exist).
 - [Source: DESIGN.md#annotation-memo, #text-input, #tool-rail, #quick-box] — memo box (surface-card, rounded.sm, hairline-strong, body-sm); rail tool order (memo below pen); memo-mode quick-box = inline text-input + color/size.
 - [Source: UX-DR4/DR5/DR7/DR15] — tool rail, contextual quick-box (memo → inline text + color/size), on-page memo rendering, `T` keymap.
-- [Source: .bmad/implementation-artifacts/2-8-pen-freehand.md] — the rail-button/flyout twin pattern, the create-then-select-into-quick-box flow, the type-aware selection quick-box, the store action twins (`restrokeAnnotation`/`activeStrokeWidth`) memo mirrors with `retext`/`resize`/`activeMemoSize`.
+- [Source: .bmad/implementation-artifacts/epic-2/2-8-pen-freehand.md] — the rail-button/flyout twin pattern, the create-then-select-into-quick-box flow, the type-aware selection quick-box, the store action twins (`restrokeAnnotation`/`activeStrokeWidth`) memo mirrors with `retext`/`resize`/`activeMemoSize`.
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions, #Versioning].
 
 ## Previous Story Intelligence

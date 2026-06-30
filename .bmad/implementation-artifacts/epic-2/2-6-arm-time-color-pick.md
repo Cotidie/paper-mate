@@ -175,8 +175,8 @@ The rail already has the right pattern: the pointer button switches in one click
 - [Source: ARCHITECTURE-SPINE.md#AD-3] — contract stability (no API/Pydantic/generated-type change).
 - [Source: DESIGN.md#quick-box, #color-swatch, #colors] — "Highlight mode → color-swatch row"; the 20px armed-ring swatch; the annotation accent token block (Orange removed).
 - [Source: EXPERIENCE.md IP-1/IP-3] — tool arming (exactly one active) + the contextual quick-box mapping the swatch row reuses.
-- [Source: .bmad/implementation-artifacts/2-5-select-highlight-recolor-delete.md] — the selection seam + `recolorAnnotation` + `ColorSwatchRow` reuse this story preserves.
-- [Source: .bmad/implementation-artifacts/2-3-highlight-text-via-drag.md] — `ColorSwatchRow`, `buildAnnotations`'s `color` option, create-on-release.
+- [Source: .bmad/implementation-artifacts/epic-2/2-5-select-highlight-recolor-delete.md] — the selection seam + `recolorAnnotation` + `ColorSwatchRow` reuse this story preserves.
+- [Source: .bmad/implementation-artifacts/epic-2/2-3-highlight-text-via-drag.md] — `ColorSwatchRow`, `buildAnnotations`'s `color` option, create-on-release.
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions, #Versioning] — adopt-stable, document-level handlers, render-mock-barrel sync, token contract, no em-dash, PATCH bump.
 
 ## Previous Story Intelligence
@@ -284,7 +284,7 @@ covered in jsdom.
 - client/src/annotations/README.md (Story 2.6 notes: 5-color palette + arm-time color)
 - docs/images/story-2-6-highlight-color-flyout.png (live-smoke capture)
 - docs/images/story-2-6-green-mark-landed.png (live-smoke capture)
-- .bmad/implementation-artifacts/2-6-arm-time-color-pick.md (this story)
+- .bmad/implementation-artifacts/epic-2/2-6-arm-time-color-pick.md (this story)
 - .bmad/implementation-artifacts/sprint-status.yaml (status tracking)
 
 ### Code Review (cross-model: Codex via `codex exec`, read-only)

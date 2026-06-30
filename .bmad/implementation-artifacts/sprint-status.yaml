@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: 2026-06-30 (Story 5-0 structural-refactor -> done; PR #24 merged to main)
+last_updated: 2026-06-30 (Story 3-1 edit-annotations-command-path -> review; dev-story complete, cross-model review pending)
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -97,8 +97,8 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Edit, persist & review
-  epic-3: backlog
-  3-1-edit-annotations-command-path: backlog
+  epic-3: in-progress
+  3-1-edit-annotations-command-path: review
   3-2-undo-redo: backlog
   3-3-delete-annotation: backlog
   3-4-autosave-to-disk: backlog

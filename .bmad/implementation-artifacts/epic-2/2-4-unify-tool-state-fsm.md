@@ -188,7 +188,7 @@ Today the pointer rail button is a flyout-opener: clicking it opens cursor/hand/
 - [Source: ARCHITECTURE-SPINE.md#AD-9] — boundary/layer invariants (anchor-only math, generated client, layering).
 - [Source: ARCHITECTURE-SPINE.md#AD-12] — the selection model (Story 2.5) that builds on this single `activeTool`; do NOT build it here.
 - [Source: EXPERIENCE.md IP-1 (line 88), IP-3 (line 90)] — tool select = exactly one tool active (mutual exclusion, AD-11); the contextual quick-box pops on drag-release.
-- [Source: .bmad/implementation-artifacts/2-3-highlight-text-via-drag.md] — the surgical mutual-exclusion patch this story supersedes; the create-on-release + recolor + re-pop fix + #3 active-cursor fix that must be preserved.
+- [Source: .bmad/implementation-artifacts/epic-2/2-3-highlight-text-via-drag.md] — the surgical mutual-exclusion patch this story supersedes; the create-on-release + recolor + re-pop fix + #3 active-cursor fix that must be preserved.
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions] — document-level handlers, adopt-stable, render-mock-barrel sync, token rules, test incantations.
 
 ## Previous Story Intelligence

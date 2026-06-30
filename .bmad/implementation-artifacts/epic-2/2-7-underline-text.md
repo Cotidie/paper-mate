@@ -180,9 +180,9 @@ DESIGN.md defines `component.annotation-underline.borderColor: {colors.annotatio
 - [Source: ARCHITECTURE-SPINE.md#AD-9, #AD-3] — layering + contract stability (no API/Pydantic/generated-type change).
 - [Source: DESIGN.md#annotation-underline, #tool-rail, #color-swatch] — "2px accent-token underline under the run"; rail tool order; the swatch row reused arm-time.
 - [Source: UX-DR4/DR5/DR6/DR7/DR15] — tool rail, contextual quick-box, on-page underline rendering, `U` keymap.
-- [Source: .bmad/implementation-artifacts/2-6-arm-time-color-pick.md] — the `activeColor` store state, `ToolFlyout`, the rail color sub-toolbox pattern underline twins.
-- [Source: .bmad/implementation-artifacts/2-5-select-highlight-recolor-delete.md] — the selection seam (`selectedId`, recolor + delete) underline rides via the shared `.annotation-highlight` base class.
-- [Source: .bmad/implementation-artifacts/2-3-highlight-text-via-drag.md] — `buildAnnotations`'s `type`/`color` options, create-on-release.
+- [Source: .bmad/implementation-artifacts/epic-2/2-6-arm-time-color-pick.md] — the `activeColor` store state, `ToolFlyout`, the rail color sub-toolbox pattern underline twins.
+- [Source: .bmad/implementation-artifacts/epic-2/2-5-select-highlight-recolor-delete.md] — the selection seam (`selectedId`, recolor + delete) underline rides via the shared `.annotation-highlight` base class.
+- [Source: .bmad/implementation-artifacts/epic-2/2-3-highlight-text-via-drag.md] — `buildAnnotations`'s `type`/`color` options, create-on-release.
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions, #Versioning] — adopt-stable, document-level handlers, render-mock-barrel sync, token contract, no em-dash, cross-page HiDPI smoke, PATCH bump.
 
 ## Previous Story Intelligence
@@ -305,7 +305,7 @@ memory risk (cross-page full-page leak) was verified live and is clean.
 - docs/images/story-2-7-underline-green-live.png (live-smoke capture)
 - docs/images/story-2-7-underline-crosspage-live.png (live-smoke capture)
 - docs/images/story-2-7-quickbox-below-3px.png (post-review: 3px + box-below-text capture)
-- .bmad/implementation-artifacts/2-7-underline-text.md (this story)
+- .bmad/implementation-artifacts/epic-2/2-7-underline-text.md (this story)
 - .bmad/implementation-artifacts/sprint-status.yaml (status tracking)
 
 ## Code Review (cross-model: Codex via `codex exec --sandbox read-only`)

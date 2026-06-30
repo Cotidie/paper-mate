@@ -31,9 +31,9 @@ describe("quickBoxSpec (selection quick-box capability)", () => {
     expect(s).toMatchObject({ strokeWidth: true, alpha: true, size: false, usesBubble: false, ariaLabel: "Pen actions" });
   });
 
-  it("memo → size row, Memo actions label", () => {
+  it("memo → no rows (Story 3.1 dropped the size picker), Memo actions label", () => {
     const s = quickBoxSpec(anno("memo", "rect"));
-    expect(s).toMatchObject({ strokeWidth: false, alpha: false, size: true, usesBubble: false, ariaLabel: "Memo actions" });
+    expect(s).toMatchObject({ strokeWidth: false, alpha: false, size: false, usesBubble: false, ariaLabel: "Memo actions" });
   });
 
   it("comment → routed to the bubble (generic box gated off), either kind", () => {

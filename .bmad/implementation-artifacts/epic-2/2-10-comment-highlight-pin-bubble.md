@@ -191,9 +191,9 @@ Resist: a `buildCommentAnnotations` fork (the text comment IS the highlight path
 - [Source: ARCHITECTURE-SPINE.md#AD-12, #AD-9, #AD-3] — selection seam; layering; contract stability (no API/Pydantic/generated-type change; `type:"comment"`/`kind=text`/`body` already exist).
 - [Source: DESIGN.md#annotation-comment-pin, #comment-bubble, #tool-rail, #quick-box] — pin (annotation-default bg, rounded.full, 20px), bubble (surface-card, rounded.md, hairline-strong, body-sm, soft drop), rail tool order (comment below memo), comment-mode quick-box = bubble opens directly.
 - [Source: UX-DR5/DR7/DR8/DR15/DR17] — contextual quick-box (comment → bubble directly), on-page comment-pin rendering, comment-bubble open-on-pin + keyboard/Esc/focus, `C` keymap, accessibility floor.
-- [Source: .bmad/implementation-artifacts/2-9-textbox-memo.md] — the `MemoBox` interactive-textarea pattern (ref + layout-effect re-fit, autofocus-when-selected, local Esc → blur + clearSelection), the non-aria-hidden group for focusable content, the rail-button/flyout twin, `retextAnnotation`, the create-then-select flow. Comment mirrors `MemoBox` with `CommentBubble`.
-- [Source: .bmad/implementation-artifacts/2-3-highlight-text-via-drag.md] — the highlight drag-selection create path the comment DRAG reuses verbatim (type is the only delta, + body).
-- [Source: .bmad/implementation-artifacts/2-9-textbox-memo.md] — the memo click-to-place gesture (`pointerdown`/release on a page surface → `pickPage` + `normalizeRect`) the comment CLICK pin reuses (type=comment instead of memo, a pin not a box).
+- [Source: .bmad/implementation-artifacts/epic-2/2-9-textbox-memo.md] — the `MemoBox` interactive-textarea pattern (ref + layout-effect re-fit, autofocus-when-selected, local Esc → blur + clearSelection), the non-aria-hidden group for focusable content, the rail-button/flyout twin, `retextAnnotation`, the create-then-select flow. Comment mirrors `MemoBox` with `CommentBubble`.
+- [Source: .bmad/implementation-artifacts/epic-2/2-3-highlight-text-via-drag.md] — the highlight drag-selection create path the comment DRAG reuses verbatim (type is the only delta, + body).
+- [Source: .bmad/implementation-artifacts/epic-2/2-9-textbox-memo.md] — the memo click-to-place gesture (`pointerdown`/release on a page surface → `pickPage` + `normalizeRect`) the comment CLICK pin reuses (type=comment instead of memo, a pin not a box).
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions, #Versioning].
 
 ## Previous Story Intelligence

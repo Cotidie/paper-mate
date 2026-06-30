@@ -59,6 +59,16 @@ This document provides the complete epic and story breakdown for Paper Mate, dec
 - **FR-21** Save annotations local-first to disk.
 - **FR-22** On reopening a PDF, restore its annotations exactly (reserved across sessions).
 
+**FG-F · Post-v1 polish & quality** *(added 2026-06-30 via correct-course — `sprint-change-proposal-2026-06-30.md`)*
+
+> Surfaced during the Epic 1–2 build and logged in `.bmad/implementation-artifacts/deferred-work.md`. NOT in the original PRD FR-1..22; promoted here as **post-v1 (Phase-1.5)** scope grouped into Epic 4 (fidelity) and Epic 5 (preferences & polish). Recommend a matching PRD addendum so the PRD stays the FR source of truth. Fidelity bugs (copy-spaces, trailing-band, gutter-join, multi-column selection) and the on-page-treatment fixes are quality of existing FRs (FR-2/4/7/8/11) under NFR-3, so they are tracked as Epic-4 stories rather than new FRs; the small UX refinements (layered Esc, confirm-check, collapse stroke-width dropdown, dim ToC) are AC-level under existing UX-DRs.
+
+- **FR-23** Hide/show ALL annotations at once — a view-only global visibility toggle (no mutation).
+- **FR-24** Settings modal with custom **hotkey rebinding** (requires a keymap-as-data enabler).
+- **FR-25** Per-tool remembered default color + user **custom color slots** (color-system extension).
+- **FR-26** Adjust the **text range** of an existing text-anchored annotation (extend/shrink the run).
+- **FR-27** **Convert** an annotation between highlight and comment, both ways.
+
 ### NonFunctional Requirements
 
 - **NFR-1 Layout stability** *(defining bar)* — the PDF area is pixel-stable regardless of UI state. The left rail, drag-to-change-tool picker, and Annotation Bank all overlay or reserve fixed space; none reflow or resize the page.
@@ -131,6 +141,13 @@ From DESIGN.md (visual identity / tokens / component catalog) and EXPERIENCE.md 
 - **FR-20** Bank click-to-jump → Epic 3
 - **FR-21** Save annotations local-first to disk → Epic 3
 - **FR-22** Restore annotations exactly on reopen → Epic 3
+- **FR-23** Hide/show all annotations toggle → Epic 5 (post-v1)
+- **FR-24** Settings modal + hotkey rebinding → Epic 5 (post-v1; keymap-as-data enabler)
+- **FR-25** Per-tool default color + custom color slots → Epic 5 (post-v1)
+- **FR-26** Adjust annotation text range → Epic 3 Story 3.8 (post-v1 slice on the command path)
+- **FR-27** Convert highlight ↔ comment → Epic 3 Story 3.7 (post-v1 slice on the command path)
+
+> **Quality/fidelity (no new FR — quality of existing FRs under NFR-3):** copy-text spaces (FR-2/4) → Epic 4 Story 4.1; trailing-punctuation selection band (FR-2) → Epic 4 Story 4.1; highlights join across the gutter + multi-column selection (FR-7/13, NFR-3) → Epic 4 Story 4.2; comment-vs-highlight distinct on-page treatment + memo transparent treatment (FR-10/11, UX-DR7) → Epic 4 Story 4.3.
 
 ## Epic List
 
@@ -148,9 +165,21 @@ Mark up the page with all six tools — highlight, underline, pen, memo, comment
 
 ### Epic 3: Edit, persist & review
 Make the annotated record durable and curatable: select, move, resize, restyle, re-edit text, undo/redo, and delete — all through one command stack — plus autosave to disk with exact restore on reopen, and the Annotation Bank (list + click-to-jump). Groups everything that flows through the store/command-stack and persistence path.
-**FRs covered:** FR-15, FR-16, FR-17, FR-18, FR-19, FR-20, FR-21, FR-22
+**FRs covered:** FR-15, FR-16, FR-17, FR-18, FR-19, FR-20, FR-21, FR-22 (+ post-v1 FR-26, FR-27 added 2026-06-30)
 **NFRs:** NFR-4 (durability), NFR-1 (Bank overlay)
 **Architecture:** AR-6 (ownership), AR-7 (command stack + autosave), AR-8 (persistence), AR-9 (boundary)
+
+### Epic 4: Reading & annotation fidelity (post-v1, Phase-1.5)
+> Added 2026-06-30 via correct-course (`sprint-change-proposal-2026-06-30.md`), grouping the render/anchor correctness items from `deferred-work.md`. Make the CORE read+annotate surfaces render and select correctly: fix the pdf.js text-layer copy/selection bugs, make highlight/selection geometry column-aware (no gutter bridging), and give comment/memo marks distinct, non-obscuring on-page treatment. No new FRs — this is quality of FR-2/4/7/8/10/11 under NFR-3. Sequenced post-v1; pull a story earlier if a bug proves v1-blocking.
+> **FRs covered:** none new (quality of FR-2, FR-4, FR-7, FR-8, FR-10, FR-11)
+> **NFRs:** NFR-3 (anchor fidelity), NFR-2/NFR-5 (reading quality)
+> **Architecture:** AR-4 (anchor geometry), AR-9 (render/anchor boundary)
+
+### Epic 5: Reader preferences & polish (post-v1, Phase-1.5)
+> Added 2026-06-30 via correct-course, grouping the preferences / color-system / UX-refinement / structural-refactor items from `deferred-work.md`. Add user-facing preferences (settings + hotkey rebinding, per-tool + custom colors, hide/show-all toggle), the small interaction-polish refinements (layered Esc, in-editor confirm, collapsed stroke-width control, dimmed ToC), and the standing codebase structural refactor (data contracts + conditional/FSM unification + src module split) as an enabler.
+> **FRs covered:** FR-23, FR-24, FR-25 (post-v1)
+> **NFRs:** NFR-1, NFR-5 (immersion), NFR-3 (unchanged by polish)
+> **Architecture:** AR-3 (contract preserved by refactor), AR-9 (layering), AD-11 (FSM)
 
 ## Epic 1: Read a paper
 
@@ -692,6 +721,11 @@ So that I can refine annotations after creating them.
 
 > Move/resize MUST cover EVERY mark geometry, not just text rects: a `kind=path` pen stroke (Story 2.8) moves by TRANSLATING all its normalized `points` (resize = scaling them); `kind=rect` marks move/resize the rect; `kind=text` marks per the run. (User feature request 2026-06-29 "pen movable when selected" → routed here, kept in 3.1 so move goes through the one command path + undo, AR-7, rather than a one-off pen mover.)
 
+> **Deferred-work additions folded into 3.1 (2026-06-30 correct-course):**
+> - **Memo CORNER drag-resize is the user's priority piece** (deferred-work 2026-06-29): a selected memo exposes corner handles for free resize (and body-drag to move). This is the memo case of the move/resize AC above — route it through the command path here, NOT the client-only 2.9 mutation. (The memo's transparent/no-color VISUAL treatment is a separate design slice → Epic 4 Story 4.3.)
+> - **Route memo/comment text re-edit through the command path** (Story 2.9 code-review follow-up, dismissed for 2.9): the double-click re-edit AC above is the one command boundary for memo body, comment body, recolor, restroke, resize, and delete — no special-case client mutation survives once 3.1 lands.
+> - **Cross-type unified hit-layer** (Story 2.7 deferred, MED): selection currently can't honor recent-wins ACROSS the two paint groups (an underline always hit-tests above a highlight on the same run). When 3.1 builds multi-type selection, separate hit-testing from the visual opacity grouping (one transparent `created_at`-ordered hit layer; paint groups stay `pointer-events:none`). Ties into Epic 5's structural refactor — coordinate.
+
 **Given** a selected annotation
 **When** I re-open its quick-box
 **Then** I can restyle the color; double-clicking a text/memo/comment annotation re-edits its text (FR-15, IP-6)
@@ -801,3 +835,231 @@ So that I can review and recall annotations instantly.
 **Given** a Bank row
 **When** I click it
 **Then** the canvas jumps to the annotation and the target flashes (degrading to instant under `prefers-reduced-motion`) (FR-20, UX-DR9, UX-DR17)
+
+### Story 3.7: Convert highlight ↔ comment
+
+> Added 2026-06-30 via correct-course (deferred-work 2026-06-29, user request). A highlight and a text-comment are nearly the same mark (both `kind=text`; a comment is a highlight with non-null `body` + pin + bubble). Cheap two-way conversion is wanted. An edit of `type`/`body` → must flow through the command path (3.1/3.2), so it sits in Epic 3.
+
+As a reader,
+I want to turn a highlight into a comment and back,
+So that I can add a note to a mark (or drop the note) without re-creating it.
+
+**Acceptance Criteria:**
+
+**Given** a selected highlight
+**When** I choose "Turn into comment" in its quick-box
+**Then** its `type` flips `highlight → comment` and `body` goes `null → ""` (gains a pin + opens the bubble); the `kind=text` anchor/rects are UNCHANGED; a two-page highlight converts ALL `group_id` siblings together (FR-27, AR-5)
+
+**Given** a `kind=text` comment whose `body` becomes empty
+**When** I deselect
+**Then** it reverts to `type=highlight`, `body=null` (drops the pin/bubble); resolve the interaction with Story 2.10 Decision 5 (empty comment kept) and the empty-memo cleanup — a `kind=rect` comment (bare pin) is out of this revert (FR-27)
+
+**Given** the conversion
+**Then** it flows through the single command stack (do/undo, AR-7) via a `type`+`body` action (e.g. `retypeAnnotation`); no contract/anchor-MODEL change (`type` union + nullable `body` already exist); live-smoke a converted two-page mark at DPR>1 (NFR-3)
+
+### Story 3.8: Adjust an annotation's text range
+
+> Added 2026-06-30 via correct-course (deferred-work 2026-06-29, user request). Extend/shrink the run a text-anchored mark covers after creation. An anchor EDIT → command path, so Epic 3.
+
+As a reader,
+I want to drag a text mark's start/end to cover more or fewer words,
+So that I can fix a highlight/underline/comment range without redrawing it.
+
+**Acceptance Criteria:**
+
+**Given** a selected text-anchored mark (highlight/underline/comment)
+**When** I drag a start/end handle
+**Then** the covered text is re-resolved and the `kind=text` anchor (`rects` + `text`) rebuilt to the new range via the anchor layer (`rectsFromSelection`/`collectTextRects`); pen (`kind=path`) and rect marks are OUT of scope (FR-26, AR-4)
+
+**Given** a re-range that crosses (or stops crossing) a page boundary
+**Then** the `group_id` siblings are added/removed so the mark still = one annotation per page (AR-4); this cross-page case MUST be live-smoked at DPR>1 (the recurring full-page-leak risk)
+
+**Given** the re-range
+**Then** it flows through the command stack (do/undo, AR-7); the `TextAnchor` shape is unchanged (only its `rects`/`text` values are rewritten) — no contract/anchor-MODEL change (AR-3, AR-9)
+
+## Epic 4: Reading & annotation fidelity (post-v1, Phase-1.5)
+
+> Added 2026-06-30 via correct-course (`sprint-change-proposal-2026-06-30.md`). Groups the render/anchor correctness items surfaced in `deferred-work.md` during the Epic 1–2 build. Theme: the core read+annotate features WORK but have fidelity defects (text copies without inter-line spaces, selection bands render thick on trailing punctuation, same-line highlights bridge the column gutter, multi-column drag-select intrudes the other column, comment fill is indistinguishable from a highlight). Fix correctness, do not add capability. No new FRs. Sequenced post-v1; promote any single story to v1-blocking if it materially degrades core reading.
+
+### Story 4.1: Text-layer copy & selection fidelity
+
+> deferred-work: "copied text loses spaces at line breaks" + "trailing punctuation renders a thick selection band". Same root family — our custom text layer omits the pdf.js viewer's EOL whitespace + `endOfContent` handling.
+
+As a reader,
+I want copied text to keep its spaces and selections to look uniform,
+So that copying a passage and selecting across lines behaves like a normal PDF reader.
+
+**Acceptance Criteria:**
+
+**Given** a multi-line selection
+**When** I copy it
+**Then** inter-line whitespace is preserved (words that wrap across a line break do NOT fuse); `selection.toString()` (and any stored `anchor.text`) matches the source text (FR-2, AR-2)
+
+**Given** a selection that includes a line-ending mark (e.g. a trailing period)
+**Then** its `::selection` band is the same height/weight as the rest of the run (no thick band) (FR-2)
+
+**Given** the fix
+**Then** it reproduces pdf.js's text-layer copy/selection handling (EOL whitespace + `endOfContent` element, mirroring `TextLayerBuilder`) and lives in `render/` only — no annotation/anchor change; highlight/underline geometry (per-line rects) is unaffected (AR-9)
+
+**Given** the parallel test suite
+**Then** the pre-existing flaky `Reader.test.tsx` Ctrl+wheel test (deferred-work 2026-06-29) is de-flaked here (flush the wheel-binding effect before dispatch / assert via `waitFor`) as a small co-located cleanup
+
+### Story 4.2: Column-aware selection & highlight geometry
+
+> deferred-work: "highlights on the same line across the two columns join across the gutter" (`mergeRects` unions by vertical overlap only) + the reverted "multi-column selection controller" (a drag in one column intrudes the other). Shared root: no column model. The user's direction is a LAYERED controller (cursor logical position → emitted column/line → selection on top), built once and reused by selection, copy, and highlight create.
+
+As a reader,
+I want selection and highlights to respect column boundaries,
+So that a drag stays in its column and a same-line highlight never bridges the gutter.
+
+**Acceptance Criteria:**
+
+**Given** two text runs on the same visual line in different columns
+**When** a highlight/selection covers one
+**Then** `mergeRects` does NOT union across a large horizontal gap (the gutter) — each column gets its own band; the fix stays in `anchor/` behind the `Rect[]` contract so highlight/underline/preview all inherit it (FR-7, FR-13, NFR-3, AR-4)
+
+**Given** a drag-select inside a two-column body
+**Then** it stays within the pointed column (a projection-profile column detector + per-column line model); cross-column selection is expressed in reading order, column by column
+
+**Given** the controller
+**Then** it lives in ONE module with a narrow contract (cursor logical position → emitted column/line) that selection, copy, and highlight create-on-release (`rectsFromSelection`) consume — not spread across `render/`/`anchor/`/`annotations/`; design it before coding (own story already; see deferred-work history of the 4 failed patch attempts)
+
+**Given** any column geometry change
+**Then** it is live-smoked with a cross-column same-line selection AND a cross-page selection at DPR>1 (jsdom zeroes rects)
+
+### Story 4.3: Distinct, non-obscuring on-page mark treatment
+
+> deferred-work: "a text-comment must read differently from a plain highlight, and not obscure the text" + the memo revised direction ("drop memo color, black border + transparent background"). Both are `style-on-type` paint changes (AD-5), token-driven.
+
+As a reader,
+I want comment and memo marks to look distinct and keep the text readable,
+So that I can tell a highlight from a comment at a glance and a memo doesn't hide the page.
+
+**Acceptance Criteria:**
+
+**Given** a `type=comment` `kind=text` mark
+**Then** it paints differently from a plain highlight (e.g. lower-alpha fill + accent border, or a hatch/underline treatment — decide among the deferred-work options) so highlight / underline / comment read as three distinct treatments, and the underlying text stays legible (FR-11, UX-DR7, AD-5)
+
+**Given** a memo box
+**Then** its color row is dropped and it renders with a `{colors.ink}` (black) border and TRANSPARENT background (text floats over the page); `style.color` stays on the model (contract unchanged) but stops driving the memo's paint (FR-10, UX-DR7)
+
+**Given** the treatments
+**Then** they are token-driven (new `--annotation-comment-*` / memo tokens, no raw values), updated in DESIGN.md as the source, and re-smoked at DPR>1 incl. cross-page; AD-5 holds (geometry-on-kind, style-on-type)
+
+## Epic 5: Reader preferences & polish (post-v1, Phase-1.5)
+
+> Added 2026-06-30 via correct-course. Groups the preferences, color-system, interaction-polish, and structural-refactor items from `deferred-work.md`. Theme: let the reader tune the app and make the chrome recede further, plus pay down the structural debt the tool stories accrued. Post-v1.
+
+### Story 5.0: Codebase structural refactor (data contracts + conditional/FSM unification + src split)
+
+> deferred-work: "lean on data classes", "unify conditional logic + FSM-isolated state", "src folder structural refactoring" — ONE refactor thread. **Sequencing note:** this is ideally done at the Epic-2/Epic-3 boundary (before 3.1 builds the command path on the current sprawl). It is tracked in Epic 5 for grouping, but pull it EARLIER if Epic 3 work is blocked by the sprawl. No behavior/contract change.
+
+As a developer,
+I want the annotation code unified behind data contracts, a per-tool descriptor/FSM, and a clean module split,
+So that adding a tool or an edit is one registration, not edits across five `if` chains.
+
+**Acceptance Criteria:**
+
+**Given** the per-tool/per-kind conditional sprawl (`AnnotationLayer`/`AnnotationInteraction`/`create.ts`/`store`)
+**Then** it is unified behind ONE descriptor/registry keyed on `anchor.kind` + `type` (AD-5 as the dispatch key), so a new tool registers one entry; the near-twin builders and `set()` blocks consolidate (AR-9)
+
+**Given** recurring loose shapes (create-options twins, `active*`/`setActive*`/`*Ref` fans, point/rect math)
+**Then** they become typed data contracts (one "create request" per tool, one "active-tool defaults" object — ties into Story 5.2, narrower prop bundles); any data class WRAPS the generated `Annotation` type, never shadows it (AR-3)
+
+**Given** the fragmented interaction state (selection / quick-box / pen-draft / memo-cleanup / flyout / Esc across components)
+**Then** the overlay lifecycle consolidates into one explicit FSM (extends `machine.ts`, AD-11/PREP-3); the duplicated App+overlay Esc logic collapses (enables Story 5.4 layered Esc)
+
+**Given** the refactor
+**Then** client + server suites stay green and the tracked OpenAPI contract is byte-identical; both `vi.mock("./render")` barrels updated if any `render/` export moves; `no-raw-values` re-run after CSS moves; its own PR(s), never folded into a feature story
+
+### Story 5.1: Settings modal + custom hotkey rebinding
+
+> deferred-work: "Settings modal in the toolbox (hotkey rebinding first)". The real cost is the keymap-as-data enabler; the modal UI is secondary.
+
+As a reader,
+I want a Settings modal where I can rebind hotkeys,
+So that the keyboard map fits my habits.
+
+**Acceptance Criteria:**
+
+**Given** the hard-coded `e.key === "h"` keydown literals in `App.tsx`
+**Then** they are first refactored into a single keymap data structure (action → binding, a store slice + a `useKeymap` lookup) the document keydown reads — the enabler that makes rebinding possible (FR-24, AD-11)
+
+**Given** a Settings affordance in the toolbox/tool-rail (Phosphor `Gear`/`Sliders`)
+**When** I open it
+**Then** a focus-trapped, `Esc`-dismissable `{component}` modal opens with a keybinding pane listing every action (UX-DR15 map) and a "press a key" capture field per action (exempt from the global tool keys while capturing) (FR-24, UX-DR17)
+
+**Given** a rebind
+**Then** conflict detection blocks two actions on one key, a reset-to-defaults exists, browser/OS-critical combos are reserved; preferences persist in `localStorage` (app-global, not per-doc `~/.paper-mate`); token-driven, no em-dash in copy; no contract change (FR-24)
+
+### Story 5.2: Color system — per-tool default + custom slots
+
+> deferred-work: "per-tool remembered default color" + "custom color slot(s) + color picker, cached in the browser". Both reshape the single shared `activeColor`; do together.
+
+As a reader,
+I want each tool to remember its own color and to add custom colors,
+So that changing the highlight color doesn't change the pen, and I'm not limited to the fixed palette.
+
+**Acceptance Criteria:**
+
+**Given** the single shared `activeColor` (one store field, every tool writes it)
+**Then** it becomes a per-tool map (`activeColorByTool` + `setActiveColor(tool, color)`); the create path reads the armed tool's color; each flyout shows/sets its own; recolor updates that mark's `type` only; the selection quick-box still shows the SELECTED mark's own color (FR-25)
+
+**Given** a "More colors" affordance at the tail of every `ColorSwatchRow` (highlight/underline/pen/memo flyouts + selection quick-box)
+**When** I pick a custom color
+**Then** it slides into the row tail as a fixed-count FIFO window (newest appended, oldest off), persisted in `localStorage`; decide the window size and whether the named defaults can rotate off (FR-25)
+
+**Given** the custom-hex contract risk
+**Then** custom colors map to runtime CSS vars (`--color-annotation-custom-N`) seeded from `localStorage` at boot (PREFERRED — keeps `style.color` a token name, no contract break, stays in `theme/` + `annotations/`); `no-raw-values` is honored (hex routed through the theme layer, never inlined) (AR-3, AR-12)
+
+### Story 5.3: Hide/show all annotations toggle
+
+> deferred-work: "hide/show all annotations toggle".
+
+As a reader,
+I want one toggle to hide/show ALL annotations,
+So that I can read the clean page and bring my marks back.
+
+**Acceptance Criteria:**
+
+**Given** a top-bar `top-bar__actions` icon button (Phosphor eye / eye-slash, `aria-pressed`, plain `title`/`aria-label`, no em-dash)
+**When** I toggle it OFF
+**Then** the overlay paints NOTHING and marks are not pointer-interactive (no hover/select); the underlying text stays selectable; ON restores everything unchanged (FR-23, NFR-1)
+
+**Given** the toggle
+**Then** it is ONE global view-only flag (composition root or store, sibling of `activeTool`/`selectedId`), threaded to `AnnotationLayer` (skip render) and `AnnotationInteraction` (suppress create/select while hidden); it NEVER mutates/deletes an annotation; clear `selectedId` on hide; decide whether the flag survives reload (FR-23)
+
+### Story 5.4: Interaction polish — layered Esc, in-editor confirm, collapsed stroke-width
+
+> deferred-work: "layered Esc", "confirm (check) affordance on memo + comment editors", "collapse the pen stroke-width row into a single dropdown". Small UX refinements; layered Esc depends on Story 5.0's Esc consolidation.
+
+As a reader,
+I want Esc to do the most-local thing, an explicit confirm on note editors, and a compact stroke-width control,
+So that the annotate interactions feel precise and uncluttered.
+
+**Acceptance Criteria:**
+
+**Given** an `Esc` press
+**Then** it resolves in priority order, consuming the event at the first match: (1) an open/edited transient box (empty memo removed, non-empty blurs) → cancel it; (2) else a selected mark → clear selection (stay in tool); (3) else → return the tool to cursor — so the FIRST Esc clears selection without disarming, a SECOND returns to cursor (UX-DR15; builds on Story 5.0)
+
+**Given** the memo (`MemoBox`) and comment (`CommentBubble`) editors
+**Then** each gets a check (Phosphor `Check`) confirm control that commits `body` and exits; preserve multi-line input (bind the button + `Ctrl/Cmd+Enter`, keep plain `Enter` as newline, or `Enter` confirms + `Shift+Enter` newline — pick one); keyboard-reachable, token icon, no em-dash; same `retext`/`clearSelection` path, no contract change (UX-DR8, UX-DR17)
+
+**Given** the pen `StrokeWidthRow` (three preset dots in a row)
+**Then** it becomes a compact collapsible control (trigger shows current width + caret → vertical thin/medium/thick list; pick collapses) matching the memo `SizeRow` pattern; update the Story 2.8 tests that asserted all three step buttons visible; presentation only, no model/contract change
+
+### Story 5.5: Dim the Table-of-Contents panel until hovered
+
+> deferred-work: "dim the Table-of-Contents panel until hovered". UX polish toward immersion (NFR-5).
+
+As a reader,
+I want the ToC panel dimmed at rest and full on hover,
+So that it recedes while reading but is there when I reach for it.
+
+**Acceptance Criteria:**
+
+**Given** the `TocPanel` (Story 1.9) at rest
+**Then** it sits at ~0.4 opacity and lifts to full opacity on `:hover`/`:focus-within` with a short transition; it stays clickable at rest (default read) (UX-DR11, NFR-5)
+
+**Given** the fade
+**Then** it respects `prefers-reduced-motion` (degrade to instant, UX-DR17), is token-driven (`--toc-panel-resting-opacity`, no raw values), and changes nothing in the contract/store — pure presentation

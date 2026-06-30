@@ -30,7 +30,7 @@
 
 import type { Annotation } from "../api/client";
 import { useAnnotationStore } from "../store";
-import { denormalizeRect, denormalizePoint, type PageBox, type ScreenRect } from "../anchor";
+import { denormalizeRect, denormalizePoint, pointsBounds, type PageBox, type ScreenRect } from "../anchor";
 import { strokeOutline, svgPathFromOutline } from "./pen";
 import MemoBox from "./MemoBox";
 import CommentBubble from "./CommentBubble";
@@ -89,6 +89,9 @@ export default function AnnotationLayer({
   const annotations = useAnnotationStore((s) => s.annotations);
   const selectedId = useAnnotationStore((s) => s.selectedId);
   const hoveredId = useAnnotationStore((s) => s.hoveredId);
+  // Transient move/resize preview (Story 3.1): while a drag is in flight, render
+  // the dragged mark + its frame at this anchor instead of the committed one.
+  const dragPreview = useAnnotationStore((s) => s.dragPreview);
   const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const setHovered = useAnnotationStore((s) => s.setHovered);
@@ -151,16 +154,32 @@ export default function AnnotationLayer({
     selected: inActiveGroup(a, selectedId, annotations),
   });
 
+  // While a move/resize drag is in flight, render the dragged mark (and its edit
+  // frame) at the transient preview geometry instead of the committed anchor, so it
+  // follows the pointer without a per-pointermove store commit (Story 3.1).
+  const effAnchor = (a: Annotation): Annotation["anchor"] =>
+    dragPreview && dragPreview.id === a.id ? dragPreview.anchor : a.anchor;
+
+  // A mark that gets drag-handle move/resize in Story 3.1: pen (path) + rect
+  // memo/region. Comments (bubble-edited) and text marks (Story 3.8 re-resolves
+  // their run) are excluded — moving a text rect would desync anchor.text.
+  const isEditable = (a: Annotation): boolean =>
+    a.anchor.kind === "path" || (a.anchor.kind === "rect" && a.type !== "comment");
+
+  // The one selected mark on THIS page that shows an edit frame (single selection).
+  const editMark = marks.find((a) => a.id === selectedId && isEditable(a)) ?? null;
+
   // Render one region mark as a single positioned fill div (geometry-on-kind = rect,
   // style-on-type: both highlight and comment get the ~0.4 fill from the highlights
   // opacity group; the comment's pin is rendered separately in renderComment).
   // The .annotation-highlight class gives it the 2.5 selection hit-test, hover ring,
   // and selected ring, so recolor/delete from the selection quick-box work for free.
   const renderRegion = (a: Annotation) => {
-    if (a.anchor.kind !== "rect") return null;
+    const anchor = effAnchor(a);
+    if (anchor.kind !== "rect") return null;
     const { hovered, selected } = markState(a);
     const cls = markClass("annotation-highlight annotation-region", "annotation-highlight", hovered, selected);
-    const pos = denormalizeRect(a.anchor.rect, box, scale);
+    const pos = denormalizeRect(anchor.rect, box, scale);
     return (
       <div
         key={a.id}
@@ -219,10 +238,11 @@ export default function AnnotationLayer({
   // preview). The path is the selection hit surface (Story 2.5 seam): fill-only
   // pointer events + hover/select handlers; hover/selected add an ink SVG stroke.
   const renderPen = (a: Annotation) => {
-    if (a.anchor.kind !== "path") return null;
+    const anchor = effAnchor(a);
+    if (anchor.kind !== "path") return null;
     const { hovered, selected } = markState(a);
     const cls = markClass("annotation-pen", "annotation-pen", hovered, selected);
-    const pts = a.anchor.points.map((p) => denormalizePoint(p, box, scale));
+    const pts = anchor.points.map((p) => denormalizePoint(p, box, scale));
     const width = (a.style.stroke_width ?? 0) * scale;
     const d = svgPathFromOutline(strokeOutline(pts, width));
     return (
@@ -249,14 +269,15 @@ export default function AnnotationLayer({
   // value = a.body, every edit writes through retextAnnotation. Autofocus when it
   // is the selected memo so a just-placed box is ready to type into.
   const renderMemo = (a: Annotation) => {
-    if (a.anchor.kind !== "rect") return null;
+    const anchor = effAnchor(a);
+    if (anchor.kind !== "rect") return null;
     const { hovered, selected } = markState(a);
     const cls = markClass("annotation-memo", "annotation-memo", hovered, selected);
     return (
       <MemoBox
         key={a.id}
         anno={a}
-        pos={denormalizeRect(a.anchor.rect, box, scale)}
+        pos={denormalizeRect(anchor.rect, box, scale)}
         cls={cls}
         selected={selected}
         onRetext={(id, body) => retextAnnotation(id, body, new Date().toISOString())}
@@ -323,6 +344,39 @@ export default function AnnotationLayer({
     );
   };
 
+  // The edit frame for the selected pen/memo/region mark: a move grip + four
+  // corner resize handles over its (preview-aware) bounding box. The handles carry
+  // data-edit-handle + data-edit-id; useEditGesture turns a drag on one into a
+  // geometry edit. Positioned via the anchor service so it rides zoom (NFR-3); the
+  // handles are <button>s so the document-level deselect/create handlers skip them
+  // (isExempt), keeping the mark selected during the drag.
+  const renderEditFrame = (a: Annotation) => {
+    const anchor = effAnchor(a);
+    let fb: ScreenRect | null = null;
+    if (anchor.kind === "rect") fb = denormalizeRect(anchor.rect, box, scale);
+    else if (anchor.kind === "path") fb = denormalizeRect(pointsBounds(anchor.points), box, scale);
+    if (!fb) return null;
+    return (
+      <div
+        className="annotation-edit-frame"
+        data-testid={`annotation-edit-frame-${a.id}`}
+        style={{ left: fb.left, top: fb.top, width: fb.width, height: fb.height }}
+      >
+        {(["move", "nw", "ne", "sw", "se"] as const).map((hh) => (
+          <button
+            key={hh}
+            type="button"
+            className={`edit-handle edit-handle--${hh}`}
+            data-edit-handle={hh}
+            data-edit-id={a.id}
+            data-testid={`edit-handle-${hh}-${a.id}`}
+            aria-label={hh === "move" ? "Move annotation" : "Resize annotation"}
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <>
       {/* The mark sheet stays decorative (aria-hidden): the highlight/underline/pen
@@ -379,6 +433,14 @@ export default function AnnotationLayer({
       {commentMarks.length > 0 && (
         <div className="annotation-comments" data-testid={`annotation-comments-${pageIndex}`}>
           {commentMarks.map((a) => renderComment(a))}
+        </div>
+      )}
+      {/* Edit frame (Story 3.1): the move grip + corner resize handles for the
+          selected pen/memo/region mark. Its own NOT-aria-hidden, pointer-transparent
+          group (focusable handle controls); each handle opts back into pointers. */}
+      {editMark && (
+        <div className="annotation-edit-frames" data-testid={`annotation-edit-frames-${pageIndex}`}>
+          {renderEditFrame(editMark)}
         </div>
       )}
     </>

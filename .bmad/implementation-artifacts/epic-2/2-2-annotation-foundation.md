@@ -175,7 +175,7 @@ app.openapi = custom_openapi
 - [Source: EXPERIENCE.md (lines 61, 100-112, 131)] — quick-box behavior (pop on drag-release, dismiss on pick/outside/Esc, positioned at selection, never shifts canvas), IP-3 contents mapping, focus-in/return accessibility.
 - [Source: DESIGN.md (lines 36-42, 195-207)] — annotation accent palette tokens; quick-box / color-swatch / annotation-highlight component dims.
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions, #Commands] — adopt-stable / document-level-handler / render-mock-barrel; token rules; contract-gen + test incantations.
-- [Source: .bmad/implementation-artifacts/2-1-dev-infra-enabler.md] — previous story (infra-only; renumber awareness: anchor foundation is 2.2, not 2.1).
+- [Source: .bmad/implementation-artifacts/epic-2/2-1-dev-infra-enabler.md] — previous story (infra-only; renumber awareness: anchor foundation is 2.2, not 2.1).
 
 ## Previous Story Intelligence
 

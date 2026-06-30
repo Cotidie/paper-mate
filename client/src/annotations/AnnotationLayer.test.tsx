@@ -602,3 +602,86 @@ describe("AnnotationLayer region fills (Story 2.11 — AC3,4,6)", () => {
     expect(container.querySelector(".annotation-regions")).toBeNull();
   });
 });
+
+describe("AnnotationLayer edit frame (Story 3.1)", () => {
+  const regionMark = (id: string): Annotation => ({
+    id,
+    doc_id: "doc-1",
+    type: "highlight",
+    group_id: null,
+    anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.2, x1: 0.5, y1: 0.4 } },
+    style: { color: "annotation-default", stroke_width: null, alpha: null },
+    body: null,
+    created_at: "2026-06-29T00:00:00+00:00",
+    updated_at: "2026-06-29T00:00:00+00:00",
+  });
+  const commentPin = (id: string): Annotation => ({
+    id,
+    doc_id: "doc-1",
+    type: "comment",
+    group_id: null,
+    anchor: { kind: "rect", page_index: 0, rect: { x0: 0.3, y0: 0.3, x1: 0.3, y1: 0.3 } },
+    style: { color: "annotation-default", stroke_width: null, alpha: null },
+    body: "",
+    created_at: "2026-06-29T00:00:00+00:00",
+    updated_at: "2026-06-29T00:00:00+00:00",
+  });
+
+  function seedAndSelect(a: Annotation) {
+    useAnnotationStore.getState().addAnnotation(a);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select(a.id));
+  }
+
+  it("shows a move grip + four corner handles for a selected memo", () => {
+    seedAndSelect(memoMark("m1", 0));
+    expect(screen.getByTestId("edit-handle-move-m1")).toBeTruthy();
+    for (const c of ["nw", "ne", "sw", "se"]) expect(screen.getByTestId(`edit-handle-${c}-m1`)).toBeTruthy();
+  });
+
+  it("shows handles for a selected pen mark", () => {
+    seedAndSelect(penMark("p1", 0));
+    expect(screen.getByTestId("edit-handle-move-p1")).toBeTruthy();
+    expect(screen.getByTestId("edit-handle-se-p1")).toBeTruthy();
+  });
+
+  it("shows handles for a selected region highlight (kind=rect)", () => {
+    seedAndSelect(regionMark("r1"));
+    expect(screen.getByTestId("edit-handle-move-r1")).toBeTruthy();
+  });
+
+  it("shows NO edit frame for a selected text mark (Story 3.8 owns text-range edit)", () => {
+    seedAndSelect(textMark("t1", 0));
+    expect(screen.queryByTestId("edit-handle-move-t1")).toBeNull();
+    expect(screen.queryByTestId("annotation-edit-frames-0")).toBeNull();
+  });
+
+  it("shows NO edit frame for a selected comment pin (bubble-edited)", () => {
+    seedAndSelect(commentPin("c1"));
+    expect(screen.queryByTestId("edit-handle-move-c1")).toBeNull();
+  });
+
+  it("renders no edit frame when nothing is selected", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.queryByTestId("annotation-edit-frames-0")).toBeNull();
+  });
+});
+
+describe("AnnotationLayer memo re-edit (Story 3.1, AE-3)", () => {
+  it("double-click focuses the memo textarea for re-editing", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const ta = screen.getByTestId("annotation-mark-m1");
+    fireEvent.doubleClick(ta);
+    expect(document.activeElement).toBe(ta);
+  });
+
+  it("editing a memo routes through retextAnnotation (the command path)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, ""));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const ta = screen.getByTestId("annotation-mark-m1") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "hello" } });
+    expect(useAnnotationStore.getState().annotations.get("m1")!.body).toBe("hello");
+  });
+});

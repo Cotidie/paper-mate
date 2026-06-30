@@ -219,9 +219,9 @@ A pen mark must be selectable/recolorable/deletable through the ONE 2.5 selectio
 - [Source: client/src/api/schema.d.ts (PathAnchor, Point, Style.stroke_width, type "pen")] — the contract ALREADY carries the full pen shape; verify byte-identical after the suite.
 - [Source: DESIGN.md#annotation-pen, #quick-box, #tool-rail, #color-swatch] — "freehand vector stroke in the chosen accent; stroke width from the pen quick-box"; pen mode quick-box = swatch row + stroke-width steps; rail tool order (pen below underline).
 - [Source: UX-DR4/DR5/DR7/DR15] — tool rail, contextual quick-box (pen → swatch + stroke-width), on-page pen rendering, `D` keymap.
-- [Source: .bmad/implementation-artifacts/2-7-underline-text.md] — the previous tool story: the rail-button/flyout twin pattern, the selection-seam reuse, style-on-type, and the live-smoke discipline pen extends.
-- [Source: .bmad/implementation-artifacts/2-6-arm-time-color-pick.md] — `activeColor` store state + `ToolFlyout` + the arm-time color sub-toolbox pen's color+width flyout twins.
-- [Source: .bmad/implementation-artifacts/2-5-select-highlight-recolor-delete.md] — the selection seam (`selectedId`, recolor + delete) pen extends with restroke + a path branch.
+- [Source: .bmad/implementation-artifacts/epic-2/2-7-underline-text.md] — the previous tool story: the rail-button/flyout twin pattern, the selection-seam reuse, style-on-type, and the live-smoke discipline pen extends.
+- [Source: .bmad/implementation-artifacts/epic-2/2-6-arm-time-color-pick.md] — `activeColor` store state + `ToolFlyout` + the arm-time color sub-toolbox pen's color+width flyout twins.
+- [Source: .bmad/implementation-artifacts/epic-2/2-5-select-highlight-recolor-delete.md] — the selection seam (`selectedId`, recolor + delete) pen extends with restroke + a path branch.
 - [Source: CLAUDE.md#Engineering-principles, #Design-conventions, #Versioning] — adopt-stable (perfect-freehand named), document-level handlers, render-mock-barrel sync, token contract, no em-dash, HiDPI live smoke, PATCH bump.
 
 ## Previous Story Intelligence
@@ -357,7 +357,7 @@ the live geometry risk (stroke shape + zoom-thickening) was verified at DPR>1.
 - server/pyproject.toml (version 0.1.4 → 0.1.5)
 - docs/images/story-2-8-pen-green-live.png (live-smoke capture)
 - docs/images/story-2-8-pen-strokes-zoomed.png (live-smoke capture — zoom-glue)
-- .bmad/implementation-artifacts/2-8-pen-freehand.md (this story)
+- .bmad/implementation-artifacts/epic-2/2-8-pen-freehand.md (this story)
 - .bmad/implementation-artifacts/sprint-status.yaml (status tracking)
 
 ## Code Review (cross-model: Codex via `codex exec --sandbox read-only`)

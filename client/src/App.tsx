@@ -63,11 +63,6 @@ export default function App() {
   // realpha both write it, the create path reads it). App threads it down.
   const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
   const setActiveAlpha = useAnnotationStore((s) => s.setActiveAlpha);
-  // Story 2.9: the active memo box size is store-backed for the same reason as
-  // activeColor/activeStrokeWidth (the rail's SizeRow + the memo quick-box's
-  // resize both write it, the placement gesture reads it). App threads it down.
-  const activeMemoSize = useAnnotationStore((s) => s.activeMemoSize);
-  const setActiveMemoSize = useAnnotationStore((s) => s.setActiveMemoSize);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
@@ -268,10 +263,6 @@ export default function App() {
           // it via onPickAlpha (the default new strokes land in).
           activeAlpha={activeAlpha}
           onPickAlpha={setActiveAlpha}
-          // Story 2.9: the Memo tool's sub-toolbox reads activeMemoSize and sets
-          // it via onPickMemoSize (the default new memos land in).
-          activeMemoSize={activeMemoSize}
-          onPickMemoSize={setActiveMemoSize}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
         />

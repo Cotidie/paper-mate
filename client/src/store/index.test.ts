@@ -21,6 +21,7 @@ beforeEach(() =>
     annotations: new Map(),
     selectedId: null,
     hoveredId: null,
+    dragPreview: null,
     activeColor: "annotation-default",
     activeStrokeWidth: 4,
     activeMemoSize: DEFAULT_MEMO_SIZE,
@@ -305,5 +306,82 @@ describe("memo size, retext + resize (Story 2.9)", () => {
     const h = useAnnotationStore.getState().annotations.get("h")!;
     expect(h.anchor.kind).toBe("text");
     expect(h.updated_at).toBe("2026-06-29T00:00:01Z"); // not bumped
+  });
+});
+
+describe("geometry edit — setAnnotationGeometry (move/resize command path, Story 3.1)", () => {
+  const rect = { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 };
+
+  function penMark(id: string, createdAt: string): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "pen",
+      group_id: null,
+      anchor: { kind: "path", page_index: 0, points: [{ x: 0.1, y: 0.1 }] },
+      style: { color: "annotation-default", stroke_width: 4, alpha: 0.4 },
+      body: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+  }
+
+  it("replaces a rect mark's geometry + bumps updated_at, keeping unrelated fields", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z", "note"));
+    const moved = { x0: 0.2, y0: 0.3, x1: 0.5, y1: 0.6 };
+    useAnnotationStore
+      .getState()
+      .setAnnotationGeometry("m", { kind: "rect", page_index: 0, rect: moved }, "2026-06-29T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.anchor.kind).toBe("rect");
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual(moved);
+    expect(m.body).toBe("note"); // unrelated fields preserved
+    expect(m.updated_at).toBe("2026-06-29T12:00:00Z");
+    expect(m.created_at).toBe("2026-06-29T00:00:01Z");
+  });
+
+  it("replaces a path mark's points (pen move/resize), leaving style untouched", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(penMark("p", "2026-06-29T00:00:01Z"));
+    const pts = [{ x: 0.3, y: 0.3 }, { x: 0.4, y: 0.4 }];
+    useAnnotationStore
+      .getState()
+      .setAnnotationGeometry("p", { kind: "path", page_index: 0, points: pts }, "2026-06-29T12:00:00Z");
+    const p = useAnnotationStore.getState().annotations.get("p")!;
+    if (p.anchor.kind === "path") expect(p.anchor.points).toEqual(pts);
+    expect(p.style.stroke_width).toBe(4);
+    expect(p.updated_at).toBe("2026-06-29T12:00:00Z");
+  });
+
+  it("ignores an unknown id without throwing", () => {
+    useAnnotationStore
+      .getState()
+      .setAnnotationGeometry("missing", { kind: "rect", page_index: 0, rect }, "2026-06-29T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
+
+  it("rejects a kind change — a geometry edit rewrites VALUES, never the discriminator (AC#8)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z"));
+    useAnnotationStore
+      .getState()
+      .setAnnotationGeometry("m", { kind: "text", page_index: 0, rects: [], text: "x" }, "2026-06-29T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.anchor.kind).toBe("rect"); // unchanged
+    expect(m.updated_at).toBe("2026-06-29T00:00:01Z"); // not bumped
+  });
+
+  it("setDragPreview holds a transient preview WITHOUT touching the stored annotation", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z"));
+    s.setDragPreview({ id: "m", anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.5, y1: 0.6 } } });
+    expect(useAnnotationStore.getState().dragPreview?.id).toBe("m");
+    // The committed annotation is untouched — the preview is separate transient state.
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual(rect);
+    expect(m.updated_at).toBe("2026-06-29T00:00:01Z");
+    s.setDragPreview(null);
+    expect(useAnnotationStore.getState().dragPreview).toBeNull();
   });
 });

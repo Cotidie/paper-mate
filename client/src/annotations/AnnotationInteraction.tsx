@@ -36,11 +36,11 @@ import { isExempt, type GestureContext } from "./gestures/shared";
 import { usePenGesture } from "./gestures/usePenGesture";
 import { useBoxGesture } from "./gestures/useBoxGesture";
 import { useMemoPlacement } from "./gestures/useMemoPlacement";
+import { useEditGesture } from "./gestures/useEditGesture";
 import { useSelection } from "./gestures/useSelection";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";
-import SizeRow from "./SizeRow";
 import "./Annotations.css";
 
 /** Max pointer travel (px) between a comment pointerdown and its release for the
@@ -148,6 +148,10 @@ export default function AnnotationInteraction({
   const { penPreview } = usePenGesture(gestureCtx, armedTool);
   const { boxPreview } = useBoxGesture(gestureCtx, boxActive);
   useMemoPlacement(gestureCtx);
+  // Drag-handle move/resize of a selected pen/rect mark (Story 3.1). A document-
+  // level gesture (the edit frame + handles render in AnnotationLayer); it commits
+  // ONE setAnnotationGeometry on release via the transient dragPreview.
+  useEditGesture({ enabled, getPagesRef, scaleRef });
   // The selected-mark quick-box (Story 2.5/AD-12), encapsulated as its own hook
   // (Story 5.0). Owns selection state + effects + the recolor/restroke/realpha/
   // resize/delete actions; the component renders the box from what it returns.
@@ -157,11 +161,9 @@ export default function AnnotationInteraction({
     selectedSpec,
     showSelectionBox,
     selectionBoxRef,
-    selectedMemoSize,
     recolorSelected,
     restrokeSelected,
     realphaSelected,
-    resizeSelected,
     deleteSelected,
   } = selection;
 
@@ -616,7 +618,6 @@ export default function AnnotationInteraction({
           {selectedSpec.alpha && (
             <AlphaRow value={selectedAnno.style.alpha ?? activeAlpha} onPick={realphaSelected} />
           )}
-          {selectedSpec.size && <SizeRow value={selectedMemoSize()} onPick={resizeSelected} />}
           <span className="quick-box__divider" aria-hidden="true" />
           <button
             type="button"

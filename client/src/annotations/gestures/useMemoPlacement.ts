@@ -6,9 +6,19 @@
 // preset (scale-1.0 px) at the click, normalized against the page. Clicking an
 // EXISTING memo selects it (the layer + selection seam) — placement is gated off
 // `.annotation-memo` so a second overlapping box isn't dropped on it.
+//
+// First-click-deselects (user fix 2026-06-30): if a mark is currently selected,
+// an empty-space click DESELECTS it rather than placing a new memo — so clicking
+// away from a memo commits/dismisses it (drawing the next memo takes a second
+// click). The actual clear is `useSelection`'s empty-space handler; this gesture
+// just SKIPS placing while something is selected. That handler runs in the capture
+// phase, so this listener is ALSO capture-phase (and registered first, at mount)
+// to read `selectedId` BEFORE the clear lands — otherwise it would see null and
+// place anyway.
 
 import { useEffect } from "react";
 import { normalizeRect, pickPage } from "../../anchor";
+import { useAnnotationStore } from "../../store";
 import { newId } from "../../uuid";
 import { buildMemoAnnotation } from "../create";
 import { isExempt, type GestureContext } from "./shared";
@@ -25,6 +35,9 @@ export function useMemoPlacement(ctx: GestureContext): void {
       // an existing memo (that click selects/edits it, not places a new one).
       if (!el?.closest?.(".page-surface") || el.closest?.(".quick-box") || el.closest?.(".annotation-memo"))
         return;
+      // A mark is selected → this empty-space click DESELECTS it (via useSelection),
+      // not place a new memo. Read here (capture phase, before useSelection clears).
+      if (useAnnotationStore.getState().selectedId !== null) return;
       const pages = getPagesRef.current();
       const cardBoxes = pages.map((p) => p.cardEl.getBoundingClientRect());
       const idx = pickPage(
@@ -55,8 +68,10 @@ export function useMemoPlacement(ctx: GestureContext): void {
       // Don't let the click start a text selection / fall through to another path.
       e.preventDefault();
     };
-    document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
+    // Capture phase (registered at mount, before useSelection's capture clear) so
+    // the selectedId read above sees the pre-clear value (see the header note).
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, docId, addAnnotation, select]);
 }
