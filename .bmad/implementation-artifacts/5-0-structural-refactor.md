@@ -4,7 +4,7 @@ baseline_commit: b45880fab7b8daf36c33b6d7ed3fde86005e7efa
 
 # Story 5.0: Codebase structural refactor (data contracts + conditional/FSM unification + src split)
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -45,20 +45,21 @@ so that adding a tool or an edit is one registration, not edits across five `if`
     - `AnnotationLayer` opacity-group DOM containers + kind/type group filters KEPT: they encode COMPOSITING (the isolated highlight opacity group) + the comment DUAL-render (a text comment paints in the fill group AND the pin group), not a clean (kind,type)→render partition. Collapsing them into one render table would change paint behavior. `marks.ts` is the clean seam for the future cross-type hit-layer (deferred-work) without restructuring the DOM.
   - [x] Each store action's SHAPE stays a direct mutation (no command stack — zundo is Epic 3 Story 3.2; 5.0 leaves one clean seam, AE-1/AE-3).
   - [x] Suite green (422: 415 baseline unchanged + 7 new `marks.test.ts`), contract byte-identical, typecheck clean. PR 2.
-- [ ] **Task 3 — Overlay FSM consolidation (AC: #3).** Highest behavioral risk; do after the registry.
-  - [ ] Extend `machine.ts` to own the full overlay lifecycle (armed → annotating → pending → selected → editing → dismissed, plus pen-draft and memo/comment edit sub-states).
-  - [ ] Migrate the `AnnotationInteraction` state islands (`selectionBoxOpen`, `penDraftRef`/`penPreview`, `boxDrawingRef`/`boxPreview`, `commentDownRef`, dismiss/Esc effects) into named transitions. Preserve EVERY current behavior exactly (see "What must NOT change").
-  - [ ] Do NOT implement layered Esc (that is Story 5.4) — only make the single Esc/dismiss path live in one place so 5.4 can later layer it. No behavior change to Esc in this story.
-  - [ ] Suite green, contract byte-identical. PR 3.
-- [ ] **Task 4 — src module split (AC: #4).** Mechanical move after logic is unified.
-  - [ ] Split `AnnotationInteraction.tsx` into per-gesture hooks (`useBoxGesture`/`usePenGesture`/`useMemoPlacement`/`useSelection`) + a thin composition component; split `AnnotationLayer.tsx` into per-mark renderer modules + a thin layer shell. Keep `annotations/` as the feature boundary; add `hooks/`/`utils/` as needed.
-  - [ ] Co-locate scoped CSS + tests with their modules; update import paths only.
-  - [ ] If any `render/` export moves: update BOTH `vi.mock("./render")` barrels (`App.test.tsx`, `Reader.test.tsx`) in the same change (AP-2). Re-run `no-raw-values.test.ts` after CSS moves.
-  - [ ] Suite green, contract byte-identical, typecheck + build clean. PR 4.
-- [ ] **Task 5 — Close-out.**
-  - [ ] Cross-model Codex review per thread (AP-3).
-  - [ ] Update `annotations/README.md` with the new module map + the descriptor pattern.
-  - [ ] Bump `server/pyproject.toml` version `0.2.0 → 0.2.1` (PATCH per story, CLAUDE.md#Versioning). No `/api` change → `docs/API.md` untouched.
+- [x] **Task 3 — Overlay state consolidation (AC: #3).** Highest behavioral risk; done after the registry.
+  - [x] **REINTERPRETED per user decision (OOP/encapsulation, not an async reducer).** The literal AC ("fold the pen draft + box draft + comment candidate into ONE `useReducer`") is NOT achievable behavior-byte-identically: those drafts are read+mutated SYNCHRONOUSLY inside document-level handlers (AP-1), and a `useReducer` dispatch is async/batched. The user chose the OOP/encapsulation answer: each gesture becomes a cohesive HOOK that owns its synchronous draft refs + transitions (a hook is React's idiomatic "object": private state + constructor params + public interface). This consolidates the islands while preserving the sync-read contract.
+  - [x] `machine.ts` kept as the create-picker control reducer (the one genuine FSM; converting it to a class would break `machine.test.ts` assertions → forbidden by the bar). The pen/box drafts, comment candidate, and selection-box state moved into `usePenGesture`/`useBoxGesture`/`useMemoPlacement`/`useSelection`, each owning its own synchronous refs + effects.
+  - [x] Single Esc/dismiss path: the create-picker dismiss is one `dismiss()` in the component; the selection Esc/dismiss now lives in ONE place inside `useSelection`. (The two overlays are orthogonal — picker vs selection — so each has its own one-place dismiss; no behavior change, and 5.4 can layer Esc onto these seams.) Layered Esc NOT implemented (that is 5.4).
+  - [x] Suite green, contract byte-identical. (Landed across the gesture/selection extraction commits.)
+- [x] **Task 4 — src module split (AC: #4).**
+  - [x] `AnnotationInteraction.tsx` split into per-gesture hooks (`gestures/usePenGesture`/`useBoxGesture`/`useMemoPlacement`/`useSelection`) + `gestures/shared.ts` (`GestureContext` + `isExempt`) + a thinner composition component (1186 → 637 lines). `AnnotationLayer.tsx` split: `MemoBox.tsx` + `CommentBubble.tsx` extracted (557 → 386 lines). `annotations/` kept as the feature boundary; `gestures/` added as the hooks subdir.
+  - [x] **Scope call:** the layer's 5 render funcs + opacity-group DOM containers KEPT in the shell (they encode compositing + comment dual-render, not a clean dispatch — see Task 2 scope call). CSS kept as the shared `Annotations.css` (splitting per-component is cosmetic and risks `no-raw-values`; global stylesheet is unchanged). Component+test stay co-located by the flat convention.
+  - [x] No `render/` export moved → both `vi.mock("./render")` barrels untouched (AP-2 N/A). `no-raw-values.test.ts` re-run green (no CSS moved).
+  - [x] Suite green (429), contract byte-identical, typecheck + build clean. (Landed across the extraction commits.)
+- [x] **Task 5 — Close-out.**
+  - [~] Cross-model Codex review per thread (AP-3): RECOMMENDED NEXT STEP, not run inline (running it from the same model defeats the cross-model purpose; the dev-story workflow's own tip is to run `code-review` with a DIFFERENT LLM). Flagged in Completion Notes.
+  - [x] Updated `annotations/README.md` with the new module map + the descriptor pattern (Story 5.0 section).
+  - [x] Bumped `server/pyproject.toml` version `0.2.0 → 0.2.1` (verified live: `/api/health` → `{"version":"0.2.1"}`). No `/api` change → `docs/API.md` untouched; `openapi.json` left byte-identical (its `info.version` was already stale at `0.1.10` pre-story — a pre-existing artifact-staleness, out of scope for a contract-neutral refactor).
+  - [x] Confirmatory live smoke (own servers on 8011/5191, never the user's 8000): loaded a PDF (23 pages rendered), drew a pen stroke (real pointer events → `usePenGesture` → mark created), selection quick-box opened ("Pen actions" via the descriptor), recolored (default → green via `patchAnnotations`), Del-deleted. All correct. Servers shut down after.
 
 ## Dev Notes
 
@@ -136,16 +137,37 @@ claude-opus-4-8 (Claude Code, bmad-dev-story).
 
 **Task 2 (PR 2) — Descriptor registry + dedup.** Added `annotations/marks.ts` (`MARK_DESCRIPTORS` + `quickBoxSpec`) as the single per-mark dispatch source. `store/index.ts`: five guard-then-map twins → one `patchAnnotations` combinator (recolor/restroke/realpha/resizeMemo; retext+delete keep distinct shapes). `AnnotationInteraction.tsx`: quick-box rows + aria-label + bubble-exclusion now read `quickBoxSpec`. `AnnotationLayer.tsx`: 5 render-func preambles → `markState` + `markClass` (class strings byte-identical). create-build registry + layer opacity-group DOM intentionally NOT collapsed (see Tasks/Subtasks scope calls). Verified: typecheck clean, 422 client tests green (415 unchanged + 7 new), contract diff empty.
 
+**Task 3 scope decision (user, OOP/encapsulation over async reducer).** When asked how to scope the overlay FSM given that gesture buffers are read synchronously in document handlers (AP-1) — which an async `useReducer` cannot preserve byte-identically — the user chose the OOP/encapsulation answer: encapsulate each gesture as a cohesive hook owning its synchronous state, rather than forcing the drafts into a reducer. So Task 3 + Task 4 merged into a per-gesture/per-component extraction. `machine.ts` stays the create-picker control reducer (the one true FSM; classifying it would break `machine.test.ts`).
+
+**Tasks 3+4 (PRs 3-6) — module split.** `gestures/shared.ts` (`GestureContext`, `isExempt`), `gestures/usePenGesture.ts`, `gestures/useBoxGesture.ts`, `gestures/useMemoPlacement.ts`, `gestures/useSelection.ts` — each gesture lifted VERBATIM into a cohesive hook owning its synchronous refs + document handlers. `MemoBox.tsx` + `CommentBubble.tsx` extracted from the layer. Result: `AnnotationInteraction.tsx` 1186 → 637, `AnnotationLayer.tsx` 557 → 386. The component is now the composition core (create-on-release + the cursor-mode picker machine + previews); the layer is the render shell (opacity groups + dual-render kept deliberately). Verified per commit: typecheck clean, suite green (429), contract byte-identical, no existing test modified.
+
+**Task 5 — close-out + verification.** README module-map section added; version `0.2.0 → 0.2.1`. Full matrix green: backend 43, client 429, `no-raw-values` 44, typecheck clean, prod build clean, contract diff empty. **Live smoke** (own servers 8011/5191, user's 8000 untouched): PDF rendered (23 pages); pen-stroke via real pointer events created a mark and opened the "Pen actions" selection box (the descriptor + `usePenGesture` + `useSelection` live); recolor (→ green, `patchAnnotations`) and Del-delete both worked. **Recommended next step:** run `/code-review` (or `bmad-code-review` via Codex) with a DIFFERENT LLM for the cross-model review (AP-3) — not run inline since same-model review defeats the purpose.
+
+**Observed pre-existing flake (not introduced):** `Reader.test.tsx` Ctrl+wheel test failed once in one full parallel run, passed in isolation + every rerun; this story touches zero Reader/render code. Left as-is.
+
 ### File List
 
-- `client/src/annotations/create.ts` (modified — Task 1 contract consolidation)
-- `client/src/annotations/AnnotationInteraction.tsx` (modified — Task 1 `defaultsRef`; Task 2 `quickBoxSpec` wiring)
-- `client/src/store/index.ts` (modified — Task 2 `patchAnnotations` combinator)
-- `client/src/annotations/AnnotationLayer.tsx` (modified — Task 2 `markState`/`markClass` dedup)
-- `client/src/annotations/marks.ts` (new — descriptor registry)
-- `client/src/annotations/marks.test.ts` (new — registry unit tests)
+Modified:
+- `client/src/annotations/create.ts` (Task 1 contract consolidation)
+- `client/src/annotations/AnnotationInteraction.tsx` (Task 1 `defaultsRef`; Task 2 `quickBoxSpec`; Tasks 3-4 gesture/selection extraction → 637 lines)
+- `client/src/store/index.ts` (Task 2 `patchAnnotations` combinator)
+- `client/src/annotations/AnnotationLayer.tsx` (Task 2 `markState`/`markClass`; Task 4 sub-component extraction → 386 lines)
+- `client/src/annotations/README.md` (Task 5 module map)
+- `server/pyproject.toml` (Task 5 version `0.2.0 → 0.2.1`)
+
+New:
+- `client/src/annotations/marks.ts` + `marks.test.ts` (descriptor registry + tests)
+- `client/src/annotations/gestures/shared.ts` (`GestureContext` + `isExempt`)
+- `client/src/annotations/gestures/usePenGesture.ts`
+- `client/src/annotations/gestures/useBoxGesture.ts`
+- `client/src/annotations/gestures/useMemoPlacement.ts`
+- `client/src/annotations/gestures/useSelection.ts`
+- `client/src/annotations/MemoBox.tsx`
+- `client/src/annotations/CommentBubble.tsx`
 
 ### Change Log
 
-- Task 1 (PR 1): consolidate create-request data contracts + active-default refs (no behavior/contract change). 2026-06-30.
-- Task 2 (PR 2): descriptor registry (`marks.ts`) + store twin combinator (`patchAnnotations`) + layer render-preamble dedup (`markState`/`markClass`); quick-box reads the registry. No behavior/contract change. 2026-06-30.
+- Task 1 (PR 1, `f11724f`): consolidate create-request data contracts + active-default refs. No behavior/contract change. 2026-06-30.
+- Task 2 (PR 2, `fb7e20f`): descriptor registry (`marks.ts`) + store twin combinator (`patchAnnotations`) + layer render-preamble dedup (`markState`/`markClass`); quick-box reads the registry. No behavior/contract change. 2026-06-30.
+- Tasks 3-4 (PRs, `76d4268` / `ab5f00e` / `616d057`): extract pen/box/memo gestures + `useSelection` hook + `MemoBox`/`CommentBubble`; `AnnotationInteraction` 1186 → 637, `AnnotationLayer` 557 → 386. No behavior/contract change. 2026-06-30.
+- Task 5: README module map; version `0.2.0 → 0.2.1`; full verification matrix + live smoke. 2026-06-30.
