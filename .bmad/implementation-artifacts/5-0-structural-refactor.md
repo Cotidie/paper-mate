@@ -56,7 +56,7 @@ so that adding a tool or an edit is one registration, not edits across five `if`
   - [x] No `render/` export moved → both `vi.mock("./render")` barrels untouched (AP-2 N/A). `no-raw-values.test.ts` re-run green (no CSS moved).
   - [x] Suite green (429), contract byte-identical, typecheck + build clean. (Landed across the extraction commits.)
 - [x] **Task 5 — Close-out.**
-  - [~] Cross-model Codex review per thread (AP-3): RECOMMENDED NEXT STEP, not run inline (running it from the same model defeats the cross-model purpose; the dev-story workflow's own tip is to run `code-review` with a DIFFERENT LLM). Flagged in Completion Notes.
+  - [x] Cross-model Codex review (AP-3): ran `bmad-code-review` via `codex exec` (Codex 0.142.4, a different model) against the story + the full diff (`b45880f..HEAD`). Verdict **Changes Requested**, 0 High / 1 Med / 0 Low. The one Med (committed `uv.lock` still at `0.1.10` after the version bump) is RESOLVED (`79c8ec4`). AC-1..AC-4 all audited Met (under the approved scope decisions); behavior + contract neutrality confirmed. Report: `.bmad/implementation-artifacts/5-0-code-review-codex.md`.
   - [x] Updated `annotations/README.md` with the new module map + the descriptor pattern (Story 5.0 section).
   - [x] Bumped `server/pyproject.toml` version `0.2.0 → 0.2.1` (verified live: `/api/health` → `{"version":"0.2.1"}`). No `/api` change → `docs/API.md` untouched; `openapi.json` left byte-identical (its `info.version` was already stale at `0.1.10` pre-story — a pre-existing artifact-staleness, out of scope for a contract-neutral refactor).
   - [x] Confirmatory live smoke (own servers on 8011/5191, never the user's 8000): loaded a PDF (23 pages rendered), drew a pen stroke (real pointer events → `usePenGesture` → mark created), selection quick-box opened ("Pen actions" via the descriptor), recolored (default → green via `patchAnnotations`), Del-deleted. All correct. Servers shut down after.
@@ -171,3 +171,4 @@ New:
 - Task 2 (PR 2, `fb7e20f`): descriptor registry (`marks.ts`) + store twin combinator (`patchAnnotations`) + layer render-preamble dedup (`markState`/`markClass`); quick-box reads the registry. No behavior/contract change. 2026-06-30.
 - Tasks 3-4 (PRs, `76d4268` / `ab5f00e` / `616d057`): extract pen/box/memo gestures + `useSelection` hook + `MemoBox`/`CommentBubble`; `AnnotationInteraction` 1186 → 637, `AnnotationLayer` 557 → 386. No behavior/contract change. 2026-06-30.
 - Task 5: README module map; version `0.2.0 → 0.2.1`; full verification matrix + live smoke. 2026-06-30.
+- Review fix (`79c8ec4`): cross-model Codex review (Changes Requested, 1 Med) → synced `server/uv.lock` to `0.2.1`. 2026-06-30.
