@@ -7,8 +7,10 @@
 // geometry edit). This IS the single command path every edit routes through (AD-7,
 // AE-3) — no component mutates annotations outside it. The do/undo STACK is here
 // (Story 3.2): zundo wraps the store, tracking only `annotations` in temporal
-// history. The dirty flag + debounced autosave (3.4) and hydrate-on-open (3.5)
-// are NOT here yet. Dependency-clean per AD-9: imports `api/` types only.
+// history. The dirty flag + debounced single-flight autosave (3.4) is a passive
+// observer in `useAutosave.ts`, NOT here (AC-7: no new mutation path). Hydrate-
+// on-open (3.5) is also not here yet. Dependency-clean per AD-9: imports `api/`
+// types only.
 //
 // zundo (Story 3.2 / AE-1): `temporal` wraps the store and records the `annotations`
 // Map on every mutating `set()`. Partialized to `{ annotations }` only — all other

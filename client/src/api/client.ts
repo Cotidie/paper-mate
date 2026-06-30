@@ -50,3 +50,18 @@ export async function uploadDoc(file: File): Promise<Doc> {
   if (!res.ok) throw await envelopeError(res);
   return (await res.json()) as Doc;
 }
+
+/**
+ * Overwrite a document's full annotation set (`PUT /api/docs/{doc_id}/annotations`).
+ * AR-7/H6: the autosave hook calls this single-flight, debounced, with the
+ * FULL current set every time. H9: the body is the bare list; the
+ * `{schema_version, annotations}` disk envelope is storage-internal.
+ */
+export async function putAnnotations(docId: string, annotations: Annotation[]): Promise<void> {
+  const res = await fetch(`/api/docs/${encodeURIComponent(docId)}/annotations`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(annotations),
+  });
+  if (!res.ok) throw await envelopeError(res);
+}

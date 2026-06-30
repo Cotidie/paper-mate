@@ -3,15 +3,17 @@
 ``POST /api/docs`` imports a PDF by delegating to the storage module and
 returns the ``Doc`` contract. A bad PDF becomes the single error envelope
 ``{ "detail": string }``. ``GET /api/docs/{doc_id}/file`` streams the stored
-bytes. Reserved (not built here): ``GET /api/docs``, ``GET /api/docs/{doc_id}``,
-``/api/docs/{doc_id}/annotations``.
+bytes. ``PUT /api/docs/{doc_id}/annotations`` overwrites the full annotation
+set (AR-7, H9: bare list body, disk envelope is storage-internal). Reserved
+(not built here): ``GET /api/docs``, ``GET /api/docs/{doc_id}``,
+``GET /api/docs/{doc_id}/annotations`` (Story 3.5).
 """
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app import storage
-from app.models import Doc
+from app.models import Annotation, Doc
 
 router = APIRouter(tags=["docs"])
 
@@ -67,3 +69,37 @@ async def get_doc_file(doc_id: str) -> FileResponse:
     except storage.StorageError as exc:
         raise HTTPException(status_code=500, detail="Could not read document") from exc
     return FileResponse(path, media_type="application/pdf")
+
+
+@router.put(
+    "/docs/{doc_id}/annotations",
+    response_model=list[Annotation],
+    responses={
+        404: {
+            "description": "No document with this id.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+        500: {
+            "description": "The annotation set could not be saved.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+    },
+)
+async def put_annotations(doc_id: str, annotations: list[Annotation]) -> list[Annotation]:
+    """Overwrite the document's full annotation set, atomically (AR-7, H6).
+
+    The request/response body is the bare list (H9); the on-disk envelope
+    is added/stripped only inside storage. No history, undo, or merge here:
+    this overwrites with exactly what it received.
+    """
+    try:
+        storage.write_annotations(doc_id, annotations)
+    except storage.DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Document not found") from exc
+    except storage.StorageError as exc:
+        raise HTTPException(status_code=500, detail="Could not save annotations") from exc
+    return annotations
