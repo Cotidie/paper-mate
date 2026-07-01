@@ -390,7 +390,9 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     const group = container.querySelector(".annotation-comments")!;
     expect(group.contains(pin)).toBe(true);
     expect(group.getAttribute("aria-hidden")).toBeNull();
-    expect(pin.style.backgroundColor).toBe("var(--color-annotation-pink)");
+    // The pin tints its ChatCircle icon via currentColor (fix request: an icon,
+    // not a filled dot, so the text under it stays legible).
+    expect(pin.style.color).toBe("var(--color-annotation-pink)");
   });
 
   it("a kind=rect comment paints a fill AND a pin (Story 2.11 region fill branch)", () => {

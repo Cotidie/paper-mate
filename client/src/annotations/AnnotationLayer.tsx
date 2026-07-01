@@ -29,6 +29,7 @@
 // non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
 
 import { useRef } from "react";
+import { ChatCircle } from "@phosphor-icons/react";
 import type { Annotation } from "../api/client";
 import { useAnnotationStore } from "../store";
 import { denormalizeRect, denormalizePoint, pointsBounds, type PageBox, type ScreenRect } from "../anchor";
@@ -340,7 +341,11 @@ export default function AnnotationLayer({
   // Render one comment's PIN (both kinds) + its bubble when selected
   // (geometry-on-kind: a text comment anchors at its first rect's start; a rect
   // comment at the rect's top-left). The pin is a round <button> (keyboard-
-  // reachable, the click selects the comment); the fill (text comments only) is
+  // reachable, the click selects the comment) holding a ChatCircle glyph tinted
+  // with the mark's color at ~0.4 opacity (fix request: a plain color dot read
+  // as decoration, not "comment", and a solid dot blotted out the text under
+  // it) — same opacity as the highlight fill, so the glyph reads as a comment
+  // marker without hiding the run underneath. The fill (text comments only) is
   // painted by the highlight group. The bubble mounts only for the EXACTLY-selected
   // annotation (not group siblings), so a two-page comment shows one bubble.
   const renderComment = (a: Annotation) => {
@@ -364,12 +369,14 @@ export default function AnnotationLayer({
           style={{
             left: anchor.left,
             top: anchor.top,
-            backgroundColor: `var(--color-${a.style.color})`,
+            color: `var(--color-${a.style.color})`,
           }}
           onPointerEnter={() => setHovered(a.id)}
           onPointerLeave={() => setHovered(null)}
           onClick={() => select(a.id)}
-        />
+        >
+          <ChatCircle weight="fill" aria-hidden className="annotation-comment-pin__icon" />
+        </button>
         {a.id === selectedId && (
           <CommentBubble
             anno={a}
