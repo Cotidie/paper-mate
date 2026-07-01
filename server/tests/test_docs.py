@@ -172,6 +172,54 @@ def test_put_annotations_malformed_body_returns_422_string_detail(data_root):
     assert isinstance(resp.json()["detail"], str)
 
 
+def test_get_annotations_round_trips_after_put(data_root):
+    """AC-5: PUT then GET returns the saved list (lossless round-trip, bare body)."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id = client.post("/api/docs", files={"file": ("g.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    body = [annotation_payload(doc_id)]
+    client.put(f"/api/docs/{doc_id}/annotations", json=body)
+
+    resp = client.get(f"/api/docs/{doc_id}/annotations")
+    assert resp.status_code == 200
+    got = resp.json()
+    assert isinstance(got, list)
+    assert got[0]["id"] == body[0]["id"]
+    assert got[0]["anchor"]["kind"] == "text"
+
+
+def test_get_annotations_unannotated_returns_empty_list(data_root):
+    """AC-1: an imported-but-unannotated doc returns 200 + [] (not a 404)."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id = client.post("/api/docs", files={"file": ("u.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    resp = client.get(f"/api/docs/{doc_id}/annotations")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_get_annotations_unknown_doc_returns_404_detail(data_root):
+    resp = client.get(f"/api/docs/{'0' * 64}/annotations")
+    assert resp.status_code == 404
+    assert isinstance(resp.json()["detail"], str)
+
+
+def test_get_annotations_unknown_schema_returns_500_detail(data_root):
+    """AC-3: a corrupt/unknown-version disk file surfaces the single { detail } 500."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id = client.post("/api/docs", files={"file": ("bad.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    (data_root / "library" / doc_id / "annotations.json").write_text(
+        json.dumps({"schema_version": 99, "annotations": []})
+    )
+    resp = client.get(f"/api/docs/{doc_id}/annotations")
+    assert resp.status_code == 500
+    assert isinstance(resp.json()["detail"], str)
+
+
 def test_put_annotations_disk_failure_returns_500_envelope(data_root, monkeypatch):
     """Codex review (Story 3.4): a filesystem failure during the atomic write
     must still answer the single { detail } envelope (AR-11), not bypass it."""

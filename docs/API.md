@@ -82,6 +82,20 @@ with exactly what it received.
 
 > On-disk shape (internal, never sent/received over the API): `{ "schema_version": 1, "annotations": [Annotation, ...] }`.
 
+### `GET /api/docs/{doc_id}/annotations` — read the saved annotation set
+
+Hydrate-on-open path (AR-6, AD-6): the client GETs this once when a document is
+opened and restores the marks into its working copy, BEFORE the reader mounts.
+The disk envelope is stripped inside storage — the API body is the bare list (H9).
+
+- **200** → bare `Annotation[]` (the saved set). An **imported-but-unannotated**
+  doc (no `annotations.json` on disk) returns `[]` (a normal 200, not a 404).
+- **404** → `{ "detail": "Document not found" }` — `doc_id` has no `meta.json`
+  (never imported).
+- **500** → `{ "detail": "Could not read annotations" }` — a corrupt
+  `annotations.json` or an unknown on-disk `schema_version` (rejected, never
+  guessed — AD-8).
+
 ## Reserved (not yet built)
 
 Declared by the architecture (AR-11), implemented in later stories. Do not
@@ -91,12 +105,12 @@ assume these exist until they appear above.
 | --- | --- | --- |
 | `GET /api/docs` | List library documents | TBD |
 | `GET /api/docs/{doc_id}` | Get one document's metadata | TBD |
-| `GET /api/docs/{doc_id}/annotations` | Fetch the saved annotation set (hydrate-on-open) | Story 3.5 |
 
 > **`Style` fields:** `color` (token name), `stroke_width` (pen-only, scale-1.0 px; `null` for text/region marks), `alpha` (pen-only transparency 0..1; `null` = render at the default highlighter opacity `0.4`; additive optional field, Story 2.13, AD-8).
 
 ## Changelog
 
+- **2026-07-01 (Story 3.5):** added `GET /api/docs/{doc_id}/annotations` (hydrate-on-open; bare list, `[]` when unannotated, 500 on a corrupt/unknown-version disk file). `components.schemas` shape unchanged (`list[Annotation]` already emitted by the 3.4 PUT). `GET /api/docs` + `GET /api/docs/{doc_id}` stay reserved.
 - **2026-07-01 (Story 3.4):** added `PUT /api/docs/{doc_id}/annotations` (overwrite full set, atomic). GET stays reserved (3.5). The manual `Annotation` OpenAPI injection in `app/main.py` is removed: the real PUT route now emits `Annotation` (+ its anchor variants) into the contract.
 - **2026-06-30 (Story 2.13):** `Style` gains `alpha: float | null` (pen stroke transparency, 0..1; optional with default `null` = render at highlighter opacity; additive, no format break, AD-8). No endpoints added.
 - **2026-06-29 (Story 2.2):** added the `Annotation` entity (+ `Anchor` variants `TextAnchor`/`RectAnchor`/`PathAnchor`, `Rect`, `Point`, `Style`) to `components.schemas` for the generated client type. No endpoints added (the `/annotations` GET/PUT stay Epic 3).

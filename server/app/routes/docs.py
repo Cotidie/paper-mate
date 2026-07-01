@@ -4,9 +4,10 @@
 returns the ``Doc`` contract. A bad PDF becomes the single error envelope
 ``{ "detail": string }``. ``GET /api/docs/{doc_id}/file`` streams the stored
 bytes. ``PUT /api/docs/{doc_id}/annotations`` overwrites the full annotation
-set (AR-7, H9: bare list body, disk envelope is storage-internal). Reserved
-(not built here): ``GET /api/docs``, ``GET /api/docs/{doc_id}``,
-``GET /api/docs/{doc_id}/annotations`` (Story 3.5).
+set (AR-7, H9: bare list body, disk envelope is storage-internal).
+``GET /api/docs/{doc_id}/annotations`` reads it back for hydrate-on-open
+(Story 3.5; bare list, ``[]`` when unannotated). Reserved (not built here):
+``GET /api/docs``, ``GET /api/docs/{doc_id}``.
 """
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -69,6 +70,40 @@ async def get_doc_file(doc_id: str) -> FileResponse:
     except storage.StorageError as exc:
         raise HTTPException(status_code=500, detail="Could not read document") from exc
     return FileResponse(path, media_type="application/pdf")
+
+
+@router.get(
+    "/docs/{doc_id}/annotations",
+    response_model=list[Annotation],
+    responses={
+        404: {
+            "description": "No document with this id.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+        500: {
+            "description": "The stored annotation set is unreadable.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+    },
+)
+async def get_annotations(doc_id: str) -> list[Annotation]:
+    """Return a document's saved annotation set for hydrate-on-open (AR-6, H9).
+
+    The response body is the bare list (H9); the on-disk envelope is stripped
+    only inside storage. An imported-but-unannotated doc returns ``[]`` (200,
+    not 404). Unknown/unresolvable id → 404; a corrupt or unknown-version disk
+    file → 500. Both use the single ``{ "detail" }`` envelope (AR-11).
+    """
+    try:
+        return storage.read_annotations(doc_id)
+    except storage.DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Document not found") from exc
+    except storage.StorageError as exc:
+        raise HTTPException(status_code=500, detail="Could not read annotations") from exc
 
 
 @router.put(

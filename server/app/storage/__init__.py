@@ -46,6 +46,15 @@ class CorruptMetadataError(StorageError):
     """An on-disk ``meta.json`` is unreadable or has an invalid shape."""
 
 
+class CorruptAnnotationsError(StorageError):
+    """An on-disk ``annotations.json`` is unreadable or has an invalid shape.
+
+    A distinct fault from ``CorruptMetadataError`` (a precise taxonomy for
+    future logging/handling); both are ``StorageError`` so the route maps them
+    to the single 500 envelope with no extra handling.
+    """
+
+
 class DocumentNotFoundError(StorageError):
     """No imported document (or its ``source.pdf``) exists for the given ``doc_id``."""
 
@@ -248,3 +257,59 @@ def write_annotations(doc_id: str, annotations: list[Annotation]) -> None:
         "annotations": [a.model_dump(mode="json") for a in annotations],
     }
     _atomic_write(doc_dir / "annotations.json", json.dumps(payload, indent=2).encode("utf-8"))
+
+
+def read_annotations(doc_id: str) -> list[Annotation]:
+    """Read ``library/{doc_id}/annotations.json`` and return the BARE list (H9).
+
+    The READ mirror of ``write_annotations`` (Story 3.5, hydrate-on-open). Same
+    error taxonomy as ``_read_meta``: an unknown ``schema_version`` or a
+    corrupt/wrong-shape file is REJECTED, never guessed (AD-8). Strips the
+    ``{schema_version, annotations}`` disk envelope and returns the annotations
+    list; the caller (route/client) only ever sees the bare list.
+
+    - ``DocumentNotFoundError`` for a doc_id that doesn't resolve or has no valid
+      ``meta.json`` (a never-imported doc has no annotations to invent).
+    - An imported-but-never-annotated doc (no ``annotations.json``) restores as
+      an EMPTY list via a normal return — this is the common first-open case,
+      NOT an error.
+    - ``UnsupportedSchemaError`` for an unknown ``schema_version``;
+      ``CorruptAnnotationsError`` for unreadable JSON or an invalid shape.
+    """
+    try:
+        doc_dir = _doc_dir(doc_id)
+    except StorageError as exc:
+        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
+    if _read_meta(doc_dir) is None:
+        raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
+    annotations_path = doc_dir / "annotations.json"
+    if not annotations_path.is_file():
+        return []  # imported but never annotated — an empty set, not an error
+    try:
+        payload = json.loads(annotations_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise CorruptAnnotationsError(f"unreadable annotations.json: {exc}") from exc
+    version = payload.get("schema_version") if isinstance(payload, dict) else None
+    if version != ANNOTATIONS_SCHEMA_VERSION:
+        raise UnsupportedSchemaError(f"unknown annotations schema_version: {version!r}")
+    raw = payload.get("annotations")
+    if not isinstance(raw, list):
+        raise CorruptAnnotationsError("annotations.json 'annotations' is not a list")
+    try:
+        parsed = [Annotation.model_validate(a) for a in raw]
+    except ValidationError as exc:
+        raise CorruptAnnotationsError(f"invalid annotations.json shape: {exc}") from exc
+    # Collection-level integrity the client can't recover from silently: a
+    # duplicate id would be collapsed by the store's id-keyed Map (last wins,
+    # NFR-4 loss) and an entry belonging to another doc would restore into the
+    # wrong reader. Reject both as corrupt rather than guess (AC-3/AC-5, AD-8).
+    seen: set[str] = set()
+    for ann in parsed:
+        if ann.id in seen:
+            raise CorruptAnnotationsError(f"duplicate annotation id {ann.id!r} in annotations.json")
+        seen.add(ann.id)
+        if ann.doc_id != doc_id:
+            raise CorruptAnnotationsError(
+                f"annotation {ann.id!r} doc_id {ann.doc_id!r} does not match {doc_id!r}"
+            )
+    return parsed

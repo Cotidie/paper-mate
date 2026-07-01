@@ -41,6 +41,11 @@ beforeEach(() => {
   // App fetches the version on mount (GET /api/health). Stub it so tests never
   // hit the network; individual tests override when they assert the value.
   vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9" });
+  // Story 3.5: handleFile now GETs the saved annotations on open. Default to an
+  // empty set so every existing open-a-doc test never fires the real fetch;
+  // individual tests override to assert restore behavior (CLAUDE.md: keep test
+  // scaffolding in sync).
+  vi.spyOn(api, "getAnnotations").mockResolvedValue([]);
 });
 
 const fakeDoc: api.Doc = {
@@ -482,6 +487,88 @@ function mark(id: string, docId: string): Annotation {
     updated_at: "2026-07-01T00:00:01Z",
   };
 }
+
+describe("restore-on-open — the anti-clobber baseline (Story 3.5, AC-4)", () => {
+  afterEach(() => {
+    useAnnotationStore.setState({ annotations: new Map() });
+    useAnnotationStore.temporal.getState().clear();
+  });
+
+  it("restoring marks on open does NOT dirty autosave (no spurious PUT)", async () => {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "getAnnotations").mockResolvedValue([mark("r1", fakeDoc.doc_id)]);
+    const putSpy = vi.spyOn(api, "putAnnotations").mockResolvedValue(undefined);
+
+    // Fake timers are enabled BEFORE render/open so that a debounce scheduled
+    // DURING open (a regression that dirties on hydrate) is created under fake
+    // timers and is actually driven by advanceTimersByTimeAsync — otherwise a
+    // real-timer PUT would fire after the test and falsely pass (Codex review).
+    vi.useFakeTimers();
+    try {
+      render(<App />);
+      fireEvent.change(screen.getByTestId("dropzone-input"), {
+        target: { files: [pdfFile()] },
+      });
+      // Flush the open promises (uploadDoc + getAnnotations) AND advance well past
+      // the debounce in one go — all under fake timers.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DEBOUNCE_MS * 2);
+      });
+      expect(screen.queryByTestId("reader-backdrop")).toBeTruthy();
+      // The restored mark is in the working copy, and no PUT was scheduled.
+      expect(useAnnotationStore.getState().annotations.has("r1")).toBe(true);
+      expect(putSpy).not.toHaveBeenCalled();
+
+      // Ctrl+Z right after open cannot remove the restored mark (undo floor, AC-4).
+      act(() => {
+        useAnnotationStore.temporal.getState().undo();
+      });
+      expect(useAnnotationStore.getState().annotations.has("r1")).toBe(true);
+      expect(useAnnotationStore.temporal.getState().pastStates.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a real edit AFTER restore still dirties + PUTs (baseline→dirty works)", async () => {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "getAnnotations").mockResolvedValue([mark("r1", fakeDoc.doc_id)]);
+    const putSpy = vi.spyOn(api, "putAnnotations").mockResolvedValue(undefined);
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        useAnnotationStore.getState().addAnnotation(mark("new", fakeDoc.doc_id));
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() => expect(putSpy).toHaveBeenCalled());
+  });
+
+  it("a GET failure on open keeps the reader closed (no empty-store clobber, AC-5)", async () => {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "getAnnotations").mockRejectedValue(new Error("network down"));
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(screen.getByText("Couldn't open this file.")).toBeTruthy());
+    // Stayed in S0: the reader never mounted.
+    expect(screen.queryByTestId("reader-backdrop")).toBeNull();
+    expect(screen.getByTestId("empty-dropzone")).toBeTruthy();
+  });
+});
 
 describe("autosave save-failure toast (Story 3.4, AC-5)", () => {
   afterEach(() => {

@@ -74,7 +74,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get Annotations
+         * @description Return a document's saved annotation set for hydrate-on-open (AR-6, H9).
+         *
+         *     The response body is the bare list (H9); the on-disk envelope is stripped
+         *     only inside storage. An imported-but-unannotated doc returns ``[]`` (200,
+         *     not 404). Unknown/unresolvable id → 404; a corrupt or unknown-version disk
+         *     file → 500. Both use the single ``{ "detail" }`` envelope (AR-11).
+         */
+        get: operations["get_annotations_api_docs__doc_id__annotations_get"];
         /**
          * Put Annotations
          * @description Overwrite the document's full annotation set, atomically (AR-7, H6).
@@ -360,6 +369,55 @@ export interface operations {
                 };
             };
             /** @description The stored document is unreadable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_annotations_api_docs__doc_id__annotations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Annotation"][];
+                };
+            };
+            /** @description No document with this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The stored annotation set is unreadable. */
             500: {
                 headers: {
                     [name: string]: unknown;

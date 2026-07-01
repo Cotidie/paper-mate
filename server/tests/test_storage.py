@@ -211,3 +211,102 @@ def test_write_annotations_without_meta_raises_not_found(data_root):
     (data_root / "library" / doc_id / "meta.json").unlink()
     with pytest.raises(storage.DocumentNotFoundError):
         storage.write_annotations(doc_id, [])
+
+
+def test_read_annotations_round_trips_written_set(data_root):
+    """AC-5: read_annotations returns exactly what write_annotations persisted
+    (same ids/anchors/styles/body/group_id), stripping the disk envelope (H9)."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "r.pdf")
+    ann = make_annotation(doc_id)
+    storage.write_annotations(doc_id, [ann])
+
+    restored = storage.read_annotations(doc_id)
+    assert len(restored) == 1
+    assert restored[0] == ann
+    assert restored[0].id == ann.id
+    assert restored[0].anchor.kind == "text"
+
+
+def test_read_annotations_no_file_returns_empty(data_root):
+    """AC-1: an imported-but-never-annotated doc restores as [] (not a 404/error)."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "unann.pdf")
+    assert storage.read_annotations(doc_id) == []
+
+
+def test_read_annotations_unknown_doc_raises_not_found(data_root):
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.read_annotations("0" * 64)
+
+
+def test_read_annotations_without_meta_raises_not_found(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "nm.pdf")
+    (data_root / "library" / doc_id / "meta.json").unlink()
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.read_annotations(doc_id)
+
+
+def test_read_annotations_unknown_schema_version_raises(data_root):
+    """AC-3: an unknown schema_version is rejected, never guessed."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "v.pdf")
+    (data_root / "library" / doc_id / "annotations.json").write_text(
+        json.dumps({"schema_version": 99, "annotations": []})
+    )
+    with pytest.raises(storage.UnsupportedSchemaError):
+        storage.read_annotations(doc_id)
+
+
+def test_read_annotations_malformed_json_raises_corrupt(data_root):
+    """AC-3: unreadable JSON is rejected, not treated as empty."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "c.pdf")
+    (data_root / "library" / doc_id / "annotations.json").write_text("{ not json")
+    with pytest.raises(storage.CorruptAnnotationsError):
+        storage.read_annotations(doc_id)
+
+
+def test_read_annotations_wrong_shape_raises_corrupt(data_root):
+    """AC-3: valid JSON of the wrong shape (annotations not a list, or a member
+    missing required fields) is rejected as corrupt."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "s.pdf")
+    ann_path = data_root / "library" / doc_id / "annotations.json"
+
+    # 'annotations' is not a list.
+    ann_path.write_text(json.dumps({"schema_version": 1, "annotations": {"id": "x"}}))
+    with pytest.raises(storage.CorruptAnnotationsError):
+        storage.read_annotations(doc_id)
+
+    # A member is missing required fields.
+    ann_path.write_text(json.dumps({"schema_version": 1, "annotations": [{"id": "x"}]}))
+    with pytest.raises(storage.CorruptAnnotationsError):
+        storage.read_annotations(doc_id)
+
+
+def test_read_annotations_duplicate_id_raises_corrupt(data_root):
+    """AC-5: a duplicate id would be collapsed by the client's id-keyed Map (silent
+    loss) — reject it instead of guessing."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "dup.pdf")
+    dup = make_annotation(doc_id).model_dump(mode="json")
+    (data_root / "library" / doc_id / "annotations.json").write_text(
+        json.dumps({"schema_version": 1, "annotations": [dup, dup]})
+    )
+    with pytest.raises(storage.CorruptAnnotationsError):
+        storage.read_annotations(doc_id)
+
+
+def test_read_annotations_foreign_doc_id_raises_corrupt(data_root):
+    """AC-5: an entry whose doc_id belongs to another document would restore into
+    the wrong reader — reject it as corrupt."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "foreign.pdf")
+    foreign = make_annotation("some-other-doc-id").model_dump(mode="json")
+    (data_root / "library" / doc_id / "annotations.json").write_text(
+        json.dumps({"schema_version": 1, "annotations": [foreign]})
+    )
+    with pytest.raises(storage.CorruptAnnotationsError):
+        storage.read_annotations(doc_id)
