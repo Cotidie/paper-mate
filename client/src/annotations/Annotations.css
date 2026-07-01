@@ -501,15 +501,14 @@
 }
 
 /* A comment PIN (DESIGN.md#annotation-comment-pin): a ChatCircle glyph anchored
-   at the run start / click point, marking a commented spot. A real <button>
-   (keyboard reachable, focus ring); the accent tint comes inline from
-   style.color (currentColor, read by the icon). Rides the denormalized anchor
-   (inline left/top) so it stays glued on zoom (NFR-3). */
+   at the run start / click point, marking a commented spot. A fixed white body
+   + ink border (fix request) — NOT tinted to the mark's own color, so it reads
+   as the same "comment" badge regardless of accent (the highlight fill
+   underneath already carries the color cue). A real <button> (keyboard
+   reachable, focus ring). Rides the denormalized anchor (inline left/top) so
+   it stays glued on zoom (NFR-3). */
 .annotation-comment-pin {
   position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: var(--comment-pin-size);
   height: var(--comment-pin-size);
   padding: 0;
@@ -519,13 +518,22 @@
   pointer-events: auto;
 }
 
-/* ~0.4 opacity (matches --annotation-highlight-opacity, the highlight fill's
-   own opacity) so the glyph reads as "comment" without blotting out the text
-   underneath it (fix request). */
+/* Two same-size glyphs stacked exactly on top of each other: no single
+   Phosphor weight is two-tone, so the white body comes from the `fill`-weight
+   layer and the border from the `regular`-weight layer drawn over it. */
 .annotation-comment-pin__icon {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  opacity: var(--annotation-highlight-opacity);
+}
+
+.annotation-comment-pin__icon--fill {
+  color: var(--color-surface-card);
+}
+
+.annotation-comment-pin__icon--outline {
+  color: var(--color-ink);
 }
 
 .annotation-comment-pin--hovered {
