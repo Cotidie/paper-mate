@@ -35,6 +35,9 @@ export interface SelectionApi {
   restrokeSelected: (width: number) => void;
   realphaSelected: (alpha: number) => void;
   resizeSelected: (size: MemoSize) => void;
+  /** Turn the selected text highlight into a text comment (Story 3.7). Group-aware;
+   *  does NOT clear the selection so the comment's bubble opens for the same mark. */
+  convertSelected: () => void;
   deleteSelected: () => void;
   /** Session-default fallbacks for the rows when a mark's field is null. */
   activeStrokeWidth: number;
@@ -58,6 +61,7 @@ export function useSelection(opts: {
   const restrokeAnnotation = useAnnotationStore((s) => s.restrokeAnnotation);
   const realphaAnnotation = useAnnotationStore((s) => s.realphaAnnotation);
   const resizeMemoAnnotation = useAnnotationStore((s) => s.resizeMemoAnnotation);
+  const retypeAnnotation = useAnnotationStore((s) => s.retypeAnnotation);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
   const setActiveAlpha = useAnnotationStore((s) => s.setActiveAlpha);
@@ -165,6 +169,14 @@ export function useSelection(opts: {
     },
     [selectedAnno, resizeMemoAnnotation, selectedGroupIds, setActiveMemoSize, getPagesRef],
   );
+
+  // Turn the selected text highlight into a text comment (Story 3.7, AC1): one
+  // retypeAnnotation command, group-aware. Unlike recolor/resize, does NOT close
+  // the box or clear the selection — the mark stays selected so the comment
+  // descriptor (usesBubble=true) takes over and its bubble opens for it.
+  const convertSelected = useCallback(() => {
+    retypeAnnotation(selectedGroupIds(), "comment", "", new Date().toISOString());
+  }, [retypeAnnotation, selectedGroupIds]);
 
   // Delete via the store (removes id + group siblings AND clears `selectedId`).
   // Uses the doc-scoped mark so a stale cross-doc id can never be deleted here.
@@ -345,6 +357,7 @@ export function useSelection(opts: {
     restrokeSelected,
     realphaSelected,
     resizeSelected,
+    convertSelected,
     deleteSelected,
     activeStrokeWidth,
     activeAlpha,

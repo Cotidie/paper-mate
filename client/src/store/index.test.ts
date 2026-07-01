@@ -389,6 +389,90 @@ describe("geometry edit — setAnnotationGeometry (move/resize command path, Sto
   });
 });
 
+describe("convert highlight <-> comment — retypeAnnotation (Story 3.7)", () => {
+  it("flips highlight -> comment: type + body change together, updated_at bumped", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().retypeAnnotation(["a"], "comment", "", "2026-06-29T12:00:00Z");
+    const a = useAnnotationStore.getState().annotations.get("a")!;
+    expect(a.type).toBe("comment");
+    expect(a.body).toBe("");
+    expect(a.updated_at).toBe("2026-06-29T12:00:00Z");
+    expect(a.created_at).toBe("2026-06-29T00:00:01Z");
+  });
+
+  it("flips comment -> highlight: body drops to null even when it held a note", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation({
+      ...mark("c", "annotation-default", "2026-06-29T00:00:01Z"),
+      type: "comment",
+      body: "a note",
+    });
+    useAnnotationStore.getState().retypeAnnotation(["c"], "highlight", null, "2026-06-29T12:00:00Z");
+    const c = useAnnotationStore.getState().annotations.get("c")!;
+    expect(c.type).toBe("highlight");
+    expect(c.body).toBeNull();
+  });
+
+  it("is group-aware: both group_id siblings flip together in one call", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z", "g1"));
+    s.addAnnotation(mark("b", "annotation-default", "2026-06-29T00:00:01Z", "g1"));
+    useAnnotationStore.getState().retypeAnnotation(["a", "b"], "comment", "", "2026-06-29T12:00:00Z");
+    const map = useAnnotationStore.getState().annotations;
+    expect(map.get("a")!.type).toBe("comment");
+    expect(map.get("b")!.type).toBe("comment");
+  });
+
+  it("ignores an unknown id: Map reference is unchanged (zundo no-op suppression)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    const before = useAnnotationStore.getState().annotations;
+    useAnnotationStore.getState().retypeAnnotation(["missing"], "comment", "", "2026-06-29T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations).toBe(before);
+  });
+
+  it("Task 4 regression: forward convert, a typed-body session, and reverse convert are THREE distinct undo steps", () => {
+    const s = useAnnotationStore.getState();
+    const t = () => useAnnotationStore.temporal.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z")); // highlight
+    const depth0 = t().pastStates.length;
+
+    s.retypeAnnotation(["a"], "comment", "", "2026-06-29T12:00:00Z"); // forward convert
+    expect(t().pastStates.length).toBe(depth0 + 1);
+
+    // A typed-body session, coalesced exactly like AnnotationLayer's focus/blur
+    // handlers (Story 3.2): pause -> N retext calls -> resume + one manual push.
+    const preSession = useAnnotationStore.getState().annotations;
+    t().pause();
+    s.retextAnnotation("a", "typed note", "2026-06-29T12:00:01Z");
+    t().resume();
+    useAnnotationStore.temporal.setState({
+      pastStates: [...t().pastStates.slice(-99), { annotations: preSession }],
+      futureStates: [],
+    });
+    expect(t().pastStates.length).toBe(depth0 + 2);
+
+    s.retypeAnnotation(["a"], "highlight", null, "2026-06-29T12:00:02Z"); // reverse convert
+    expect(t().pastStates.length).toBe(depth0 + 3);
+
+    // Undo unwinds ONE command at a time, in reverse order.
+    t().undo(); // undoes the reverse convert
+    let a = useAnnotationStore.getState().annotations.get("a")!;
+    expect(a.type).toBe("comment");
+    expect(a.body).toBe("typed note");
+
+    t().undo(); // undoes the typed-body session
+    a = useAnnotationStore.getState().annotations.get("a")!;
+    expect(a.body).toBe("");
+
+    t().undo(); // undoes the forward convert
+    a = useAnnotationStore.getState().annotations.get("a")!;
+    expect(a.type).toBe("highlight");
+    expect(a.body).toBeNull();
+  });
+});
+
 describe("hydrate-on-open (Story 3.5)", () => {
   const t = () => useAnnotationStore.temporal.getState();
 
@@ -564,6 +648,21 @@ describe("undo/redo — zundo temporal store (Story 3.2)", () => {
     t().undo();
     const a = useAnnotationStore.getState().annotations.get("a")!;
     expect(a.style.color).toBe("annotation-default");
+  });
+
+  it("convert (retypeAnnotation) is one undo step; undo restores prior type + body exactly", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z")); // type=highlight, body=null
+    const depthAfterAdd = t().pastStates.length;
+    s.retypeAnnotation(["a"], "comment", "", "2026-06-29T12:00:00Z");
+    expect(t().pastStates.length).toBe(depthAfterAdd + 1);
+    let a = useAnnotationStore.getState().annotations.get("a")!;
+    expect(a.type).toBe("comment");
+    expect(a.body).toBe("");
+    t().undo();
+    a = useAnnotationStore.getState().annotations.get("a")!;
+    expect(a.type).toBe("highlight");
+    expect(a.body).toBeNull();
   });
 
   it("deleteAnnotation then undo restores the mark exactly (AC-3)", () => {

@@ -490,6 +490,55 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     // The (non-empty) comment survives (Decision 5 keeps it either way).
     expect(useAnnotationStore.getState().annotations.has("c8")).toBe(true);
   });
+
+  it("a selected kind=text comment shows 'Turn into highlight' in its bubble (Story 3.7, AC2)", () => {
+    useAnnotationStore.getState().addAnnotation(textComment("c9"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c9"));
+    expect(screen.getByTestId("comment-convert-highlight-c9")).toBeTruthy();
+  });
+
+  it("a kind=rect comment has NO 'Turn into highlight' action (no text counterpart to revert to)", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c10"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c10"));
+    expect(screen.queryByTestId("comment-convert-highlight-c10")).toBeNull();
+  });
+
+  it("clicking 'Turn into highlight' flips type -> highlight and drops a non-empty body to null", () => {
+    useAnnotationStore.getState().addAnnotation(textComment("c11", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c11"));
+    fireEvent.click(screen.getByTestId("comment-convert-highlight-c11"));
+    const c = useAnnotationStore.getState().annotations.get("c11")!;
+    expect(c.type).toBe("highlight");
+    expect(c.body).toBeNull();
+    // Selection is kept (not cleared) so the generic quick-box takes over for it.
+    expect(useAnnotationStore.getState().selectedId).toBe("c11");
+  });
+
+  it("converts a two-page comment group together (both siblings flip in one call)", () => {
+    const c1 = { ...textComment("c1", "note"), group_id: "g1" };
+    const c2 = { ...textComment("c2", "note"), group_id: "g1" };
+    useAnnotationStore.getState().addAnnotation(c1);
+    useAnnotationStore.getState().addAnnotation(c2);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c1"));
+    fireEvent.click(screen.getByTestId("comment-convert-highlight-c1"));
+    const map = useAnnotationStore.getState().annotations;
+    expect(map.get("c1")!.type).toBe("highlight");
+    expect(map.get("c2")!.type).toBe("highlight");
+  });
+
+  it("deselecting an empty text comment does NOT auto-revert it to highlight (no auto-revert, Decision 5)", () => {
+    useAnnotationStore.getState().addAnnotation(textComment("c12", ""));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c12"));
+    act(() => useAnnotationStore.getState().select(null));
+    const c = useAnnotationStore.getState().annotations.get("c12")!;
+    expect(c.type).toBe("comment");
+    expect(c.body).toBe("");
+  });
 });
 
 describe("AnnotationLayer region fills (Story 2.11 — AC3,4,6)", () => {

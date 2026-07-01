@@ -140,6 +140,7 @@ export default function AnnotationLayer({
   // layer owns those actions for comments. Recolor sets the active default too
   // (last-choice-wins, like every other tool).
   const recolorAnnotation = useAnnotationStore((s) => s.recolorAnnotation);
+  const retypeAnnotation = useAnnotationStore((s) => s.retypeAnnotation);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   const marks = [...annotations.values()]
@@ -400,6 +401,12 @@ export default function AnnotationLayer({
               recolorAnnotation(commentGroupIds(a), color, new Date().toISOString());
               setActiveColor(color);
             }}
+            onConvertToHighlight={() =>
+              // Reverse (Story 3.7, AC2): drops body -> null unconditionally (even a
+              // non-empty note), group-aware, undoable. CommentBubble only renders the
+              // button for a kind=text comment, so this always targets a text mark.
+              retypeAnnotation(commentGroupIds(a), "highlight", null, new Date().toISOString())
+            }
             onDelete={() => deleteAnnotation(a.id)}
             onClearSelection={clearSelection}
             onTextFocus={startTextEditSession}
