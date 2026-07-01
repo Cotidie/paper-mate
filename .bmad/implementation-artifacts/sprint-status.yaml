@@ -22,6 +22,9 @@
 #   - in-progress: Developer actively working on implementation
 #   - review: Ready for code review (via Dev's code-review workflow)
 #   - done: Story completed
+#   - blocked: Attempted and reverted due to a hard external blocker (not merely
+#     unstarted); descoped from the current epic/version. See deferred-work.md
+#     for the writeup. An epic with a `blocked` story can still reach 'done'.
 #
 # Retrospective Status:
 #   - optional: Can be completed but not required
@@ -97,7 +100,7 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Edit, persist & review
-  epic-3: in-progress
+  epic-3: done
   3-1-edit-annotations-command-path: done
   3-2-undo-redo: done
   3-3-delete-annotation: done
@@ -107,7 +110,10 @@ development_status:
   # 2026-06-30 correct-course (sprint-change-proposal-2026-06-30.md): folded two
   # deferred-work edit capabilities onto the Epic-3 command path (post-v1, FR-26/27).
   3-7-convert-highlight-comment: done
-  3-8-adjust-text-range: backlog
+  # 2026-07-02: attempted in full, discarded on a hard Chromium caretRangeFromPoint/
+  # caretPositionFromPoint blocker during live smoke (deferred-work.md has the full
+  # writeup); descoped from v1 in the Epic-3 retro. epic-3 closes without it.
+  3-8-adjust-text-range: blocked
   epic-3-retrospective: optional
 
   # 2026-06-30 correct-course (sprint-change-proposal-2026-06-30.md): grouped the

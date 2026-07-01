@@ -144,7 +144,7 @@ From DESIGN.md (visual identity / tokens / component catalog) and EXPERIENCE.md 
 - **FR-23** Hide/show all annotations toggle → Epic 5 (post-v1)
 - **FR-24** Settings modal + hotkey rebinding → Epic 5 (post-v1; keymap-as-data enabler)
 - **FR-25** Per-tool default color + custom color slots → Epic 5 (post-v1)
-- **FR-26** Adjust annotation text range → Epic 3 Story 3.8 (post-v1 slice on the command path)
+- **FR-26** Adjust annotation text range → Epic 3 Story 3.8 — **attempted 2026-07-02, discarded on a hard Chromium `caretRangeFromPoint`/`caretPositionFromPoint` blocker during live smoke (see `deferred-work.md`); descoped from v1, open for a future revisit**
 - **FR-27** Convert highlight ↔ comment → Epic 3 Story 3.7 (post-v1 slice on the command path)
 
 > **Quality/fidelity (no new FR — quality of existing FRs under NFR-3):** copy-text spaces (FR-2/4) → Epic 4 Story 4.1; trailing-punctuation selection band (FR-2) → Epic 4 Story 4.1; highlights join across the gutter + multi-column selection (FR-7/13, NFR-3) → Epic 4 Story 4.2; comment-vs-highlight distinct on-page treatment + memo transparent treatment (FR-10/11, UX-DR7) → Epic 4 Story 4.3.
