@@ -4,7 +4,7 @@ baseline_commit: ed930a0a02430601a787ce7247496bb56382afd9
 
 # Story 3.7: Convert highlight ↔ comment
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -62,6 +62,12 @@ Then it flows through the single client command stack (do/undo, AR-7) via a `typ
     - Ran on `uvicorn` (port 8010, scratch `PAPER_MATE_DATA`) + `vite` (port 5183, `PAPER_MATE_API_TARGET` pointed at 8010), driven via chrome-devtools MCP at `1280x900x2` (DPR=2). Built the cross-page selection via `Selection.setBaseAndExtent` across two REAL `.page-surface` text layers (26 live `getClientRects()`, 5 on page0/19 on page1) then dispatched a real `pointerup` — the app's own `rectsFromSelection`/`collectTextRects`/`buildAnnotations` ran unmodified against genuine DPR=2 layout; only the selection's origin (API call vs. mouse pixels) is synthetic, not the geometry pipeline this story's AE-5 risk is about.
     - Verified via DOM testids AND the real backend GET (not just visuals): two annotations, `group_id` shared, `page_index` 0/1, forward convert flips both to `type=comment`/`body=""`, exactly one `.comment-bubble` mounts; typed note round-trips to `body` on BOTH siblings (persisted, confirmed via `GET .../annotations`); reverse convert flips both back to `type=highlight`/`body=null` (confirmed persisted); an empty comment survives Esc-deselect on both the DOM and the backend (no auto-revert).
     - Undo/redo: confirmed both directions revert/reapply as one step. **Methodology finding, not a product bug:** an in-page `dispatchEvent`/`.click()` (untrusted) does NOT reproduce a real click's browser-default focus shift, so clicking "Turn into highlight" while its bubble's textarea holds focus looked like a dropped undo entry under untrusted events. Re-tested with the MCP `click`/`press_key` tools (real trusted CDP input, matching how `AE-5`'s "real mouse" caveat in [[verify-on-hidpi-and-real-host]] applies beyond geometry to focus semantics too) and undo/redo both worked correctly; a stray follow-up "redo did nothing" was the app's OWN intentional `isEditable` exemption (Ctrl+Z/Y inside a focused textarea defers to native text-undo) — moving focus off the textarea first (Esc) made redo fire normally. No code change required.
+
+### Review Findings
+
+Cross-model review (Codex, `bmad-code-review`, diff `ed930a0..HEAD`): Blind Hunter + Edge Case Hunter + Acceptance Auditor, no failed layers. 0 decision-needed, 1 patch (low), 0 deferred, 3 dismissed as noise, 0 High/Med.
+
+- [x] [Review][Patch] Reverse conversion could leave the generic quick-box hidden after a scroll [client/src/annotations/gestures/useSelection.ts:105-112] — a scroll closes `selectionBoxOpen` without changing `selectedId`; reverse convert also keeps `selectedId` unchanged, so a scroll-then-reverse-convert sequence left the mark selected as a highlight with no visible quick-box (data was still correct; the bubble, unlike the generic box, doesn't gate on that flag, so only the reverse direction was affected). Fixed: added `selectedAnno?.type` to the box-open effect's dependency array so a `type` flip re-derives `selectionBoxOpen` too. Regression test added and confirmed RED before the fix, GREEN after (`AnnotationInteraction.test.tsx`, "reverse convert reopens the generic quick-box...").
 
 ## Dev Notes
 
@@ -186,3 +192,4 @@ Claude Sonnet 5 (claude-sonnet-5)
 - 2026-07-01: Story drafted (ready-for-dev). Cluster-C command-path edit (FR-27): convert a text highlight ⇄ text comment via a new `retypeAnnotation` zundo command — a `type`+`body` flip only (no anchor/contract change). Forward = a "Turn into comment" quick-box menuitem on a selected text highlight (group-aware); reverse = an empty `kind=text` comment reverts to highlight on deselect (extends the empty-memo cleanup watcher; refines Story 2.10 Decision 5, `kind=rect` bare pins still kept). Client-only; version 0.2.8 → 0.2.9.
 - 2026-07-01: Review change (Wonseok): reverse made EXPLICIT and symmetric. Comment → highlight is now a "Turn into highlight" action in the comment bubble (drops `body`, group-aware, undoable), not an implicit deselect-revert. The auto-revert is dropped; the empty-memo cleanup watcher is untouched and Story 2.10 Decision 5 (empty comment kept) stands unchanged. Adds `CommentBubble.tsx` + `AnnotationLayer.tsx` to the touched files.
 - 2026-07-01: Implemented (dev-story). All 6 tasks complete; all 3 ACs satisfied. Backend 67/67, frontend 595/595 (35 files), typecheck clean. Live-smoked at DPR=2 cross-page (own scratch servers) with DOM + real-backend verification. Status → review.
+- 2026-07-02: Cross-model code review (Codex): 1 low patch finding (scroll-then-reverse-convert could hide the generic quick-box), 0 High/Med. Fixed in `useSelection.ts` (re-derive `selectionBoxOpen` on a mark `type` change too) with a red-then-green regression test. Backend 67/67, frontend 596/596 (35 files), typecheck clean. Status → done.

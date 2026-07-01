@@ -1071,6 +1071,17 @@ describe("AnnotationInteraction convert highlight to comment (Story 3.7 — AC1)
     expect(map.get("m1")!.type).toBe("comment");
     expect(map.get("m2")!.type).toBe("comment");
   });
+
+  it("reverse convert reopens the generic quick-box even if a scroll closed it while the bubble was open (code review finding)", async () => {
+    const comment: Annotation = { ...textMark("m1"), type: "comment", body: "" };
+    setup([comment], "m1");
+    // A scroll while the comment (bubble-routed) is selected closes selectionBoxOpen.
+    // Harmless for a comment (its bubble doesn't gate on that flag) but must not
+    // suppress the generic box once the store flips the mark back to a highlight.
+    fireEvent.scroll(document, {});
+    act(() => useAnnotationStore.getState().retypeAnnotation(["m1"], "highlight", null, "2026-06-29T12:00:00Z"));
+    await screen.findByTestId("selection-quick-box");
+  });
 });
 
 describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {

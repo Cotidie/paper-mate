@@ -104,10 +104,13 @@ export function useSelection(opts: {
 
   // Open the box on a new selection; close it when nothing is selected (e.g. after
   // a delete). A pick/scroll closes it WITHOUT changing `selectedId`, so this effect
-  // won't re-run and reopen it; re-clicking the mark does (above).
+  // won't re-run and reopen it; re-clicking the mark does (above). Also re-run on a
+  // `type` change (Story 3.7 convert): a reverse convert keeps the SAME `selectedId`
+  // but flips the mark off the bubble route onto this generic box, so a stale
+  // `false` left by an earlier scroll must not suppress it (Codex review finding).
   useEffect(() => {
     setSelectionBoxOpen(selectedId !== null);
-  }, [selectedId]);
+  }, [selectedId, selectedAnno?.type]);
 
   // The ids a selection action touches: the selected mark + its group siblings
   // (a two-page highlight recolors/deletes together, AR-4).
