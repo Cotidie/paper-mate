@@ -443,6 +443,42 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     expect(screen.getByTestId("annotation-comment-pin-c5").style.left).toBe("120px");
   });
 
+  it("a kind=rect comment's pin is tagged as a move handle (pinned in empty space is draggable)", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c7"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const pin = screen.getByTestId("annotation-comment-pin-c7");
+    expect(pin.getAttribute("data-edit-handle")).toBe("move");
+    expect(pin.getAttribute("data-edit-id")).toBe("c7");
+    expect(pin.className).toContain("annotation-comment-pin--movable");
+  });
+
+  it("a kind=text comment's pin is NOT a move handle (anchored on text stays immovable)", () => {
+    useAnnotationStore.getState().addAnnotation(textComment("c8"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const pin = screen.getByTestId("annotation-comment-pin-c8");
+    expect(pin.getAttribute("data-edit-handle")).toBeNull();
+    expect(pin.getAttribute("data-edit-id")).toBeNull();
+    expect(pin.className).not.toContain("annotation-comment-pin--movable");
+  });
+
+  it("a rect-kind pin (and its open bubble) live-track an in-flight drag preview", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c9"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("c9"));
+    // Committed anchor: x0=0.2,y0=0.3 → left=120, top=240 (box 600x800, scale 1).
+    expect(screen.getByTestId("annotation-comment-pin-c9").style.left).toBe("120px");
+    act(() =>
+      useAnnotationStore.getState().setDragPreview({
+        id: "c9",
+        anchor: { kind: "rect", page_index: 0, rect: { x0: 0.4, y0: 0.5, x1: 0.4, y1: 0.5 } },
+      }),
+    );
+    // Preview anchor: x0=0.4,y0=0.5 → left=240, top=400 — both the pin AND the
+    // open bubble (which hangs off the same `anchor` value) must follow.
+    expect(screen.getByTestId("annotation-comment-pin-c9").style.left).toBe("240px");
+    expect(screen.getByTestId("comment-bubble-c9").style.left).toBe("240px");
+  });
+
   it("a non-selected comment renders no bubble; an empty comment is NOT auto-removed by the layer", () => {
     useAnnotationStore.getState().addAnnotation(rectComment("c6", ""));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);

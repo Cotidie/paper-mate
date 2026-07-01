@@ -571,6 +571,14 @@
   outline-offset: var(--color-swatch-ring-offset);
 }
 
+.annotation-comment-pin--movable {
+  cursor: grab;
+}
+
+.annotation-comment-pin--movable:active {
+  cursor: grabbing;
+}
+
 /* comment-bubble (DESIGN.md#comment-bubble): the comment's note popup. surface-card
    bg, rounded.md, hairline-strong border, body-sm, soft drop. Anchored inline at
    the pin's screen point; the transform nudges it BELOW the pin (so it clears it)

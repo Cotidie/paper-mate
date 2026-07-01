@@ -359,16 +359,32 @@ export default function AnnotationLayer({
   // highlight group. The bubble mounts only for the EXACTLY-selected
   // annotation (not group siblings), so a two-page comment shows one bubble.
   const renderComment = (a: Annotation) => {
+    // effAnchor (not a.anchor): a rect-kind pin is a live move-handle (below), so
+    // it must track an in-flight drag preview like every other movable mark.
+    const liveAnchor = effAnchor(a);
     let anchor: ScreenRect | null = null;
-    if (a.anchor.kind === "text") {
-      if (a.anchor.rects.length === 0) return null;
-      anchor = denormalizeRect(a.anchor.rects[0], box, scale);
-    } else if (a.anchor.kind === "rect") {
-      anchor = denormalizeRect(a.anchor.rect, box, scale);
+    if (liveAnchor.kind === "text") {
+      if (liveAnchor.rects.length === 0) return null;
+      anchor = denormalizeRect(liveAnchor.rects[0], box, scale);
+    } else if (liveAnchor.kind === "rect") {
+      anchor = denormalizeRect(liveAnchor.rect, box, scale);
     }
     if (!anchor) return null;
     const { hovered, selected, flashed } = markState(a);
-    const cls = markClass("annotation-comment-pin", "annotation-comment-pin", hovered, selected, flashed);
+    // A comment pinned in empty space (kind=rect) is directly draggable: it
+    // carries the SAME data-edit-handle/data-edit-id pair the edit-frame's move
+    // grip uses, so useEditGesture drives it unchanged — click still selects
+    // (native click fires below slop), drag moves and persists. A comment
+    // anchored on highlighted TEXT stays immovable (its position is derived from
+    // the text run, Story 3.8 territory).
+    const movable = liveAnchor.kind === "rect";
+    const cls = markClass(
+      "annotation-comment-pin" + (movable ? " annotation-comment-pin--movable" : ""),
+      "annotation-comment-pin",
+      hovered,
+      selected,
+      flashed,
+    );
     return (
       <div key={a.id} className="annotation-comment" data-comment-id={a.id}>
         <button
@@ -377,6 +393,7 @@ export default function AnnotationLayer({
           data-testid={`annotation-comment-pin-${a.id}`}
           aria-label="Comment"
           style={{ left: anchor.left, top: anchor.top }}
+          {...(movable ? { "data-edit-handle": "move", "data-edit-id": a.id } : {})}
           onPointerEnter={() => setHovered(a.id)}
           onPointerLeave={() => setHovered(null)}
           onClick={() => select(a.id)}
