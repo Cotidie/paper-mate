@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { useAnnotationStore, hydrateStore, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "./index";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { useAnnotationStore, hydrateStore, flashAnnotation, FLASH_MS, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "./index";
 import type { Annotation } from "../api/client";
 
 function mark(id: string, color: string, createdAt: string, groupId: string | null = null): Annotation {
@@ -22,6 +22,7 @@ beforeEach(() => {
     selectedId: null,
     hoveredId: null,
     dragPreview: null,
+    flashId: null,
     activeColor: "annotation-default",
     activeStrokeWidth: 4,
     activeMemoSize: DEFAULT_MEMO_SIZE,
@@ -601,5 +602,58 @@ describe("undo/redo — zundo temporal store (Story 3.2)", () => {
     const map = useAnnotationStore.getState().annotations;
     expect(map.has("a")).toBe(true);
     expect(map.has("b")).toBe(true);
+  });
+});
+
+describe("transient flash (Story 3.6, Annotation Bank jump)", () => {
+  const t = () => useAnnotationStore.temporal.getState();
+
+  it("flash(id) sets flashId; flash(null) clears it", () => {
+    useAnnotationStore.getState().flash("a");
+    expect(useAnnotationStore.getState().flashId).toBe("a");
+    useAnnotationStore.getState().flash(null);
+    expect(useAnnotationStore.getState().flashId).toBeNull();
+  });
+
+  it("flashId is excluded from the zundo partialize: flash() pushes NO undo history entry", () => {
+    const before = t().pastStates.length;
+    useAnnotationStore.getState().flash("a");
+    expect(t().pastStates.length).toBe(before);
+  });
+
+  it("hydrate clears a stale flashId", () => {
+    useAnnotationStore.getState().flash("stale");
+    useAnnotationStore.getState().hydrate([]);
+    expect(useAnnotationStore.getState().flashId).toBeNull();
+  });
+
+  it("flashAnnotation(id) sets flashId then auto-clears after FLASH_MS", async () => {
+    vi.useFakeTimers();
+    try {
+      flashAnnotation("a");
+      expect(useAnnotationStore.getState().flashId).toBe("a");
+      await vi.advanceTimersByTimeAsync(FLASH_MS);
+      expect(useAnnotationStore.getState().flashId).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a second flashAnnotation before the first clears cancels the first timer (retargets, no premature clear)", async () => {
+    vi.useFakeTimers();
+    try {
+      flashAnnotation("a");
+      await vi.advanceTimersByTimeAsync(FLASH_MS / 2);
+      flashAnnotation("b");
+      // The first timer's original deadline passes; since it was cancelled,
+      // flashId must still be "b" (not cleared early / not stranded).
+      await vi.advanceTimersByTimeAsync(FLASH_MS / 2);
+      expect(useAnnotationStore.getState().flashId).toBe("b");
+      // The second timer's own full duration then clears it.
+      await vi.advanceTimersByTimeAsync(FLASH_MS / 2);
+      expect(useAnnotationStore.getState().flashId).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

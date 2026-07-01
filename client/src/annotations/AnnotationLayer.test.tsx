@@ -83,7 +83,7 @@ function memoMark(
   };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
+beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null, flashId: null }));
 afterEach(cleanup);
 
 describe("AnnotationLayer (AC-3, AC-4, AC-6)", () => {
@@ -522,7 +522,7 @@ describe("AnnotationLayer region fills (Story 2.11 — AC3,4,6)", () => {
     };
   }
 
-  beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null }));
+  beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null, flashId: null }));
 
   it("kind=rect + type=highlight renders a fill div in .annotation-regions, NOT memo/pen groups", () => {
     useAnnotationStore.getState().addAnnotation(regionHighlight("r1"));
@@ -683,5 +683,59 @@ describe("AnnotationLayer memo re-edit (Story 3.1, AE-3)", () => {
     const ta = screen.getByTestId("annotation-mark-m1") as HTMLTextAreaElement;
     fireEvent.change(ta, { target: { value: "hello" } });
     expect(useAnnotationStore.getState().annotations.get("m1")!.body).toBe("hello");
+  });
+});
+
+describe("AnnotationLayer flash (Story 3.6, Annotation Bank jump — AC-4)", () => {
+  it("flashId adds the --flash modifier to that mark's rects; clearing removes it", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("a1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().flash("a1"));
+    expect(screen.getByTestId("annotation-mark-a1").className).toContain("annotation-highlight--flash");
+    act(() => useAnnotationStore.getState().flash(null));
+    expect(screen.getByTestId("annotation-mark-a1").className).not.toContain("annotation-highlight--flash");
+  });
+
+  it("flash is group-aware: flashing one mark also flashes its group sibling (two-page highlight)", () => {
+    useAnnotationStore.getState().addAnnotation(groupMark("g-a", "grp1"));
+    useAnnotationStore.getState().addAnnotation(groupMark("g-b", "grp1", "2026-06-29T00:00:01+00:00"));
+    useAnnotationStore.getState().addAnnotation(textMark("solo", 0, "doc-1", "2026-06-29T00:00:02+00:00"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().flash("g-a"));
+    expect(screen.getByTestId("annotation-mark-g-a").className).toContain("annotation-highlight--flash");
+    expect(screen.getByTestId("annotation-mark-g-b").className).toContain("annotation-highlight--flash");
+    // A non-grouped mark must NOT flash.
+    expect(screen.getByTestId("annotation-mark-solo").className).not.toContain("annotation-highlight--flash");
+  });
+
+  it("flash applies to a pen stroke (SVG class attribute)", () => {
+    useAnnotationStore.getState().addAnnotation(penMark("p1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().flash("p1"));
+    expect(screen.getByTestId("annotation-mark-p1").getAttribute("class")).toContain("annotation-pen--flash");
+  });
+
+  it("flash applies to a memo box", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().flash("m1"));
+    expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--flash");
+  });
+
+  it("flash applies to a comment pin", () => {
+    useAnnotationStore.getState().addAnnotation({
+      id: "c1",
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.2, y1: 0.3 } },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: "",
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    });
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().flash("c1"));
+    expect(screen.getByTestId("annotation-comment-pin-c1").className).toContain("annotation-comment-pin--flash");
   });
 });

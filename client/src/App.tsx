@@ -5,9 +5,11 @@ import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
 import ToolRail from "./ToolRail";
 import { type ActiveTool, isAnnotationTool } from "./tools";
-import { useAnnotationStore, hydrateStore } from "./store";
+import { useAnnotationStore, hydrateStore, flashAnnotation } from "./store";
 import ZoomControl from "./ZoomControl";
 import TocPanel from "./TocPanel";
+import BankPanel from "./BankPanel";
+import type { BankItem } from "./bank";
 import Toast from "./Toast";
 import { uploadDoc, getAnnotations, fetchHealth, type Doc } from "./api/client";
 import type { TocEntry } from "./render";
@@ -72,6 +74,9 @@ export default function App() {
   // React state (see the header note).
   const [tocOpen, setTocOpen] = useState(false);
   const [toc, setToc] = useState<TocEntry[] | null>(null);
+  // Annotation Bank panel (Story 3.6): open/closed only — its row list is
+  // store-owned and read directly by BankPanel (unlike ToC's App-owned outline).
+  const [bankOpen, setBankOpen] = useState(false);
   // Imperative zoom handle into the Reader (it owns `scale` + the scroll
   // container needed for focal-point zoom); the top-bar control drives it.
   const readerRef = useRef<ReaderHandle>(null);
@@ -168,6 +173,44 @@ export default function App() {
     return () => document.removeEventListener("keydown", onKey);
   }, [docOpen]);
 
+  // Ctrl B toggles the Annotation Bank (Story 3.6, AC-1). A SEPARATE document-
+  // level effect (not folded into the tool-key effect above, which early-returns
+  // on any Ctrl/Alt/Meta chord): preventDefault blocks the browser's own
+  // bookmark-bar shortcut. Exempt editable targets so typing a note is never
+  // hijacked (same isExempt shape as the tool-key effect). Document-level,
+  // phase/doc-gated — never bound to `.pdf-canvas` (Epic-1 retro AP-1).
+  useEffect(() => {
+    if (!docOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key !== "b" && e.key !== "B") return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.tagName === "BUTTON" ||
+          t.isContentEditable)
+      )
+        return;
+      e.preventDefault();
+      setBankOpen((o) => !o);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [docOpen]);
+
+  // Annotation Bank row click (Story 3.6, AC-4): jump the canvas to the mark's
+  // page + fractional position, then flash it. Flash only — no `select` (that
+  // would leave the mark in an edit-frame/quick-box state, heavier than a
+  // review click warrants, Open Q2). The panel itself stays open (Open Q1: a
+  // review surface, not one-shot navigation like the ToC).
+  function handleBankJump(item: BankItem) {
+    readerRef.current?.jumpToAnnotation(item.pageIndex, item.topFraction);
+    flashAnnotation(item.id);
+  }
+
   async function handleFile(file: File) {
     // Single-flight: ignore a new pick while an upload is in flight, so an
     // overlapping request can't clobber the result or fire a stale toast.
@@ -235,10 +278,10 @@ export default function App() {
             onZoomOut={() => readerRef.current?.zoomOut()}
             onReset={() => readerRef.current?.resetZoom()}
           />
-          {/* ToC toggles the table-of-contents overlay (Story 1.9). Bank is
-              still a focusable placeholder — behavior arrives with Story 3.6.
-              Icon-only (Phosphor, matching the tool-rail idiom); the aria-label
-              is the accessible name and the title is the hover tooltip. */}
+          {/* ToC toggles the table-of-contents overlay (Story 1.9); Bank toggles
+              the Annotation Bank overlay (Story 3.6). Icon-only (Phosphor,
+              matching the tool-rail idiom); the aria-label is the accessible
+              name and the title is the hover tooltip. */}
           <button
             type="button"
             className="pill pill--icon"
@@ -254,6 +297,8 @@ export default function App() {
             className="pill pill--icon"
             aria-label="Annotation bank"
             title="Annotation bank"
+            aria-pressed={bankOpen}
+            onClick={() => setBankOpen((o) => !o)}
           >
             <Cards aria-hidden />
           </button>
@@ -291,7 +336,7 @@ export default function App() {
           onPickColor={setActiveColor}
           // Box-highlight mode lives under the Highlight tool's flyout (a toggle).
           boxHighlight={boxHighlight}
-          onToggleBoxHighlight={() => setBoxHighlight((b) => !b)}
+          onSetBoxHighlight={setBoxHighlight}
           // Story 2.8: the Pen tool's sub-toolbox reads activeStrokeWidth and
           // sets it via onPickStrokeWidth (the default new strokes land in).
           activeStrokeWidth={activeStrokeWidth}
@@ -311,6 +356,12 @@ export default function App() {
             setTocOpen(false);
           }}
           onClose={() => setTocOpen(false)}
+        />
+        <BankPanel
+          open={bankOpen}
+          docId={doc.doc_id}
+          onJump={handleBankJump}
+          onClose={() => setBankOpen(false)}
         />
       </main>
       {toast}

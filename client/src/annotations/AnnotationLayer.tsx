@@ -53,16 +53,25 @@ function inActiveGroup(a: Annotation, activeId: string | null, all: Map<string, 
   return active != null && active.group_id != null && active.group_id === a.group_id;
 }
 
-/** Build a mark's class string from its base + hover/selected modifiers (Story 5.0:
- *  the one helper for the hover/selected suffixing that was copy-pasted into all
- *  five render funcs). `classList` is the full static class (may carry extra classes
- *  like `annotation-region`/`--underline`); `modifierRoot` is the BEM root the
- *  `--hovered`/`--selected` suffixes attach to (often a prefix of `classList`). */
-function markClass(classList: string, modifierRoot: string, hovered: boolean, selected: boolean): string {
+/** Build a mark's class string from its base + hover/selected/flash modifiers
+ *  (Story 5.0: the one helper for the suffixing that was copy-pasted into all
+ *  five render funcs; Story 3.6 adds `flashed`, the Annotation Bank jump's
+ *  brief emphasis, following the exact same pattern). `classList` is the full
+ *  static class (may carry extra classes like `annotation-region`/`--underline`);
+ *  `modifierRoot` is the BEM root the `--hovered`/`--selected`/`--flash` suffixes
+ *  attach to (often a prefix of `classList`). */
+function markClass(
+  classList: string,
+  modifierRoot: string,
+  hovered: boolean,
+  selected: boolean,
+  flashed: boolean,
+): string {
   return (
     classList +
     (hovered ? ` ${modifierRoot}--hovered` : "") +
-    (selected ? ` ${modifierRoot}--selected` : "")
+    (selected ? ` ${modifierRoot}--selected` : "") +
+    (flashed ? ` ${modifierRoot}--flash` : "")
   );
 }
 
@@ -90,6 +99,9 @@ export default function AnnotationLayer({
   const annotations = useAnnotationStore((s) => s.annotations);
   const selectedId = useAnnotationStore((s) => s.selectedId);
   const hoveredId = useAnnotationStore((s) => s.hoveredId);
+  // The Annotation Bank's jump target (Story 3.6): a transient, group-aware
+  // emphasis rendered exactly like hover/select — see markState below.
+  const flashId = useAnnotationStore((s) => s.flashId);
   // Transient move/resize preview (Story 3.1): while a drag is in flight, render
   // the dragged mark + its frame at this anchor instead of the committed one.
   const dragPreview = useAnnotationStore((s) => s.dragPreview);
@@ -173,11 +185,13 @@ export default function AnnotationLayer({
     return ids;
   };
 
-  // A mark's hover/selected state, group-aware (a two-page mark lights as one).
-  // The shared preamble every render func used to recompute inline (Story 5.0).
+  // A mark's hover/selected/flashed state, group-aware (a two-page mark lights
+  // as one). The shared preamble every render func used to recompute inline
+  // (Story 5.0; `flashed` added Story 3.6 — the Bank jump's target emphasis).
   const markState = (a: Annotation) => ({
     hovered: inActiveGroup(a, hoveredId, annotations),
     selected: inActiveGroup(a, selectedId, annotations),
+    flashed: inActiveGroup(a, flashId, annotations),
   });
 
   // While a move/resize drag is in flight, render the dragged mark (and its edit
@@ -203,8 +217,14 @@ export default function AnnotationLayer({
   const renderRegion = (a: Annotation) => {
     const anchor = effAnchor(a);
     if (anchor.kind !== "rect") return null;
-    const { hovered, selected } = markState(a);
-    const cls = markClass("annotation-highlight annotation-region", "annotation-highlight", hovered, selected);
+    const { hovered, selected, flashed } = markState(a);
+    const cls = markClass(
+      "annotation-highlight annotation-region",
+      "annotation-highlight",
+      hovered,
+      selected,
+      flashed,
+    );
     const pos = denormalizeRect(anchor.rect, box, scale);
     return (
       <div
@@ -231,12 +251,13 @@ export default function AnnotationLayer({
   // 2.5 selection hit-test / hover / selected ring work identically.
   const renderMark = (a: Annotation, underline: boolean) => {
     if (a.anchor.kind !== "text") return null;
-    const { hovered, selected } = markState(a);
+    const { hovered, selected, flashed } = markState(a);
     const cls = markClass(
       "annotation-highlight" + (underline ? " annotation-highlight--underline" : ""),
       "annotation-highlight",
       hovered,
       selected,
+      flashed,
     );
     return a.anchor.rects.map((r, i) => {
       const pos = denormalizeRect(r, box, scale);
@@ -266,8 +287,8 @@ export default function AnnotationLayer({
   const renderPen = (a: Annotation) => {
     const anchor = effAnchor(a);
     if (anchor.kind !== "path") return null;
-    const { hovered, selected } = markState(a);
-    const cls = markClass("annotation-pen", "annotation-pen", hovered, selected);
+    const { hovered, selected, flashed } = markState(a);
+    const cls = markClass("annotation-pen", "annotation-pen", hovered, selected, flashed);
     const pts = anchor.points.map((p) => denormalizePoint(p, box, scale));
     const width = (a.style.stroke_width ?? 0) * scale;
     const d = svgPathFromOutline(strokeOutline(pts, width));
@@ -297,8 +318,8 @@ export default function AnnotationLayer({
   const renderMemo = (a: Annotation) => {
     const anchor = effAnchor(a);
     if (anchor.kind !== "rect") return null;
-    const { hovered, selected } = markState(a);
-    const cls = markClass("annotation-memo", "annotation-memo", hovered, selected);
+    const { hovered, selected, flashed } = markState(a);
+    const cls = markClass("annotation-memo", "annotation-memo", hovered, selected, flashed);
     return (
       <MemoBox
         key={a.id}
@@ -331,8 +352,8 @@ export default function AnnotationLayer({
       anchor = denormalizeRect(a.anchor.rect, box, scale);
     }
     if (!anchor) return null;
-    const { hovered, selected } = markState(a);
-    const cls = markClass("annotation-comment-pin", "annotation-comment-pin", hovered, selected);
+    const { hovered, selected, flashed } = markState(a);
+    const cls = markClass("annotation-comment-pin", "annotation-comment-pin", hovered, selected, flashed);
     return (
       <div key={a.id} className="annotation-comment" data-comment-id={a.id}>
         <button

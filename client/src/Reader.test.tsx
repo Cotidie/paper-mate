@@ -324,6 +324,69 @@ describe("Reader", () => {
     });
   });
 
+  it("exposes jumpToAnnotation on the handle, scrolling by page offset + a fractional offset within it (Story 3.6 AC-4)", async () => {
+    const ref = { current: null as null | import("./Reader").ReaderHandle };
+    render(<Reader ref={ref} doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop") as HTMLElement;
+    const scrollTo = vi.fn();
+    canvas.scrollTo = scrollTo as unknown as typeof canvas.scrollTo;
+    expect(typeof ref.current?.jumpToAnnotation).toBe("function");
+    // 0-based pageIndex 1 (page 2); jsdom cards have 0 clientHeight, so the
+    // fractional term is 0 — assert the call shape (offset scroll + smooth),
+    // not pixels (the DPR/live-layout math is covered by the live smoke).
+    await waitFor(() => {
+      ref.current!.jumpToAnnotation(1, 0.5);
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
+    });
+  });
+
+  it("jumpToAnnotation's top margin is a fraction of the VIEWPORT, not the page card (Codex review fix)", async () => {
+    const ref = { current: null as null | import("./Reader").ReaderHandle };
+    render(<Reader ref={ref} doc={doc} />);
+    const cards = await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop") as HTMLElement;
+    const scrollTo = vi.fn();
+    canvas.scrollTo = scrollTo as unknown as typeof canvas.scrollTo;
+    // Deliberately mismatched heights: a card-relative margin (the pre-fix bug)
+    // and a viewport-relative one (the fix) land on different `top` values —
+    // this distinguishes them where jsdom's real (always-0) layout could not.
+    Object.defineProperty(canvas, "clientHeight", { value: 1000, configurable: true });
+    const targetCard = cards[1];
+    Object.defineProperty(targetCard, "clientHeight", { value: 200, configurable: true });
+    Object.defineProperty(targetCard, "offsetTop", { value: 500, configurable: true });
+    await waitFor(() => {
+      ref.current!.jumpToAnnotation(1, 0.5);
+      expect(scrollTo).toHaveBeenCalled();
+    });
+    // top = card.offsetTop + topFraction * card.clientHeight - viewport.clientHeight * 0.15
+    //     = 500 + 0.5*200 - 1000*0.15 = 500 + 100 - 150 = 450.
+    const { top } = scrollTo.mock.calls.at(-1)![0] as { top: number };
+    expect(top).toBeCloseTo(450, 5);
+  });
+
+  it("clamps an out-of-range jumpToAnnotation pageIndex into the document's page range", async () => {
+    const ref = { current: null as null | import("./Reader").ReaderHandle };
+    render(<Reader ref={ref} doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    const canvas = screen.getByTestId("reader-backdrop") as HTMLElement;
+    const scrollTo = vi.fn();
+    canvas.scrollTo = scrollTo as unknown as typeof canvas.scrollTo;
+    // page_count = 3; a wildly out-of-range 0-based index clamps to the last card.
+    await waitFor(() => {
+      ref.current!.jumpToAnnotation(99, 0.2);
+      expect(scrollTo).toHaveBeenCalled();
+    });
+  });
+
+  it("jumpToAnnotation no-ops (does not throw) when scrollTo is unavailable (jsdom guard)", async () => {
+    const ref = { current: null as null | import("./Reader").ReaderHandle };
+    render(<Reader ref={ref} doc={doc} />);
+    await screen.findAllByTestId("page-surface");
+    // No scrollTo stub: same "layout/scrollTo unavailable" guard jumpToPage has.
+    expect(() => ref.current!.jumpToAnnotation(0, 0.5)).not.toThrow();
+  });
+
   it("ignores plain wheel, and a Ctrl+wheel with deltaY===0 (no zoom-out) (AC-2 / LOW fix)", async () => {
     const onZoomChange = vi.fn();
     render(<Reader doc={doc} onZoomChange={onZoomChange} />);

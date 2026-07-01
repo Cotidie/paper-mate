@@ -71,6 +71,19 @@
   /* Phosphor close glyph size. */
   --toc-icon-size: 18px;
 
+  /* annotation-bank-panel (Story 3.6; DESIGN.md components.annotation-bank-panel).
+     Mirrors toc-panel's overlay shape (own width/offset/max-height); the row
+     dims (dot/icon/gap) BankPanel.css consumes. */
+  --bank-panel-width: 320px;
+  --bank-panel-offset: 16px;
+  --bank-panel-max-height: 70vh;
+  --bank-row-gap: 2px;
+  --bank-dot-size: 10px;
+  --bank-icon-size: 18px;
+  /* The brief ring emphasis a Bank jump gives its target mark (AC-4); the
+     annotation-*--flash modifiers in Annotations.css consume this. */
+  --bank-flash-ring-width: 3px;
+
   /* zoom-control (top-bar pill, left of ToC; DESIGN.md components.zoom-control) */
   --zoom-control-gap: 4px;
   /* Reserve room for the widest % readout ("400%") so the pill doesn't jitter

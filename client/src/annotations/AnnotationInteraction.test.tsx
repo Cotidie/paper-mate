@@ -1260,6 +1260,35 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
     expect(screen.queryByTestId("selection-quick-box")).toBeNull();
   });
 
+  it("with a comment selected, an empty-space click DESELECTS it instead of dropping a new pin (user fix)", () => {
+    const surf = canvasTarget();
+    const comment: Annotation = {
+      id: "c1",
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.05, y0: 0.05, x1: 0.05, y1: 0.05 } },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: "existing note",
+      created_at: "2026-06-29T00:00:01Z",
+      updated_at: "2026-06-29T00:00:01Z",
+    };
+    useAnnotationStore.getState().addAnnotation(comment);
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="comment" rectReader={reader} />,
+    );
+    act(() => useAnnotationStore.getState().select("c1"));
+    // Click empty page space while the comment tool is still armed and a comment
+    // is selected: a real click (pointerdown then pointerup at the same point).
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
+    fireEvent.pointerUp(surf, { button: 0, clientX: 60, clientY: 160 });
+    // No second pin dropped; the selection cleared (first click deselects, the
+    // memo-placement fix's sibling — a second, fresh click would create one).
+    expect(useAnnotationStore.getState().all().filter((a) => a.type === "comment")).toHaveLength(1);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
   it("comment CLICK over the quick-box or an existing pin does NOT drop a second pin", () => {
     const surf = canvasTarget();
     // An existing pin inside the page surface (the kind the click must NOT stack on).

@@ -799,3 +799,58 @@
   stroke: none;
 }
 
+/* Bank jump flash (Story 3.6, AC-4): the Annotation Bank's target mark gets a
+   resting ink ring (box-shadow, so it layers with an existing --selected
+   outline without fighting it; box-shadow doesn't affect layout either,
+   NFR-1) that briefly PULSES wider then settles back — the eye catches the
+   pulse, the resting ring then holds until `flashId` auto-clears
+   (store/index.ts's FLASH_MS, ~600ms; the 0.4s pulse settles well inside that
+   window so it is never cut mid-animation). */
+.annotation-highlight--flash,
+.annotation-memo--flash,
+.annotation-comment-pin--flash {
+  box-shadow: 0 0 0 var(--bank-flash-ring-width) var(--color-ink);
+  animation: bank-flash 0.4s ease-out;
+}
+
+@keyframes bank-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 var(--bank-flash-ring-width) var(--color-ink);
+  }
+  50% {
+    box-shadow: 0 0 0 calc(var(--bank-flash-ring-width) * 2) var(--color-ink);
+  }
+}
+
+/* A pen stroke (SVG path) can't take a box-shadow ring around its silhouette;
+   mirror the --hovered/--selected treatment (an ink SVG stroke) with the same
+   pulse shape instead. */
+.annotation-pen--flash {
+  stroke: var(--color-ink);
+  stroke-width: var(--bank-flash-ring-width);
+  animation: bank-flash-pen 0.4s ease-out;
+}
+
+@keyframes bank-flash-pen {
+  0%,
+  100% {
+    stroke-width: var(--bank-flash-ring-width);
+  }
+  50% {
+    stroke-width: calc(var(--bank-flash-ring-width) * 2);
+  }
+}
+
+/* Reduced motion (UX-DR17, AC-4): keep the resting ring/stroke (a brief static
+   emphasis) but skip the pulse entirely — instant, no motion. `flashId` still
+   sets/clears on its own timer regardless (store/index.ts). */
+@media (prefers-reduced-motion: reduce) {
+  .annotation-highlight--flash,
+  .annotation-memo--flash,
+  .annotation-comment-pin--flash,
+  .annotation-pen--flash {
+    animation: none;
+  }
+}
+

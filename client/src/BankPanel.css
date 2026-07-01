@@ -1,0 +1,145 @@
+/* BankPanel — the Annotation Bank overlay (Story 3.6). Same overlay shape as
+   .toc-panel (App.css): a floating right-edge card that never reflows the
+   canvas (NFR-1), its list scrolling internally. Its own stylesheet (the
+   SaveIndicator.css/Toast.css precedent) since the row shape (glyph + dot +
+   snippet + page) differs enough from ToC's plain title rows. Tokens only —
+   raw hex/px live in theme/** only (no-raw-values.test.ts). */
+
+.bank-panel {
+  position: absolute;
+  top: var(--bank-panel-offset);
+  right: var(--bank-panel-offset);
+  width: var(--bank-panel-width);
+  /* Never exceed the stage width less both insets (mirrors .toc-panel). */
+  max-width: calc(100% - var(--bank-panel-offset) * 2);
+  max-height: var(--bank-panel-max-height);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  z-index: 5;
+  overflow: hidden;
+}
+
+.bank-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: var(--hairline-width) solid var(--color-hairline);
+}
+
+.bank-panel__title {
+  font-family: var(--font-sans);
+  font-size: var(--type-title-md-size);
+  font-weight: var(--type-title-md-weight);
+  line-height: var(--type-title-md-leading);
+  color: var(--color-ink);
+}
+
+.bank-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-body);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.bank-panel__close svg {
+  width: var(--bank-icon-size);
+  height: var(--bank-icon-size);
+  display: block;
+}
+
+.bank-panel__close:hover {
+  background: var(--color-surface-strong);
+}
+
+/* The scrollable row list; the panel scrolls, the canvas never moves (NFR-1). */
+.bank-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-xxs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--bank-row-gap);
+  overflow-y: auto;
+}
+
+.bank-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  text-align: start;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) var(--space-xs);
+}
+
+/* DESIGN.md bank-list-item-hover: surface-strong bg, ink text. */
+.bank-row:hover {
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+}
+
+.bank-row__icon {
+  flex: 0 0 auto;
+  width: var(--bank-icon-size);
+  height: var(--bank-icon-size);
+  color: var(--color-muted);
+}
+
+.bank-row__dot {
+  flex: 0 0 auto;
+  width: var(--bank-dot-size);
+  height: var(--bank-dot-size);
+  border-radius: var(--radius-pill);
+}
+
+/* Single-line ellipsis truncation (the row is compact: glyph+dot+snippet+page
+   share one line). The full text stays in the DOM (bank.ts never slices it);
+   only the paint is clipped. */
+.bank-row__snippet {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A placeholder snippet (no real text on the mark, e.g. "Region") reads as a
+   dimmed label rather than actual content. */
+.bank-row__snippet--placeholder {
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.bank-row__page {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-leading);
+}
+
+.bank-panel__empty {
+  margin: 0;
+  padding: var(--space-sm);
+  color: var(--color-muted);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-leading);
+}

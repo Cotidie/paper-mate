@@ -47,7 +47,7 @@ export default function ToolRail({
   activeColor,
   onPickColor,
   boxHighlight,
-  onToggleBoxHighlight,
+  onSetBoxHighlight,
   activeStrokeWidth,
   onPickStrokeWidth,
   activeAlpha,
@@ -66,12 +66,13 @@ export default function ToolRail({
   activeColor: string;
   /** Set the active color (the default new marks land in). */
   onPickColor: (token: string) => void;
-  /** Whether box-highlight mode is on (a mode of the Highlight tool). The Highlight
-   *  flyout shows a toggle reflecting this; while on, a rectangle drag makes a region
-   *  highlight instead of a text-run highlight. */
+  /** Whether box-highlight mode is on (a mode of the Highlight tool): false = a
+   *  drag highlights the TEXT it crosses (the default), true = a drag makes a
+   *  rectangular region highlight instead. The Highlight flyout shows both as an
+   *  explicit two-option picker (text vs box), not just a single box checkbox. */
   boxHighlight: boolean;
-  /** Flip box-highlight mode on/off (the Highlight flyout's toggle). */
-  onToggleBoxHighlight: () => void;
+  /** Set box-highlight mode explicitly (the Highlight flyout's text/box pair). */
+  onSetBoxHighlight: (value: boolean) => void;
   /** The active pen stroke width (store-backed; Story 2.8). The Pen tool's
    *  sub-toolbox shows this armed and sets it via `onPickStrokeWidth`. */
   activeStrokeWidth: number;
@@ -234,23 +235,33 @@ export default function ToolRail({
 
         {highlightActive && flyoutOpen && (
           <ToolFlyout testId="highlight-color-flyout">
-            {/* Box-highlight mode (Story 2.11, relocated): a toggle that lives UNDER
-                the Highlight tool, not as its own rail tool. It sits FIRST, above the
-                colors, with a divider between. While on, a rectangle drag makes a
-                region highlight instead of a text-run highlight. A mode toggle, so it
-                does NOT close the flyout (the user may still pick a color).
-                `aria-checked` reflects the mode. */}
+            {/* Highlight mode (Story 2.11, relocated + extended): an explicit TWO-OPTION
+                picker under the Highlight tool, not its own rail tool. Text (default) vs
+                Box are mutually exclusive (`menuitemradio`, mirroring the pointer-tool
+                picker above) so both modes are visible/selectable, not just a single box
+                checkbox. They sit FIRST, above the colors, with a divider between. A mode
+                PICK, so it does NOT close the flyout (the user may still pick a color). */}
             <button
               type="button"
-              role="menuitemcheckbox"
+              role="menuitemradio"
+              aria-checked={!boxHighlight}
+              className={!boxHighlight ? "tool-button tool-button--armed" : "tool-button"}
+              aria-label="Text highlight"
+              title="Text highlight: drag over text"
+              data-testid="highlight-text-toggle"
+              onClick={() => onSetBoxHighlight(false)}
+            >
+              <Highlighter aria-hidden />
+            </button>
+            <button
+              type="button"
+              role="menuitemradio"
               aria-checked={boxHighlight}
-              className={
-                boxHighlight ? "tool-button tool-button--armed" : "tool-button"
-              }
+              className={boxHighlight ? "tool-button tool-button--armed" : "tool-button"}
               aria-label="Box highlight"
               title="Box highlight: drag a region (M)"
               data-testid="highlight-box-toggle"
-              onClick={onToggleBoxHighlight}
+              onClick={() => onSetBoxHighlight(true)}
             >
               <BoundingBox aria-hidden />
             </button>
