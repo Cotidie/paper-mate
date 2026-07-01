@@ -7,13 +7,18 @@
 // and RETURNS focus to the prior element on close (the unmount cleanup). Owns its
 // ref + the auto-grow layout effect (like `MemoBox`).
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Highlighter, Trash } from "@phosphor-icons/react";
 import type { Annotation } from "../api/client";
 import type { ScreenRect } from "../anchor";
 import ColorSwatchRow from "./ColorSwatchRow";
 import { clampToViewport } from "./position";
 import "./Annotations.css";
+
+/** Nudges the bubble below the pin (was a static CSS `transform`, DESIGN.md
+ *  tokens unchanged) — now inline because the drag offset (below) shares the
+ *  same `transform` property, and only one `transform` can win per element. */
+const PIN_OFFSET_TRANSFORM = "translateY(calc(var(--comment-pin-size) + var(--space-xxs)))";
 
 export default function CommentBubble({
   anno,
@@ -43,6 +48,12 @@ export default function CommentBubble({
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const body = anno.body ?? "";
+  // Manual reposition (temporary): a local offset added on top of the anchored
+  // `pos`. Resets to {0,0} on every mount — which happens each time the bubble
+  // opens (AnnotationLayer only mounts it while selected) — so closing and
+  // reopening the box always shows it back at the default position.
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const boxDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   // Focus moves INTO the textarea on open; on close (unmount) it RETURNS to the
   // element focused before the bubble opened (UX-DR8/DR17). Runs once per open.
   useEffect(() => {
@@ -82,7 +93,35 @@ export default function CommentBubble({
       ref={boxRef}
       className="comment-bubble"
       data-testid={`comment-bubble-${anno.id}`}
-      style={{ left: pos.left, top: pos.top }}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        transform: `${PIN_OFFSET_TRANSFORM} translate(${dragOffset.x}px, ${dragOffset.y}px)`,
+      }}
+      // Drag-to-reposition: only the bubble's OWN empty padding starts a drag —
+      // the target check excludes the textarea and the swatch/convert/delete
+      // controls beneath it, which keep their normal click/focus behavior.
+      onPointerDown={(e) => {
+        if (e.target !== boxRef.current || e.button !== 0) return;
+        boxDragRef.current = { startX: e.clientX, startY: e.clientY, originX: dragOffset.x, originY: dragOffset.y };
+        try {
+          boxRef.current?.setPointerCapture(e.pointerId);
+        } catch {
+          /* capture refused (e.g. a synthetic test event) — the handlers below still fire on this element */
+        }
+        e.preventDefault();
+      }}
+      onPointerMove={(e) => {
+        const d = boxDragRef.current;
+        if (!d) return;
+        setDragOffset({ x: d.originX + (e.clientX - d.startX), y: d.originY + (e.clientY - d.startY) });
+      }}
+      onPointerUp={() => {
+        boxDragRef.current = null;
+      }}
+      onPointerCancel={() => {
+        boxDragRef.current = null;
+      }}
       // Esc dismisses from ANY control in the bubble, not just the textarea
       // (Codex MED): the swatch/delete buttons are exempt from the document-level
       // selection keys, so Esc on them would otherwise do nothing. Handling it on

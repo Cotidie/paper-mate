@@ -584,8 +584,9 @@
    the pin's screen point; the transform nudges it BELOW the pin (so it clears it)
    without recomputing the offset in JS (keeps the pin-size token in CSS only). */
 .comment-bubble {
+  /* Positioning `transform` (pin-nudge + drag offset) is set inline (CommentBubble.tsx):
+     it shares the property with the drag offset, so only one `transform` source can win. */
   position: absolute;
-  transform: translateY(calc(var(--comment-pin-size) + var(--space-xxs)));
   display: flex;
   flex-direction: column;
   gap: var(--space-xxs);
@@ -597,6 +598,11 @@
   box-shadow: var(--shadow-card);
   pointer-events: auto;
   z-index: 50;
+  cursor: grab;
+}
+
+.comment-bubble:active {
+  cursor: grabbing;
 }
 
 .comment-bubble__text {
@@ -613,6 +619,7 @@
   font-size: var(--type-body-sm-size);
   resize: none;
   overflow: hidden;
+  cursor: text;
 }
 
 .comment-bubble__text:focus-visible {
