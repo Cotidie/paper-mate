@@ -49,11 +49,31 @@ describe("CommentBubble drag (movable comment box)", () => {
     expect(bubble.style.transform).toBe(`${PIN_OFFSET_TRANSFORM} translate(30px, 15px)`);
   });
 
+  it("dragging the gap between the swatches and the action buttons ALSO moves the bubble (empty space inside a child wrapper, not just the outer padding)", () => {
+    const { container } = renderBubble("c4");
+    const bubble = screen.getByTestId("comment-bubble-c4");
+    const actionsGap = container.querySelector(".comment-bubble__actions") as HTMLElement;
+    fireEvent.pointerDown(actionsGap, { clientX: 200, clientY: 200, button: 0 });
+    fireEvent.pointerMove(bubble, { clientX: 230, clientY: 215 });
+    fireEvent.pointerUp(bubble, { clientX: 230, clientY: 215 });
+    expect(bubble.style.transform).toBe(`${PIN_OFFSET_TRANSFORM} translate(30px, 15px)`);
+  });
+
   it("dragging from the textarea does NOT move the bubble (only empty padding drags)", () => {
     renderBubble("c2");
     const bubble = screen.getByTestId("comment-bubble-c2");
     const textarea = screen.getByTestId("comment-body-c2");
     fireEvent.pointerDown(textarea, { clientX: 200, clientY: 200, button: 0 });
+    fireEvent.pointerMove(bubble, { clientX: 230, clientY: 215 });
+    fireEvent.pointerUp(bubble, { clientX: 230, clientY: 215 });
+    expect(bubble.style.transform).toBe(`${PIN_OFFSET_TRANSFORM} translate(0px, 0px)`);
+  });
+
+  it("dragging from an action button (e.g. delete) does NOT move the bubble", () => {
+    renderBubble("c5");
+    const bubble = screen.getByTestId("comment-bubble-c5");
+    const deleteButton = screen.getByTestId("comment-delete-c5");
+    fireEvent.pointerDown(deleteButton, { clientX: 200, clientY: 200, button: 0 });
     fireEvent.pointerMove(bubble, { clientX: 230, clientY: 215 });
     fireEvent.pointerUp(bubble, { clientX: 230, clientY: 215 });
     expect(bubble.style.transform).toBe(`${PIN_OFFSET_TRANSFORM} translate(0px, 0px)`);

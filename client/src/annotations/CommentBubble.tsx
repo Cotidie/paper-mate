@@ -98,11 +98,15 @@ export default function CommentBubble({
         top: pos.top,
         transform: `${PIN_OFFSET_TRANSFORM} translate(${dragOffset.x}px, ${dragOffset.y}px)`,
       }}
-      // Drag-to-reposition: only the bubble's OWN empty padding starts a drag —
-      // the target check excludes the textarea and the swatch/convert/delete
-      // controls beneath it, which keep their normal click/focus behavior.
+      // Drag-to-reposition: any EMPTY space inside the bubble starts a drag —
+      // excluded by ANCESTRY (closest, not a strict target===boxRef check), so
+      // this covers the outer padding AND blank space inside child wrappers
+      // (e.g. the gap between the color swatches and the action buttons in
+      // .comment-bubble__actions) without hardcoding which wrapper div is
+      // "safe." Only the textarea and the swatch/convert/delete controls
+      // themselves are excluded, keeping their normal click/focus behavior.
       onPointerDown={(e) => {
-        if (e.target !== boxRef.current || e.button !== 0) return;
+        if (e.button !== 0 || (e.target as HTMLElement).closest("textarea, button")) return;
         boxDragRef.current = { startX: e.clientX, startY: e.clientY, originX: dragOffset.x, originY: dragOffset.y };
         try {
           boxRef.current?.setPointerCapture(e.pointerId);
