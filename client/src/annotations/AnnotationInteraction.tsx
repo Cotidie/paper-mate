@@ -167,6 +167,7 @@ export default function AnnotationInteraction({
     recolorSelected,
     restrokeSelected,
     realphaSelected,
+    convertSelected,
     deleteSelected,
   } = selection;
 
@@ -637,6 +638,21 @@ export default function AnnotationInteraction({
             <AlphaRow value={selectedAnno.style.alpha ?? activeAlpha} onPick={realphaSelected} />
           )}
           <span className="quick-box__divider" aria-hidden="true" />
+          {/* Turn into comment (Story 3.7, AC1): text-highlight only — a region
+              highlight/underline/pen has no comment counterpart via this action. */}
+          {selectedAnno.type === "highlight" && selectedAnno.anchor.kind === "text" && (
+            <button
+              type="button"
+              role="menuitem"
+              className="quick-box__action quick-box__action--icon"
+              data-testid="quick-box-convert-comment"
+              aria-label="Turn into comment"
+              title="Turn into comment"
+              onClick={convertSelected}
+            >
+              <ChatCircle aria-hidden />
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"

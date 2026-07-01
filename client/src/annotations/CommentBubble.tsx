@@ -8,7 +8,7 @@
 // ref + the auto-grow layout effect (like `MemoBox`).
 
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { Trash } from "@phosphor-icons/react";
+import { Highlighter, Trash } from "@phosphor-icons/react";
 import type { Annotation } from "../api/client";
 import type { ScreenRect } from "../anchor";
 import ColorSwatchRow from "./ColorSwatchRow";
@@ -20,6 +20,7 @@ export default function CommentBubble({
   pos,
   onRetext,
   onRecolor,
+  onConvertToHighlight,
   onDelete,
   onClearSelection,
   onTextFocus,
@@ -29,6 +30,9 @@ export default function CommentBubble({
   pos: ScreenRect;
   onRetext: (id: string, body: string) => void;
   onRecolor: (color: string) => void;
+  /** Turn this comment back into a highlight (Story 3.7, AC2). Only rendered
+   *  for a `kind=text` comment (the reverse revert has no rect counterpart). */
+  onConvertToHighlight: () => void;
   onDelete: () => void;
   onClearSelection: () => void;
   /** Called when the textarea gains focus (start of a text-edit session). */
@@ -104,9 +108,22 @@ export default function CommentBubble({
       />
       <div className="comment-bubble__actions">
         <ColorSwatchRow value={anno.style.color} onPick={onRecolor} ariaLabel="Comment color" />
+        {anno.anchor.kind === "text" && (
+          <button
+            type="button"
+            role="menuitem"
+            className="comment-bubble__action"
+            data-testid={`comment-convert-highlight-${anno.id}`}
+            aria-label="Turn into highlight"
+            title="Turn into highlight"
+            onClick={onConvertToHighlight}
+          >
+            <Highlighter aria-hidden />
+          </button>
+        )}
         <button
           type="button"
-          className="comment-bubble__delete"
+          className="comment-bubble__action"
           data-testid={`comment-delete-${anno.id}`}
           aria-label="Delete"
           title="Delete (Del)"

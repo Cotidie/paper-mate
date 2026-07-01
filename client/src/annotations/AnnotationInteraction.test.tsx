@@ -1019,6 +1019,71 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
   });
 });
 
+describe("AnnotationInteraction convert highlight to comment (Story 3.7 — AC1)", () => {
+  /** Render the interaction layer with one page card and select a stored mark. */
+  function setup(marks: Annotation[], selectId: string) {
+    marks.forEach((m) => useAnnotationStore.getState().addAnnotation(m));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select(selectId));
+  }
+
+  it("shows 'Turn into comment' for a selected text highlight", async () => {
+    setup([textMark("m1")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("quick-box-convert-comment")).toBeTruthy();
+  });
+
+  it("is gated off for an underline mark (scope OUT)", async () => {
+    const underline = textMark("m1");
+    underline.type = "underline";
+    setup([underline], "m1");
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.queryByTestId("quick-box-convert-comment")).toBeNull();
+  });
+
+  it("is gated off for a region (kind=rect) highlight (scope OUT — reverse revert is text-only)", async () => {
+    const region = textMark("m1");
+    region.anchor = { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 } };
+    setup([region], "m1");
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.queryByTestId("quick-box-convert-comment")).toBeNull();
+  });
+
+  it("clicking it flips the mark to type=comment/body='' via the command path, keeps the selection", async () => {
+    setup([textMark("m1")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("quick-box-convert-comment"));
+    const m1 = useAnnotationStore.getState().annotations.get("m1")!;
+    expect(m1.type).toBe("comment");
+    expect(m1.body).toBe("");
+    // Selection is kept (not cleared) so the comment's bubble opens for it.
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+    // The generic quick-box gates off once the descriptor routes to the bubble.
+    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+  });
+
+  it("converts a two-page group together (both siblings flip in one call)", async () => {
+    setup([textMark("m1", "annotation-default", "g1"), textMark("m2", "annotation-default", "g1")], "m1");
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("quick-box-convert-comment"));
+    const map = useAnnotationStore.getState().annotations;
+    expect(map.get("m1")!.type).toBe("comment");
+    expect(map.get("m2")!.type).toBe("comment");
+  });
+
+  it("reverse convert reopens the generic quick-box even if a scroll closed it while the bubble was open (code review finding)", async () => {
+    const comment: Annotation = { ...textMark("m1"), type: "comment", body: "" };
+    setup([comment], "m1");
+    // A scroll while the comment (bubble-routed) is selected closes selectionBoxOpen.
+    // Harmless for a comment (its bubble doesn't gate on that flag) but must not
+    // suppress the generic box once the store flips the mark back to a highlight.
+    fireEvent.scroll(document, {});
+    act(() => useAnnotationStore.getState().retypeAnnotation(["m1"], "highlight", null, "2026-06-29T12:00:00Z"));
+    await screen.findByTestId("selection-quick-box");
+  });
+});
+
 describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
   /** A .page-surface element (inside a .pdf-canvas) so the memo pointerdown's
    *  closest(".page-surface") check passes. */

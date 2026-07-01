@@ -611,20 +611,22 @@
   outline: var(--focus-ring-width) solid var(--color-ink);
 }
 
-/* The bubble's action row: the recolor swatches + the delete button. */
+/* The bubble's action row: the recolor swatches + convert/delete icon buttons. */
 .comment-bubble__actions {
   display: flex;
   align-items: center;
   gap: var(--space-xxs);
 }
 
-.comment-bubble__delete {
+/* Shared icon-button chrome for the trailing actions (Turn into highlight,
+   Delete). The first one absorbs the row's free space so the pair (one or two
+   buttons, convert is gated to kind=text) hugs the right edge as a group. */
+.comment-bubble__action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: var(--quick-box-action-height);
   height: var(--quick-box-action-height);
-  margin-left: auto;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -633,15 +635,19 @@
   cursor: pointer;
 }
 
-.comment-bubble__delete:hover {
+.comment-bubble__actions button.comment-bubble__action:first-of-type {
+  margin-left: auto;
+}
+
+.comment-bubble__action:hover {
   background-color: var(--color-hairline-soft);
 }
 
-.comment-bubble__delete:focus-visible {
+.comment-bubble__action:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-ink);
 }
 
-.comment-bubble__delete svg {
+.comment-bubble__action svg {
   width: var(--pill-icon-size);
   height: var(--pill-icon-size);
   display: block;

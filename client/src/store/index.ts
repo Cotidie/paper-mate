@@ -166,6 +166,12 @@ export interface AnnotationStore {
    *  `updated_at` — the batch twin of `retextAnnotation` for group-aware comment
    *  edits (Story 3.2). Used for the blur-commit when a comment has group siblings. */
   retextAnnotations: (ids: string[], body: string, now: string) => void;
+  /** Flip one or more annotations' `type` + `body` together (Story 3.7, FR-27):
+   *  the highlight <-> comment conversion command. Group-aware via the `ids` the
+   *  caller passes (the forward/reverse actions resolve group siblings before
+   *  calling, like `recolorAnnotation`). No anchor/kind change (AD-5: style/type
+   *  only) — the same command path (patchAnnotations) gets undo/redo for free. */
+  retypeAnnotation: (ids: string[], type: Annotation["type"], body: string | null, now: string) => void;
   /** Resize one or more memos (by id) to a new box size and bump `updated_at` —
    *  the size twin of `restrokeAnnotation`, from the memo selection quick-box's
    *  `SizeRow`. `size` is the new normalized width/height FRACTION of the page box
@@ -317,6 +323,12 @@ export const useAnnotationStore = create<AnnotationStore>()(
           }
           return { annotations: next };
         }),
+      retypeAnnotation: (ids, type, body, now) =>
+        set((state) => ({
+          // No kind/anchor guard, like recolor — the caller (forward/reverse
+          // conversion action) already resolves the correct text-mark group.
+          annotations: patchAnnotations(state.annotations, ids, now, (a) => ({ ...a, type, body })),
+        })),
       resizeMemoAnnotation: (ids, size, now) =>
         set((state) => ({
           // Size is memo-only geometry (AR-5): only a rect-anchored memo has a box to
