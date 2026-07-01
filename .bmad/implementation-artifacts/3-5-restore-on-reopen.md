@@ -4,7 +4,7 @@ baseline_commit: 314092e
 
 # Story 3.5: Restore on reopen
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

@@ -4,7 +4,7 @@ baseline_commit: eba70f5
 
 # Story 3.4: Autosave to disk
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
