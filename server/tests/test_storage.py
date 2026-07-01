@@ -284,3 +284,29 @@ def test_read_annotations_wrong_shape_raises_corrupt(data_root):
     ann_path.write_text(json.dumps({"schema_version": 1, "annotations": [{"id": "x"}]}))
     with pytest.raises(storage.CorruptAnnotationsError):
         storage.read_annotations(doc_id)
+
+
+def test_read_annotations_duplicate_id_raises_corrupt(data_root):
+    """AC-5: a duplicate id would be collapsed by the client's id-keyed Map (silent
+    loss) — reject it instead of guessing."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "dup.pdf")
+    dup = make_annotation(doc_id).model_dump(mode="json")
+    (data_root / "library" / doc_id / "annotations.json").write_text(
+        json.dumps({"schema_version": 1, "annotations": [dup, dup]})
+    )
+    with pytest.raises(storage.CorruptAnnotationsError):
+        storage.read_annotations(doc_id)
+
+
+def test_read_annotations_foreign_doc_id_raises_corrupt(data_root):
+    """AC-5: an entry whose doc_id belongs to another document would restore into
+    the wrong reader — reject it as corrupt."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "foreign.pdf")
+    foreign = make_annotation("some-other-doc-id").model_dump(mode="json")
+    (data_root / "library" / doc_id / "annotations.json").write_text(
+        json.dumps({"schema_version": 1, "annotations": [foreign]})
+    )
+    with pytest.raises(storage.CorruptAnnotationsError):
+        storage.read_annotations(doc_id)

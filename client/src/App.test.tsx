@@ -498,32 +498,36 @@ describe("restore-on-open — the anti-clobber baseline (Story 3.5, AC-4)", () =
     vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
     vi.spyOn(api, "getAnnotations").mockResolvedValue([mark("r1", fakeDoc.doc_id)]);
     const putSpy = vi.spyOn(api, "putAnnotations").mockResolvedValue(undefined);
-    render(<App />);
 
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
-    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
-    // The restored mark is in the working copy.
-    expect(useAnnotationStore.getState().annotations.has("r1")).toBe(true);
-
-    // Advance well past the debounce: the restore must NOT have scheduled a PUT.
+    // Fake timers are enabled BEFORE render/open so that a debounce scheduled
+    // DURING open (a regression that dirties on hydrate) is created under fake
+    // timers and is actually driven by advanceTimersByTimeAsync — otherwise a
+    // real-timer PUT would fire after the test and falsely pass (Codex review).
     vi.useFakeTimers();
     try {
+      render(<App />);
+      fireEvent.change(screen.getByTestId("dropzone-input"), {
+        target: { files: [pdfFile()] },
+      });
+      // Flush the open promises (uploadDoc + getAnnotations) AND advance well past
+      // the debounce in one go — all under fake timers.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(DEBOUNCE_MS * 2);
       });
+      expect(screen.queryByTestId("reader-backdrop")).toBeTruthy();
+      // The restored mark is in the working copy, and no PUT was scheduled.
+      expect(useAnnotationStore.getState().annotations.has("r1")).toBe(true);
+      expect(putSpy).not.toHaveBeenCalled();
+
+      // Ctrl+Z right after open cannot remove the restored mark (undo floor, AC-4).
+      act(() => {
+        useAnnotationStore.temporal.getState().undo();
+      });
+      expect(useAnnotationStore.getState().annotations.has("r1")).toBe(true);
+      expect(useAnnotationStore.temporal.getState().pastStates.length).toBe(0);
     } finally {
       vi.useRealTimers();
     }
-    expect(putSpy).not.toHaveBeenCalled();
-
-    // Ctrl+Z right after open cannot remove the restored mark (undo floor, AC-4).
-    act(() => {
-      useAnnotationStore.temporal.getState().undo();
-    });
-    expect(useAnnotationStore.getState().annotations.has("r1")).toBe(true);
-    expect(useAnnotationStore.temporal.getState().pastStates.length).toBe(0);
   });
 
   it("a real edit AFTER restore still dirties + PUTs (baseline→dirty works)", async () => {

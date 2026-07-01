@@ -296,6 +296,20 @@ def read_annotations(doc_id: str) -> list[Annotation]:
     if not isinstance(raw, list):
         raise CorruptAnnotationsError("annotations.json 'annotations' is not a list")
     try:
-        return [Annotation.model_validate(a) for a in raw]
+        parsed = [Annotation.model_validate(a) for a in raw]
     except ValidationError as exc:
         raise CorruptAnnotationsError(f"invalid annotations.json shape: {exc}") from exc
+    # Collection-level integrity the client can't recover from silently: a
+    # duplicate id would be collapsed by the store's id-keyed Map (last wins,
+    # NFR-4 loss) and an entry belonging to another doc would restore into the
+    # wrong reader. Reject both as corrupt rather than guess (AC-3/AC-5, AD-8).
+    seen: set[str] = set()
+    for ann in parsed:
+        if ann.id in seen:
+            raise CorruptAnnotationsError(f"duplicate annotation id {ann.id!r} in annotations.json")
+        seen.add(ann.id)
+        if ann.doc_id != doc_id:
+            raise CorruptAnnotationsError(
+                f"annotation {ann.id!r} doc_id {ann.doc_id!r} does not match {doc_id!r}"
+            )
+    return parsed
