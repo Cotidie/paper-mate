@@ -502,11 +502,13 @@
 
 /* A comment PIN (DESIGN.md#annotation-comment-pin): a ChatCircle glyph anchored
    at the run start / click point, marking a commented spot. A fixed white body
-   + ink border (fix request) — NOT tinted to the mark's own color, so it reads
-   as the same "comment" badge regardless of accent (the highlight fill
-   underneath already carries the color cue). A real <button> (keyboard
-   reachable, focus ring). Rides the denormalized anchor (inline left/top) so
-   it stays glued on zoom (NFR-3). */
+   + ink border, NOT tinted to the mark's own color, so it reads as the same
+   "comment" badge regardless of accent (the highlight fill underneath already
+   carries the color cue). Floats just ABOVE the run (fix request: sitting
+   exactly on the text row blotted out the line under it) via the same
+   translate-above-the-anchor recipe `.edit-handle--move` uses. A real
+   <button> (keyboard reachable, focus ring). Rides the denormalized anchor
+   (inline left/top) so it stays glued on zoom (NFR-3). */
 .annotation-comment-pin {
   position: absolute;
   width: var(--comment-pin-size);
@@ -516,6 +518,18 @@
   background: none;
   cursor: pointer;
   pointer-events: auto;
+  transform: translateY(calc(-100% - var(--space-xxs)));
+}
+
+/* The icon reads as a group at ~0.4 opacity (matches --annotation-highlight-
+   opacity, the highlight fill's own opacity, fix request) so it doesn't blot
+   out whatever it sits over. Opacity is on the STACK, not each layer or the
+   button, so the two layers don't show through each other's edges and the
+   button's own hover/selected/flash ring stays full-strength. */
+.annotation-comment-pin__icon-stack {
+  position: absolute;
+  inset: 0;
+  opacity: var(--annotation-highlight-opacity);
 }
 
 /* Two same-size glyphs stacked exactly on top of each other: no single

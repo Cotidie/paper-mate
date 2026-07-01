@@ -342,14 +342,18 @@ export default function AnnotationLayer({
   // (geometry-on-kind: a text comment anchors at its first rect's start; a rect
   // comment at the rect's top-left). The pin is a round <button> (keyboard-
   // reachable, the click selects the comment) holding a ChatCircle glyph, white
-  // body + black border (fix request: a plain color dot read as decoration, not
-  // "comment" — a fixed white/black badge reads as a comment marker regardless
-  // of the mark's own accent color, which the highlight fill underneath already
-  // carries). Built from two stacked same-size glyphs (`fill` white behind,
-  // `regular` black on top) since no single Phosphor weight is two-tone. The
-  // highlight fill (text comments only) is painted by the highlight group. The
-  // bubble mounts only for the EXACTLY-selected annotation (not group siblings),
-  // so a two-page comment shows one bubble.
+  // body + black border, at ~0.4 opacity, floated just above the run (fix
+  // request: a plain color dot read as decoration, not "comment", and sitting
+  // exactly on the text row blotted out the line under it). A fixed white/black
+  // badge reads as a comment marker regardless of the mark's own accent color,
+  // which the highlight fill underneath already carries. Built from two stacked
+  // same-size glyphs (`fill` white behind, `regular` black on top) since no
+  // single Phosphor weight is two-tone; the float-above + opacity are CSS-only
+  // (`.annotation-comment-pin`/`__icon-stack`), so the anchor math here is
+  // unchanged and the comment bubble (which hangs off the SAME anchor point)
+  // is unaffected. The highlight fill (text comments only) is painted by the
+  // highlight group. The bubble mounts only for the EXACTLY-selected
+  // annotation (not group siblings), so a two-page comment shows one bubble.
   const renderComment = (a: Annotation) => {
     let anchor: ScreenRect | null = null;
     if (a.anchor.kind === "text") {
@@ -373,8 +377,10 @@ export default function AnnotationLayer({
           onPointerLeave={() => setHovered(null)}
           onClick={() => select(a.id)}
         >
-          <ChatCircle weight="fill" aria-hidden className="annotation-comment-pin__icon annotation-comment-pin__icon--fill" />
-          <ChatCircle weight="regular" aria-hidden className="annotation-comment-pin__icon annotation-comment-pin__icon--outline" />
+          <span className="annotation-comment-pin__icon-stack" aria-hidden>
+            <ChatCircle weight="fill" className="annotation-comment-pin__icon annotation-comment-pin__icon--fill" />
+            <ChatCircle weight="regular" className="annotation-comment-pin__icon annotation-comment-pin__icon--outline" />
+          </span>
         </button>
         {a.id === selectedId && (
           <CommentBubble
