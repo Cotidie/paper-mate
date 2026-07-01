@@ -92,9 +92,9 @@ def test_pen_annotation_null_alpha_backward_compatible() -> None:
     assert ann.style.alpha is None
 
 
-def test_annotation_surfaced_in_openapi_via_put_route() -> None:
-    """AD-3: the real PUT /annotations route emits the Annotation schema (Story
-    3.4); the manual injection is gone. GET stays Reserved (Story 3.5)."""
+def test_annotation_surfaced_in_openapi_via_annotations_route() -> None:
+    """AD-3: the real PUT + GET /annotations routes emit the Annotation schema
+    (Story 3.4 PUT, Story 3.5 GET); the manual injection is gone."""
     schema = app.openapi()
     schemas = schema["components"]["schemas"]
     assert "Annotation" in schemas
@@ -105,4 +105,4 @@ def test_annotation_surfaced_in_openapi_via_put_route() -> None:
     assert len(annotations_paths) == 1
     operations = schema["paths"][annotations_paths[0]]
     assert "put" in operations
-    assert "get" not in operations
+    assert "get" in operations  # Story 3.5: hydrate-on-open GET now live

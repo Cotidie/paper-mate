@@ -9,8 +9,10 @@
 // (Story 3.2): zundo wraps the store, tracking only `annotations` in temporal
 // history. The dirty flag + debounced single-flight autosave (3.4) is a passive
 // observer in `useAutosave.ts`, NOT here (AC-7: no new mutation path). Hydrate-
-// on-open (3.5) is also not here yet. Dependency-clean per AD-9: imports `api/`
-// types only.
+// on-open (3.5) lives here as the `hydrate` action + the `hydrateStore` free
+// function (which also clears zundo history so the loaded set is the undo floor).
+// It is a LOAD, not a user edit — the ONLY non-mutation way the set is set
+// wholesale. Dependency-clean per AD-9: imports `api/` types only.
 //
 // zundo (Story 3.2 / AE-1): `temporal` wraps the store and records the `annotations`
 // Map on every mutating `set()`. Partialized to `{ annotations }` only — all other
@@ -171,6 +173,13 @@ export interface AnnotationStore {
    *  rewrites VALUES only, so a kind change is rejected as a no-op (AC-8). No-op for
    *  an unknown id. kind=text marks are not moved here (Story 3.8 re-resolves them). */
   setAnnotationGeometry: (id: string, anchor: Annotation["anchor"], now: string) => void;
+  /** Replace the whole working copy with a freshly loaded set (hydrate-on-open,
+   *  Story 3.5). This is a LOAD, not a user edit — the ONLY non-mutation way the
+   *  annotation set is set wholesale. Builds the Map keyed by `id` and clears the
+   *  transient UI fields (selection/hover/drag) so nothing from a prior state
+   *  survives. Callers use `hydrateStore` (below), which also clears zundo
+   *  history so the loaded set is the undo floor (AC-4). */
+  hydrate: (annotations: Annotation[]) => void;
   /** Every annotation, ordered by `created_at` ascending — the Bank order (AR-12). */
   all: () => Annotation[];
 }
@@ -319,6 +328,15 @@ export const useAnnotationStore = create<AnnotationStore>()(
           next.set(id, { ...a, anchor, updated_at: now });
           return { annotations: next };
         }),
+      hydrate: (annotations) =>
+        // A LOAD, not a user edit: replace the Map keyed by id and clear all
+        // transient UI state so nothing from a prior state survives (Story 3.5).
+        set(() => ({
+          annotations: new Map(annotations.map((a) => [a.id, a])),
+          selectedId: null,
+          hoveredId: null,
+          dragPreview: null,
+        })),
       all: () =>
         [...get().annotations.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)),
     }),
@@ -337,3 +355,19 @@ export const useAnnotationStore = create<AnnotationStore>()(
     },
   ),
 );
+
+/**
+ * Hydrate the store with a freshly loaded annotation set, then drop undo history
+ * (Story 3.5, hydrate-on-open). Two steps: (1) the `hydrate` action replaces the
+ * working copy; (2) `temporal.getState().clear()` wipes zundo's past/future so the
+ * loaded set is the undo FLOOR — `Ctrl+Z` immediately after opening cannot remove
+ * restored marks (AC-4). Encapsulating the temporal clear here keeps zundo
+ * knowledge inside the store module (the caller in App just calls `hydrateStore`).
+ * Must run BEFORE the reader mounts (App keys `useAutosave` off the open doc): with
+ * the doc still null the autosave hook is inert, so this LOAD becomes the autosave
+ * baseline and is never PUT back (AC-4).
+ */
+export function hydrateStore(annotations: Annotation[]): void {
+  useAnnotationStore.getState().hydrate(annotations);
+  useAnnotationStore.temporal.getState().clear();
+}

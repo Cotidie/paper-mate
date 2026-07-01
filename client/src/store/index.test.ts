@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useAnnotationStore, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "./index";
+import { useAnnotationStore, hydrateStore, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "./index";
 import type { Annotation } from "../api/client";
 
 function mark(id: string, color: string, createdAt: string, groupId: string | null = null): Annotation {
@@ -385,6 +385,56 @@ describe("geometry edit — setAnnotationGeometry (move/resize command path, Sto
     expect(m.updated_at).toBe("2026-06-29T00:00:01Z");
     s.setDragPreview(null);
     expect(useAnnotationStore.getState().dragPreview).toBeNull();
+  });
+});
+
+describe("hydrate-on-open (Story 3.5)", () => {
+  const t = () => useAnnotationStore.temporal.getState();
+
+  it("hydrate builds the Map keyed by id and clears transient UI state", () => {
+    const s = useAnnotationStore.getState();
+    // Seed prior transient state that a hydrate must wipe.
+    s.addAnnotation(mark("old", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.select("old");
+    s.setHovered("old");
+    s.setDragPreview({ id: "old", anchor: { kind: "text", page_index: 0, rects: [], text: "x" } });
+
+    useAnnotationStore.getState().hydrate([
+      mark("a", "annotation-pink", "2026-06-29T00:00:02Z"),
+      mark("b", "annotation-blue", "2026-06-29T00:00:03Z"),
+    ]);
+
+    const st = useAnnotationStore.getState();
+    expect([...st.annotations.keys()].sort()).toEqual(["a", "b"]);
+    expect(st.annotations.get("a")!.style.color).toBe("annotation-pink");
+    expect(st.annotations.has("old")).toBe(false);
+    expect(st.selectedId).toBeNull();
+    expect(st.hoveredId).toBeNull();
+    expect(st.dragPreview).toBeNull();
+  });
+
+  it("hydrateStore clears zundo history so undo() cannot remove restored marks (AC-4)", () => {
+    // Prior edits leave undo history that hydrateStore must wipe.
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("x", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.addAnnotation(mark("y", "annotation-default", "2026-06-29T00:00:02Z"));
+    expect(t().pastStates.length).toBeGreaterThan(0);
+
+    hydrateStore([mark("r", "annotation-green", "2026-06-29T00:00:03Z")]);
+
+    expect(t().pastStates.length).toBe(0);
+    expect(t().futureStates.length).toBe(0);
+    // Undo is a no-op: the restored mark survives (it is the undo floor).
+    t().undo();
+    expect(useAnnotationStore.getState().annotations.has("r")).toBe(true);
+  });
+
+  it("hydrateStore([]) restores an empty set (imported-but-unannotated doc)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("stale", "annotation-default", "2026-06-29T00:00:01Z"));
+    hydrateStore([]);
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+    expect(t().pastStates.length).toBe(0);
   });
 });
 

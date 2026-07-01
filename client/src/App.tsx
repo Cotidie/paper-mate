@@ -5,11 +5,11 @@ import EmptyDropzone from "./EmptyDropzone";
 import Reader, { type ReaderHandle } from "./Reader";
 import ToolRail from "./ToolRail";
 import { type ActiveTool, isAnnotationTool } from "./tools";
-import { useAnnotationStore } from "./store";
+import { useAnnotationStore, hydrateStore } from "./store";
 import ZoomControl from "./ZoomControl";
 import TocPanel from "./TocPanel";
 import Toast from "./Toast";
-import { uploadDoc, fetchHealth, type Doc } from "./api/client";
+import { uploadDoc, getAnnotations, fetchHealth, type Doc } from "./api/client";
 import type { TocEntry } from "./render";
 import { useAutosave } from "./useAutosave";
 import SaveIndicator from "./SaveIndicator";
@@ -175,7 +175,18 @@ export default function App() {
     setBusy(true);
     setError(null);
     try {
-      setDoc(await uploadDoc(file));
+      // Hydrate-on-open ordering is load-bearing (Story 3.5, AC-4). Both awaits
+      // run while `doc` is still null, so `useAutosave` (keyed on the open doc)
+      // is inert. hydrateStore populates the store + clears undo history BEFORE
+      // `setDoc` flips the reader on, so autosave's baseline run captures the
+      // ALREADY-restored set — restore is never PUT back and is not undoable. A
+      // failure of either await lands in the catch: `doc` stays null, the store
+      // stays empty, and the next session can't clobber disk (AC-5). Do NOT move
+      // hydration into a Reader effect (baseline would capture the empty set).
+      const opened = await uploadDoc(file);
+      const restored = await getAnnotations(opened.doc_id);
+      hydrateStore(restored);
+      setDoc(opened);
     } catch {
       // Any load failure surfaces the same fixed copy; stay in S0 (AC-5).
       setError("Couldn't open this file.");
