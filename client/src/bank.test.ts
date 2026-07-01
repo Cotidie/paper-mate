@@ -137,6 +137,20 @@ describe("bankItems (Story 3.6, AC #2, #4)", () => {
     expect(rows.map((r) => r.id)).toEqual(["mine"]);
   });
 
+  it("excludes pen strokes and underlines; only highlight/memo/comment appear", () => {
+    const rows = bankItems(
+      [
+        penMark("pen"),
+        textMark("underline", { type: "underline" }),
+        textMark("highlight"),
+        memoMark("memo", "note"),
+        commentMark("comment", "reply"),
+      ],
+      "doc-1",
+    );
+    expect(rows.map((r) => r.id)).toEqual(["highlight", "memo", "comment"]);
+  });
+
   describe("snippet selection", () => {
     it("kind=text uses anchor.text, not a placeholder", () => {
       const [row] = bankItems([textMark("a", {}, "Theorem 1")], "doc-1");
@@ -154,14 +168,10 @@ describe("bankItems (Story 3.6, AC #2, #4)", () => {
       expect(comment.isPlaceholder).toBe(false);
     });
 
-    it("a region highlight (kind=rect) or a pen stroke (kind=path) gets a placeholder label", () => {
+    it("a region highlight (kind=rect) gets a placeholder label", () => {
       const [region] = bankItems([regionMark("r")], "doc-1");
       expect(region.snippet).toBe("Region");
       expect(region.isPlaceholder).toBe(true);
-
-      const [pen] = bankItems([penMark("p")], "doc-1");
-      expect(pen.snippet).toBe("Pen stroke");
-      expect(pen.isPlaceholder).toBe(true);
     });
 
     it("an empty/whitespace-only body falls back to the type label", () => {
@@ -203,25 +213,6 @@ describe("bankItems (Story 3.6, AC #2, #4)", () => {
     it("kind=rect: rect.y0", () => {
       const [row] = bankItems([regionMark("r")], "doc-1");
       expect(row.topFraction).toBe(0.4);
-    });
-
-    it("kind=path: pointsBounds(points).y0", () => {
-      const [row] = bankItems(
-        [
-          penMark("p", {
-            anchor: {
-              kind: "path",
-              page_index: 0,
-              points: [
-                { x: 0.1, y: 0.6 },
-                { x: 0.2, y: 0.3 },
-              ],
-            },
-          }),
-        ],
-        "doc-1",
-      );
-      expect(row.topFraction).toBe(0.3);
     });
 
     it("page = page_index + 1", () => {

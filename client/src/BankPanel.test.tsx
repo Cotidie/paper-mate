@@ -134,9 +134,25 @@ describe("BankPanel (Story 3.6, AC #1, #2, #3, #5)", () => {
     expect(screen.getByTestId("bank-row-r1").getAttribute("aria-label")).toBe("Highlight, page 1: Region");
   });
 
-  it("a placeholder whose snippet already equals its type label isn't repeated (e.g. a pen stroke)", () => {
+  it("a placeholder whose snippet already equals its type label isn't repeated (e.g. an empty memo)", () => {
     useAnnotationStore.getState().addAnnotation({
-      id: "p1",
+      id: "m1",
+      doc_id: "doc-1",
+      type: "memo",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.3, y1: 0.3 } },
+      style: { color: "annotation-pink", stroke_width: null, alpha: null },
+      body: "",
+      created_at: "2026-06-29T00:00:01Z",
+      updated_at: "2026-06-29T00:00:01Z",
+    });
+    render(<BankPanel open docId="doc-1" onJump={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByTestId("bank-row-m1").getAttribute("aria-label")).toBe("Memo, page 1");
+  });
+
+  it("excludes pen strokes and underlines from the panel (fix request)", () => {
+    useAnnotationStore.getState().addAnnotation({
+      id: "pen1",
       doc_id: "doc-1",
       type: "pen",
       group_id: null,
@@ -153,7 +169,10 @@ describe("BankPanel (Story 3.6, AC #1, #2, #3, #5)", () => {
       created_at: "2026-06-29T00:00:01Z",
       updated_at: "2026-06-29T00:00:01Z",
     });
+    useAnnotationStore.getState().addAnnotation(textMark("underline1", { type: "underline" }));
     render(<BankPanel open docId="doc-1" onJump={vi.fn()} onClose={vi.fn()} />);
-    expect(screen.getByTestId("bank-row-p1").getAttribute("aria-label")).toBe("Pen stroke, page 1");
+    expect(screen.getByTestId("bank-empty")).toBeTruthy();
+    expect(screen.queryByTestId("bank-row-pen1")).toBeNull();
+    expect(screen.queryByTestId("bank-row-underline1")).toBeNull();
   });
 });

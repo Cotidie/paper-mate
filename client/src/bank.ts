@@ -35,6 +35,10 @@ export const TYPE_LABEL: Record<Annotation["type"], string> = {
   comment: "Comment",
 };
 
+/** The types the Bank surfaces. Pen strokes and underlines are excluded: they
+ *  never produce a row, regardless of how many exist in the document. */
+const BANK_TYPES: ReadonlySet<Annotation["type"]> = new Set(["highlight", "memo", "comment"]);
+
 /** Trim outer whitespace and collapse internal newlines to a single space, so
  *  a multi-line note reads as one line in the row (visual truncation is CSS
  *  line-clamp, not string-slicing here — the full text stays available). */
@@ -84,14 +88,15 @@ function toBankItem(a: Annotation): BankItem {
 }
 
 /**
- * The Bank's row list (AC #2): every `docId` annotation, ordered `created_at`
- * ascending (AR-12, matching `store.all()`), with a two-page group (shared
- * non-null `group_id`) collapsed to ONE row — the first (earliest) sibling
+ * The Bank's row list (AC #2): every `docId` annotation of a `BANK_TYPES`
+ * type (pen and underline never appear), ordered `created_at` ascending
+ * (AR-12, matching `store.all()`), with a two-page group (shared non-null
+ * `group_id`) collapsed to ONE row — the first (earliest) sibling
  * encountered after sorting, so the jump lands on its own page/anchor.
  */
 export function bankItems(annotations: Iterable<Annotation>, docId: string): BankItem[] {
   const ordered = [...annotations]
-    .filter((a) => a.doc_id === docId)
+    .filter((a) => a.doc_id === docId && BANK_TYPES.has(a.type))
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   const seenGroups = new Set<string>();
