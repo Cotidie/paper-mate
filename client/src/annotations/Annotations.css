@@ -557,14 +557,13 @@
   color: var(--color-ink);
 }
 
-.annotation-comment-pin--hovered {
-  outline: var(--hairline-width) solid var(--color-ink);
-  outline-offset: var(--color-swatch-ring-offset);
-}
-
+/* No outline ring on hover/select (fix request: the ring read as a distracting
+   box around the icon) — full opacity above is the only hover/selected tell.
+   `:focus-visible` below is untouched: that is the KEYBOARD a11y ring, a
+   different affordance than mouse hover/click-select. */
+.annotation-comment-pin--hovered,
 .annotation-comment-pin--selected {
-  outline: var(--focus-ring-width) solid var(--color-ink);
-  outline-offset: var(--color-swatch-ring-offset);
+  outline: none;
 }
 
 .annotation-comment-pin:focus-visible {
