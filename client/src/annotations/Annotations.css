@@ -500,30 +500,70 @@
   pointer-events: none;
 }
 
-/* A comment PIN (DESIGN.md#annotation-comment-pin): a round accent dot anchored at
-   the run start / click point, marking a commented spot. A real <button> (keyboard
-   reachable, focus ring); the accent fill comes inline from style.color. Rides the
-   denormalized anchor (inline left/top) so it stays glued on zoom (NFR-3). */
+/* A comment PIN (DESIGN.md#annotation-comment-pin): a ChatCircle glyph anchored
+   at the run start / click point, marking a commented spot. A fixed white body
+   + ink border, NOT tinted to the mark's own color, so it reads as the same
+   "comment" badge regardless of accent (the highlight fill underneath already
+   carries the color cue). Straddles the run's top edge, HALF above it (fix
+   request: floating fully clear of the run read as detached from it) — shift
+   up by exactly half its own height, no extra gap. A real <button> (keyboard
+   reachable, focus ring). Rides the denormalized anchor (inline left/top) so
+   it stays glued on zoom (NFR-3). */
 .annotation-comment-pin {
   position: absolute;
   width: var(--comment-pin-size);
   height: var(--comment-pin-size);
   padding: 0;
-  border: var(--color-swatch-border) solid var(--color-hairline-strong);
-  border-radius: var(--radius-full);
+  border: none;
+  background: none;
   cursor: pointer;
   pointer-events: auto;
-  box-shadow: var(--shadow-card);
+  transform: translateY(-50%);
 }
 
-.annotation-comment-pin--hovered {
-  outline: var(--hairline-width) solid var(--color-ink);
-  outline-offset: var(--color-swatch-ring-offset);
+/* The icon reads as a group at --comment-pin-opacity (its OWN opacity, not
+   --annotation-highlight-opacity — the two are tuned independently) so it
+   doesn't blot out whatever it sits over. Opacity is on the STACK, not each
+   layer or the button, so the two layers don't show through each other's
+   edges and the button's own hover/selected/flash ring stays full-strength.
+   Hovering or selecting the comment goes to full opacity (fix request: make
+   the translucency "gone" on interaction) below. */
+.annotation-comment-pin__icon-stack {
+  position: absolute;
+  inset: 0;
+  opacity: var(--comment-pin-opacity);
 }
 
+.annotation-comment-pin--hovered .annotation-comment-pin__icon-stack,
+.annotation-comment-pin--selected .annotation-comment-pin__icon-stack {
+  opacity: 1;
+}
+
+/* Two same-size glyphs stacked exactly on top of each other: no single
+   Phosphor weight is two-tone, so the white body comes from the `fill`-weight
+   layer and the border from the `regular`-weight layer drawn over it. */
+.annotation-comment-pin__icon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.annotation-comment-pin__icon--fill {
+  color: var(--color-surface-card);
+}
+
+.annotation-comment-pin__icon--outline {
+  color: var(--color-ink);
+}
+
+/* No outline ring on hover/select (fix request: the ring read as a distracting
+   box around the icon) — full opacity above is the only hover/selected tell.
+   `:focus-visible` below is untouched: that is the KEYBOARD a11y ring, a
+   different affordance than mouse hover/click-select. */
+.annotation-comment-pin--hovered,
 .annotation-comment-pin--selected {
-  outline: var(--focus-ring-width) solid var(--color-ink);
-  outline-offset: var(--color-swatch-ring-offset);
+  outline: none;
 }
 
 .annotation-comment-pin:focus-visible {
@@ -797,5 +837,60 @@
    ring while drawing. */
 .pdf-canvas[data-draw] .annotation-pen--hovered:not(.annotation-pen--selected) {
   stroke: none;
+}
+
+/* Bank jump flash (Story 3.6, AC-4): the Annotation Bank's target mark gets a
+   resting ink ring (box-shadow, so it layers with an existing --selected
+   outline without fighting it; box-shadow doesn't affect layout either,
+   NFR-1) that briefly PULSES wider then settles back — the eye catches the
+   pulse, the resting ring then holds until `flashId` auto-clears
+   (store/index.ts's FLASH_MS, ~600ms; the 0.4s pulse settles well inside that
+   window so it is never cut mid-animation). */
+.annotation-highlight--flash,
+.annotation-memo--flash,
+.annotation-comment-pin--flash {
+  box-shadow: 0 0 0 var(--bank-flash-ring-width) var(--color-ink);
+  animation: bank-flash 0.4s ease-out;
+}
+
+@keyframes bank-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 var(--bank-flash-ring-width) var(--color-ink);
+  }
+  50% {
+    box-shadow: 0 0 0 calc(var(--bank-flash-ring-width) * 2) var(--color-ink);
+  }
+}
+
+/* A pen stroke (SVG path) can't take a box-shadow ring around its silhouette;
+   mirror the --hovered/--selected treatment (an ink SVG stroke) with the same
+   pulse shape instead. */
+.annotation-pen--flash {
+  stroke: var(--color-ink);
+  stroke-width: var(--bank-flash-ring-width);
+  animation: bank-flash-pen 0.4s ease-out;
+}
+
+@keyframes bank-flash-pen {
+  0%,
+  100% {
+    stroke-width: var(--bank-flash-ring-width);
+  }
+  50% {
+    stroke-width: calc(var(--bank-flash-ring-width) * 2);
+  }
+}
+
+/* Reduced motion (UX-DR17, AC-4): keep the resting ring/stroke (a brief static
+   emphasis) but skip the pulse entirely — instant, no motion. `flashId` still
+   sets/clears on its own timer regardless (store/index.ts). */
+@media (prefers-reduced-motion: reduce) {
+  .annotation-highlight--flash,
+  .annotation-memo--flash,
+  .annotation-comment-pin--flash,
+  .annotation-pen--flash {
+    animation: none;
+  }
 }
 

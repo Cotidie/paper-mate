@@ -16,14 +16,14 @@
 //
 // zundo (Story 3.2 / AE-1): `temporal` wraps the store and records the `annotations`
 // Map on every mutating `set()`. Partialized to `{ annotations }` only — all other
-// state (selectedId, hoveredId, dragPreview, active* defaults, actions) is excluded.
-// Equality: `Object.is` on the Map reference — no-op actions that return the same
-// `state` object produce no history entry (the existing no-op guards all return
-// `state`, preserving the reference). Limit: 100 entries (cheap; Annotation objects
-// are shared across Map snapshots so memory is bounded). Undo/redo is client-only,
-// in-memory, discarded on reload (AR-7).
+// state (selectedId, hoveredId, dragPreview, flashId, active* defaults, actions) is
+// excluded. Equality: `Object.is` on the Map reference — no-op actions that return
+// the same `state` object produce no history entry (the existing no-op guards all
+// return `state`, preserving the reference). Limit: 100 entries (cheap; Annotation
+// objects are shared across Map snapshots so memory is bounded). Undo/redo is
+// client-only, in-memory, discarded on reload (AR-7).
 // Access: `useAnnotationStore.temporal.getState().{undo,redo,clear,pause,resume}`.
-// Partialize exclusions: selectedId, hoveredId, dragPreview, activeColor,
+// Partialize exclusions: selectedId, hoveredId, dragPreview, flashId, activeColor,
 // activeStrokeWidth, activeAlpha, activeMemoSize, and all action functions.
 
 import { create } from "zustand";
@@ -121,6 +121,15 @@ export interface AnnotationStore {
   dragPreview: { id: string; anchor: Annotation["anchor"] } | null;
   /** Set or clear the transient drag preview. */
   setDragPreview: (preview: { id: string; anchor: Annotation["anchor"] } | null) => void;
+  /** The one annotation to briefly emphasize (Annotation Bank jump, Story 3.6):
+   *  a `--flash` ring `AnnotationLayer` renders, group-aware like hover/select.
+   *  The transient sibling of `hoveredId`/`selectedId` — excluded from the zundo
+   *  partialize and never part of `annotations` (AC-6: no new mutation surface). */
+  flashId: string | null;
+  /** Set (or clear) the flashed annotation. Prefer the free `flashAnnotation`
+   *  helper below for the Bank's auto-clearing jump-flash; call this directly
+   *  only to clear one early. */
+  flash: (id: string | null) => void;
   /** Remove an annotation by id AND every annotation sharing its non-null
    *  `group_id` (a two-page highlight deletes both pages together, AR-4). If the
    *  removed set includes `selectedId`, the selection clears. This is the
@@ -232,6 +241,8 @@ export const useAnnotationStore = create<AnnotationStore>()(
       setHovered: (id) => set({ hoveredId: id }),
       dragPreview: null,
       setDragPreview: (preview) => set({ dragPreview: preview }),
+      flashId: null,
+      flash: (id) => set({ flashId: id }),
       deleteAnnotation: (id) =>
         set((state) => {
           const target = state.annotations.get(id);
@@ -336,6 +347,7 @@ export const useAnnotationStore = create<AnnotationStore>()(
           selectedId: null,
           hoveredId: null,
           dragPreview: null,
+          flashId: null,
         })),
       all: () =>
         [...get().annotations.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)),
@@ -370,4 +382,33 @@ export const useAnnotationStore = create<AnnotationStore>()(
 export function hydrateStore(annotations: Annotation[]): void {
   useAnnotationStore.getState().hydrate(annotations);
   useAnnotationStore.temporal.getState().clear();
+}
+
+/**
+ * Idle time (ms) a Bank-jumped mark stays flashed before auto-clearing (Story
+ * 3.6, AC-4) — a behavioral timing constant, not a design token (mirrors
+ * `Reader.REPAINT_DEBOUNCE`). Exported so tests assert against the real value
+ * instead of a duplicated magic number.
+ */
+export const FLASH_MS = 600;
+
+/** The pending auto-clear timer, module-level so a second `flashAnnotation`
+ *  call can cancel the first (below) rather than racing it. */
+let flashClearTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Flash an annotation (Annotation Bank row click, Story 3.6), then auto-clear
+ * it after `FLASH_MS` — the `hydrateStore` sibling: a free function + side
+ * effect that keeps the timer out of `App` and out of React render. Cancels
+ * any prior pending clear FIRST, so a rapid second row click retargets the
+ * flash to the new mark instead of stranding it unflashed or double-firing a
+ * clear on the new one.
+ */
+export function flashAnnotation(id: string): void {
+  if (flashClearTimer) clearTimeout(flashClearTimer);
+  useAnnotationStore.getState().flash(id);
+  flashClearTimer = setTimeout(() => {
+    flashClearTimer = null;
+    useAnnotationStore.getState().flash(null);
+  }, FLASH_MS);
 }

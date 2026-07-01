@@ -225,6 +225,18 @@ export default function AnnotationInteraction({
         commentDownRef.current = null;
         return;
       }
+      // First-click-deselects (mirrors useMemoPlacement's user fix): if a mark is
+      // currently selected, this click's job is to DESELECT it (useSelection's own
+      // empty-space pointerdown handler does that, capture-phase) — not drop a new
+      // pin under it. Read the pre-clear value via `.getState()`: this listener is
+      // registered once at mount (stable deps below), so it fires before
+      // useSelection's per-selection listener, which re-registers later in the
+      // capture queue every time the selection changes. A second, fresh click
+      // (nothing selected) creates normally.
+      if (useAnnotationStore.getState().selectedId !== null) {
+        commentDownRef.current = null;
+        return;
+      }
       const el = e.target as Element | null;
       if (
         !el?.closest?.(".page-surface") ||
@@ -334,11 +346,14 @@ export default function AnnotationInteraction({
       restoreFocusRef.current = document.activeElement as HTMLElement | null;
       dispatch({ type: "present", selection: [], at: { x: e.clientX, y: e.clientY } });
     };
-    document.addEventListener("pointerdown", onPointerDownCandidate);
+    // Capture phase (registered at mount): must read `selectedId` BEFORE
+    // useSelection's own capture-phase deselect listener clears it (see the
+    // comment above) — mirrors useMemoPlacement's same ordering requirement.
+    document.addEventListener("pointerdown", onPointerDownCandidate, true);
     document.addEventListener("pointerup", onPointerUp);
     document.addEventListener("contextmenu", onContextMenu);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDownCandidate);
+      document.removeEventListener("pointerdown", onPointerDownCandidate, true);
       document.removeEventListener("pointerup", onPointerUp);
       document.removeEventListener("contextmenu", onContextMenu);
     };

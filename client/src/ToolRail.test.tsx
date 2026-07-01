@@ -20,7 +20,7 @@ type RailProps = {
 function renderRail(over: Partial<RailProps> = {}) {
   const onSelectTool = vi.fn();
   const onPickColor = vi.fn();
-  const onToggleBoxHighlight = vi.fn();
+  const onSetBoxHighlight = vi.fn();
   const onPickStrokeWidth = vi.fn();
   const onPickAlpha = vi.fn();
   const onToggleCollapse = vi.fn();
@@ -40,7 +40,7 @@ function renderRail(over: Partial<RailProps> = {}) {
       activeColor={p.activeColor}
       onPickColor={onPickColor}
       boxHighlight={p.boxHighlight}
-      onToggleBoxHighlight={onToggleBoxHighlight}
+      onSetBoxHighlight={onSetBoxHighlight}
       activeStrokeWidth={p.activeStrokeWidth}
       onPickStrokeWidth={onPickStrokeWidth}
       activeAlpha={p.activeAlpha}
@@ -54,7 +54,7 @@ function renderRail(over: Partial<RailProps> = {}) {
     props = { ...props, ...next };
     utils.rerender(el(props));
   };
-  return { ...utils, onSelectTool, onPickColor, onToggleBoxHighlight, onPickStrokeWidth, onPickAlpha, onToggleCollapse, update };
+  return { ...utils, onSelectTool, onPickColor, onSetBoxHighlight, onPickStrokeWidth, onPickAlpha, onToggleCollapse, update };
 }
 
 // Arm Pen (Story 2.8): start on cursor, switch to pen so the open-on-tool-change
@@ -199,7 +199,7 @@ describe("ToolRail", () => {
         activeColor="annotation-default"
         onPickColor={vi.fn()}
         boxHighlight={false}
-        onToggleBoxHighlight={vi.fn()}
+        onSetBoxHighlight={vi.fn()}
         activeStrokeWidth={4}
         onPickStrokeWidth={vi.fn()}
         activeAlpha={0.4}
@@ -271,29 +271,46 @@ describe("ToolRail", () => {
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
   });
 
-  // ── Box-highlight: a MODE toggle under the Highlight tool (relocated 2.11) ──
-  it("the highlight flyout carries a box-highlight toggle reflecting boxHighlight", () => {
+  // ── Highlight mode: TEXT (default) vs BOX — a two-option picker under the
+  // Highlight tool (relocated 2.11; TEXT option added alongside BOX so both
+  // modes are visible/selectable, not just a single box-mode checkbox) ──
+  it("the highlight flyout shows a text- and a box-highlight option, text armed by default", () => {
     armHighlight({ boxHighlight: false });
-    const toggle = screen.getByTestId("highlight-box-toggle");
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(toggle.className).not.toContain("tool-button--armed");
-    // Lives inside the highlight color flyout, not as a top-level rail tool.
-    expect(screen.getByTestId("highlight-color-flyout").contains(toggle)).toBe(true);
+    const text = screen.getByTestId("highlight-text-toggle");
+    const box = screen.getByTestId("highlight-box-toggle");
+    expect(text.getAttribute("aria-checked")).toBe("true");
+    expect(text.className).toContain("tool-button--armed");
+    expect(box.getAttribute("aria-checked")).toBe("false");
+    expect(box.className).not.toContain("tool-button--armed");
+    // Both live inside the highlight color flyout, not as top-level rail tools.
+    const flyout = screen.getByTestId("highlight-color-flyout");
+    expect(flyout.contains(text)).toBe(true);
+    expect(flyout.contains(box)).toBe(true);
     expect(screen.queryByTestId("tool-option-box")).toBeNull();
   });
 
-  it("shows the box-highlight toggle armed when boxHighlight is on", () => {
+  it("shows the box option armed (and text disarmed) when boxHighlight is on", () => {
     armHighlight({ boxHighlight: true });
-    const toggle = screen.getByTestId("highlight-box-toggle");
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(toggle.className).toContain("tool-button--armed");
+    const text = screen.getByTestId("highlight-text-toggle");
+    const box = screen.getByTestId("highlight-box-toggle");
+    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(box.className).toContain("tool-button--armed");
+    expect(text.getAttribute("aria-checked")).toBe("false");
+    expect(text.className).not.toContain("tool-button--armed");
   });
 
-  it("clicking the box-highlight toggle calls onToggleBoxHighlight and keeps the flyout open", () => {
-    const { onToggleBoxHighlight } = armHighlight({ boxHighlight: false });
+  it("clicking the box option calls onSetBoxHighlight(true) and keeps the flyout open", () => {
+    const { onSetBoxHighlight } = armHighlight({ boxHighlight: false });
     fireEvent.click(screen.getByTestId("highlight-box-toggle"));
-    expect(onToggleBoxHighlight).toHaveBeenCalledTimes(1);
-    // A mode toggle, NOT a pick — the flyout stays open (unlike a color swatch).
+    expect(onSetBoxHighlight).toHaveBeenCalledWith(true);
+    // A mode pick, NOT a color pick — the flyout stays open (unlike a swatch).
+    expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
+  });
+
+  it("clicking the text option calls onSetBoxHighlight(false) and keeps the flyout open", () => {
+    const { onSetBoxHighlight } = armHighlight({ boxHighlight: true });
+    fireEvent.click(screen.getByTestId("highlight-text-toggle"));
+    expect(onSetBoxHighlight).toHaveBeenCalledWith(false);
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
   });
 

@@ -216,9 +216,10 @@ components:
     padding: "{spacing.xs}"
     border: "1px {colors.hairline-strong}"
   annotation-comment-pin:
-    backgroundColor: "{colors.annotation-default}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.full}"
+    backgroundColor: "{colors.surface-card}"
+    borderColor: "{colors.ink}"
+    opacity: 0.6
+    hoverOpacity: 1
     size: 20px
   comment-bubble:
     backgroundColor: "{colors.surface-card}"
@@ -473,7 +474,7 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 
 **`annotation-memo`** — Free-floating text box typed onto the page. Background `{colors.surface-card}`, `{rounded.sm}`, 1px `{colors.hairline-strong}`, `{typography.body-sm}`. Does not displace page text.
 
-**`annotation-comment-pin`** — A comment both **highlights the underlying text** (accent at ~0.4) **and** anchors a `{rounded.full}` pin (accent fill) to mark it as a comment. Click opens the `comment-bubble`.
+**`annotation-comment-pin`** — A comment both **highlights the underlying text** (accent at ~0.4) **and** anchors a fixed comment-bubble glyph (`{colors.surface-card}` body, `{colors.ink}` border, not tinted to the mark's own accent), straddling the run's top edge at ~0.6 opacity (full opacity, no outline ring, on hover/select), to mark it as a comment. Click opens the `comment-bubble`.
 
 **`comment-bubble`** — The comment's note. Background `{colors.surface-card}`, `{rounded.md}`, 1px `{colors.hairline-strong}`, soft drop, `{typography.body-sm}`. Opens on pin click.
 

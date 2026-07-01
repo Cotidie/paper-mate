@@ -488,6 +488,80 @@ function mark(id: string, docId: string): Annotation {
   };
 }
 
+describe("Annotation Bank (Story 3.6)", () => {
+  afterEach(() => {
+    useAnnotationStore.setState({ annotations: new Map(), flashId: null });
+    useAnnotationStore.temporal.getState().clear();
+  });
+
+  // Resolve loadDocument (the shell tests leave it pending) so the Reader
+  // reaches its ready phase — mirrors the ToC describe block's helper.
+  async function openedApp() {
+    vi.mocked(renderLayer.loadDocument).mockResolvedValue({
+      getPage: vi.fn(async () => ({})),
+    } as unknown as Awaited<ReturnType<typeof renderLayer.loadDocument>>);
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    render(<App />);
+    fireEvent.change(screen.getByTestId("dropzone-input"), { target: { files: [pdfFile()] } });
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+  }
+
+  it("renders nothing until toggled, and shows the empty state once open (AC-1, AC-3)", async () => {
+    await openedApp();
+    expect(screen.queryByTestId("bank-panel")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Annotation bank" }));
+    expect(screen.getByTestId("bank-empty")).toBeTruthy();
+  });
+
+  it("toggles the Bank panel open/closed from the top-bar button, reflecting aria-pressed (AC-1)", async () => {
+    await openedApp();
+    const bank = screen.getByRole("button", { name: "Annotation bank" });
+    fireEvent.click(bank);
+    expect(screen.getByTestId("bank-panel")).toBeTruthy();
+    expect(bank.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(bank);
+    expect(screen.queryByTestId("bank-panel")).toBeNull();
+    expect(bank.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("Ctrl B toggles the Bank panel (AC-1)", async () => {
+    await openedApp();
+    expect(screen.queryByTestId("bank-panel")).toBeNull();
+    fireEvent.keyDown(document, { ctrlKey: true, key: "b" });
+    expect(screen.getByTestId("bank-panel")).toBeTruthy();
+    fireEvent.keyDown(document, { ctrlKey: true, key: "b" });
+    expect(screen.queryByTestId("bank-panel")).toBeNull();
+  });
+
+  it("Ctrl B is exempt while typing in an editable field", async () => {
+    await openedApp();
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+    fireEvent.keyDown(input, { ctrlKey: true, key: "b" });
+    expect(screen.queryByTestId("bank-panel")).toBeNull();
+    document.body.removeChild(input);
+  });
+
+  it("lists a mark belonging to the open document", async () => {
+    await openedApp();
+    act(() => useAnnotationStore.getState().addAnnotation(mark("a1", fakeDoc.doc_id)));
+    fireEvent.click(screen.getByRole("button", { name: "Annotation bank" }));
+    expect(screen.getByTestId("bank-row-a1")).toBeTruthy();
+  });
+
+  it("clicking a row flashes the mark and keeps the panel open (unlike ToC's close-on-jump)", async () => {
+    await openedApp();
+    act(() => useAnnotationStore.getState().addAnnotation(mark("a1", fakeDoc.doc_id)));
+    fireEvent.click(screen.getByRole("button", { name: "Annotation bank" }));
+    fireEvent.click(screen.getByTestId("bank-row-a1"));
+    expect(useAnnotationStore.getState().flashId).toBe("a1");
+    // The Bank is a review surface (EXPERIENCE.md F2): stays open so the reader
+    // can click through several marks, unlike the ToC's one-shot navigation.
+    expect(screen.getByTestId("bank-panel")).toBeTruthy();
+  });
+});
+
 describe("restore-on-open — the anti-clobber baseline (Story 3.5, AC-4)", () => {
   afterEach(() => {
     useAnnotationStore.setState({ annotations: new Map() });

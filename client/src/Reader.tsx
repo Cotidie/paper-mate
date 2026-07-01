@@ -46,6 +46,11 @@ export interface ReaderHandle {
   /** Scroll the given 1-based page to the top of the viewport (ToC jump,
    *  Story 1.9). Same no-reflow scroll mechanic as PgUp/PgDn. */
   jumpToPage: (pageNumber: number) => void;
+  /** Scroll to a fractional position within a page (Annotation Bank jump,
+   *  Story 3.6): `pageIndex` is 0-based, `topFraction` a `[0,1]` fraction of
+   *  that page's rendered height. Same no-reflow scroll mechanic as
+   *  `jumpToPage`, offset by the fraction. */
+  jumpToAnnotation: (pageIndex: number, topFraction: number) => void;
 }
 
 /**
@@ -210,34 +215,66 @@ export default function Reader({
     [applyScale, centerFocal, computeFitScale, boxes],
   );
 
-  // Scroll a 1-based page to the top of the viewport. The shared mechanic behind
-  // BOTH PgUp/PgDn and the ToC jump (Story 1.9): clamp the target, find its card,
-  // and `scrollTo` its top — offset-only, so nothing reflows (NFR-1). Honors
-  // `prefers-reduced-motion` (smooth → instant). No-ops where layout/scrollTo is
-  // unavailable (jsdom). No anchor/coordinate math (AR-9).
+  // Scroll a page card's top (+ a card-relative `extraTop` px offset) into the
+  // viewport — offset-only, so nothing reflows (NFR-1). Honors
+  // `prefers-reduced-motion` (smooth → instant) and refocuses the canvas after
+  // (so PgUp/PgDn nav / a next Bank jump stays live — a ToC row click or Bank
+  // row click unmounts its panel, dropping focus to <body>; `preventScroll` so
+  // the focus call can't fight the smooth scroll). No-ops where layout/scrollTo
+  // is unavailable (jsdom). No anchor/coordinate math (AR-9). Shared by
+  // `scrollToPage` (PgUp/PgDn + ToC, `extraTop=0`) and `jumpToAnnotation`
+  // (Annotation Bank, Story 3.6) so there is one scroll mechanic, not two.
+  const scrollCardIntoView = useCallback((card: HTMLDivElement, extraTop: number) => {
+    const container = scrollRef.current;
+    if (!container || typeof container.scrollTo !== "function") return;
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    container.scrollTo({ top: card.offsetTop + extraTop, behavior: reduceMotion ? "auto" : "smooth" });
+    container.focus?.({ preventScroll: true });
+  }, []);
+
+  // Scroll a 1-based page to the top of the viewport (PgUp/PgDn + the ToC jump,
+  // Story 1.9): clamp the target, find its card, scroll it flush to the top.
   const scrollToPage = useCallback(
     (pageNumber: number) => {
       const target = Math.min(doc.page_count, Math.max(1, pageNumber));
       const card = cards.current.get(target);
-      const container = scrollRef.current;
-      if (!card || !container || typeof container.scrollTo !== "function") return;
-      const reduceMotion =
-        typeof window.matchMedia === "function" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      container.scrollTo({ top: card.offsetTop, behavior: reduceMotion ? "auto" : "smooth" });
-      // Return keyboard focus to the canvas so PgUp/PgDn nav stays live after a
-      // jump (a ToC row click unmounts the panel, dropping focus to <body>).
-      // `preventScroll` so the focus call can't fight the smooth scroll above.
-      container.focus?.({ preventScroll: true });
+      if (card) scrollCardIntoView(card, 0);
     },
-    [doc.page_count],
+    [doc.page_count, scrollCardIntoView],
   );
 
-  // Expose zoom + ToC jump to the top-bar chrome owned by App.
+  // The margin (a fraction of the scroll CONTAINER's — the viewport's —
+  // clientHeight, not the target card's) kept between the viewport top and a
+  // Bank-jumped mark, so it lands a little inside the view rather than pinned
+  // flush to the edge (Story 3.6, AC-4). Deliberately viewport-relative, not
+  // card-relative: at high zoom a page card can be many times taller than the
+  // viewport, so a card-relative margin could overshoot the visible area
+  // (Codex review finding).
+  const JUMP_MARGIN_FRACTION = 0.15;
+
+  // Scroll to a fractional position within a page (Annotation Bank row click,
+  // Story 3.6): clamp the 0-based `pageIndex` to a real page, then add
+  // `topFraction * card.clientHeight` (a page-normalized, zoom-independent
+  // fraction from `bank.ts` — AD-9: no anchor/coordinate math here) less the
+  // top margin above.
+  const jumpToAnnotation = useCallback(
+    (pageIndex: number, topFraction: number) => {
+      const pageNumber = Math.min(doc.page_count, Math.max(1, pageIndex + 1));
+      const card = cards.current.get(pageNumber);
+      if (!card) return;
+      const margin = (scrollRef.current?.clientHeight ?? 0) * JUMP_MARGIN_FRACTION;
+      scrollCardIntoView(card, topFraction * card.clientHeight - margin);
+    },
+    [doc.page_count, scrollCardIntoView],
+  );
+
+  // Expose zoom + ToC jump + Bank jump to the top-bar chrome owned by App.
   useImperativeHandle(
     ref,
-    () => ({ zoomIn, zoomOut, resetZoom, jumpToPage: scrollToPage }),
-    [zoomIn, zoomOut, resetZoom, scrollToPage],
+    () => ({ zoomIn, zoomOut, resetZoom, jumpToPage: scrollToPage, jumpToAnnotation }),
+    [zoomIn, zoomOut, resetZoom, scrollToPage, jumpToAnnotation],
   );
 
   // Keep scaleRef in sync AND apply focal-point scroll compensation after the

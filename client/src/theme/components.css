@@ -71,6 +71,19 @@
   /* Phosphor close glyph size. */
   --toc-icon-size: 18px;
 
+  /* annotation-bank-panel (Story 3.6; DESIGN.md components.annotation-bank-panel).
+     Mirrors toc-panel's overlay shape (own width/offset/max-height); the row
+     dims (dot/icon/gap) BankPanel.css consumes. */
+  --bank-panel-width: 320px;
+  --bank-panel-offset: 16px;
+  --bank-panel-max-height: 70vh;
+  --bank-row-gap: 2px;
+  --bank-dot-size: 10px;
+  --bank-icon-size: 18px;
+  /* The brief ring emphasis a Bank jump gives its target mark (AC-4); the
+     annotation-*--flash modifiers in Annotations.css consume this. */
+  --bank-flash-ring-width: 3px;
+
   /* zoom-control (top-bar pill, left of ToC; DESIGN.md components.zoom-control) */
   --zoom-control-gap: 4px;
   /* Reserve room for the widest % readout ("400%") so the pill doesn't jitter
@@ -128,12 +141,16 @@
   --memo-size-preview-large: 22px;
 
   /* annotation-comment-pin + comment-bubble (DESIGN.md components.annotation-
-     comment-pin / comment-bubble): the round pin (rounded.full, 20px, accent fill)
-     anchored at a comment's run start / click point, and its note popup. The pin
-     size doubles as the bubble's vertical offset below the pin; the bubble width +
-     its textarea min-height are the only other raw dims (chrome, scale-independent
-     since the bubble is a fixed popup, not page-anchored geometry). */
+     comment-pin / comment-bubble): the white/ink ChatCircle badge straddling a
+     comment's run start / click point (half above, half over the run), and its
+     note popup. The pin size doubles as the bubble's vertical offset below the
+     ANCHOR point (not the pin's own straddled position); the bubble width + its
+     textarea min-height are the only other raw dims (chrome, scale-independent
+     since the bubble is a fixed popup, not page-anchored geometry). The pin's
+     OWN opacity is separate from --annotation-highlight-opacity (the highlight
+     fill's own opacity) since the two are tuned independently. */
   --comment-pin-size: 20px;
+  --comment-pin-opacity: 0.6;
   --comment-bubble-width: 220px;
   --comment-bubble-text-min-height: 48px;
 
