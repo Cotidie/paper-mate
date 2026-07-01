@@ -34,6 +34,13 @@ export type EditHandle = "move" | RectCorner;
  *  can't scale a stroke to a zero/negative (flipped) size. */
 const MIN_PEN_SCALE = 0.05;
 
+/** Client-pixel distance from the pointerdown origin before a handle drag counts
+ *  as "moved" (vs. a plain click). Mirrors the existing COMMENT_CLICK_SLOP
+ *  convention (AnnotationInteraction.tsx) — needed here because the comment pin
+ *  is a dual-purpose handle: click selects, drag moves. Without this, hand-tremor
+ *  during a plain click would commit a spurious geometry write. */
+const HANDLE_MOVE_SLOP = 5;
+
 interface DragState {
   id: string;
   handle: EditHandle;
@@ -100,11 +107,15 @@ export function useEditGesture(opts: {
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
+      if (!d.moved) {
+        const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
+        if (dist < HANDLE_MOVE_SLOP) return; // still within slop: let a plain click fire on release
+        d.moved = true;
+      }
       const w = d.box.width * d.scale;
       const h = d.box.height * d.scale;
       const dx = w > 0 ? (e.clientX - d.startX) / w : 0;
       const dy = h > 0 ? (e.clientY - d.startY) / h : 0;
-      if (dx !== 0 || dy !== 0) d.moved = true;
       const next = computeAnchor(d, dx, dy);
       if (!next) return;
       d.lastAnchor = next;

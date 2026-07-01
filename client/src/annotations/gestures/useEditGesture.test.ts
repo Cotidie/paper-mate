@@ -131,6 +131,32 @@ describe("useEditGesture (move/resize drag, Story 3.1)", () => {
     expect(useAnnotationStore.getState().annotations.get("m")!.updated_at).toBe("2026-06-30T00:00:00Z");
     expect(useAnnotationStore.getState().dragPreview).toBeNull();
   });
+
+  it("a sub-slop press-and-jiggle commits nothing (click-vs-drag slop, matches COMMENT_CLICK_SLOP)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    down(handle("move", "m"), 100, 100);
+    move(102, 101); // dist ≈ 2.24px, below the 5px slop
+    expect(useAnnotationStore.getState().dragPreview).toBeNull();
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.updated_at).toBe("2026-06-30T00:00:00Z");
+  });
+
+  it("a past-slop drag measures the delta from the ORIGINAL down-point (no jump at the slop threshold)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    down(handle("move", "m"), 100, 100);
+    move(103, 100); // dist = 3px, still below slop — no preview yet
+    move(350, 100); // now well past slop; dx must be measured from x=100, not x=103
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    if (m.anchor.kind === "rect") {
+      // dx = (350-100)/1000 = 0.25 — same delta as the plain move test above,
+      // proving the intermediate sub-slop sample never became the new origin.
+      expect(m.anchor.rect).toEqual({ x0: 0.5, y0: 0.25, x1: 0.75, y1: 0.5 });
+    }
+  });
 });
 
 function pen(id: string, points: { x: number; y: number }[]): Annotation {
