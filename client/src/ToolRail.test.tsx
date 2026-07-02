@@ -209,6 +209,19 @@ describe("ToolRail", () => {
     expect(screen.queryByTestId("tool-flyout")).toBeNull();
   });
 
+  it("remembers the last pointer sub-tool across a switch away and back (bug repro)", () => {
+    // Pick Box select, switch to an unrelated tool, then click the pointer
+    // group button again: it must re-arm Box select, not reset to Cursor.
+    const r = renderRail({ activeTool: "cursor" });
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    fireEvent.click(screen.getByTestId("tool-option-boxSelect"));
+    r.update({ activeTool: "boxSelect" });
+    r.update({ activeTool: "highlight" });
+    expect(screen.getByTestId("tool-cursor-button").className).not.toContain("tool-button--armed");
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    expect(r.onSelectTool).toHaveBeenCalledWith("boxSelect");
+  });
+
   it("gives every tool a hover tooltip (native title) describing it + its shortcut", () => {
     renderRail({ activeTool: "cursor" });
     // Rail button + collapse have tooltips.

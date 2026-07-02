@@ -114,6 +114,14 @@ export default function ToolRail({
   const memoActive = activeTool === "memo";
   const commentActive = activeTool === "comment";
 
+  // Remember the last-armed pointer sub-tool (cursor/hand/boxSelect) across a
+  // switch to a non-pointer tool, so clicking the pointer-group button again
+  // re-arms what was last chosen (e.g. Group Select) instead of resetting to
+  // Cursor. A ref, not state: it only needs to track the latest pointer value
+  // seen, never triggers its own render.
+  const lastPointerModeRef = useRef<PointerTool>(isPointerTool(activeTool) ? activeTool : "cursor");
+  if (isPointerTool(activeTool)) lastPointerModeRef.current = activeTool;
+
   // ONE consistent mechanism (Story 2.6 refinement): switching to ANY tool opens
   // that tool's sub-toolbar by default. Detect a real CHANGE of `activeTool`
   // (compare to the previous value) so it does NOT fire on mount — the initial
@@ -151,8 +159,8 @@ export default function ToolRail({
   }, [collapsed]);
 
   // The pointer sub-mode the button shows: the active pointer tool when one is
-  // active, else cursor (the default).
-  const pointerMode: PointerTool = isPointerTool(activeTool) ? activeTool : "cursor";
+  // active, else the last one that WAS active (falls back to cursor on mount).
+  const pointerMode: PointerTool = isPointerTool(activeTool) ? activeTool : lastPointerModeRef.current;
   const active = OPTIONS.find((o) => o.value === pointerMode) ?? OPTIONS[0];
   const ActiveIcon = active.Icon;
 
