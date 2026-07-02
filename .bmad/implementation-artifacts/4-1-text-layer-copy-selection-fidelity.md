@@ -4,7 +4,7 @@ baseline_commit: 687cabd1f654650d2f144a3e38e04e71f898ea35
 
 # Story 4.1: Text-layer copy & selection fidelity
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

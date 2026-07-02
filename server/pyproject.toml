@@ -1,6 +1,6 @@
 [project]
 name = "paper-mate-server"
-version = "0.3.0"
+version = "0.3.1"
 description = "Paper Mate backend — thin FastAPI persistence + static SPA serving (AD-1, AD-10)."
 requires-python = ">=3.12"
 dependencies = [
