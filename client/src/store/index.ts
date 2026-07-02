@@ -8,11 +8,14 @@
 // AE-3) — no component mutates annotations outside it. The do/undo STACK is here
 // (Story 3.2): zundo wraps the store, tracking only `annotations` in temporal
 // history. The dirty flag + debounced single-flight autosave (3.4) is a passive
-// observer in `useAutosave.ts`, NOT here (AC-7: no new mutation path). Hydrate-
-// on-open (3.5) lives here as the `hydrate` action + the `hydrateStore` free
-// function (which also clears zundo history so the loaded set is the undo floor).
-// It is a LOAD, not a user edit — the ONLY non-mutation way the set is set
-// wholesale. Dependency-clean per AD-9: imports `api/` types only.
+// observer in `useAutosave.ts`, NOT here (AC-7: no new mutation path). The store
+// also owns `docId` (Story 5.8): opening/switching a doc sets `docId` and
+// `annotations` atomically via the `openDoc` action + its `openDoc` free-function
+// wrapper (which also clears zundo history so the loaded set is the undo floor),
+// so autosave can bind its PUT target to `store.docId` instead of a defensive
+// cross-doc generation guard. This is a LOAD, not a user edit — the ONLY
+// non-mutation way the set is set wholesale. Dependency-clean per AD-9: imports
+// `api/` types only.
 //
 // zundo (Story 3.2 / AE-1): `temporal` wraps the store and records the `annotations`
 // Map on every mutating `set()`. Partialized to `{ annotations }` only — all other
@@ -23,7 +26,7 @@
 // objects are shared across Map snapshots so memory is bounded). Undo/redo is
 // client-only, in-memory, discarded on reload (AR-7).
 // Access: `useAnnotationStore.temporal.getState().{undo,redo,clear,pause,resume}`.
-// Partialize exclusions: selectedId, multiSelectedIds, hoveredId, dragPreview,
+// Partialize exclusions: docId, selectedId, multiSelectedIds, hoveredId, dragPreview,
 // groupDragPreview, flashId, hidden, activeColors, activeStrokeWidth,
 // activeAlpha, activeMemoSize, and all action functions.
 
@@ -61,6 +64,13 @@ export const MEMO_SIZES: MemoSize[] = [
 export const DEFAULT_MEMO_SIZE: MemoSize = { key: "medium", width: 90, height: 90 };
 
 export interface AnnotationStore {
+  /** The currently open document's id, or `null` when no doc is open (Story
+   *  5.8). Owned ATOMICALLY with `annotations` below: both are set together by
+   *  `openDoc`, so there is never a window where `annotations` belongs to one
+   *  doc while `docId` reads another (AR-6). Autosave (`useAutosave.ts`) binds
+   *  its PUT target to this field, read live at flush time. Excluded from the
+   *  zundo partialize: undo/redo must never revert which doc is open. */
+  docId: string | null;
   /** All annotations, keyed by `id` (AD-7). */
   annotations: Map<string, Annotation>;
   /** The one selected annotation (AD-12), or `null` when nothing is selected.
@@ -256,13 +266,14 @@ export interface AnnotationStore {
    *  computes each next anchor via the `anchor/` helpers — the store still does
    *  no coordinate math (AD-9). */
   setAnnotationGeometries: (updates: { id: string; anchor: Annotation["anchor"] }[], now: string) => void;
-  /** Replace the whole working copy with a freshly loaded set (hydrate-on-open,
-   *  Story 3.5). This is a LOAD, not a user edit — the ONLY non-mutation way the
-   *  annotation set is set wholesale. Builds the Map keyed by `id` and clears the
-   *  transient UI fields (selection/hover/drag) so nothing from a prior state
-   *  survives. Callers use `hydrateStore` (below), which also clears zundo
-   *  history so the loaded set is the undo floor (AC-4). */
-  hydrate: (annotations: Annotation[]) => void;
+  /** Replace `docId` AND the whole working copy atomically (hydrate-on-open /
+   *  doc-switch, Story 3.5 + 5.8). This is a LOAD, not a user edit — the ONLY
+   *  non-mutation way the set is set wholesale. Builds the Map keyed by `id` and
+   *  clears the transient UI fields (selection/hover/drag) so nothing from a
+   *  prior doc's state survives. Callers use the free `openDoc` function
+   *  (below), which also clears zundo history so the loaded set is the undo
+   *  floor (AC-4). */
+  openDoc: (docId: string, annotations: Annotation[]) => void;
   /** Every annotation, ordered by `created_at` ascending — the Bank order (AR-12). */
   all: () => Annotation[];
 }
@@ -314,6 +325,7 @@ function patchAnnotations(
 export const useAnnotationStore = create<AnnotationStore>()(
   temporal(
     (set, get) => ({
+      docId: null,
       annotations: new Map(),
       selectedId: null,
       hoveredId: null,
@@ -486,10 +498,12 @@ export const useAnnotationStore = create<AnnotationStore>()(
           }
           return next ? { annotations: next } : state;
         }),
-      hydrate: (annotations) =>
-        // A LOAD, not a user edit: replace the Map keyed by id and clear all
-        // transient UI state so nothing from a prior state survives (Story 3.5).
+      openDoc: (docId, annotations) =>
+        // A LOAD, not a user edit: set docId + the annotations Map keyed by id
+        // TOGETHER in one update (atomic ownership, AC-1) and clear all transient
+        // UI state so nothing from a prior doc's state survives (Story 3.5 + 5.8).
         set(() => ({
+          docId,
           annotations: new Map(annotations.map((a) => [a.id, a])),
           selectedId: null,
           multiSelectedIds: [],
@@ -503,8 +517,9 @@ export const useAnnotationStore = create<AnnotationStore>()(
         [...get().annotations.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)),
     }),
     {
-      // Track only the annotation set. Excludes selectedId, hoveredId, dragPreview,
-      // active* defaults, and all action functions from undo history (AC-5).
+      // Track only the annotation set. Excludes docId, selectedId, hoveredId,
+      // dragPreview, active* defaults, and all action functions from undo
+      // history (AC-5) — undo/redo must never revert which doc is open (5.8).
       partialize: (s) => ({ annotations: s.annotations }),
       // 100 entries: generous for normal sessions, bounded so the singleton's memory
       // stays finite (Map snapshots share unchanged Annotation objects, so each entry
@@ -519,18 +534,20 @@ export const useAnnotationStore = create<AnnotationStore>()(
 );
 
 /**
- * Hydrate the store with a freshly loaded annotation set, then drop undo history
- * (Story 3.5, hydrate-on-open). Two steps: (1) the `hydrate` action replaces the
- * working copy; (2) `temporal.getState().clear()` wipes zundo's past/future so the
- * loaded set is the undo FLOOR — `Ctrl+Z` immediately after opening cannot remove
- * restored marks (AC-4). Encapsulating the temporal clear here keeps zundo
- * knowledge inside the store module (the caller in App just calls `hydrateStore`).
- * Must run BEFORE the reader mounts (App keys `useAutosave` off the open doc): with
- * the doc still null the autosave hook is inert, so this LOAD becomes the autosave
- * baseline and is never PUT back (AC-4).
+ * Open a doc into the store: set `docId` + a freshly loaded annotation set
+ * atomically, then drop undo history (Story 3.5 hydrate-on-open + Story 5.8
+ * doc-scoping). Two steps: (1) the `openDoc` action replaces `docId` and the
+ * working copy TOGETHER, so there is never a window where one belongs to the
+ * new doc and the other to the old; (2) `temporal.getState().clear()` wipes
+ * zundo's past/future so the loaded set is the undo FLOOR — `Ctrl+Z`
+ * immediately after opening cannot remove restored marks (AC-4/AC-5).
+ * Encapsulating the temporal clear here keeps zundo knowledge inside the store
+ * module (the caller in App just calls `openDoc`). Must run BEFORE the reader
+ * mounts: with `store.docId` still null, `useAutosave` is inert, so this LOAD
+ * becomes the autosave baseline and is never PUT back (AC-5).
  */
-export function hydrateStore(annotations: Annotation[]): void {
-  useAnnotationStore.getState().hydrate(annotations);
+export function openDoc(docId: string, annotations: Annotation[]): void {
+  useAnnotationStore.getState().openDoc(docId, annotations);
   useAnnotationStore.temporal.getState().clear();
 }
 
@@ -548,7 +565,7 @@ let flashClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Flash an annotation (Annotation Bank row click, Story 3.6), then auto-clear
- * it after `FLASH_MS` — the `hydrateStore` sibling: a free function + side
+ * it after `FLASH_MS` — the `openDoc` sibling: a free function + side
  * effect that keeps the timer out of `App` and out of React render. Cancels
  * any prior pending clear FIRST, so a rapid second row click retargets the
  * flash to the new mark instead of stranding it unflashed or double-firing a

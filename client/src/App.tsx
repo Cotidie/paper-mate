@@ -5,7 +5,7 @@ import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
 import Reader, { type ReaderHandle } from "@/components/Reader/Reader";
 import ToolRail from "@/components/ToolRail/ToolRail";
 import { type ActiveTool, isAnnotationTool } from "@/lib/tools";
-import { useAnnotationStore, hydrateStore, flashAnnotation } from "@/store";
+import { useAnnotationStore, openDoc, flashAnnotation } from "@/store";
 import ZoomControl from "@/components/ZoomControl/ZoomControl";
 import PageIndicator from "@/components/PageIndicator/PageIndicator";
 import TocPanel from "@/components/TocPanel/TocPanel";
@@ -111,13 +111,14 @@ export default function App() {
     };
   }, []);
 
-  // Autosave (Story 3.4): a passive observer of the annotation store, keyed on
-  // the open doc. Always called (hooks must be unconditional); it no-ops while
-  // `doc` is null (empty docId). `saveErrorDismissed` is local UI state ONLY
-  // (hides the toast on dismiss) — it does NOT touch the hook's retry-on-next-
-  // change behavior, and resets whenever a NEW failure occurs (status flips
-  // back to "error" only after passing through "saving" again).
-  const saveStatus = useAutosave(doc?.doc_id ?? "");
+  // Autosave (Story 3.4, doc-scoped per Story 5.8): a passive observer of the
+  // annotation store, bound to `store.docId` (not App's own `doc` state).
+  // Always called (hooks must be unconditional); it no-ops while no doc is
+  // open. `saveErrorDismissed` is local UI state ONLY (hides the toast on
+  // dismiss) — it does NOT touch the hook's retry-on-next-change behavior, and
+  // resets whenever a NEW failure occurs (status flips back to "error" only
+  // after passing through "saving" again).
+  const saveStatus = useAutosave();
   const [saveErrorDismissed, setSaveErrorDismissed] = useState(false);
   useEffect(() => {
     if (saveStatus.status === "error") setSaveErrorDismissed(false);
@@ -250,16 +251,17 @@ export default function App() {
     setError(null);
     try {
       // Hydrate-on-open ordering is load-bearing (Story 3.5, AC-4). Both awaits
-      // run while `doc` is still null, so `useAutosave` (keyed on the open doc)
-      // is inert. hydrateStore populates the store + clears undo history BEFORE
-      // `setDoc` flips the reader on, so autosave's baseline run captures the
-      // ALREADY-restored set — restore is never PUT back and is not undoable. A
-      // failure of either await lands in the catch: `doc` stays null, the store
-      // stays empty, and the next session can't clobber disk (AC-5). Do NOT move
-      // hydration into a Reader effect (baseline would capture the empty set).
+      // run while `store.docId` is still null, so `useAutosave` (bound to
+      // `store.docId`) is inert. openDoc sets `docId` + populates the store
+      // atomically + clears undo history BEFORE `setDoc` flips the reader on,
+      // so autosave's baseline run captures the ALREADY-restored set — restore
+      // is never PUT back and is not undoable. A failure of either await lands
+      // in the catch: `doc` stays null, the store stays empty, and the next
+      // session can't clobber disk (AC-5). Do NOT move hydration into a Reader
+      // effect (baseline would capture the empty set).
       const opened = await uploadDoc(file);
       const restored = await getAnnotations(opened.doc_id);
-      hydrateStore(restored);
+      openDoc(opened.doc_id, restored);
       setDoc(opened);
     } catch {
       // Any load failure surfaces the same fixed copy; stay in S0 (AC-5).
