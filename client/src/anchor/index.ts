@@ -240,12 +240,30 @@ export function scalePoints(points: Point[], sx: number, sy: number, ox: number,
 }
 
 /**
+ * A same-row horizontal gap strictly greater than this multiple of the row's
+ * own height is treated as a column gutter, not inter-word/inter-run spacing
+ * (Story 4.2); a gap at or below it still merges. Height-relative, NOT a
+ * fixed page-width fraction: a page-width fraction is fragile across real
+ * documents — live-smoke on a real two-column paper (Microsoft COCO,
+ * arXiv:1405.0312) found an actual gutter of only ~2% of page width (well
+ * under an earlier 3%-of-page-width threshold that missed it), while normal
+ * word-spacing is a small fraction of the text's own line height regardless
+ * of page width or font size. Typical academic two-column gutters run
+ * roughly 1-2x line height (confirmed ~1.4x on the COCO fixture); normal
+ * inter-word/inter-run gaps are well under 0.5x. Chosen with margin above the
+ * former and below the latter.
+ */
+const GUTTER_GAP_HEIGHT_MULTIPLE = 0.5;
+
+/**
  * Merge per-line text rects so each line is ONE band (NFR-1, anti-stacking).
  * `Range.getClientRects()` can return several overlapping fragments for the same
  * line (mixed fonts/italics, sub-pixel duplicates ~1-2px apart) — painted at the
  * highlight's reduced opacity they compound into a darker, thicker band. Cluster
  * rects into rows by vertical overlap (>50% of the smaller height, so genuinely
- * separate lines — which only touch by a few px — stay separate) and union each
+ * separate lines — which only touch by a few px — stay separate) AND
+ * horizontal contiguity (Story 4.2: a same-row rect separated by a column
+ * gutter starts its own row rather than bridging across it), and union each
  * row into a single rect. Operates on canonical normalized rects.
  */
 export function mergeRects(rects: Rect[]): Rect[] {
@@ -253,8 +271,20 @@ export function mergeRects(rects: Rect[]): Rect[] {
   for (const r of rects) {
     const h = r.y1 - r.y0;
     const row = rows.find((x) => {
+      const rowH = x.y1 - x.y0;
+      const minH = Math.min(rowH, h);
       const overlap = Math.max(0, Math.min(x.y1, r.y1) - Math.max(x.y0, r.y0));
-      return overlap > 0.5 * Math.min(x.y1 - x.y0, h);
+      if (overlap <= 0.5 * minH) return false;
+      // Horizontal gap between the two rects' x-extents (negative/zero when
+      // overlapping or touching). Checked INSIDE the predicate so `find` skips
+      // a gutter-separated row and keeps scanning for the rect's own column's
+      // row, rather than matching the first vertically-overlapping row and
+      // rejecting it (which would strand every same-column fragment after the
+      // first as its own singleton row). Height-relative (not a page-width
+      // fraction, see GUTTER_GAP_HEIGHT_MULTIPLE) so it works across page
+      // widths and font sizes.
+      const gap = Math.max(r.x0 - x.x1, x.x0 - r.x1);
+      return gap <= GUTTER_GAP_HEIGHT_MULTIPLE * minH;
     });
     if (row) {
       row.x0 = Math.min(row.x0, r.x0);

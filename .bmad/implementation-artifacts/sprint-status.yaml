@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-02 (PR #32 merged to main: 4-1-text-layer-copy-selection-fidelity -> done)"
+last_updated: "2026-07-02 (dev-story: 4-2-column-aware-selection-highlight -> review; Part A shipped, Part B deferred)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -121,7 +121,7 @@ development_status:
   # Epic 4: Reading & annotation fidelity (render/anchor correctness + on-page treatment)
   epic-4: in-progress
   4-1-text-layer-copy-selection-fidelity: done
-  4-2-column-aware-selection-highlight: backlog
+  4-2-column-aware-selection-highlight: review
   4-3-distinct-on-page-mark-treatment: backlog
   epic-4-retrospective: optional
 
