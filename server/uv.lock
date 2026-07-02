@@ -181,7 +181,7 @@ wheels = [
 
 [[package]]
 name = "paper-mate-server"
-version = "0.3.11"
+version = "0.3.13"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

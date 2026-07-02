@@ -246,6 +246,7 @@ export function useCreateQuickBox(opts: {
         el.closest?.(".quick-box") ||
         el.closest?.(".annotation-comment-pin") ||
         el.closest?.(".comment-bubble") ||
+        el.closest?.(".comment-preview") ||
         el.closest?.(".annotation-highlight, .annotation-pen, .annotation-memo")
       ) {
         commentDownRef.current = null;
@@ -279,6 +280,7 @@ export function useCreateQuickBox(opts: {
             el.closest?.(".quick-box") ||
             el.closest?.(".annotation-comment-pin") ||
             el.closest?.(".comment-bubble") ||
+            el.closest?.(".comment-preview") ||
             el.closest?.(".annotation-highlight, .annotation-pen, .annotation-memo")
           )
             return;
@@ -339,7 +341,7 @@ export function useCreateQuickBox(opts: {
         !el?.closest?.(".page-surface") ||
         el.closest?.(".quick-box") ||
         el.closest?.(
-          ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble",
+          ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble, .comment-preview",
         )
       )
         return;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ListBullets, Cards } from "@phosphor-icons/react";
+import { ListBullets, Cards, Eye, EyeSlash } from "@phosphor-icons/react";
 import "@/App.css";
 import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
 import Reader, { type ReaderHandle } from "@/components/Reader/Reader";
@@ -73,6 +73,11 @@ export default function App() {
   // realpha both write it, the create path reads it). App threads it down.
   const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
   const setActiveAlpha = useAnnotationStore((s) => s.setActiveAlpha);
+  // Hide-all toggle (Story 5.5, FR-23): a view-only flag read here only for the
+  // top-bar pill button itself; AnnotationLayer/AnnotationInteraction read it
+  // directly from the store (no prop-drilling).
+  const hidden = useAnnotationStore((s) => s.hidden);
+  const toggleHidden = useAnnotationStore((s) => s.toggleHidden);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // Settings modal (Story 5.1): App owns open/closed, same pattern as
   // tocOpen/bankOpen. Threaded to ToolRail's Gear trigger and SettingsModal.
@@ -302,6 +307,20 @@ export default function App() {
             onClick={() => setBankOpen((o) => !o)}
           >
             <Cards aria-hidden />
+          </button>
+          {/* Hide/show ALL annotations (Story 5.5, FR-23): ONE global view-only
+              flag, same pill idiom as ToC/Bank. Toggling OFF hides every mark
+              (nothing painted, nothing interactive, text stays selectable);
+              ON restores everything unchanged. Never mutates annotations. */}
+          <button
+            type="button"
+            className="pill pill--icon"
+            aria-label={hidden ? "Show annotations" : "Hide annotations"}
+            title={hidden ? "Show annotations" : "Hide annotations"}
+            aria-pressed={hidden}
+            onClick={() => toggleHidden()}
+          >
+            {hidden ? <EyeSlash aria-hidden /> : <Eye aria-hidden />}
           </button>
         </div>
       </header>

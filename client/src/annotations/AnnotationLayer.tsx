@@ -37,6 +37,7 @@ import { inActiveGroup, markClass, unionRect, markBounds } from "./markGeometry"
 import { useTextEditSession } from "./useTextEditSession";
 import MemoBox from "./MemoBox";
 import CommentBubble from "./CommentBubble";
+import CommentPreview from "./CommentPreview";
 import "./Annotations.css";
 
 /** Default pen stroke alpha (transparency). Matches --annotation-highlight-opacity
@@ -103,6 +104,12 @@ export default function AnnotationLayer({
   const retypeAnnotation = useAnnotationStore((s) => s.retypeAnnotation);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
+  // Hide-all toggle (Story 5.5, FR-23): a view-only flag, sibling of selectedId/
+  // hoveredId. Early-return null BEFORE building marks/groups so nothing paints
+  // and nothing is pointer-interactive; the pdf.js text layer beneath is
+  // untouched (still selectable). Hooks above stay unconditional.
+  const hidden = useAnnotationStore((s) => s.hidden);
+  if (hidden) return null;
   const marks = [...annotations.values()]
     .filter((a) => a.doc_id === docId && a.anchor.page_index === pageIndex)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -396,6 +403,27 @@ export default function AnnotationLayer({
             }
             onDelete={() => deleteAnnotation(a.id)}
             onClearSelection={clearSelection}
+            onTextFocus={startTextEditSession}
+            onTextBlur={commitTextEditSession}
+          />
+        )}
+        {/* Hover compact preview (user feature request): glance + quick text
+            edit without selecting. Only while NOT selected — selecting swaps to
+            the full CommentBubble above (recolor/convert/delete). Mounted
+            unconditionally (not gated on `hovered`) so its own hover-intent
+            debounce can outlive the pin's instant pointerleave; it renders
+            null itself once its grace window elapses. */}
+        {a.id !== selectedId && (
+          <CommentPreview
+            anno={a}
+            pos={anchor}
+            hovered={hovered}
+            onRetext={(_id, body) =>
+              // Group-aware, same as the full bubble's retext (see above).
+              retextAnnotations(commentGroupIds(a), body, new Date().toISOString())
+            }
+            onHoverEnter={() => setHovered(a.id)}
+            onHoverLeave={() => setHovered(null)}
             onTextFocus={startTextEditSession}
             onTextBlur={commitTextEditSession}
           />

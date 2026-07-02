@@ -85,6 +85,12 @@ export default function AnnotationInteraction({
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
   const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
   const activeMemoSize = useAnnotationStore((s) => s.activeMemoSize);
+  // Hide-all toggle (Story 5.5, FR-23): a view-only flag. `active` (not `enabled`)
+  // is what every gesture hook + gestureCtx gets: while hidden, no create, no
+  // select, no edit, no marquee, no quick-box, no undo/redo — the overlay goes
+  // fully inert (but the phase gate itself, `enabled`, is untouched).
+  const hidden = useAnnotationStore((s) => s.hidden);
+  const active = enabled && !hidden;
 
   // Latest values for the document-level listeners (bound once) to read without
   // re-binding on every scale / tool change.
@@ -108,7 +114,7 @@ export default function AnnotationInteraction({
   // consumes. The dynamic values are reached through stable refs, so a fresh ctx
   // object each render is safe (the hooks' effects don't depend on its identity).
   const gestureCtx: GestureContext = {
-    enabled,
+    enabled: active,
     docId,
     armedToolRef,
     getPagesRef,
@@ -128,14 +134,14 @@ export default function AnnotationInteraction({
   // document-level gesture (the edit frame(s) render in AnnotationLayer); it
   // commits ONE setAnnotationGeometry (or the batched setAnnotationGeometries for
   // a group) via the transient dragPreview/groupDragPreview.
-  useEditGesture({ enabled, getPagesRef, scaleRef, multiSelectActive });
-  useUndoRedo({ enabled });
+  useEditGesture({ enabled: active, getPagesRef, scaleRef, multiSelectActive });
+  useUndoRedo({ enabled: active });
   // Box-select marquee gesture (user feature request): drag to select existing
   // annotations for bulk Move/Delete. A SEPARATE selection mode from the
   // single-mark quick-box below (AD-12 extended) — its own group frame renders in
   // AnnotationLayer, and it owns its own Del/Esc handling internally.
   const { multiSelectPreview } = useMultiSelectGesture({
-    enabled,
+    enabled: active,
     docId,
     getPagesRef,
     scaleRef,
@@ -144,7 +150,7 @@ export default function AnnotationInteraction({
   // The selected-mark quick-box (Story 2.5/AD-12), encapsulated as its own hook
   // (Story 5.0). Owns selection state + effects + the recolor/restroke/realpha/
   // resize/delete actions; the component renders the box from what it returns.
-  const selection = useSelection({ enabled, docId, scale, getPagesRef, scaleRef });
+  const selection = useSelection({ enabled: active, docId, scale, getPagesRef, scaleRef });
   const {
     selectedAnno,
     selectedSpec,
@@ -159,7 +165,7 @@ export default function AnnotationInteraction({
   // The CREATE quick-box's armed-tool / pending machine (Story 2.2 foundation),
   // encapsulated as its own hook (Story 5.3), mirroring `useSelection`'s shape.
   const { pending, pendingGeometry, quickBoxRef, commitTool } = useCreateQuickBox({
-    enabled,
+    enabled: active,
     docId,
     scale,
     getPagesRef,
@@ -170,6 +176,10 @@ export default function AnnotationInteraction({
     rectReaderRef,
   });
 
+  // Belt-and-suspenders (Story 5.5): `active` already suppressed every gesture
+  // above, so this state is already empty while hidden, but an explicit check
+  // documents the invariant directly at the render gate.
+  if (hidden) return null;
   if (!pending && !showSelectionBox && !penPreview && !boxPreview && !multiSelectPreview) return null;
 
   const selInit = showSelectionBox ? selection.selectionPoint() : { x: 0, y: 0 };
