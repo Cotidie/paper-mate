@@ -11,7 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage, type PageBox, type PageRender } from "../render";
 import { AnnotationLayer } from "../annotations";
-import "../Reader.css";
+import "../components/Reader/Reader.css";
 
 /**
  * Idle delay before a zoomed page re-renders crisply (ms). During a continuous

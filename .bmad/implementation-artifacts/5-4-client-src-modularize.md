@@ -25,18 +25,18 @@ so that a component, hook, or helper lives in an obvious place and the root stop
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 - Load the scaffold-react convention (facilitate `/scaffold-react`).** (AC: 1, 2)
-  - [ ] Invoke the `cotidie:scaffold-react` skill (Skill tool) before moving files; it treats an existing project as a REFACTOR target, not a new scaffold.
-  - [ ] Read its `references/react-scaffold-rules.md` ("Folder Layout" + "Existing Project Targets"): reusable UI in `components/<Name>/`, colocated `.css`/`.test`, adapt to the target stack, keep the target toolchain. Do NOT run `scripts/create_from_template.py` (that is for a NEW CRA app) and do NOT copy CRA files into this Vite/TS app.
-  - [ ] Follow its incremental-migration rule: move ONE slice at a time, update imports, run focused checks, then continue (this is why Tasks 1-3 below are per-slice, each its own commit).
-  - [ ] Capture baseline before the first move: `cd client && npm test` + `npm run typecheck`, and confirm the contract is byte-clean (`cd server && PYTHONPATH= uv run python -m app.export_openapi` then `cd client && npm run gen:api`, expect no diff). Record the baseline test count in the Debug Log.
+- [x] **Task 0 - Load the scaffold-react convention (facilitate `/scaffold-react`).** (AC: 1, 2)
+  - [x] Invoke the `cotidie:scaffold-react` skill (Skill tool) before moving files; it treats an existing project as a REFACTOR target, not a new scaffold.
+  - [x] Read its `references/react-scaffold-rules.md` ("Folder Layout" + "Existing Project Targets"): reusable UI in `components/<Name>/`, colocated `.css`/`.test`, adapt to the target stack, keep the target toolchain. Do NOT run `scripts/create_from_template.py` (that is for a NEW CRA app) and do NOT copy CRA files into this Vite/TS app.
+  - [x] Follow its incremental-migration rule: move ONE slice at a time, update imports, run focused checks, then continue (this is why Tasks 1-3 below are per-slice, each its own commit).
+  - [x] Capture baseline before the first move: `cd client && npm test` + `npm run typecheck`, and confirm the contract is byte-clean (`cd server && PYTHONPATH= uv run python -m app.export_openapi` then `cd client && npm run gen:api`, expect no diff). Record the baseline test count in the Debug Log.
 
-- [ ] **Task 1 - Move the 9 UI components into `components/<Name>/`.** (AC: 1, 3, 4)
-  - [ ] Move each of the following (with its colocated `.css`/`.test.tsx` where present) into `components/<Name>/`: `Reader`, `BankPanel`, `SaveIndicator`, `EmptyDropzone`, `Toast`, `TocPanel`, `ToolRail`, `ToolFlyout`, `ZoomControl`. See the move-map table in Dev Notes.
-  - [ ] Update the importers: `App.tsx` imports 8 of these directly; `ToolRail.tsx` imports `ToolFlyout`. Fix each moved file's OWN imports for its new depth (e.g. `Reader.tsx`'s `./reader/...`, `./render`, `./anchor`, `./annotations` become `../../reader/...` etc.).
-  - [ ] **CRITICAL:** `Reader.test.tsx` moves, so its `vi.mock("./render", ...)` AND `import * as renderLayer from "./render"` must both change to the new relative path (e.g. `../../render`). `App.test.tsx` STAYS at root, so its `vi.mock("./render")` is UNCHANGED. This is the exact both-barrels gotcha from the Engineering-principles note. [Source: CLAUDE.md; Reader.test.tsx:5,9 / App.test.tsx:6,15]
-  - [ ] Decide Reader's target (see Dev Notes "Decisions"): `components/Reader/` vs folding into the existing `reader/` feature dir. Pick one, note the rationale in Project Structure Notes.
-  - [ ] `npm test` + `npm run typecheck` green; commit.
+- [x] **Task 1 - Move the 9 UI components into `components/<Name>/`.** (AC: 1, 3, 4)
+  - [x] Move each of the following (with its colocated `.css`/`.test.tsx` where present) into `components/<Name>/`: `Reader`, `BankPanel`, `SaveIndicator`, `EmptyDropzone`, `Toast`, `TocPanel`, `ToolRail`, `ToolFlyout`, `ZoomControl`. See the move-map table in Dev Notes.
+  - [x] Update the importers: `App.tsx` imports 8 of these directly; `ToolRail.tsx` imports `ToolFlyout`. Fix each moved file's OWN imports for its new depth (e.g. `Reader.tsx`'s `./reader/...`, `./render`, `./anchor`, `./annotations` become `../../reader/...` etc.).
+  - [x] **CRITICAL:** `Reader.test.tsx` moves, so its `vi.mock("./render", ...)` AND `import * as renderLayer from "./render"` must both change to the new relative path (e.g. `../../render`). `App.test.tsx` STAYS at root, so its `vi.mock("./render")` is UNCHANGED. This is the exact both-barrels gotcha from the Engineering-principles note. [Source: CLAUDE.md; Reader.test.tsx:5,9 / App.test.tsx:6,15]
+  - [x] Decide Reader's target (see Dev Notes "Decisions"): `components/Reader/` vs folding into the existing `reader/` feature dir. Pick one, note the rationale in Project Structure Notes.
+  - [x] `npm test` + `npm run typecheck` green; commit.
 
 - [ ] **Task 2 - Move the hooks into `hooks/`.** (AC: 1, 3, 4)
   - [ ] Move `useAutosave.ts` (+ `useAutosave.test.ts`) and `useLiveRef.ts` into `hooks/`.
@@ -153,6 +153,21 @@ Variance from the CRA scaffold (deliberate, per AC-2): no `pages/` (single-view 
 
 ### Debug Log References
 
+- Baseline (before any move): `npm test` from `client/` = 41 test files, 803 tests, all pass. `npm run typecheck` clean. Contract byte-clean: `server` `export_openapi` -> `openapi.json` no diff, `client` `gen:api` -> `src/api/schema.d.ts` no diff.
+- Task 1: moved the 9 components with `git mv`. Found ONE importer not listed in the story's move-map: `reader/PageCard.tsx` has a bare `import "../Reader.css"` (Reader's CSS reused for the page-card canvas/text-layer styling) -> updated to `../components/Reader/Reader.css`. After fix: `npm test` = 41/803 pass (matches baseline), `npm run typecheck` clean. Reader home decision: `components/Reader/` (uniform component convention, per Dev Notes recommendation); `reader/` stays Reader's pure sub-hook/sub-view layer, unchanged.
+
 ### Completion Notes List
 
 ### File List
+
+- client/src/App.tsx (importer paths updated for Task 1 moves)
+- client/src/components/BankPanel/BankPanel.tsx, BankPanel.css, BankPanel.test.tsx (moved from src/, imports updated)
+- client/src/components/EmptyDropzone/EmptyDropzone.tsx, EmptyDropzone.css (moved from src/)
+- client/src/components/Reader/Reader.tsx, Reader.css, Reader.test.tsx (moved from src/, imports + vi.mock updated)
+- client/src/components/SaveIndicator/SaveIndicator.tsx, SaveIndicator.css, SaveIndicator.test.tsx (moved from src/, imports updated)
+- client/src/components/Toast/Toast.tsx, Toast.css (moved from src/)
+- client/src/components/TocPanel/TocPanel.tsx, TocPanel.test.tsx (moved from src/, imports updated)
+- client/src/components/ToolFlyout/ToolFlyout.tsx (moved from src/)
+- client/src/components/ToolRail/ToolRail.tsx, ToolRail.test.tsx (moved from src/, imports updated)
+- client/src/components/ZoomControl/ZoomControl.tsx, ZoomControl.test.tsx (moved from src/)
+- client/src/reader/PageCard.tsx (CSS import path fixed for Reader.css move; not in the original move-map)

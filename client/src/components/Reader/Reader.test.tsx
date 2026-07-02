@@ -1,12 +1,12 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
 import Reader from "./Reader";
-import type { Doc } from "./api/client";
-import * as renderLayer from "./render";
+import type { Doc } from "../../api/client";
+import * as renderLayer from "../../render";
 
 // pdf.js can't run under jsdom (canvas/worker), so mock the whole render module
 // and assert the Reader's reserve-then-stream behavior against the mock.
-vi.mock("./render", () => {
+vi.mock("../../render", () => {
   const fakePage = { _page: true };
   return {
     loadDocument: vi.fn(async () => ({ getPage: vi.fn(async () => fakePage) })),

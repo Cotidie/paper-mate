@@ -14,9 +14,9 @@ import {
   Gear,
   type Icon,
 } from "@phosphor-icons/react";
-import { type ActiveTool, type AnnotationTool, type PointerTool, isPointerTool } from "./tools";
-import { ColorSwatchRow, StrokeWidthRow, AlphaRow } from "./annotations";
-import ToolFlyout from "./ToolFlyout";
+import { type ActiveTool, type AnnotationTool, type PointerTool, isPointerTool } from "../../tools";
+import { ColorSwatchRow, StrokeWidthRow, AlphaRow } from "../../annotations";
+import ToolFlyout from "../ToolFlyout/ToolFlyout";
 
 /**
  * The cursor-family (pointer) options, in flyout order. `Icon` is the Phosphor

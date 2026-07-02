@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import BankPanel from "./BankPanel";
-import { useAnnotationStore } from "./store";
-import type { Annotation } from "./api/client";
-import type { BankItem } from "./bank";
+import { useAnnotationStore } from "../../store";
+import type { Annotation } from "../../api/client";
+import type { BankItem } from "../../bank";
 
 function textMark(id: string, overrides: Partial<Annotation> = {}, text = "Selected run"): Annotation {
   return {

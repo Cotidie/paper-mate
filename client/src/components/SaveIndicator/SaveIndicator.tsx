@@ -1,5 +1,5 @@
 import "./SaveIndicator.css";
-import type { SaveStatus } from "./useAutosave";
+import type { SaveStatus } from "../../useAutosave";
 
 /**
  * `{component.save-indicator}` (Story 3.4, AC-4) — text-only, top bar adjacent

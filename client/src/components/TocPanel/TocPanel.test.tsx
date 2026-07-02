@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import TocPanel from "./TocPanel";
-import type { TocEntry } from "./render";
+import type { TocEntry } from "../../render";
 
 afterEach(cleanup);
 

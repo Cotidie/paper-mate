@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { X } from "@phosphor-icons/react";
-import type { TocEntry } from "./render";
+import type { TocEntry } from "../../render";
 
 /**
  * `{component.toc-panel}` — the Table-of-Contents overlay (Story 1.9). A 280px
