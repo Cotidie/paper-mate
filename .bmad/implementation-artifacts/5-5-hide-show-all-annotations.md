@@ -150,3 +150,4 @@ None — no blockers, no failing-test debugging needed. All tasks landed green o
 
 - 2026-07-03: Story implemented end-to-end (Tasks 1-4) via `bmad-dev-story`. Added the `hidden` store flag (view-only, not undoable, resets on hydrate), threaded it into `AnnotationLayer` (skip render) and `AnnotationInteraction` (suppress create/select/edit/undo), and added the top-bar `Eye`/`EyeSlash` toggle pill. Version bumped 0.3.11 -> 0.3.12. Status: ready-for-dev -> review.
 - 2026-07-03: Cross-model Codex code review (`bmad-code-review` via `codex exec`). 1 Low patch finding (gesture-hook draft state stranded when `hidden` disables mid-drag) — fixed across the 4 affected gesture hooks + regression test added; 3 dismissed as noise. Full suite re-verified green. Status: review -> done.
+- 2026-07-03: PR #39 merged (squash, includes a same-branch follow-on: hover preview for comment annotations, user feature request, version 0.3.13). sprint-status.yaml synced: review -> done.
