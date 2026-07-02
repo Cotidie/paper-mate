@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-02 (5-3-client-structural-refactor-reader-annotation: backlog -> review, PR #36 open, codex code review clean; inserted as 5-3, shifted old 5-3..5-6 -> 5-4..5-7; 5-2-color-system-per-tool-custom: backlog -> blocked, descoped from v1; 5-1-settings-hotkey-rebinding: review -> done; 4-2-column-aware-selection-highlight: review -> done, PR #33 merged; epic-4 -> done)"
+last_updated: "2026-07-02 (5-3-client-structural-refactor-reader-annotation: review -> done, PR #36 merged; inserted as 5-3, shifted old 5-3..5-6 -> 5-4..5-7; 5-2-color-system-per-tool-custom: backlog -> blocked, descoped from v1; 5-1-settings-hotkey-rebinding: review -> done; 4-2-column-aware-selection-highlight: review -> done, PR #33 merged; epic-4 -> done)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -146,7 +146,7 @@ development_status:
   # 2026-07-02: implemented directly from an ad-hoc plan (no bmad-create-story
   # run, no dedicated story file -- epics.md Story 5.3 + PR #36's description
   # stand in for it). Codex code review clean (0 findings). review -> done at merge.
-  5-3-client-structural-refactor-reader-annotation: review
+  5-3-client-structural-refactor-reader-annotation: done
   5-4-hide-show-all-annotations: backlog
   5-5-interaction-polish-esc-confirm-strokewidth: backlog
   5-6-dim-toc-panel: backlog

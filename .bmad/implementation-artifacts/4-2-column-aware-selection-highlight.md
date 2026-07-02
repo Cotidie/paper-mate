@@ -4,7 +4,7 @@ baseline_commit: 8f8a22e8ab2f048ebae000689e6d0c7ce9eef820
 
 # Story 4.2: Column-aware selection & highlight geometry
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
