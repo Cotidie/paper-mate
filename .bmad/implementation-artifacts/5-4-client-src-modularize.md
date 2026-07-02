@@ -3,7 +3,7 @@ baseline_commit: f065d9a9ed8345b4ec480f15c1ae80209f76006f
 ---
 # Story 5.4: React client `src/` module layout (folder-structure refactor)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -191,3 +191,4 @@ Claude Sonnet 5 (claude-sonnet-5), xHigh reasoning
 ## Change Log
 
 - 2026-07-03: Story implemented end-to-end (Tasks 0-4) via `bmad-dev-story`. `client/src/` foldered into the scaffold-react layout (`components/`, `hooks/`, `lib/`), AD-9 layer dirs untouched, entry/guard suites stayed at root. Version bumped 0.3.9 -> 0.3.10. Status: ready-for-dev -> review.
+- 2026-07-03: PR #37 merged (squash). Codex `bmad-code-review` clean, 0 findings. Status: review -> done.
