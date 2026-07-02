@@ -71,6 +71,17 @@ export default function MemoBox({
     <div
       className={cls}
       data-testid={`annotation-mark-${anno.id}`}
+      // Drag-to-move from empty space, even while UNSELECTED (user feature
+      // request): carries the SAME data-edit-handle/data-edit-id pair the
+      // rendered edit-frame's own move grip uses (mirrors the movable comment
+      // pin), so useEditGesture's document-level handler drives it unchanged —
+      // click still selects (native click fires below slop), drag moves. Unlike
+      // the pin, a memo nests a rich `.annotation-memo__body` textarea, so
+      // useEditGesture additionally checks WHERE inside the wrapper the press
+      // landed: on real text, it bails and lets the textarea's own click/select
+      // behavior proceed; only genuinely empty space starts a move.
+      data-edit-handle="move"
+      data-edit-id={anno.id}
       onPointerEnter={() => onHover(anno.id)}
       onPointerLeave={() => onHover(null)}
       onClick={() => onSelect(anno.id)}

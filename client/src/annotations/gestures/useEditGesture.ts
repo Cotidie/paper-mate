@@ -51,6 +51,28 @@ const MIN_PEN_SCALE = 0.05;
  *  during a plain click would commit a spurious geometry write. */
 const HANDLE_MOVE_SLOP = 5;
 
+/** Whether a pointerdown inside a memo's OWN textarea landed BELOW its natural
+ *  (wrapped) text content — i.e., genuinely empty box space, not on/near a
+ *  character (user feature request: drag empty space to move the memo, even
+ *  unselected, without disturbing normal text click/select). Reuses MemoBox's
+ *  own auto-grow measurement trick (reset height to auto, read scrollHeight,
+ *  restore): a manually-resized box's RENDERED height can exceed its content's
+ *  natural height (the textarea's `min-height:100%` stretches it to fill the
+ *  wrapper), so reading `scrollHeight` without the reset would report the
+ *  stretched height, not the content's — masking real empty space below short
+ *  text in a resized box. Vertical-only (no horizontal empty-space detection):
+ *  a textarea has no visual cue for "past the end of a short line," so treating
+ *  every in-line click as text keeps the heuristic simple and matches what a
+ *  reader can actually see. */
+function isBelowMemoText(ta: HTMLTextAreaElement, clientY: number): boolean {
+  const prevHeight = ta.style.height;
+  ta.style.height = "auto";
+  const naturalHeight = ta.scrollHeight;
+  ta.style.height = prevHeight;
+  const rect = ta.getBoundingClientRect();
+  return clientY - rect.top + ta.scrollTop > naturalHeight;
+}
+
 interface DragState {
   id: string;
   handle: EditHandle;
@@ -78,8 +100,15 @@ export function useEditGesture(opts: {
   enabled: boolean;
   getPagesRef: RefObject<() => PageCardRef[]>;
   scaleRef: RefObject<number>;
+  /** True when the Box-select pointer tool is armed. A memo's wrapper now
+   *  carries data-edit-handle unconditionally (empty-space drag-to-move, user
+   *  feature request), so without this gate a marquee drag STARTING on top of a
+   *  memo would race useMultiSelectGesture's own onDown for the same pointerdown
+   *  — that hook explicitly allows starting a marquee over an existing mark, so
+   *  edit-drag must yield the gesture entirely while box-select is active. */
+  multiSelectActive?: boolean;
 }): void {
-  const { enabled, getPagesRef, scaleRef } = opts;
+  const { enabled, getPagesRef, scaleRef, multiSelectActive = false } = opts;
   const setDragPreview = useAnnotationStore((s) => s.setDragPreview);
   const setAnnotationGeometry = useAnnotationStore((s) => s.setAnnotationGeometry);
   const setGroupDragPreview = useAnnotationStore((s) => s.setGroupDragPreview);
@@ -87,6 +116,8 @@ export function useEditGesture(opts: {
   const setActiveMemoSize = useAnnotationStore((s) => s.setActiveMemoSize);
   const dragRef = useRef<DragState | null>(null);
   const groupDragRef = useRef<GroupDragState | null>(null);
+  const multiSelectActiveRef = useRef(multiSelectActive);
+  multiSelectActiveRef.current = multiSelectActive;
 
   useEffect(() => {
     if (!enabled) return;
@@ -102,12 +133,26 @@ export function useEditGesture(opts: {
     };
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
+      // Box-select owns the pointer entirely — see the multiSelectActive doc
+      // above.
+      if (multiSelectActiveRef.current) return;
       const handleEl = (e.target as HTMLElement | null)?.closest?.(
         "[data-edit-handle]",
       ) as HTMLElement | null;
       if (!handleEl) return;
       const handle = handleEl.dataset.editHandle as EditHandle | undefined;
       if (!handle) return;
+      // A memo's wrapper carries data-edit-handle UNCONDITIONALLY (even
+      // unselected, user feature request) and nests both the collapse toggle and
+      // a rich `.annotation-memo__body` textarea — neither of which should ever
+      // start a move. The toggle has its own click behavior; a press on real
+      // TEXT must place the cursor / extend a selection like any normal
+      // textarea, only a press on genuinely empty space (below the wrapped
+      // content) may proceed as a move.
+      const pressTarget = e.target as HTMLElement | null;
+      if (pressTarget?.closest?.(".memo-collapse-toggle")) return;
+      const textarea = pressTarget?.closest?.(".annotation-memo__body") as HTMLTextAreaElement | null;
+      if (textarea && !isBelowMemoText(textarea, e.clientY)) return;
       if (handleEl.dataset.editGroup !== undefined) {
         // Group-move path: the frame exposes only a move grip (no resize corners).
         if (handle !== "move") return;
@@ -207,6 +252,21 @@ export function useEditGesture(opts: {
         // press with no real drag changes nothing → no commit, no updated_at bump.
         if (d.moved && d.lastAnchor) {
           setAnnotationGeometry(d.id, d.lastAnchor, new Date().toISOString());
+          // A real move (moved beyond slop) never fires the wrapper's own click
+          // (browsers suppress "click" after pointer movement), so an UNSELECTED
+          // memo dragged from empty space (user feature request) would otherwise
+          // land with no selection ring/quick-box feedback. Already a no-op for
+          // every pre-existing path (its mark is already selected to expose a
+          // handle at all) — EXCEPT skip it while an unrelated multi-selection is
+          // active (AD-12: selectedId/multiSelectedIds are mutually exclusive, so
+          // select() would silently clear the user's OTHER, unrelated bulk
+          // selection; a mark reachable only via its own edit-frame handle is
+          // never in this position, since that requires it to already BE
+          // selectedId, which the mutual-exclusion invariant already guarantees
+          // means multiSelectedIds is empty).
+          if (useAnnotationStore.getState().multiSelectedIds.length === 0) {
+            useAnnotationStore.getState().select(d.id);
+          }
           // Remember a memo's last RESIZED size as the session default, so the next
           // new memo lands at it (user request: last-adjusted-size-wins). Only on a
           // corner resize (not a move) of a memo; size is scale-1.0 px = normalized

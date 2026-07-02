@@ -76,6 +76,17 @@ export function useMultiSelectGesture(opts: {
       drawingRef.current = true;
       startRef.current = { x: e.clientX, y: e.clientY };
       setMultiSelectPreview({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY });
+      // Suppress the native text-selection drag (user fix request: dragging the
+      // marquee over page text also highlighted it) — must fire on POINTERDOWN,
+      // matching useBoxGesture's own onDown: the browser sets the selection anchor
+      // at mousedown, so preventing default only on pointermove (below) is too
+      // late, the anchor is already set and mousemove keeps extending it.
+      e.preventDefault();
+      try {
+        (el as Element & { setPointerCapture?: (id: number) => void }).setPointerCapture?.(e.pointerId);
+      } catch {
+        /* capture refused on synthetic events */
+      }
     };
     const onMove = (e: PointerEvent) => {
       if (!drawingRef.current || !startRef.current) return;

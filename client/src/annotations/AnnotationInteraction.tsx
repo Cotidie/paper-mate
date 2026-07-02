@@ -178,7 +178,7 @@ export default function AnnotationInteraction({
   // document-level gesture (the edit frame(s) render in AnnotationLayer); it
   // commits ONE setAnnotationGeometry (or the batched setAnnotationGeometries for
   // a group) via the transient dragPreview/groupDragPreview.
-  useEditGesture({ enabled, getPagesRef, scaleRef });
+  useEditGesture({ enabled, getPagesRef, scaleRef, multiSelectActive });
   useUndoRedo({ enabled });
   // Box-select marquee gesture (user feature request): drag to select existing
   // annotations for bulk Move/Delete. A SEPARATE selection mode from the

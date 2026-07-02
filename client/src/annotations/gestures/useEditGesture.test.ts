@@ -26,8 +26,15 @@ function pages(): PageCardRef[] {
   return [{ pageIndex: 0, cardEl: document.createElement("div"), box: BOX }];
 }
 
-function mountGesture() {
-  renderHook(() => useEditGesture({ enabled: true, getPagesRef: { current: pages }, scaleRef: { current: 1 } }));
+function mountGesture(multiSelectActive = false) {
+  renderHook(() =>
+    useEditGesture({
+      enabled: true,
+      getPagesRef: { current: pages },
+      scaleRef: { current: 1 },
+      multiSelectActive,
+    }),
+  );
 }
 
 function handle(kind: string, id: string): HTMLButtonElement {
@@ -36,6 +43,44 @@ function handle(kind: string, id: string): HTMLButtonElement {
   btn.dataset.editId = id;
   document.body.appendChild(btn);
   return btn;
+}
+
+/** A memo's own wrapper (data-edit-handle carried UNCONDITIONALLY — user feature
+ *  request: drag-to-move from empty space even unselected), nesting a collapse
+ *  toggle and a textarea. jsdom has no real layout, so scrollHeight/rect are
+ *  stubbed directly, letting each test control whether a given clientY reads as
+ *  "on text" or "below it" (isBelowMemoText's threshold). */
+function memoWrapper(
+  id: string,
+  opts: { naturalHeight: number; top: number; height: number },
+): { wrapper: HTMLDivElement; textarea: HTMLTextAreaElement; toggle: HTMLButtonElement } {
+  const wrapper = document.createElement("div");
+  wrapper.dataset.editHandle = "move";
+  wrapper.dataset.editId = id;
+  wrapper.className = "annotation-memo";
+
+  const toggle = document.createElement("button");
+  toggle.className = "memo-collapse-toggle";
+  wrapper.appendChild(toggle);
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "annotation-memo__body";
+  Object.defineProperty(textarea, "scrollHeight", { value: opts.naturalHeight, configurable: true });
+  textarea.getBoundingClientRect = () =>
+    ({
+      left: 0,
+      top: opts.top,
+      right: 200,
+      bottom: opts.top + opts.height,
+      width: 200,
+      height: opts.height,
+      x: 0,
+      y: opts.top,
+    }) as DOMRect;
+  wrapper.appendChild(textarea);
+
+  document.body.appendChild(wrapper);
+  return { wrapper, textarea, toggle };
 }
 
 /** The multi-select group frame's move grip: `data-edit-group` instead of a
@@ -399,6 +444,12 @@ describe("useEditGesture group move (box-select multi-selection, user feature re
       expect(solo.anchor.rect.x0).toBeCloseTo(0.2, 10);
       expect(solo.anchor.rect.x1).toBeCloseTo(0.3, 10);
     }
+    // The solo move must NOT clobber the pre-existing, UNRELATED g1
+    // multi-selection (user feature request's select()-on-move guard) — the
+    // regression this exact assertion caught: an earlier version called select()
+    // unconditionally, wiping multiSelectedIds here and silently no-op-ing the
+    // group move below (empty `members`).
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual(["g1"]);
     // Then a group move.
     down(groupMoveHandle(), 100, 100);
     move(200, 100);
@@ -408,5 +459,81 @@ describe("useEditGesture group move (box-select multi-selection, user feature re
       expect(g1.anchor.rect.x0).toBeCloseTo(0.6, 10);
       expect(g1.anchor.rect.x1).toBeCloseTo(0.7, 10);
     }
+  });
+});
+
+describe("useEditGesture memo empty-space drag-to-move (user feature request)", () => {
+  it("dragging EMPTY space inside an UNSELECTED memo's textarea moves it and selects it on commit", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const { textarea } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    // clientY=150 is well below naturalHeight=20 -> empty space.
+    down(textarea, 100, 150);
+    move(350, 150);
+    expect(useAnnotationStore.getState().dragPreview?.id).toBe("m");
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    if (m.anchor.kind === "rect") {
+      expect(m.anchor.rect.x0).toBeCloseTo(0.5, 10);
+      expect(m.anchor.rect.x1).toBeCloseTo(0.75, 10);
+    }
+    expect(useAnnotationStore.getState().selectedId).toBe("m");
+  });
+
+  it("pressing ON the text itself (above naturalHeight) does NOT start a move (normal textarea click/select proceeds)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const { textarea } = memoWrapper("m", { naturalHeight: 100, top: 0, height: 200 });
+    // clientY=10 is within naturalHeight=100 -> real text.
+    down(textarea, 100, 10);
+    move(350, 10);
+    expect(useAnnotationStore.getState().dragPreview).toBeNull();
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 });
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
+  it("pressing the collapse toggle never starts a move, even though it is nested in the data-edit-handle wrapper", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const { toggle } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    down(toggle, 100, 100);
+    move(350, 100);
+    expect(useAnnotationStore.getState().dragPreview).toBeNull();
+  });
+
+  it("empty-space press on the WRAPPER itself (not the textarea, e.g. the padding rim) also moves it", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const { wrapper } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    down(wrapper, 100, 100);
+    move(350, 100);
+    expect(useAnnotationStore.getState().dragPreview?.id).toBe("m");
+  });
+
+  it("does NOT start a move while box-select is armed (yields the gesture to the marquee)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture(true);
+    const { textarea } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    down(textarea, 100, 150);
+    move(350, 150);
+    expect(useAnnotationStore.getState().dragPreview).toBeNull();
+  });
+
+  it("moving an unrelated, UNSELECTED memo does not clobber an active multi-selection", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    useAnnotationStore.getState().addAnnotation(memo("g1", { x0: 0.6, y0: 0.6, x1: 0.7, y1: 0.7 }));
+    useAnnotationStore.getState().setMultiSelected(["g1"]);
+    mountGesture();
+    const { textarea } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    down(textarea, 100, 150);
+    move(350, 150);
+    up();
+    // Moved, but left the g1 multi-selection alone and did NOT promote "m" into
+    // selectedId (AD-12 mutual exclusion: select() would have cleared g1's
+    // selection out from under the user).
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual(["g1"]);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
   });
 });
