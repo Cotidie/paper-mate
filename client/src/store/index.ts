@@ -24,8 +24,8 @@
 // client-only, in-memory, discarded on reload (AR-7).
 // Access: `useAnnotationStore.temporal.getState().{undo,redo,clear,pause,resume}`.
 // Partialize exclusions: selectedId, multiSelectedIds, hoveredId, dragPreview,
-// groupDragPreview, flashId, activeColors, activeStrokeWidth, activeAlpha,
-// activeMemoSize, and all action functions.
+// groupDragPreview, flashId, hidden, activeColors, activeStrokeWidth,
+// activeAlpha, activeMemoSize, and all action functions.
 
 import { create } from "zustand";
 import { temporal } from "zundo";
@@ -87,6 +87,22 @@ export interface AnnotationStore {
    *  outlines as ONE: every layer reads it and matches by `group_id`. Transient;
    *  never persisted, cleared on pointer-leave. */
   hoveredId: string | null;
+  /** Global view-only "hide all annotations" flag (Story 5.5, FR-23): a
+   *  transient UI toggle, the sibling of `selectedId`/`hoveredId`, NOT
+   *  annotation data. When true, `AnnotationLayer` skips its render and
+   *  `AnnotationInteraction` goes inert (no create/select/edit). It NEVER
+   *  mutates `annotations` and is excluded from the zundo partialize (not
+   *  undoable). Resets to `false` on `hydrate` (doc switch/reload) — see the
+   *  "Persistence decision" in the story: this is a momentary view toggle,
+   *  not a durable preference. */
+  hidden: boolean;
+  /** Set the hide-all flag directly. Hiding also clears the current selection
+   *  (`selectedId` + `multiSelectedIds`) so a hidden mark can't stay selected
+   *  behind the scenes; showing leaves selection untouched (there was none
+   *  live to restore). Never touches `annotations`. */
+  setHidden: (hidden: boolean) => void;
+  /** Flip the hide-all flag (sugar for `setHidden(!hidden)`). */
+  toggleHidden: () => void;
   /** The active annotation color, PER TOOL (Story 2.6, split per-tool by user
    *  request): the DEFAULT a new mark of that tool lands in. Each tool's entry is
    *  the LAST color chosen for THAT tool — set by its own rail sub-toolbox OR by
@@ -329,6 +345,10 @@ export const useAnnotationStore = create<AnnotationStore>()(
       setMultiSelected: (ids) => set({ multiSelectedIds: ids, selectedId: null }),
       clearMultiSelection: () => set({ multiSelectedIds: [] }),
       setHovered: (id) => set({ hoveredId: id }),
+      hidden: false,
+      setHidden: (hidden) =>
+        set(hidden ? { hidden, selectedId: null, multiSelectedIds: [] } : { hidden }),
+      toggleHidden: () => get().setHidden(!get().hidden),
       dragPreview: null,
       setDragPreview: (preview) => set({ dragPreview: preview }),
       groupDragPreview: null,
@@ -474,6 +494,7 @@ export const useAnnotationStore = create<AnnotationStore>()(
           selectedId: null,
           multiSelectedIds: [],
           hoveredId: null,
+          hidden: false,
           dragPreview: null,
           groupDragPreview: null,
           flashId: null,

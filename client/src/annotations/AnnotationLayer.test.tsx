@@ -83,7 +83,7 @@ function memoMark(
   };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, multiSelectedIds: [], hoveredId: null, flashId: null, groupDragPreview: null }));
+beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, multiSelectedIds: [], hoveredId: null, flashId: null, groupDragPreview: null, hidden: false }));
 afterEach(cleanup);
 
 describe("AnnotationLayer (AC-3, AC-4, AC-6)", () => {
@@ -1009,5 +1009,25 @@ describe("AnnotationLayer flash (Story 3.6, Annotation Bank jump — AC-4)", () 
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     act(() => useAnnotationStore.getState().flash("c1"));
     expect(screen.getByTestId("annotation-comment-pin-c1").className).toContain("annotation-comment-pin--flash");
+  });
+});
+
+describe("AnnotationLayer hide-all toggle (Story 5.5, AC-2)", () => {
+  it("renders nothing while hidden, with marks present", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("a1", 0));
+    useAnnotationStore.setState({ hidden: true });
+    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.queryByTestId("annotation-mark-a1")).toBeNull();
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("un-hiding restores the marks", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("a1", 0));
+    useAnnotationStore.setState({ hidden: true });
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.queryByTestId("annotation-mark-a1")).toBeNull();
+
+    act(() => useAnnotationStore.setState({ hidden: false }));
+    expect(screen.getByTestId("annotation-mark-a1")).not.toBeNull();
   });
 });

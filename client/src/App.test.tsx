@@ -53,6 +53,9 @@ beforeEach(() => {
   // rebind in one test can't poison the next.
   localStorage.clear();
   useSettingsStore.setState({ keymap: DEFAULT_KEYMAP });
+  // Story 5.5: the hide-all flag is a store singleton across tests in this file;
+  // reset it so a toggle in one test can't leak "hidden" into the next.
+  useAnnotationStore.setState({ hidden: false, selectedId: null });
 });
 
 const fakeDoc: api.Doc = {
@@ -655,6 +658,57 @@ describe("Annotation Bank (Story 3.6)", () => {
     // The Bank is a review surface (EXPERIENCE.md F2): stays open so the reader
     // can click through several marks, unlike the ToC's one-shot navigation.
     expect(screen.getByTestId("bank-panel")).toBeTruthy();
+  });
+});
+
+describe("hide/show all annotations toggle (Story 5.5)", () => {
+  afterEach(() => {
+    useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hidden: false });
+  });
+
+  // Mirrors the ToC/Bank describe blocks' helper.
+  async function openedApp() {
+    vi.mocked(renderLayer.loadDocument).mockResolvedValue({
+      getPage: vi.fn(async () => ({})),
+    } as unknown as Awaited<ReturnType<typeof renderLayer.loadDocument>>);
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    render(<App />);
+    fireEvent.change(screen.getByTestId("dropzone-input"), { target: { files: [pdfFile()] } });
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+  }
+
+  it("renders the eye pill in S1 with aria-pressed=false", async () => {
+    await openedApp();
+    const eye = screen.getByRole("button", { name: "Hide annotations" });
+    expect(eye.getAttribute("aria-pressed")).toBe("false");
+    expect(eye.querySelector("svg")).toBeTruthy();
+    expect(eye.textContent).toBe("");
+  });
+
+  it("does not render before a document is open (S0)", () => {
+    render(<App />);
+    expect(screen.queryByRole("button", { name: "Hide annotations" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show annotations" })).toBeNull();
+  });
+
+  it("clicking flips aria-pressed and swaps the aria-label (AC-1)", async () => {
+    await openedApp();
+    const eye = screen.getByRole("button", { name: "Hide annotations" });
+    fireEvent.click(eye);
+    expect(screen.getByRole("button", { name: "Show annotations" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Show annotations" }));
+    expect(screen.getByRole("button", { name: "Hide annotations" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("a store with a selectedId set has it cleared after a hide click (AC-3)", async () => {
+    await openedApp();
+    act(() => useAnnotationStore.getState().addAnnotation(mark("a1", fakeDoc.doc_id)));
+    act(() => useAnnotationStore.getState().select("a1"));
+    expect(useAnnotationStore.getState().selectedId).toBe("a1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide annotations" }));
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(useAnnotationStore.getState().hidden).toBe(true);
   });
 });
 

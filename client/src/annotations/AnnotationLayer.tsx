@@ -103,6 +103,12 @@ export default function AnnotationLayer({
   const retypeAnnotation = useAnnotationStore((s) => s.retypeAnnotation);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
+  // Hide-all toggle (Story 5.5, FR-23): a view-only flag, sibling of selectedId/
+  // hoveredId. Early-return null BEFORE building marks/groups so nothing paints
+  // and nothing is pointer-interactive; the pdf.js text layer beneath is
+  // untouched (still selectable). Hooks above stay unconditional.
+  const hidden = useAnnotationStore((s) => s.hidden);
+  if (hidden) return null;
   const marks = [...annotations.values()]
     .filter((a) => a.doc_id === docId && a.anchor.page_index === pageIndex)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));

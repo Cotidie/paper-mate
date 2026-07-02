@@ -66,6 +66,7 @@ beforeEach(() =>
     selectedId: null,
     multiSelectedIds: [],
     hoveredId: null,
+    hidden: false,
     groupDragPreview: null,
     activeColors: {
       highlight: "annotation-default",
@@ -1930,5 +1931,51 @@ describe("selected-mark Delete/Escape are not swallowed by a focused button (bug
     fireEvent.keyDown(button, { key: "Escape" });
     expect(useAnnotationStore.getState().selectedId).toBeNull();
     expect(useAnnotationStore.getState().annotations.has("m2")).toBe(true);
+  });
+});
+
+describe("AnnotationInteraction hide-all toggle (Story 5.5, AC-2, AC-3)", () => {
+  it("a create gesture while hidden produces no quick-box and creates nothing", () => {
+    useAnnotationStore.setState({ hidden: true });
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("un-hiding restores the create path (same gesture now pops the quick-box)", async () => {
+    useAnnotationStore.setState({ hidden: true });
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+
+    act(() => useAnnotationStore.setState({ hidden: false }));
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    await screen.findByTestId("quick-box");
+  });
+
+  it("a select gesture on an existing mark is suppressed while hidden", () => {
+    const mark = textMark("m1");
+    useAnnotationStore.setState({ annotations: new Map([[mark.id, mark]]), hidden: true });
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [fakeCard(0, 0)]} scale={1} enabled rectReader={reader} />);
+
+    act(() => useAnnotationStore.getState().select("m1"));
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+  });
+
+  it("renders nothing while hidden even with a live selection", () => {
+    const mark = textMark("m1");
+    useAnnotationStore.setState({ annotations: new Map([[mark.id, mark]]), selectedId: "m1", hidden: true });
+    const { container } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => [fakeCard(0, 0)]} scale={1} enabled rectReader={reader} />,
+    );
+    expect(container.firstChild).toBeNull();
   });
 });

@@ -22,6 +22,7 @@ beforeEach(() => {
     selectedId: null,
     multiSelectedIds: [],
     hoveredId: null,
+    hidden: false,
     dragPreview: null,
     groupDragPreview: null,
     flashId: null,
@@ -719,6 +720,7 @@ describe("hydrate-on-open (Story 3.5)", () => {
     s.select("old");
     s.setHovered("old");
     s.setDragPreview({ id: "old", anchor: { kind: "text", page_index: 0, rects: [], text: "x" } });
+    s.setHidden(true);
 
     useAnnotationStore.getState().hydrate([
       mark("a", "annotation-pink", "2026-06-29T00:00:02Z"),
@@ -732,6 +734,7 @@ describe("hydrate-on-open (Story 3.5)", () => {
     expect(st.selectedId).toBeNull();
     expect(st.hoveredId).toBeNull();
     expect(st.dragPreview).toBeNull();
+    expect(st.hidden).toBe(false);
   });
 
   it("hydrateStore clears zundo history so undo() cannot remove restored marks (AC-4)", () => {
@@ -756,6 +759,70 @@ describe("hydrate-on-open (Story 3.5)", () => {
     hydrateStore([]);
     expect(useAnnotationStore.getState().annotations.size).toBe(0);
     expect(t().pastStates.length).toBe(0);
+  });
+});
+
+describe("hide-all annotations toggle (Story 5.5, view-only, NOT undoable)", () => {
+  const t = () => useAnnotationStore.temporal.getState();
+
+  it("defaults to shown (hidden === false)", () => {
+    expect(useAnnotationStore.getState().hidden).toBe(false);
+  });
+
+  it("setHidden(true) clears selectedId + multiSelectedIds and leaves annotations untouched", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.select("a");
+    const before = useAnnotationStore.getState().annotations;
+
+    s.setHidden(true);
+
+    const st = useAnnotationStore.getState();
+    expect(st.hidden).toBe(true);
+    expect(st.selectedId).toBeNull();
+    expect(st.multiSelectedIds).toEqual([]);
+    // Same Map reference: hiding never mutates annotations (AC-3).
+    expect(st.annotations).toBe(before);
+  });
+
+  it("setHidden(true) also clears a live multi-selection", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.setMultiSelected(["a"]);
+    s.setHidden(true);
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("setHidden(false) leaves other state untouched", () => {
+    const s = useAnnotationStore.getState();
+    s.setHidden(true);
+    s.setHidden(false);
+    expect(useAnnotationStore.getState().hidden).toBe(false);
+  });
+
+  it("toggleHidden flips the flag", () => {
+    const s = useAnnotationStore.getState();
+    expect(useAnnotationStore.getState().hidden).toBe(false);
+    s.toggleHidden();
+    expect(useAnnotationStore.getState().hidden).toBe(true);
+    s.toggleHidden();
+    expect(useAnnotationStore.getState().hidden).toBe(false);
+  });
+
+  it("setHidden/toggleHidden produce NO zundo history entry (not undoable)", () => {
+    const s = useAnnotationStore.getState();
+    expect(t().pastStates.length).toBe(0);
+    s.setHidden(true);
+    s.toggleHidden();
+    s.setHidden(false);
+    expect(t().pastStates.length).toBe(0);
+  });
+
+  it("hydrate resets hidden to false", () => {
+    const s = useAnnotationStore.getState();
+    s.setHidden(true);
+    s.hydrate([]);
+    expect(useAnnotationStore.getState().hidden).toBe(false);
   });
 });
 
