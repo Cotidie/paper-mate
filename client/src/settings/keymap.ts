@@ -97,8 +97,12 @@ export function isReserved(binding: KeyBinding): boolean {
   if (/^f([1-9]|1[0-2])$/.test(key)) return true;
   if (binding.ctrl) {
     // Ctrl +/-/0 (also "=" as the unshifted "+") zoom; Ctrl Z undo/redo;
-    // Ctrl W/T/N/R/L are browser/OS-critical chords.
-    if (["+", "=", "-", "0", "z", "w", "t", "n", "r", "l"].includes(key)) return true;
+    // Ctrl W/T/N/R/L are browser/OS-critical chords. "i" is blocked
+    // unconditionally because capture/match drop shiftKey (KeyBinding has no
+    // shift field, v1), so Ctrl+Shift+I (devtools, AC-3) is indistinguishable
+    // from Ctrl+I at this layer — reserving the bare key is the only way to
+    // also block the shifted chord.
+    if (["+", "=", "-", "0", "z", "w", "t", "n", "r", "l", "i"].includes(key)) return true;
     // Ctrl Up/Down are the page-nav aliases (Reader.tsx ctrlArrow).
     if (key === "arrowup" || key === "arrowdown") return true;
   } else {

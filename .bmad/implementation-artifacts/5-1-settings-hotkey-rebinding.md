@@ -4,7 +4,7 @@ baseline_commit: 33da559cd16f5d90deca68120db177cd17a75b50
 
 # Story 5.1: Settings modal + custom hotkey rebinding
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -180,3 +180,9 @@ Claude Sonnet 5 (xHigh)
 - DESIGN.md (modified: `scrim` color, `settings-modal` + `settings-capture-chip` component entries)
 - client/src/theme/tokens.css (regenerated: `--color-scrim`)
 - client/src/theme/components.css (modified: `--settings-modal-*` / `--settings-capture-chip-*` dims)
+
+### Review Findings
+
+Codex (`codex exec`) adversarial review (Blind Hunter, Edge Case Hunter, Acceptance Auditor) of `33da559..55e40c1` against this story's ACs. 1 patch found, applied; 0 decision-needed, 0 defer, 3 dismissed as noise.
+
+- [x] [Review][Patch] Reserved `Ctrl Shift I` was capturable — fixed [client/src/settings/keymap.ts:101]. `KeyBinding` has no `shift` field (v1: "shift/alt/meta not user-settable") and both capture (`SettingsModal.tsx`) and `matchAction` drop `e.shiftKey`, so `Ctrl+Shift+I` was indistinguishable from `Ctrl+I`. `isReserved`'s ctrl-chord denylist blocked `w t n r l` but not `i`, so `Ctrl+Shift+I` (AC-3's own devtools example) could be captured and would then `preventDefault` the real browser shortcut. Fix: added `"i"` to the reserved ctrl-chord list (blocks the bare key unconditionally, which is the only way to also block the shifted chord at this layer) + 2 new `keymap.test.ts` cases. `npm run typecheck` clean; `keymap.test.ts`/`store.test.ts`/`SettingsModal.test.tsx`/`App.test.tsx` (94 tests) green.

@@ -79,6 +79,15 @@ describe("isReserved", () => {
     }
   });
 
+  it("rejects Ctrl I regardless of shift (AC-3: Ctrl Shift I devtools is indistinguishable from Ctrl I since KeyBinding drops shiftKey)", () => {
+    expect(isReserved({ key: "i", ctrl: true })).toBe(true);
+    expect(isReserved({ key: "I", ctrl: true })).toBe(true);
+  });
+
+  it("allows bare I without ctrl", () => {
+    expect(isReserved({ key: "i" })).toBe(false);
+  });
+
   it("rejects F1..F12", () => {
     expect(isReserved({ key: "F1" })).toBe(true);
     expect(isReserved({ key: "F5" })).toBe(true);
