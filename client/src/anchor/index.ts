@@ -310,6 +310,60 @@ export interface PageCardRef {
   box: PageBox;
 }
 
+/** CARD-LOCAL geometry for the CREATE quick-box while a text-drag selection is
+ *  pending (not yet a persisted `Annotation`): one preview rect per selected
+ *  line per page, plus where the popup anchors. The caller adds each page's
+ *  LIVE `getBoundingClientRect()` viewport offset to get final screen
+ *  positions (untestable in jsdom — that step is live-smoke covered, not
+ *  unit-tested; this function is the DOM-free part). */
+export interface PendingSelectionGeometry {
+  /** Per-selection-page CARD-LOCAL preview rects, in selection order. */
+  pages: { pageIndex: number; rects: ScreenRect[] }[];
+  /** The popup's CARD-LOCAL anchor point (below the FIRST page's rects — a
+   *  multi-page selection's popup always tracks its first page, mirroring
+   *  `createTextTool`'s `select(created[0].id)` for a persisted mark) + which
+   *  page it's relative to. */
+  anchor: { pageIndex: number; point: { x: number; y: number } };
+}
+
+/**
+ * Re-derive the CREATE quick-box's geometry from a pending text-drag
+ * `selection` at the CURRENT `scale` — the fix for the selection "resetting"
+ * on zoom/scroll (Story 4.x): previously the popup was pinned to a frozen
+ * viewport point captured once at drag-release, which went stale on zoom and
+ * was dismissed outright on any scroll. Denormalizing the STORED (already
+ * scale-independent) selection rects here, on demand, lets the caller re-run
+ * this on every scroll/resize/zoom to keep the popup + a preview highlight
+ * glued to the actual text (AD-4, same pattern `useSelection.ts`'s
+ * `selectionPoint()` uses for a persisted mark's selection quick-box).
+ * `boxOf` resolves a page's scale-1.0 box (`null` if that page isn't
+ * currently mounted); returns `null` for an empty selection (the click-to-
+ * place Comment/Memo picker has no rects — the caller anchors that case from
+ * the click point directly) or if the first page's box isn't available.
+ */
+export function pendingSelectionGeometry(
+  selection: PageSelection[],
+  boxOf: (pageIndex: number) => PageBox | null,
+  scale: number,
+  gap: number,
+): PendingSelectionGeometry | null {
+  if (selection.length === 0) return null;
+  const pages = selection.map((ps) => {
+    const box = boxOf(ps.page_index);
+    const rects = box ? ps.rects.map((r) => denormalizeRect(r, box, scale)) : [];
+    return { pageIndex: ps.page_index, rects };
+  });
+  const firstPage = pages[0];
+  if (firstPage.rects.length === 0) return null;
+  const first = firstPage.rects[0];
+  let bottom = first.top + first.height;
+  for (const r of firstPage.rects) bottom = Math.max(bottom, r.top + r.height);
+  return {
+    pages,
+    anchor: { pageIndex: firstPage.pageIndex, point: { x: first.left, y: bottom + gap } },
+  };
+}
+
 /**
  * The on-screen rects of the TEXT a `range` selects — one set of line boxes per
  * text node it covers, EXCLUDING element border boxes.

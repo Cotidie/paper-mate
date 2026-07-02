@@ -17,12 +17,13 @@
 // on `.pdf-canvas`. Layering (AD-9): this lives in annotations/, consuming
 // anchor/ + store/ only; render/ stays annotation-free (geometry via `getPages`).
 
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { Highlighter, TextUnderline, ChatCircle, TextT, Trash } from "@phosphor-icons/react";
 import {
   rectsFromSelection,
   normalizeRect,
   pickPage,
+  pendingSelectionGeometry,
   type PageCardRef,
   type PageSelection,
 } from "../anchor";
@@ -47,6 +48,19 @@ import "./Annotations.css";
 /** Max pointer travel (px) between a comment pointerdown and its release for the
  *  release to still count as a CLICK (drops a pin). Beyond this it was a drag. */
 const COMMENT_CLICK_SLOP = 5;
+
+/** Vertical gap (viewport px) between the pending selection and its floating
+ *  quick-box, below it — mirrors `useSelection.ts`'s `QUICK_BOX_GAP` (the same
+ *  value, for the post-creation selected-mark box) so both quick-boxes sit the
+ *  same distance from their run. */
+const PENDING_BOX_GAP = 6;
+
+/** The CREATE quick-box's live viewport geometry, re-derived (not frozen) so it
+ *  survives zoom/scroll — see `computePendingGeometry` below. */
+interface PendingViewportGeometry {
+  boxAt: { x: number; y: number };
+  previewRects: { left: number; top: number; width: number; height: number }[];
+}
 
 export default function AnnotationInteraction({
   docId,
@@ -175,6 +189,77 @@ export default function AnnotationInteraction({
   // Readable from the disarm effect below without making `pending` a dep.
   const pendingRef = useRef(false);
   pendingRef.current = pending !== null;
+
+  // Where the CREATE quick-box's release-point anchors, as a page index +
+  // fraction (not a frozen viewport point) — captured ONLY for the empty-click
+  // case (Comment+Memo picker); a text-drag selection already carries its own
+  // normalized rects (`pending.selection`), reprojected directly on every
+  // recompute. Mirrors Reader's own zoom focal-point pattern (page + fraction,
+  // re-derived from the LIVE card rect at read time) — the fix for the
+  // selection "resetting" on zoom/scroll: the OLD frozen `pending.at` viewport
+  // point went stale on zoom and the popup was unconditionally dismissed on
+  // any scroll at all.
+  const pendingClickAnchorRef = useRef<{ pageIndex: number; fracX: number; fracY: number } | null>(null);
+  const [pendingGeometry, setPendingGeometry] = useState<PendingViewportGeometry | null>(null);
+
+  // Re-derive the popup position + preview-highlight rects from LIVE page-card
+  // geometry (`getBoundingClientRect`, which naturally reflects the current
+  // scroll position) + the CURRENT scale. Called on open, on every
+  // scroll/resize, and on every scale change (see the effects below) — so the
+  // popup + preview track the actual text instead of the old dismiss-on-scroll/
+  // stale-on-zoom behavior.
+  const computePendingGeometry = useCallback((): PendingViewportGeometry | null => {
+    if (state.status !== "pending") return null;
+    const pgs = getPagesRef.current();
+    const cardOf = (pageIndex: number): PageCardRef | null =>
+      pgs.find((p) => p.pageIndex === pageIndex) ?? null;
+
+    if (state.selection.length > 0) {
+      const geom = pendingSelectionGeometry(
+        state.selection,
+        (pageIndex) => cardOf(pageIndex)?.box ?? null,
+        scaleRef.current,
+        PENDING_BOX_GAP,
+      );
+      if (!geom) return null;
+      const previewRects = geom.pages.flatMap(({ pageIndex, rects }) => {
+        const card = cardOf(pageIndex);
+        if (!card) return [];
+        const cardRect = card.cardEl.getBoundingClientRect();
+        return rects.map((r) => ({
+          left: cardRect.left + r.left,
+          top: cardRect.top + r.top,
+          width: r.width,
+          height: r.height,
+        }));
+      });
+      const anchorCard = cardOf(geom.anchor.pageIndex);
+      if (!anchorCard) return null;
+      const anchorRect = anchorCard.cardEl.getBoundingClientRect();
+      return {
+        boxAt: {
+          x: anchorRect.left + geom.anchor.point.x,
+          y: anchorRect.top + geom.anchor.point.y,
+        },
+        previewRects,
+      };
+    }
+
+    // Click (empty selection): re-derive from the captured page + fraction.
+    const clickAnchor = pendingClickAnchorRef.current;
+    if (!clickAnchor) return null;
+    const card = cardOf(clickAnchor.pageIndex);
+    if (!card) return null;
+    const cardRect = card.cardEl.getBoundingClientRect();
+    return {
+      boxAt: {
+        x: cardRect.left + clickAnchor.fracX * cardRect.width,
+        y: cardRect.top + clickAnchor.fracY * cardRect.height,
+      },
+      previewRects: [],
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getPagesRef/scaleRef are refs (stable, read live)
+  }, [state]);
 
   // Shared text-anchor create helper (Story 2.12, Decision 2): builds a
   // text-anchor mark from a selection + tool type, adds it, clears the live
@@ -318,7 +403,13 @@ export default function AnnotationInteraction({
       // fall through to the cursor-mode picker: that would pop it as if nothing
       // were armed. Only cursor mode (tool === null) reaches it.
       if (tool !== null) return;
-      // Cursor mode with a text drag: pop the H/U/C picker.
+      // Cursor mode with a text drag: pop the H/U/C picker. Clear the native
+      // selection immediately — the custom preview highlight (denormalized
+      // from `pages`, tracked through zoom/scroll by `computePendingGeometry`)
+      // now represents it visually, so the fragile native Selection (destroyed
+      // by any text-layer DOM swap, e.g. every zoom re-render) no longer needs
+      // to survive.
+      window.getSelection()?.removeAllRanges();
       restoreFocusRef.current = document.activeElement as HTMLElement | null;
       dispatch({ type: "present", selection: pages, at: { x: e.clientX, y: e.clientY } });
     };
@@ -385,6 +476,10 @@ export default function AnnotationInteraction({
 
   // Esc dismisses the quick-box; an outside pointer-down dismisses it too — both
   // document-level. Only while pending so we don't shadow other Esc handlers.
+  // Scrolling no longer dismisses (Story 4.x fix): the popup + preview now
+  // TRACK scroll/zoom instead (the effects below), rather than treating any
+  // canvas scroll — including the zoom feature's own focal-point-preserving
+  // programmatic scroll adjustment — as "the user navigated away."
   useEffect(() => {
     if (!pending) return;
     const onKey = (e: KeyboardEvent) => {
@@ -401,45 +496,85 @@ export default function AnnotationInteraction({
     document.addEventListener("keydown", onKey);
     // Capture phase so the dismiss runs before a fresh selection's pointerdown.
     document.addEventListener("pointerdown", onPointerDown, true);
-    // The quick-box is a transient popup pinned to the release point (fixed
-    // position); once the canvas scrolls it would float detached from its mark,
-    // so scrolling dismisses it. Capture-phase: `scroll` does not bubble, and the
-    // scrolling element is the pdf-canvas, not window.
-    document.addEventListener("scroll", dismiss, true);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("scroll", dismiss, true);
     };
   }, [pending, dismiss]);
 
-  // Focus moves INTO the quick-box on open and RETURNS to the prior element on
-  // dismiss (EXPERIENCE.md accessibility floor). Also nudges the box on-screen
-  // once measured (AC-4: positioned at the selection, nudged to stay on-screen).
+  // Capture the click-to-place anchor (page + fraction) on a fresh open, set
+  // the initial geometry before paint, and move focus INTO the quick-box —
+  // returning it to the prior element on dismiss (EXPERIENCE.md accessibility
+  // floor). Re-runs only when the pending IDENTITY changes (open/dismiss/
+  // commit), not on every geometry recompute below.
   useLayoutEffect(() => {
-    if (pending) {
-      // Focus the first action in the quick-box (proof button or first swatch).
-      quickBoxRef.current?.querySelector<HTMLElement>("button")?.focus();
-      const el = quickBoxRef.current;
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        const { x, y } = clampToViewport(
-          pending.at.x,
-          pending.at.y,
-          rect.width,
-          rect.height,
-          window.innerWidth,
-          window.innerHeight,
-        );
-        el.style.left = `${x}px`;
-        el.style.top = `${y}px`;
+    if (!pending) {
+      pendingClickAnchorRef.current = null;
+      setPendingGeometry(null);
+      if (restoreFocusRef.current) {
+        restoreFocusRef.current.focus?.();
+        restoreFocusRef.current = null;
       }
-    } else if (restoreFocusRef.current) {
-      restoreFocusRef.current.focus?.();
-      restoreFocusRef.current = null;
+      return;
     }
-    // Re-run when the pending identity changes (open / dismiss / move).
+    if (pending.selection.length === 0) {
+      const pgs = getPagesRef.current();
+      const cardBoxes = pgs.map((p) => p.cardEl.getBoundingClientRect());
+      const idx = pickPage(
+        { left: pending.at.x, top: pending.at.y, right: pending.at.x, bottom: pending.at.y },
+        cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
+      );
+      if (idx >= 0) {
+        const cr = cardBoxes[idx];
+        pendingClickAnchorRef.current = {
+          pageIndex: pgs[idx].pageIndex,
+          fracX: cr.width > 0 ? (pending.at.x - cr.left) / cr.width : 0,
+          fracY: cr.height > 0 ? (pending.at.y - cr.top) / cr.height : 0,
+        };
+      }
+    }
+    setPendingGeometry(computePendingGeometry());
+    // Focus the first action in the quick-box (proof button or first swatch).
+    quickBoxRef.current?.querySelector<HTMLElement>("button")?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on the pending IDENTITY change
   }, [pending]);
+
+  // Keep the popup + preview glued to the actual text: re-derive geometry on
+  // every scroll/resize while pending, and whenever `scale` changes (zoom).
+  // This is what makes the selection survive zoom/scroll instead of going
+  // stale or being dismissed.
+  useEffect(() => {
+    if (!pending) return;
+    const reposition = () => setPendingGeometry(computePendingGeometry());
+    reposition();
+    // Capture phase: `scroll` does not bubble, and the scrolling element is
+    // the pdf-canvas, not window.
+    document.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      document.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [pending, scale, computePendingGeometry]);
+
+  // Clamp the popup's re-derived position to stay on-screen (AC-4) and set it
+  // imperatively (like `useSelection.ts`'s `selectionPoint()`), avoiding a
+  // React re-render per scroll-driven reposition.
+  useLayoutEffect(() => {
+    const el = quickBoxRef.current;
+    if (!el || !pendingGeometry) return;
+    const rect = el.getBoundingClientRect();
+    const { x, y } = clampToViewport(
+      pendingGeometry.boxAt.x,
+      pendingGeometry.boxAt.y,
+      rect.width,
+      rect.height,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+  }, [pendingGeometry]);
 
   // Cursor-mode tool-type picker action (Story 2.12): creates the chosen mark
   // and routes into the tool's existing affordance. Text drag (selection.length>0):
@@ -455,20 +590,19 @@ export default function AnnotationInteraction({
         createTextTool(pending.selection, tool);
         dispatch({ type: "commit" });
       } else {
-        // Click on empty page: place Comment pin or Memo at the click point.
-        const { x, y } = pending.at;
+        // Click on empty page: place Comment pin or Memo at the click point,
+        // re-derived from the captured page + fraction anchor (NOT the frozen
+        // `pending.at`) so it lands where the popup is actually showing now —
+        // after any zoom/scroll since the click — not the stale release point.
+        const anchor = pendingClickAnchorRef.current;
+        if (!anchor) return;
         const pgs = getPagesRef.current();
-        const cardBoxes = pgs.map((p) => p.cardEl.getBoundingClientRect());
-        const idx = pickPage(
-          { left: x, top: y, right: x, bottom: y },
-          cardBoxes.map((c) => ({ left: c.left, top: c.top, right: c.right, bottom: c.bottom })),
-        );
-        if (idx < 0) return;
-        const page = pgs[idx];
-        const cardRect = cardBoxes[idx];
+        const page = pgs.find((p) => p.pageIndex === anchor.pageIndex);
+        if (!page) return;
+        const cardRect = page.cardEl.getBoundingClientRect();
         const scale = scaleRef.current;
-        const x0 = x - cardRect.left;
-        const y0 = y - cardRect.top;
+        const x0 = anchor.fracX * cardRect.width;
+        const y0 = anchor.fracY * cardRect.height;
         const now = new Date().toISOString();
         if (tool === "comment") {
           const rect = normalizeRect({ x0, y0, x1: x0, y1: y0 }, page.box, scale);
@@ -536,17 +670,35 @@ export default function AnnotationInteraction({
           }}
         />
       )}
+      {pending &&
+        pendingGeometry?.previewRects.map((r, i) => (
+          // Stands in for the native browser selection (cleared on present,
+          // Story 4.x fix) while the CREATE quick-box is open: re-derived from
+          // the stored, scale-independent selection on every scroll/resize/
+          // zoom, so it survives what the native Selection can't. Tinted by
+          // the CSS class with the neutral selection token, NOT the active
+          // tool color — nothing has been chosen as highlight/underline/
+          // comment yet.
+          <div
+            key={i}
+            className="pending-selection-preview"
+            data-testid="pending-selection-preview"
+            aria-hidden="true"
+            style={{ left: r.left, top: r.top, width: r.width, height: r.height }}
+          />
+        ))}
       {pending && (
         // Cursor-mode tool-type picker (Story 2.12). Drag-select → H/U/C (icon
         // only). Click on empty page → Comment+Memo (icon only). Machine, shell,
-        // position/clamp, focus-in/return, and dismiss plumbing unchanged.
+        // and focus-in/return plumbing unchanged; position/clamp/dismiss-on-
+        // scroll replaced by the live-tracking geometry above (Story 4.x fix).
         <div
           ref={quickBoxRef}
           className="quick-box"
           role="menu"
           aria-label="Annotation tools"
           data-testid="quick-box"
-          style={{ left: pending.at.x, top: pending.at.y }}
+          style={{ left: pendingGeometry?.boxAt.x ?? pending.at.x, top: pendingGeometry?.boxAt.y ?? pending.at.y }}
         >
           {pending.selection.length > 0 ? (
             // Text drag: Highlight / Underline / Comment
