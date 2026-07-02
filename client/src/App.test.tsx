@@ -1,18 +1,18 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
-import App from "./App";
-import * as api from "./api/client";
-import type { Annotation } from "./api/client";
-import * as renderLayer from "./render";
-import { useAnnotationStore } from "./store";
-import { DEBOUNCE_MS } from "./hooks/useAutosave";
-import { useSettingsStore } from "./settings/store";
-import { DEFAULT_KEYMAP } from "./settings/keymap";
+import App from "@/App";
+import * as api from "@/api/client";
+import type { Annotation } from "@/api/client";
+import * as renderLayer from "@/render";
+import { useAnnotationStore } from "@/store";
+import { DEBOUNCE_MS } from "@/hooks/useAutosave";
+import { useSettingsStore } from "@/settings/store";
+import { DEFAULT_KEYMAP } from "@/settings/keymap";
 
 // The S1 Reader pulls in pdf.js, which can't run under jsdom. These App tests
 // only care about the S0↔S1 shell, so stub the render layer; loadDocument stays
 // pending so the Reader sits in its loading phase (the pdf-canvas is present).
-vi.mock("./render", () => ({
+vi.mock("@/render", () => ({
   loadDocument: vi.fn(() => new Promise(() => {})),
   destroyDocument: vi.fn(),
   getPageBox: vi.fn(() => ({ width: 600, height: 800 })),

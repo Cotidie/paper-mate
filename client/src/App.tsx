@@ -1,25 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { ListBullets, Cards } from "@phosphor-icons/react";
-import "./App.css";
-import EmptyDropzone from "./components/EmptyDropzone/EmptyDropzone";
-import Reader, { type ReaderHandle } from "./components/Reader/Reader";
-import ToolRail from "./components/ToolRail/ToolRail";
-import { type ActiveTool, isAnnotationTool } from "./lib/tools";
-import { useAnnotationStore, hydrateStore, flashAnnotation } from "./store";
-import ZoomControl from "./components/ZoomControl/ZoomControl";
-import PageIndicator from "./components/PageIndicator/PageIndicator";
-import TocPanel from "./components/TocPanel/TocPanel";
-import BankPanel from "./components/BankPanel/BankPanel";
-import type { BankItem } from "./lib/bank";
-import Toast from "./components/Toast/Toast";
-import { uploadDoc, getAnnotations, fetchHealth, type Doc } from "./api/client";
-import type { TocEntry } from "./render";
-import { useAutosave } from "./hooks/useAutosave";
-import SaveIndicator from "./components/SaveIndicator/SaveIndicator";
-import { matchAction } from "./settings/keymap";
-import { useSettingsStore } from "./settings/store";
-import SettingsModal from "./settings/SettingsModal";
-import { isEditableTarget } from "./lib/domFocus";
+import "@/App.css";
+import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
+import Reader, { type ReaderHandle } from "@/components/Reader/Reader";
+import ToolRail from "@/components/ToolRail/ToolRail";
+import { type ActiveTool, isAnnotationTool } from "@/lib/tools";
+import { useAnnotationStore, hydrateStore, flashAnnotation } from "@/store";
+import ZoomControl from "@/components/ZoomControl/ZoomControl";
+import PageIndicator from "@/components/PageIndicator/PageIndicator";
+import TocPanel from "@/components/TocPanel/TocPanel";
+import BankPanel from "@/components/BankPanel/BankPanel";
+import type { BankItem } from "@/lib/bank";
+import Toast from "@/components/Toast/Toast";
+import { uploadDoc, getAnnotations, fetchHealth, type Doc } from "@/api/client";
+import type { TocEntry } from "@/render";
+import { useAutosave } from "@/hooks/useAutosave";
+import SaveIndicator from "@/components/SaveIndicator/SaveIndicator";
+import { matchAction } from "@/settings/keymap";
+import { useSettingsStore } from "@/settings/store";
+import SettingsModal from "@/settings/SettingsModal";
+import { isEditableTarget } from "@/lib/domFocus";
 
 /**
  * App shell. Holds the current-doc state and switches between:
@@ -256,10 +256,15 @@ export default function App() {
   return (
     <div className="app">
       <header className="top-bar" role="banner">
-        <span className="top-bar__title">{doc.filename}</span>
-        <SaveIndicator status={saveStatus.status} />
-        {/* Centered page nav (absolute, so it stays centered regardless of the
-            title/actions widths). Prev/next drive the Reader's page jump. */}
+        {/* Three-column grid: lead cluster (left) / page nav (center) / actions
+            (right). The lead's title truncates (min-width:0) so a long filename
+            can never overlap the centered page nav. */}
+        <div className="top-bar__lead">
+          <span className="top-bar__title">{doc.filename}</span>
+          <SaveIndicator status={saveStatus.status} />
+        </div>
+        {/* Centered page nav (grid middle column). Prev/next drive the Reader's
+            page jump; the carets disable at the first/last page. */}
         <PageIndicator
           currentPage={currentPage}
           pageCount={doc.page_count}
