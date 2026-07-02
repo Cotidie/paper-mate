@@ -927,8 +927,10 @@ So that a drag stays in its column and a same-line highlight never bridges the g
 **Given** any column geometry change
 **Then** it is live-smoked with a cross-column same-line selection AND a cross-page selection at DPR>1 (jsdom zeroes rects)
 
-### Story 4.3: Distinct, non-obscuring on-page mark treatment
+### Story 4.3: Distinct, non-obscuring on-page mark treatment — DESCOPED from v1 (2026-07-02)
 
+> **DESCOPED (2026-07-02, product decision, never attempted).** No longer needed for v1; not built. `sprint-status.yaml` marks it `blocked` so Epic 4 can still close after 4.2 merges. The spec below is retained as the source if it is ever re-promoted (see `deferred-work.md` "Descoped: Story 4.3").
+>
 > deferred-work: "a text-comment must read differently from a plain highlight, and not obscure the text" + the memo revised direction ("drop memo color, black border + transparent background"). Both are `style-on-type` paint changes (AD-5), token-driven.
 
 As a reader,
