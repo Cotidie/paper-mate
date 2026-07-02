@@ -395,6 +395,24 @@ export function pendingSelectionGeometry(
 }
 
 /**
+ * Clip a viewport-space preview rect to the reader's visible vertical band.
+ * The CREATE preview is `position: fixed` (Story 4.x — it must span two page
+ * cards for a cross-page selection), which, unlike the card-scoped
+ * AnnotationLayer marks, escapes `.pdf-canvas`'s scroll-clipping ancestor
+ * entirely. Without this, a selection row whose true position has scrolled
+ * above/below the visible reader viewport still paints — on top of the
+ * top-bar chrome (Story 4.2 bug: a same-page column-2 row scrolled behind the
+ * top-bar bled through above it). Returns `null` when nothing of the rect
+ * remains visible. DOM-free, unit-testable.
+ */
+export function clipRectToViewport(rect: ScreenRect, viewport: { top: number; bottom: number }): ScreenRect | null {
+  const top = Math.max(rect.top, viewport.top);
+  const bottom = Math.min(rect.top + rect.height, viewport.bottom);
+  if (bottom <= top) return null;
+  return { left: rect.left, top, width: rect.width, height: bottom - top };
+}
+
+/**
  * The on-screen rects of the TEXT a `range` selects — one set of line boxes per
  * text node it covers, EXCLUDING element border boxes.
  *

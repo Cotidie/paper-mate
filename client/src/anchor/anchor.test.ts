@@ -14,6 +14,7 @@ import {
   scalePoints,
   pointsBounds,
   pendingSelectionGeometry,
+  clipRectToViewport,
   type PageBox,
   type PageSelection,
 } from "./index";
@@ -485,5 +486,39 @@ describe("pendingSelectionGeometry (CREATE quick-box tracking, Story 4.x — sel
       { pageIndex: 0, rects: [{ left: 0, top: 0, width: 60, height: 80 }] },
       { pageIndex: 9, rects: [] },
     ]);
+  });
+});
+
+describe("clipRectToViewport (fixed-position CREATE preview clipped to the reader viewport, Story 4.2)", () => {
+  const viewport = { top: 48, bottom: 1000 };
+
+  it("returns the rect unchanged when fully inside the viewport", () => {
+    const rect = { left: 10, top: 100, width: 200, height: 20 };
+    expect(clipRectToViewport(rect, viewport)).toEqual(rect);
+  });
+
+  it("clips the top when the rect starts above the viewport (scrolled behind the top-bar)", () => {
+    const rect = { left: 10, top: 20, width: 200, height: 40 };
+    expect(clipRectToViewport(rect, viewport)).toEqual({ left: 10, top: 48, width: 200, height: 12 });
+  });
+
+  it("clips the bottom when the rect extends past the viewport", () => {
+    const rect = { left: 10, top: 980, width: 200, height: 40 };
+    expect(clipRectToViewport(rect, viewport)).toEqual({ left: 10, top: 980, width: 200, height: 20 });
+  });
+
+  it("returns null when the rect is entirely above the viewport", () => {
+    const rect = { left: 10, top: 0, width: 200, height: 30 };
+    expect(clipRectToViewport(rect, viewport)).toBeNull();
+  });
+
+  it("returns null when the rect is entirely below the viewport", () => {
+    const rect = { left: 10, top: 1000, width: 200, height: 30 };
+    expect(clipRectToViewport(rect, viewport)).toBeNull();
+  });
+
+  it("returns null for a rect that exactly touches the viewport edge with zero overlap", () => {
+    const rect = { left: 10, top: 8, width: 200, height: 40 };
+    expect(clipRectToViewport(rect, viewport)).toBeNull();
   });
 });

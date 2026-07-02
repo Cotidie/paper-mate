@@ -24,6 +24,7 @@ import {
   normalizeRect,
   pickPage,
   pendingSelectionGeometry,
+  clipRectToViewport,
   type PageCardRef,
   type PageSelection,
 } from "../anchor";
@@ -222,16 +223,23 @@ export default function AnnotationInteraction({
         PENDING_BOX_GAP,
       );
       if (!geom) return null;
+      // Clip each row to the reader's visible viewport: the preview is
+      // `position: fixed` (it must span two page cards), so it does not
+      // inherit `.pdf-canvas`'s scroll-clipping the way a real AnnotationLayer
+      // mark does — a row scrolled past the top/bottom of the reader would
+      // otherwise paint over the top-bar/other chrome instead of going hidden.
+      const readerViewport = document.querySelector(".pdf-canvas")?.getBoundingClientRect() ?? null;
       const previewRects = geom.pages.flatMap(({ pageIndex, rects }) => {
         const card = cardOf(pageIndex);
         if (!card) return [];
         const cardRect = card.cardEl.getBoundingClientRect();
-        return rects.map((r) => ({
-          left: cardRect.left + r.left,
-          top: cardRect.top + r.top,
-          width: r.width,
-          height: r.height,
-        }));
+        return rects.flatMap((r) => {
+          const screen = { left: cardRect.left + r.left, top: cardRect.top + r.top, width: r.width, height: r.height };
+          const clipped = readerViewport
+            ? clipRectToViewport(screen, { top: readerViewport.top, bottom: readerViewport.bottom })
+            : screen;
+          return clipped ? [clipped] : [];
+        });
       });
       const anchorCard = cardOf(geom.anchor.pageIndex);
       if (!anchorCard) return null;
