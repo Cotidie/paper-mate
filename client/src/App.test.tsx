@@ -401,6 +401,44 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(screen.getByTestId("highlight-box-toggle").getAttribute("aria-checked")).toBe("false");
   });
 
+  it("Escape defers to the overlay when a mark is selected (does not disarm the tool); a second Escape then returns to cursor (Story 5.6, layered Esc)", async () => {
+    await openReader();
+    const hi = () => screen.getByTestId("tool-highlight-button");
+    fireEvent.keyDown(document, { key: "h" });
+    expect(hi().className).toContain("tool-button--armed");
+
+    // A mark is selected (seeded directly on the store -- the overlay's own
+    // clearSelection is a separate concern, covered by useSelection's Esc
+    // handling and AnnotationInteraction.test.tsx). App's Escape branch must
+    // DEFER, not disarm, so a single press never both clears the selection
+    // AND drops the armed tool (the AC-2 regression this story fixes).
+    act(() => useAnnotationStore.setState({ selectedId: "a1" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).toContain("tool-button--armed");
+
+    // Nothing selected now (as the overlay's clearSelection would have left
+    // it): the SECOND Escape falls through to the fallback rung, cursor.
+    act(() => useAnnotationStore.setState({ selectedId: null }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).not.toContain("tool-button--armed");
+    expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
+  });
+
+  it("Escape defers to the overlay when a marquee multi-selection is active (does not disarm the tool) (Story 5.6, layered Esc)", async () => {
+    await openReader();
+    const hi = () => screen.getByTestId("tool-highlight-button");
+    fireEvent.keyDown(document, { key: "h" });
+    expect(hi().className).toContain("tool-button--armed");
+
+    act(() => useAnnotationStore.setState({ multiSelectedIds: ["a1", "a2"] }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).toContain("tool-button--armed");
+
+    act(() => useAnnotationStore.setState({ multiSelectedIds: [] }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).not.toContain("tool-button--armed");
+  });
+
   it("'H' over a focused button still arms (letter hotkeys have no native button meaning)", async () => {
     await openReader();
     // Bug repro: clicking a tool-rail button leaves it focused; a stale focus

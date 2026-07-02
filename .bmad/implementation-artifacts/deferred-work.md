@@ -30,7 +30,7 @@ Items surfaced during review that are real but intentionally not actioned now.
 | Layered Esc | Epic 5 Story 5.5 |
 | Confirm (check) on memo + comment editors | Epic 5 Story 5.5 |
 | Collapse pen stroke-width into a dropdown | Epic 5 Story 5.5 |
-| Dim ToC panel until hovered | Epic 5 Story 5.6 |
+| Dim ToC panel until hovered | Epic 5 Story 5.7 — **descoped from v1 (2026-07-03, product decision, never attempted). See "Descoped: Story 5.7" below.** |
 
 **Not promoted (stay out of v1 / the new epics):** upload size cap (backend hardening, only if multi-user) · ToC synthesis + persist + schema bump (Phase 2) · directly edit PDF text + style (Phase 2/3, needs a feasibility spike).
 
@@ -41,6 +41,10 @@ Items surfaced during review that are real but intentionally not actioned now.
 ## Descoped: Story 5.2 — color system, per-tool default + custom slots (2026-07-02)
 
 > Story 5.2 (per-tool remembered default color + custom color slots/picker) is **descoped from v1**. Product decision, never attempted (no create-story run, no code). `sprint-status.yaml` marks `5-2-color-system-per-tool-custom: blocked` so Epic 5 can still close once its remaining stories reach `done`; the epics.md Story 5.2 section is kept, marked descoped. The original spec stays there as the source if this is ever revisited: reshaping the single shared `activeColor` into a per-tool `activeColorByTool` map, plus a FIFO custom-color-slot window seeded from `localStorage` and mapped to runtime CSS vars (`--color-annotation-custom-N`) to keep `no-raw-values` honored.
+
+## Descoped: Story 5.7 — dim the Table-of-Contents panel until hovered (2026-07-03)
+
+> Story 5.7 (dim `TocPanel` at rest, full opacity on hover/focus-within) is **descoped from v1**. Product decision, never attempted (no create-story run, no code). `sprint-status.yaml` marks `5-7-dim-toc-panel: blocked` so Epic 5 can still close once its remaining stories reach `done`; the epics.md Story 5.7 section is kept, marked descoped. The original spec stays there as the source if this is ever revisited: a resting `~0.4` opacity token (`--toc-panel-resting-opacity`) lifting to full on `:hover`/`:focus-within` with a short transition, respecting `prefers-reduced-motion`, pure presentation, no contract/store change.
 
 ## Deferred from: code review of story-1-2-open-a-pdf-from-disk (2026-06-28)
 

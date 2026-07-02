@@ -149,6 +149,11 @@ export default function App() {
       if (isEditableTarget(e.target)) return;
       if (e.key === "Escape") {
         e.preventDefault();
+        // Fallback rung only (Story 5.6, layered Esc): defer to a more-local
+        // rung (the overlay's selection-clear) when a mark is selected, so a
+        // single Esc never both clears the selection AND disarms the tool.
+        const { selectedId, multiSelectedIds } = useAnnotationStore.getState();
+        if (selectedId || multiSelectedIds.length > 0) return;
         setActiveTool("cursor");
         return;
       }
