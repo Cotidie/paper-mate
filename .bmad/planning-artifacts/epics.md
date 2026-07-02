@@ -969,7 +969,7 @@ So that adding a tool or an edit is one registration, not edits across five `if`
 **Then** they become typed data contracts (one "create request" per tool, one "active-tool defaults" object — ties into Story 5.2, narrower prop bundles); any data class WRAPS the generated `Annotation` type, never shadows it (AR-3)
 
 **Given** the fragmented interaction state (selection / quick-box / pen-draft / memo-cleanup / flyout / Esc across components)
-**Then** the overlay lifecycle consolidates into one explicit FSM (extends `machine.ts`, AD-11/PREP-3); the duplicated App+overlay Esc logic collapses (enables Story 5.4 layered Esc)
+**Then** the overlay lifecycle consolidates into one explicit FSM (extends `machine.ts`, AD-11/PREP-3); the duplicated App+overlay Esc logic collapses (enables Story 5.5 layered Esc)
 
 **Given** the refactor
 **Then** client + server suites stay green and the tracked OpenAPI contract is byte-identical; both `vi.mock("./render")` barrels updated if any `render/` export moves; `no-raw-values` re-run after CSS moves; its own PR(s), never folded into a feature story
@@ -1016,7 +1016,29 @@ So that changing the highlight color doesn't change the pen, and I'm not limited
 **Given** the custom-hex contract risk
 **Then** custom colors map to runtime CSS vars (`--color-annotation-custom-N`) seeded from `localStorage` at boot (PREFERRED — keeps `style.color` a token name, no contract break, stays in `theme/` + `annotations/`); `no-raw-values` is honored (hex routed through the theme layer, never inlined) (AR-3, AR-12)
 
-### Story 5.3: Hide/show all annotations toggle
+### Story 5.3: React client structural refactor — modularize Reader/AnnotationLayer/AnnotationInteraction
+
+> User request (2026-07-02): `Reader.tsx`, `AnnotationLayer.tsx`, and `AnnotationInteraction.tsx` have bloated since Story 5.0's gesture-hook extraction (2293 combined lines). Modularize further, deduplicate, remove dead code. A pure refactor thread, same footing as Story 5.0 — its own PR(s), never folded into a feature story.
+
+As a developer,
+I want `Reader`/`AnnotationLayer`/`AnnotationInteraction` split into cohesive, single-responsibility modules with no dead code or duplication,
+So that the overlay/reader composition root stays legible and the next tool/story doesn't have to wade through three 600-800 line files to find where it hooks in.
+
+**Acceptance Criteria:**
+
+**Given** `Reader.tsx` / `AnnotationLayer.tsx` / `AnnotationInteraction.tsx` (2293 combined lines post-5.0)
+**Then** each is decomposed into smaller, cohesive units (extracted hooks/components/pure helpers) along the SAME OOP/encapsulation approach Story 5.0 chose (each concern owns its own state/refs, not a shared conditional sprawl); no god-component remains the dumping ground for unrelated concerns
+
+**Given** the extraction
+**Then** duplicated logic (across these 3 files AND vs. the existing `gestures/`/`render/`/`anchor/` layers) is consolidated to one definition; dead code (unreferenced exports, stale branches, superseded comments) is deleted, not left "just in case"
+
+**Given** the refactor
+**Then** it is BEHAVIOR- and CONTRACT-identical: client + server suites stay green, `server/openapi.json`/`schema.d.ts` byte-identical, both `vi.mock("./render")` barrels updated if any export moves, re-smoked live at DPR>1 cross-page (the standing `annotations/` selection-geometry risk)
+
+**Given** AD-9 layering (`render/` → `anchor/` → `annotations/` → `App`) and the zero-import-leaf convention (`tools.ts`, `domFocus.ts`)
+**Then** the new module boundaries respect it; no upward imports introduced
+
+### Story 5.4: Hide/show all annotations toggle
 
 > deferred-work: "hide/show all annotations toggle".
 
@@ -1033,7 +1055,7 @@ So that I can read the clean page and bring my marks back.
 **Given** the toggle
 **Then** it is ONE global view-only flag (composition root or store, sibling of `activeTool`/`selectedId`), threaded to `AnnotationLayer` (skip render) and `AnnotationInteraction` (suppress create/select while hidden); it NEVER mutates/deletes an annotation; clear `selectedId` on hide; decide whether the flag survives reload (FR-23)
 
-### Story 5.4: Interaction polish — layered Esc, in-editor confirm, collapsed stroke-width
+### Story 5.5: Interaction polish — layered Esc, in-editor confirm, collapsed stroke-width
 
 > deferred-work: "layered Esc", "confirm (check) affordance on memo + comment editors", "collapse the pen stroke-width row into a single dropdown". Small UX refinements; layered Esc depends on Story 5.0's Esc consolidation.
 
@@ -1052,7 +1074,7 @@ So that the annotate interactions feel precise and uncluttered.
 **Given** the pen `StrokeWidthRow` (three preset dots in a row)
 **Then** it becomes a compact collapsible control (trigger shows current width + caret → vertical thin/medium/thick list; pick collapses) matching the memo `SizeRow` pattern; update the Story 2.8 tests that asserted all three step buttons visible; presentation only, no model/contract change
 
-### Story 5.5: Dim the Table-of-Contents panel until hovered
+### Story 5.6: Dim the Table-of-Contents panel until hovered
 
 > deferred-work: "dim the Table-of-Contents panel until hovered". UX polish toward immersion (NFR-5).
 

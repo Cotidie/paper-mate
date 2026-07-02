@@ -26,11 +26,11 @@ Items surfaced during review that are real but intentionally not actioned now.
 | Settings modal + hotkey rebinding | Epic 5 Story 5.1 |
 | Per-tool remembered default color | Epic 5 Story 5.2 — **descoped from v1 (2026-07-02, product decision, never attempted). See "Descoped: Story 5.2" below.** |
 | Custom color slots + picker | Epic 5 Story 5.2 — **descoped from v1 (2026-07-02, see above).** |
-| Hide/show all annotations toggle | Epic 5 Story 5.3 |
-| Layered Esc | Epic 5 Story 5.4 |
-| Confirm (check) on memo + comment editors | Epic 5 Story 5.4 |
-| Collapse pen stroke-width into a dropdown | Epic 5 Story 5.4 |
-| Dim ToC panel until hovered | Epic 5 Story 5.5 |
+| Hide/show all annotations toggle | Epic 5 Story 5.4 |
+| Layered Esc | Epic 5 Story 5.5 |
+| Confirm (check) on memo + comment editors | Epic 5 Story 5.5 |
+| Collapse pen stroke-width into a dropdown | Epic 5 Story 5.5 |
+| Dim ToC panel until hovered | Epic 5 Story 5.6 |
 
 **Not promoted (stay out of v1 / the new epics):** upload size cap (backend hardening, only if multi-user) · ToC synthesis + persist + schema bump (Phase 2) · directly edit PDF text + style (Phase 2/3, needs a feasibility spike).
 
