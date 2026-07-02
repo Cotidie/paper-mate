@@ -205,14 +205,16 @@ export function useSelection(opts: {
       // A selected memo's OWN textarea is also exempt from the editable-field skip
       // below, for Delete only: the user must be able to remove the memo with Del
       // even mid-typing (user bug report), unlike a normal input where Delete is a
-      // text edit. Scoped by the exact data-testid MemoBox renders, so this can
-      // only ever match the currently selected memo's own textarea, never a
-      // bystander field (mirrors CommentBubble's own Delete override, which
-      // handles this the same way for its bubble textarea).
+      // text edit. Scoped by the exact data-testid MemoBox's inner textarea
+      // carries (the OUTER box keeps `annotation-mark-${id}`; the textarea child
+      // is `memo-body-${id}`, memo collapse/expand feature), so this can only ever
+      // match the currently selected memo's own textarea, never a bystander field
+      // (mirrors CommentBubble's own Delete override for its bubble textarea). A
+      // COLLAPSED memo has no textarea at all, so this naturally never matches then.
       const inOwnMemoTextarea =
         selectedAnno.type === "memo" &&
         (e.target as HTMLElement | null)?.getAttribute?.("data-testid") ===
-          `annotation-mark-${selectedAnno.id}`;
+          `memo-body-${selectedAnno.id}`;
       if (!inSelectionBox && !inOwnMemoTextarea && isExempt(e.target)) return;
       if (e.key === "Escape") {
         // Esc clears the selection (the App-level Esc->cursor also runs).

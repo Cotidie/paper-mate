@@ -224,6 +224,11 @@ components:
     rounded: "{rounded.sm}"
     padding: "{spacing.xs}"
     border: "1px {colors.annotation-default}"
+  memo-collapse-toggle:
+    backgroundColor: "{colors.surface-card}"
+    borderColor: "{colors.ink}"
+    rounded: "{rounded.pill}"
+    size: 20px
   annotation-comment-pin:
     backgroundColor: "{colors.surface-card}"
     borderColor: "{colors.ink}"
@@ -485,7 +490,9 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 
 **`annotation-pen`** — Freehand vector stroke in the chosen accent or `{colors.ink}`; stroke width from the pen quick-box.
 
-**`annotation-memo`** — Free-floating text box typed onto the page. Background AND 1px border both the mark's own accent color (`style.color`; `{colors.annotation-default}` shown as the representative default), `{rounded.sm}`, `{typography.body-sm}`, `{colors.ink}` text. Does not displace page text.
+**`annotation-memo`** — Free-floating text box typed onto the page. Background AND 1px border both the mark's own accent color (`style.color`; `{colors.annotation-default}` shown as the representative default), `{rounded.sm}`, `{typography.body-sm}`, `{colors.ink}` text. Does not displace page text. Collapsible (user feature request, persisted on `style.collapsed`): expanded shows the editable body; collapsed shows a single non-editable line (the memo's first line + a literal `(...)` tell) and shrinks the box to fit. The `memo-collapse-toggle` chevron (below) switches between the two; must expand before editing.
+
+**`memo-collapse-toggle`** — A small pill badge straddling the memo's bottom-center edge (half outside the box, below it) — not a corner or top-center, since a selected memo's edit frame occupies all four corners plus top-center. Same size/shape as `annotation-comment-pin`'s badge. `{colors.surface-card}` fill, `{colors.ink}` border, `{rounded.pill}`. Shows a down caret when collapsed (click to expand), up caret when expanded (click to collapse). Always present, independent of selection.
 
 **`annotation-comment-pin`** — A comment both **highlights the underlying text** (accent at ~0.4) **and** anchors a fixed comment-bubble glyph (`{colors.surface-card}` body, `{colors.ink}` border, not tinted to the mark's own accent), straddling the run's top edge at ~0.6 opacity (full opacity, no outline ring, on hover/select), to mark it as a comment. Click opens the `comment-bubble`.
 

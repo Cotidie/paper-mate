@@ -139,6 +139,7 @@ export default function AnnotationLayer({
   const setHovered = useAnnotationStore((s) => s.setHovered);
   const retextAnnotation = useAnnotationStore((s) => s.retextAnnotation);
   const retextAnnotations = useAnnotationStore((s) => s.retextAnnotations);
+  const setMemoCollapsed = useAnnotationStore((s) => s.setMemoCollapsed);
   // Text-edit session coalescing (Story 3.2, AC-4): a memo or comment textarea
   // editing session (focus→blur) must land as ONE undo step, not one per keystroke.
   // On focus: pause the temporal store and save the pre-session annotations Map.
@@ -351,7 +352,9 @@ export default function AnnotationLayer({
   // color comes from style.color (inline); the body text stays ink. The box is
   // the selection hit surface (Story 2.5 seam): pointer-events + select/hover.
   // value = a.body, every edit writes through retextAnnotation. Autofocus when it
-  // is the selected memo so a just-placed box is ready to type into.
+  // is the selected memo so a just-placed box is ready to type into. Collapse/
+  // expand (user feature request) is a memo-only style toggle, persisted via
+  // setMemoCollapsed — the same command path as recolor, so it is undoable.
   const renderMemo = (a: Annotation) => {
     const anchor = effAnchor(a);
     if (anchor.kind !== "rect") return null;
@@ -368,6 +371,7 @@ export default function AnnotationLayer({
         onSelect={select}
         onHover={setHovered}
         onClearSelection={clearSelection}
+        onToggleCollapse={(id, collapsed) => setMemoCollapsed([id], collapsed, new Date().toISOString())}
         onTextFocus={startTextEditSession}
         onTextBlur={commitTextEditSession}
       />

@@ -474,12 +474,16 @@
   z-index: 1;
 }
 
-/* A memo box = a free-floating <textarea> over the page card (DESIGN.md
+/* A memo box = a free-floating container over the page card (DESIGN.md
    #annotation-memo: rounded.sm, body-sm). Positioned + sized inline from the
    denormalized rect (so it rides zoom, NFR-3) and never reflows the canvas
    (absolute overlay). Both the border AND background colors are applied inline
    from style.color (the mark's accent); this rule supplies the chrome only. The
-   box is the selection hit surface (pointer-events:auto). */
+   box is the selection hit surface (pointer-events:auto). Holds the collapse
+   toggle PLUS either the editable body (expanded) or a one-line preview
+   (collapsed, user feature request) as children — see .annotation-memo__body /
+   __preview below. Its own `position:absolute` already anchors the toggle's
+   corner-straddle (no separate `position:relative` needed). */
 .annotation-memo {
   position: absolute;
   box-sizing: border-box;
@@ -490,8 +494,6 @@
   color: var(--color-ink);
   font-family: inherit;
   font-size: var(--type-body-sm-size);
-  resize: none;
-  overflow: hidden;
   pointer-events: auto;
   box-shadow: var(--shadow-card);
 }
@@ -508,9 +510,79 @@
   outline-offset: var(--color-swatch-ring-offset);
 }
 
-.annotation-memo:focus-visible {
+/* The editable body (expanded state): fills the wrapper's content box, chrome-
+   free (the wrapper already paints border/background) — font/color inherited. */
+.annotation-memo__body {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  resize: none;
+  overflow: hidden;
+}
+
+.annotation-memo__body:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-ink);
   outline-offset: var(--color-swatch-ring-offset);
+}
+
+/* The collapsed preview (user feature request): the memo's first line only,
+   plus a literal "(...)" tell so a reader knows it's expandable. Single line,
+   clipped with an ellipsis if it overflows the box width on its own. */
+.annotation-memo__preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The collapse/expand toggle chevron (user feature request): a small pill badge
+   straddling the memo's BOTTOM-center edge (half outside the box, below it) —
+   same visual language + size token as .multi-select-frame__delete and the
+   comment pin (ink-bordered, surface-card fill), mirroring .edit-handle--move's
+   own top-center/above placement but flipped to the bottom. Deliberately NOT a
+   corner: a SELECTED memo also renders its Story 3.1 edit frame (4 corner resize
+   handles + the top-center move grip, same z-layer) — any corner or top-center
+   position collides with one of those. Bottom-center is the one edge the edit
+   frame never touches. Always present (not selection-gated), so a reader can
+   collapse/expand a memo without first selecting it. */
+.memo-collapse-toggle {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, calc(100% + var(--space-xxs)));
+  width: var(--comment-pin-size);
+  height: var(--comment-pin-size);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-card);
+  border: var(--focus-ring-width) solid var(--color-ink);
+  border-radius: var(--radius-pill);
+  color: var(--color-ink);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.memo-collapse-toggle:hover {
+  background-color: var(--color-hairline-soft);
+}
+
+.memo-collapse-toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.memo-collapse-toggle svg {
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  display: block;
 }
 
 /* annotation-comments group (Story 2.10): the comment pins + the selected

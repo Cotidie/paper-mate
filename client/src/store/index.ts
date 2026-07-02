@@ -216,6 +216,14 @@ export interface AnnotationStore {
    *  so a stale text/path id is never mutated (AR-5). Creation-time edit; no
    *  command stack yet. */
   resizeMemoAnnotation: (ids: string[], size: { w: number; h: number }, now: string) => void;
+  /** Collapse/expand one or more memos (by id) and bump `updated_at` — the
+   *  collapse twin of `resizeMemoAnnotation`, from the memo's own toggle chevron
+   *  (user feature request). Persisted on `style.collapsed` (AD-8, additive
+   *  optional field); `None`/`false` = expanded (default), `true` = show only
+   *  the memo's first line. Guarded to `kind=rect`+`type=memo`, same as
+   *  `resizeMemoAnnotation`. Routes through the normal command path, so it is
+   *  undoable like every other restyle (AD-7) — no special-casing. */
+  setMemoCollapsed: (ids: string[], collapsed: boolean, now: string) => void;
   /** Replace a mark's anchor GEOMETRY (a moved/resized rect or points) and bump
    *  `updated_at` — the Story 3.1 move/resize command-path action, shared by
    *  kind=rect (memo/region/comment-pin) and kind=path (pen). The CALLER (the edit
@@ -425,6 +433,15 @@ export const useAnnotationStore = create<AnnotationStore>()(
             const rect = { x0, y0, x1: Math.min(1, x0 + size.w), y1: Math.min(1, y0 + size.h) };
             return { ...a, anchor: { ...a.anchor, rect } };
           }),
+        })),
+      setMemoCollapsed: (ids, collapsed, now) =>
+        set((state) => ({
+          // Collapsed is memo-only style (AR-5), same guard shape as resizeMemoAnnotation.
+          annotations: patchAnnotations(state.annotations, ids, now, (a) =>
+            a.anchor.kind === "rect" && a.type === "memo"
+              ? { ...a, style: { ...a.style, collapsed } }
+              : null,
+          ),
         })),
       setAnnotationGeometry: (id, anchor, now) =>
         set((state) => {

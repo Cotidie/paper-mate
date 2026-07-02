@@ -472,6 +472,82 @@ describe("memo size, retext + resize (Story 2.9)", () => {
   });
 });
 
+describe("setMemoCollapsed (memo collapse/expand, user feature request)", () => {
+  const rect = { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 };
+
+  it("sets style.collapsed and bumps updated_at", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().setMemoCollapsed(["m"], true, "2026-06-29T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.style.collapsed).toBe(true);
+    expect(m.updated_at).toBe("2026-06-29T12:00:00Z");
+  });
+
+  it("expands back (collapsed=false) and bumps updated_at again", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().setMemoCollapsed(["m"], true, "2026-06-29T12:00:00Z");
+    useAnnotationStore.getState().setMemoCollapsed(["m"], false, "2026-06-29T13:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.style.collapsed).toBe(false);
+    expect(m.updated_at).toBe("2026-06-29T13:00:00Z");
+  });
+
+  it("does not disturb the memo's other style fields (color, geometry)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().setMemoCollapsed(["m"], true, "2026-06-29T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.style.color).toBe("annotation-default");
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual(rect);
+  });
+
+  it("guards non-memo marks (a stale text/path id is untouched)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("h", "annotation-default", "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().setMemoCollapsed(["h"], true, "2026-06-29T12:00:00Z");
+    const h = useAnnotationStore.getState().annotations.get("h")!;
+    expect(h.style.collapsed).toBeUndefined();
+    expect(h.updated_at).toBe("2026-06-29T00:00:01Z"); // not bumped
+  });
+
+  it("guards a rect mark that is not a memo (e.g. a region highlight)", () => {
+    const s = useAnnotationStore.getState();
+    const region: Annotation = {
+      id: "r",
+      doc_id: "doc-1",
+      type: "highlight",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: null,
+      created_at: "2026-06-29T00:00:01Z",
+      updated_at: "2026-06-29T00:00:01Z",
+    };
+    s.addAnnotation(region);
+    useAnnotationStore.getState().setMemoCollapsed(["r"], true, "2026-06-29T12:00:00Z");
+    const r = useAnnotationStore.getState().annotations.get("r")!;
+    expect(r.style.collapsed).toBeUndefined();
+    expect(r.updated_at).toBe("2026-06-29T00:00:01Z");
+  });
+
+  it("ignores an unknown id without throwing", () => {
+    useAnnotationStore.getState().setMemoCollapsed(["missing"], true, "2026-06-29T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
+
+  it("is undoable via zundo (the normal command path, AD-7)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.temporal.getState().clear();
+    useAnnotationStore.getState().setMemoCollapsed(["m"], true, "2026-06-29T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.get("m")!.style.collapsed).toBe(true);
+    useAnnotationStore.temporal.getState().undo();
+    expect(useAnnotationStore.getState().annotations.get("m")!.style.collapsed).toBeUndefined();
+  });
+});
+
 describe("geometry edit — setAnnotationGeometry (move/resize command path, Story 3.1)", () => {
   const rect = { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 };
 

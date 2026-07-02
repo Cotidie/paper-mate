@@ -1,6 +1,7 @@
 """Annotation entity tests (AD-5, Story 2.2 + 2.13): the discriminated-union
 anchor round-trips and the model is surfaced into OpenAPI (so the client gets a
-generated TS type) without adding endpoints. Story 2.13 adds Style.alpha."""
+generated TS type) without adding endpoints. Story 2.13 adds Style.alpha.
+Memo collapse/expand (user feature request, 2026-07-02) adds Style.collapsed."""
 
 import pytest
 from pydantic import ValidationError
@@ -90,6 +91,47 @@ def test_pen_annotation_null_alpha_backward_compatible() -> None:
         }
     )
     assert ann.style.alpha is None
+
+
+def test_style_collapsed_null_by_default() -> None:
+    """Memo collapse/expand: collapsed defaults to None (backward-compatible, AD-8)."""
+    s = Style(color="annotation-default")
+    assert s.collapsed is None
+
+
+def test_style_collapsed_round_trips() -> None:
+    """Memo collapse/expand: collapsed is stored and retrieved exactly."""
+    s = Style(color="annotation-default", collapsed=True)
+    assert s.collapsed is True
+
+
+def test_memo_annotation_with_collapsed_round_trips() -> None:
+    """Memo collapse/expand: a memo Annotation with collapsed=True parses correctly."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "memo",
+            "style": {"color": "annotation-default", "collapsed": True},
+            "body": "a note",
+            "anchor": {"kind": "rect", "page_index": 0, "rect": {"x0": 0, "y0": 0, "x1": 0.1, "y1": 0.1}},
+        }
+    )
+    assert isinstance(ann.anchor, RectAnchor)
+    assert ann.style.collapsed is True
+
+
+def test_memo_annotation_no_collapsed_field_backward_compatible() -> None:
+    """AD-8: a pre-collapse memo mark (no collapsed field) parses fine, defaults expanded."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "memo",
+            "style": {"color": "annotation-default"},
+            "body": "a note",
+            "anchor": {"kind": "rect", "page_index": 0, "rect": {"x0": 0, "y0": 0, "x1": 0.1, "y1": 0.1}},
+        }
+    )
+    assert ann.style.collapsed is None
 
 
 def test_annotation_surfaced_in_openapi_via_annotations_route() -> None:

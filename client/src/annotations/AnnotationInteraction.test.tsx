@@ -1321,12 +1321,16 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     const surf = canvasTarget();
     useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
     // AnnotationInteraction doesn't render the layer; stand in the real MemoBox
-    // textarea (same class + data-testid AnnotationLayer/MemoBox render) so the
-    // fix's exact-testid match can be exercised.
+    // structure (outer box data-testid="annotation-mark-*" wrapping an inner
+    // data-testid="memo-body-*" textarea, memo collapse/expand restructure) so
+    // the fix's exact-testid match can be exercised.
+    const box = document.createElement("div");
+    box.className = "annotation-memo";
+    box.setAttribute("data-testid", "annotation-mark-m1");
     const ta = document.createElement("textarea");
-    ta.className = "annotation-memo";
-    ta.setAttribute("data-testid", "annotation-mark-m1");
-    surf.appendChild(ta);
+    ta.setAttribute("data-testid", "memo-body-m1");
+    box.appendChild(ta);
+    surf.appendChild(box);
     const pages = [fakeCard(0, 0)];
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
     act(() => useAnnotationStore.getState().select("m1"));
