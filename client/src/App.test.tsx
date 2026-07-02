@@ -6,6 +6,8 @@ import type { Annotation } from "./api/client";
 import * as renderLayer from "./render";
 import { useAnnotationStore } from "./store";
 import { DEBOUNCE_MS } from "./useAutosave";
+import { useSettingsStore } from "./settings/store";
+import { DEFAULT_KEYMAP } from "./settings/keymap";
 
 // The S1 Reader pulls in pdf.js, which can't run under jsdom. These App tests
 // only care about the S0↔S1 shell, so stub the render layer; loadDocument stays
@@ -46,6 +48,11 @@ beforeEach(() => {
   // individual tests override to assert restore behavior (CLAUDE.md: keep test
   // scaffolding in sync).
   vi.spyOn(api, "getAnnotations").mockResolvedValue([]);
+  // Story 5.1: the settings store's `persist` middleware writes localStorage,
+  // which leaks across tests (Gotcha #1, story Dev Notes). Reset both so a
+  // rebind in one test can't poison the next.
+  localStorage.clear();
+  useSettingsStore.setState({ keymap: DEFAULT_KEYMAP });
 });
 
 const fakeDoc: api.Doc = {
@@ -454,6 +461,71 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(screen.getByTestId("tool-rail-collapse").getAttribute("aria-label")).toBe("Expand tools");
     fireEvent.keyDown(document, { key: "[" });
     expect(screen.queryByTestId("tool-cursor-button")).toBeTruthy();
+  });
+});
+
+describe("Settings modal + hotkey rebinding (Story 5.1)", () => {
+  async function openReader() {
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    render(<App />);
+    fireEvent.change(screen.getByTestId("dropzone-input"), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+  }
+
+  it("the Gear trigger opens the Settings modal", async () => {
+    await openReader();
+    expect(screen.queryByTestId("settings-modal")).toBeNull();
+    fireEvent.click(screen.getByTestId("tool-settings-button"));
+    expect(screen.getByTestId("settings-modal")).toBeTruthy();
+  });
+
+  it("a rebound key arms the new tool; the old default key is inert (AC-1/AC-3)", async () => {
+    await openReader();
+    act(() => {
+      useSettingsStore.getState().rebind("highlight", { key: "g" });
+    });
+    fireEvent.keyDown(document, { key: "g" });
+    expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
+    fireEvent.keyDown(document, { key: "v" });
+    fireEvent.keyDown(document, { key: "h" });
+    expect(screen.getByTestId("tool-highlight-button").className).not.toContain(
+      "tool-button--armed",
+    );
+  });
+
+  it("the global tool-key handler is suppressed while the Settings modal is open", async () => {
+    await openReader();
+    fireEvent.click(screen.getByTestId("tool-settings-button"));
+    fireEvent.keyDown(document, { key: "h" });
+    expect(screen.getByTestId("tool-highlight-button").className).not.toContain(
+      "tool-button--armed",
+    );
+  });
+
+  it("a captured key inside the modal does not leak through to arm a tool", async () => {
+    await openReader();
+    fireEvent.click(screen.getByTestId("tool-settings-button"));
+    fireEvent.click(screen.getByTestId("settings-capture-highlight"));
+    fireEvent.keyDown(screen.getByTestId("settings-modal"), { key: "g" });
+    fireEvent.click(screen.getByTestId("settings-close"));
+    expect(screen.getByTestId("tool-highlight-button").className).not.toContain(
+      "tool-button--armed",
+    );
+    // But the rebind itself DID take effect, once the modal is closed.
+    fireEvent.keyDown(document, { key: "g" });
+    expect(screen.getByTestId("tool-highlight-button").className).toContain("tool-button--armed");
+  });
+
+  it("Escape closes the modal and returns focus to the Gear trigger", async () => {
+    await openReader();
+    const gear = screen.getByTestId("tool-settings-button");
+    gear.focus();
+    fireEvent.click(gear);
+    fireEvent.keyDown(screen.getByTestId("settings-modal"), { key: "Escape" });
+    expect(screen.queryByTestId("settings-modal")).toBeNull();
+    expect(document.activeElement).toBe(gear);
   });
 });
 

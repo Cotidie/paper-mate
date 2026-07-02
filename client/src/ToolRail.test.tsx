@@ -38,6 +38,7 @@ function renderRail(over: Partial<RailProps> = {}) {
   const onPickStrokeWidth = vi.fn();
   const onPickAlpha = vi.fn();
   const onToggleCollapse = vi.fn();
+  const onOpenSettings = vi.fn();
   let props: RailProps = {
     activeTool: "cursor",
     activeColors: DEFAULT_COLORS,
@@ -61,6 +62,7 @@ function renderRail(over: Partial<RailProps> = {}) {
       onPickAlpha={onPickAlpha}
       collapsed={p.collapsed}
       onToggleCollapse={onToggleCollapse}
+      onOpenSettings={onOpenSettings}
     />
   );
   const utils = render(el(props));
@@ -68,7 +70,17 @@ function renderRail(over: Partial<RailProps> = {}) {
     props = { ...props, ...next };
     utils.rerender(el(props));
   };
-  return { ...utils, onSelectTool, onPickColor, onSetBoxHighlight, onPickStrokeWidth, onPickAlpha, onToggleCollapse, update };
+  return {
+    ...utils,
+    onSelectTool,
+    onPickColor,
+    onSetBoxHighlight,
+    onPickStrokeWidth,
+    onPickAlpha,
+    onToggleCollapse,
+    onOpenSettings,
+    update,
+  };
 }
 
 // Arm Pen (Story 2.8): start on cursor, switch to pen so the open-on-tool-change
@@ -237,6 +249,7 @@ describe("ToolRail", () => {
         onPickAlpha={vi.fn()}
         collapsed={false}
         onToggleCollapse={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
     expect(screen.getByTestId("highlight-color-flyout")).toBeTruthy();
@@ -615,6 +628,14 @@ describe("ToolRail", () => {
     const { onToggleCollapse } = renderRail({ activeTool: "cursor" });
     fireEvent.click(screen.getByTestId("tool-rail-collapse"));
     expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onOpenSettings from the Gear trigger (Story 5.1)", () => {
+    const { onOpenSettings } = renderRail({ activeTool: "cursor" });
+    const btn = screen.getByTestId("tool-settings-button");
+    expect(btn.getAttribute("aria-label")).toBe("Settings");
+    fireEvent.click(btn);
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
   it("when collapsed, renders the minimal rail with an expand affordance", () => {
