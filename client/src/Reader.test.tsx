@@ -391,6 +391,11 @@ describe("Reader", () => {
     const onZoomChange = vi.fn();
     render(<Reader doc={doc} onZoomChange={onZoomChange} />);
     await screen.findAllByTestId("page-surface");
+    // Flush the document-level wheel-binding useEffect before dispatching
+    // synthetic wheel events below — the effect is passive and can otherwise
+    // still be pending when findAllByTestId resolves, making the following
+    // synchronous `defaultPrevented` assertions flaky (Story 4.1 de-flake).
+    await act(async () => {});
     onZoomChange.mockClear();
     const wheel = (init: WheelEventInit) => {
       const e = new WheelEvent("wheel", { bubbles: true, cancelable: true, ...init });

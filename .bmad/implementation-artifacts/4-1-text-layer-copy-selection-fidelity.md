@@ -1,6 +1,10 @@
+---
+baseline_commit: 687cabd1f654650d2f144a3e38e04e71f898ea35
+---
+
 # Story 4.1: Text-layer copy & selection fidelity
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -36,30 +40,30 @@ Two user-reported bugs, one root family. Both live in the **raw pdf.js text laye
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Decide the adopt strategy (AC: 1, 2, 3).** (AD-2 "adopt stable solutions, don't reinvent".)
-  - [ ] `TextLayerBuilder` IS exported: `import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs"` (confirmed: `pdf_viewer.mjs` export line). Its selection code is `pdf_viewer.mjs:6195-6403`.
-  - [ ] **Recommended (Option B, smallest correct change):** keep our offscreen-`TextLayer` + atomic-swap flicker-free render (Epic 1 invariant — do NOT regress it), and reproduce ONLY `TextLayerBuilder`'s post-render bits over our LIVE `textLayerDiv`: append the `endOfContent` div after the swap, and register the shared global `.selecting` selection listener. Extract this into a small OOP module `client/src/render/textSelection.ts` (e.g. a `TextSelectionController` with `register(div): () => void` mirroring `TextLayerBuilder`'s static `#textLayers` Map + `#enableGlobalSelectionListener` / `#removeGlobalSelectionListener` at `pdf_viewer.mjs:6299-6402`). This keeps `render/index.ts` lean and the listener testable in isolation.
-  - [ ] Rejected as primary — Option A (let `TextLayerBuilder` own the div): TLB renders into and manages its own `this.div` and binds the listener to THAT div, which conflicts with our persistent-node atomic-swap design (the live node ≠ TLB's div, so its registry keys the wrong element). Only pursue if B proves insufficient; if so, restructure so the card's live text node IS the TLB div and TLB's `hide()/show()/update()` replace our manual swap — larger change, must preserve flicker-free zoom.
-- [ ] **Task 2 — Add `endOfContent` + `.selecting` machinery (AC: 1, 2, 5).**
-  - [ ] In `renderPage`'s post-swap block (`render/index.ts:345-372`), after `replaceChildren`, append `<div class="endOfContent">` to `textLayerDiv` and `register(textLayerDiv)` with the controller. Mirror the reset/reposition logic at `pdf_viewer.mjs:6315-6398` (pointerdown/up, blur, keyup, selectionchange → toggle `.selecting`, move `endOfContent` to bound the selection).
-  - [ ] Return the `unregister` cleanup from the controller and call it from `renderPage(...).cancel()` (`render/index.ts:379-383`) AND ensure the PageCard release path (`Reader.tsx:711` `textRef.current?.replaceChildren()`) does not orphan a registered div. Prefer: `cancel()` unregisters; also unregister defensively if the div is emptied. (AC 5.)
-  - [ ] The optional `copy` handler (`pdf_viewer.mjs:6292-6298`, `normalizeUnicode`) is not required for AC 1 once brs are selectable again — include it only if a smoke shows residual unicode issues. Keep scope minimal.
-- [ ] **Task 3 — Remove the br hack + reconcile CSS specificity (AC: 1, 2, 3).**
-  - [ ] Delete `.pdf-canvas .textLayer br { user-select: none; }` (`Reader.css:17-26`, drop the block + comment). The vendor `pdf_viewer.css:729 br::selection { background: transparent }` already suppresses the br sliver's paint while keeping the br selectable (so its `\n` returns to copy).
-  - [ ] **CSS-specificity gotcha (verify live):** our `.pdf-canvas .textLayer ::selection { background: var(--color-text-selection) }` (`Reader.css:10-15`) has higher specificity `(0,2,1)+pe` than the vendor `br::selection` `(0,1,2)+pe`, so our tint would REPAINT the br sliver after the hack is removed. Add `.pdf-canvas .textLayer br::selection { background: transparent }` (and the `-moz` twin) to re-suppress it, OR scope our tint to glyph spans (`.pdf-canvas .textLayer span::selection`). Choose one; smoke that no left-margin sliver returns.
-  - [ ] **Decide (design point):** whether to gate our visible tint on the active-selection class (`.pdf-canvas .textLayer.selecting ::selection { ... }`) to match pdf.js semantics (tint only while dragging, paired with the `endOfContent` bound). Smoke both trailing-band and normal multi-line selection to pick. Keep all values token-driven (`--color-text-selection`); raw hex/px only in `src/theme/**` (`no-raw-values.test.ts`).
-- [ ] **Task 4 — De-flake the Ctrl+wheel test (AC: 4).**
-  - [ ] In `client/src/Reader.test.tsx:390` (`"ignores plain wheel, and a Ctrl+wheel with deltaY===0..."`), ensure the document-level wheel listener (bound in a `useEffect`) is flushed before the synthetic `wheel` dispatch. Options: `await waitFor(...)` on a state that proves the effect ran, or wrap the dispatch+assert in `waitFor`, or `await act(async () => {})` after mount. Do NOT weaken the assertion. Run it repeatedly (`npm test -- Reader` a few times) to confirm determinism. See the non-flaky sibling at `Reader.test.tsx:410-421` (already uses `waitFor`) for the pattern.
-- [ ] **Task 5 — Verify (AC: 1-6).**
-  - [ ] `cd client && npm test && npm run typecheck && npm run build`.
-  - [ ] If any `render/index.ts` export was added, update BOTH `vi.mock("./render")` barrels (`App.test.tsx`, `Reader.test.tsx`) in this change (Epic-1 retro rule).
-  - [ ] **Live smoke (mandatory — jsdom cannot see real selection geometry or clipboard):** run YOUR OWN dev servers (fresh `uvicorn` + `vite dev`, do NOT reuse a user-launched/Docker server), open a real multi-column paper, and:
+- [x] **Task 1 — Decide the adopt strategy (AC: 1, 2, 3).** (AD-2 "adopt stable solutions, don't reinvent".)
+  - [x] `TextLayerBuilder` IS exported: `import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs"` (confirmed: `pdf_viewer.mjs` export line). Its selection code is `pdf_viewer.mjs:6195-6403`.
+  - [x] **Recommended (Option B, smallest correct change):** keep our offscreen-`TextLayer` + atomic-swap flicker-free render (Epic 1 invariant — do NOT regress it), and reproduce ONLY `TextLayerBuilder`'s post-render bits over our LIVE `textLayerDiv`: append the `endOfContent` div after the swap, and register the shared global `.selecting` selection listener. Extract this into a small OOP module `client/src/render/textSelection.ts` (e.g. a `TextSelectionController` with `register(div): () => void` mirroring `TextLayerBuilder`'s static `#textLayers` Map + `#enableGlobalSelectionListener` / `#removeGlobalSelectionListener` at `pdf_viewer.mjs:6299-6402`). This keeps `render/index.ts` lean and the listener testable in isolation.
+  - [x] Rejected as primary — Option A (let `TextLayerBuilder` own the div): TLB renders into and manages its own `this.div` and binds the listener to THAT div, which conflicts with our persistent-node atomic-swap design (the live node ≠ TLB's div, so its registry keys the wrong element). Only pursue if B proves insufficient; if so, restructure so the card's live text node IS the TLB div and TLB's `hide()/show()/update()` replace our manual swap — larger change, must preserve flicker-free zoom.
+- [x] **Task 2 — Add `endOfContent` + `.selecting` machinery (AC: 1, 2, 5).**
+  - [x] In `renderPage`'s post-swap block (`render/index.ts:345-372`), after `replaceChildren`, append `<div class="endOfContent">` to `textLayerDiv` and `register(textLayerDiv)` with the controller. Mirror the reset/reposition logic at `pdf_viewer.mjs:6315-6398` (pointerdown/up, blur, keyup, selectionchange → toggle `.selecting`, move `endOfContent` to bound the selection).
+  - [x] Return the `unregister` cleanup from the controller and call it from `renderPage(...).cancel()` (`render/index.ts:379-383`) AND ensure the PageCard release path (`Reader.tsx:711` `textRef.current?.replaceChildren()`) does not orphan a registered div. Prefer: `cancel()` unregisters; also unregister defensively if the div is emptied. (AC 5.)
+  - [x] The optional `copy` handler (`pdf_viewer.mjs:6292-6298`, `normalizeUnicode`) is not required for AC 1 once brs are selectable again — include it only if a smoke shows residual unicode issues. Keep scope minimal.
+- [x] **Task 3 — Remove the br hack + reconcile CSS specificity (AC: 1, 2, 3).**
+  - [x] Delete `.pdf-canvas .textLayer br { user-select: none; }` (`Reader.css:17-26`, drop the block + comment). The vendor `pdf_viewer.css:729 br::selection { background: transparent }` already suppresses the br sliver's paint while keeping the br selectable (so its `\n` returns to copy).
+  - [x] **CSS-specificity gotcha (verify live):** our `.pdf-canvas .textLayer ::selection { background: var(--color-text-selection) }` (`Reader.css:10-15`) has higher specificity `(0,2,1)+pe` than the vendor `br::selection` `(0,1,2)+pe`, so our tint would REPAINT the br sliver after the hack is removed. Add `.pdf-canvas .textLayer br::selection { background: transparent }` (and the `-moz` twin) to re-suppress it, OR scope our tint to glyph spans (`.pdf-canvas .textLayer span::selection`). Choose one; smoke that no left-margin sliver returns.
+  - [x] **Decide (design point):** whether to gate our visible tint on the active-selection class (`.pdf-canvas .textLayer.selecting ::selection { ... }`) to match pdf.js semantics (tint only while dragging, paired with the `endOfContent` bound). Smoke both trailing-band and normal multi-line selection to pick. Keep all values token-driven (`--color-text-selection`); raw hex/px only in `src/theme/**` (`no-raw-values.test.ts`).
+- [x] **Task 4 — De-flake the Ctrl+wheel test (AC: 4).**
+  - [x] In `client/src/Reader.test.tsx:390` (`"ignores plain wheel, and a Ctrl+wheel with deltaY===0..."`), ensure the document-level wheel listener (bound in a `useEffect`) is flushed before the synthetic `wheel` dispatch. Options: `await waitFor(...)` on a state that proves the effect ran, or wrap the dispatch+assert in `waitFor`, or `await act(async () => {})` after mount. Do NOT weaken the assertion. Run it repeatedly (`npm test -- Reader` a few times) to confirm determinism. See the non-flaky sibling at `Reader.test.tsx:410-421` (already uses `waitFor`) for the pattern.
+- [x] **Task 5 — Verify (AC: 1-6).**
+  - [x] `cd client && npm test && npm run typecheck && npm run build`.
+  - [x] If any `render/index.ts` export was added, update BOTH `vi.mock("./render")` barrels (`App.test.tsx`, `Reader.test.tsx`) in this change (Epic-1 retro rule).
+  - [x] **Live smoke (mandatory — jsdom cannot see real selection geometry or clipboard):** run YOUR OWN dev servers (fresh `uvicorn` + `vite dev`, do NOT reuse a user-launched/Docker server), open a real multi-column paper, and:
     - Copy a multi-line passage → paste into a text editor → diff against source (no fused words). (AC 1)
     - Select through a line-ending period → the band is uniform, no thick box. (AC 2)
     - Confirm no left-margin selection sliver returned. (Task 3)
     - Confirm existing highlights/underlines still paint per-line and don't leak to full-page. (AC 3)
     - **Do all of the above at DPR>1 AND with a CROSS-PAGE selection** ([[verify-on-hidpi-and-real-host]]; the recurring full-page-leak/DPR class of bug is invisible in jsdom).
-  - [ ] Fill the Dev Agent Record (model, debug log, completion notes, File List) before flipping status (AE3-2).
+  - [x] Fill the Dev Agent Record (model, debug log, completion notes, File List) before flipping status (AE3-2).
 
 ## Dev Notes
 
@@ -109,10 +113,31 @@ Two user-reported bugs, one root family. Both live in the **raw pdf.js text laye
 
 ### Agent Model Used
 
-<!-- Use Sonnet 5 xHigh for dev-story implementation (CLAUDE.md "Model per job"). -->
+Sonnet 5 xHigh
 
 ### Debug Log References
 
+- `TextLayerBuilder` reference read from `client/node_modules/pdfjs-dist/web/pdf_viewer.mjs:6195-6403` and `pdf_viewer.css:700-750` to port the `endOfContent` + global `.selecting` listener mechanics exactly (adopt-stable-solutions).
+- Ran `npm test -- --run Reader -t "hold-Space arms"` in isolation (20/20 pass) and the full `Reader.test.tsx` file repeatedly (some runs showed 1 pre-existing, unrelated flake in "hold-Space arms a temp pan..." — reproduces only in full-file runs, never in isolation, and is untouched by this story's diff since `renderPage`/the real `render/` module is fully mocked in `Reader.test.tsx`; not in scope for AC-4, which names only the Ctrl+wheel test). The Ctrl+wheel de-flake itself was verified deterministic across 15 consecutive full-suite runs.
+- Live-smoked against fresh scratch `uvicorn` (port 8010) + `vite dev` (port 5183) with `PAPER_MATE_DATA` pointed at a scratch dir (not the user's real `~/.paper-mate`), using `fixtures/sample-pdfs/09-regularization.pdf` (23 pages) at DPR=2 (emulated viewport `1400x1000x2`) via chrome-devtools-mcp. Verified with both a scripted `Range`/`selectionchange` construction AND a real trusted mouse drag (`drag` tool) per [[use-trusted-input-for-focus-sensitive-smoke]].
+
 ### Completion Notes List
 
+- Root-cause fix ported per Dev Notes: `client/src/render/textSelection.ts` (new) exports a `TextSelectionController` singleton mirroring `TextLayerBuilder`'s `endOfContent` + shared global `.selecting`/`selectionchange` listener (register/unregister keyed by the live `.textLayer` div). Wired into `renderPage` (`render/index.ts`): registered right after the atomic `replaceChildren` swap; unregistered in `cancel()`. Not re-exported from the `render/` barrel (same sub-path-import convention as `usePageViewport.ts`), so no `renderPage`/index.ts public signature changed — the `vi.mock("./render")` barrels in `App.test.tsx`/`Reader.test.tsx` needed NO updates (confirmed: `renderPage` is fully mocked there, so the real controller never executes in those suites).
+- `Reader.css`: removed the `.pdf-canvas .textLayer br { user-select: none }` hack; rescoped our `::selection` tint to `.pdf-canvas .textLayer span::selection` (+ `-moz` twin) instead of the whole `.textLayer`, since pdf.js's text spans are one-per-line `<span>` while EOL separators are `<br>` (confirmed by reading `pdf.mjs`) — scoping to `span` means the vendor `br::selection { background: transparent }` rule is never contended for specificity, so no override rule was needed.
+- **Design decision (Task 3, un-gated tint):** did NOT gate the visible tint on `.textLayer.selecting` — confirmed via reading `pdf_viewer.css` that pdf.js's own `::selection` is unconditionally `transparent` (`.selecting` only bounds `endOfContent`, it never makes a visible tint conditional), and per pdf.js's own `pointerup` handler, `.selecting` is removed on EVERY pointerup regardless of whether a selection persists — gating our tint on it would make the highlight band disappear the instant the mouse is released, which is not "look uniform... like a normal PDF reader" (the AC's own language). The Range is already finalized by the last `selectionchange` before `pointerup` fires, so the bounding-during-drag behavior is unaffected by leaving the tint un-gated.
+- AC 5 (no leak): traced the PageCard `useEffect` ordering (`Reader.tsx:679-762`) — on `live: true → false`, React runs the paint effect's cleanup (`handle.cancel()`, which now unregisters) before the separate release effect's body (`textRef.current?.replaceChildren()`) runs, so a card leaving the live window is always unregistered before its text nodes are cleared; no defensive second call needed from `Reader.tsx`. Added `client/src/render/textSelection.test.ts` (5 jsdom-safe tests) covering register/unregister bookkeeping, the shared-listener-enabled-once invariant, and idempotent unregister.
+- Live smoke (own scratch servers, DPR=2, `09-regularization.pdf`): AC 1 verified single-page (line-wrap `"...there could" / "be a significant..."` → `selection.toString()` correctly returns `"...could\nbe..."`, no `couldbe` fusion) AND cross-page (footer/next-page-heading boundary, no fusion) AND via a real trusted mouse drag (not just scripted Range). AC 2 verified visually: selecting through `"...leading to sub-" / "optimal predictions."` (trailing period) paints a uniform-height band on both lines, no thick/tall box. No left-margin sliver on any screenshot. Highlight geometry (Epic 2 `anchor/collectTextRects`, unrelated to this story) still paints correctly per-line at DPR=2 after a real drag-highlight — confirms AR-9/AD-9 boundary held (no anchor/annotation regression). Scrolled through 13+ pages and zoomed twice (exercising many register/unregister cycles) with zero console errors/warnings throughout.
+- All ACs (1-6) satisfied. `npm test` 612/612, `npm run typecheck` clean, `npm run build` succeeds (pre-existing >500kB chunk-size warning, unrelated).
+
 ### File List
+
+- `client/src/render/textSelection.ts` (new)
+- `client/src/render/textSelection.test.ts` (new)
+- `client/src/render/index.ts` (modified — wire `textSelectionController` register/unregister into `renderPage`)
+- `client/src/Reader.css` (modified — removed the `br { user-select: none }` hack, rescoped the `::selection` tint to `span`)
+- `client/src/Reader.test.tsx` (modified — de-flaked the Ctrl+wheel test with `await act(async () => {})`)
+
+## Change Log
+
+- 2026-07-02: Implemented (dev-story). Ported pdf.js `TextLayerBuilder`'s `endOfContent` + global `.selecting` selection machinery into a new `render/textSelection.ts` (`TextSelectionController`), wired into `renderPage`/`cancel()`; removed the `br { user-select: none }` CSS hack and rescoped the selection tint to `span::selection`; de-flaked the Ctrl+wheel Reader test. All 6 ACs satisfied; live-smoked at DPR=2 with cross-page selection and a real trusted-input drag. `npm test` 612/612, typecheck clean, build succeeds. Status → review.
