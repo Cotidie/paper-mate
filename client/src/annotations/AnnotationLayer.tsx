@@ -37,6 +37,7 @@ import { inActiveGroup, markClass, unionRect, markBounds } from "./markGeometry"
 import { useTextEditSession } from "./useTextEditSession";
 import MemoBox from "./MemoBox";
 import CommentBubble from "./CommentBubble";
+import CommentPreview from "./CommentPreview";
 import "./Annotations.css";
 
 /** Default pen stroke alpha (transparency). Matches --annotation-highlight-opacity
@@ -402,6 +403,27 @@ export default function AnnotationLayer({
             }
             onDelete={() => deleteAnnotation(a.id)}
             onClearSelection={clearSelection}
+            onTextFocus={startTextEditSession}
+            onTextBlur={commitTextEditSession}
+          />
+        )}
+        {/* Hover compact preview (user feature request): glance + quick text
+            edit without selecting. Only while NOT selected — selecting swaps to
+            the full CommentBubble above (recolor/convert/delete). Mounted
+            unconditionally (not gated on `hovered`) so its own hover-intent
+            debounce can outlive the pin's instant pointerleave; it renders
+            null itself once its grace window elapses. */}
+        {a.id !== selectedId && (
+          <CommentPreview
+            anno={a}
+            pos={anchor}
+            hovered={hovered}
+            onRetext={(_id, body) =>
+              // Group-aware, same as the full bubble's retext (see above).
+              retextAnnotations(commentGroupIds(a), body, new Date().toISOString())
+            }
+            onHoverEnter={() => setHovered(a.id)}
+            onHoverLeave={() => setHovered(null)}
             onTextFocus={startTextEditSession}
             onTextBlur={commitTextEditSession}
           />

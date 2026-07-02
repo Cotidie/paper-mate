@@ -788,6 +788,44 @@
   display: block;
 }
 
+/* comment-preview (user feature request): the comment's HOVER-triggered
+   compact glance/edit surface — a lighter twin of comment-bubble (same anchor,
+   surface-card bg, rounded.md, hairline-strong border, soft drop) with no
+   action row: just the body text, so hovering never adds chrome to click
+   through. Positioning `transform` is set inline (CommentPreview.tsx), same
+   pin-nudge as the full bubble. */
+.comment-preview {
+  position: absolute;
+  width: var(--comment-bubble-width);
+  padding: var(--space-sm);
+  background-color: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  pointer-events: auto;
+  z-index: 50;
+}
+
+.comment-preview__text {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: var(--quick-box-action-height);
+  margin: 0;
+  padding: var(--annotation-memo-padding);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-card);
+  color: var(--color-ink);
+  font-family: inherit;
+  font-size: var(--type-body-sm-size);
+  resize: none;
+  cursor: text;
+}
+
+.comment-preview__text:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+}
+
 /* size-row (Story 2.9): the COLLAPSIBLE memo box-size picker. A compact trigger
    (current size preview + caret) that expands a short vertical step list, so the
    rail flyout / quick-box stays narrow (unlike a step ROW). */

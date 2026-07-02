@@ -255,7 +255,7 @@ export function useSelection(opts: {
       // A comment's pin (a focusable control) and its bubble are part of the
       // selected mark's affordance, so clicking them must NOT clear the selection.
       const onMark = !!t?.closest?.(
-        ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble",
+        ".annotation-highlight, .annotation-pen, .annotation-memo, .annotation-comment-pin, .comment-bubble, .comment-preview",
       );
       const inBox = selectionBoxRef.current?.contains(t as Node) ?? false;
       if (!onMark && !inBox) {

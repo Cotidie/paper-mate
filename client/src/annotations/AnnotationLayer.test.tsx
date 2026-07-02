@@ -1,9 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import AnnotationLayer from "./AnnotationLayer";
 import { useAnnotationStore } from "@/store";
+import { HOVER_CLOSE_DELAY_MS } from "./CommentPreview";
 import type { Annotation } from "@/api/client";
 import type { PageBox } from "@/anchor";
+
+/** Advance fake timers AND let React flush any state updates that result
+ *  (mirrors useAutosave.test.ts's own `tick` helper). */
+async function tick(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
 
 const box: PageBox = { width: 600, height: 800 };
 
@@ -586,6 +595,98 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     const c = useAnnotationStore.getState().annotations.get("c12")!;
     expect(c.type).toBe("comment");
     expect(c.body).toBe("");
+  });
+});
+
+describe("AnnotationLayer comment hover preview (user feature request)", () => {
+  function rectComment(id: string, body = "", color = "annotation-default", groupId: string | null = null): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: groupId,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.2, y1: 0.3 } },
+      style: { color, stroke_width: null, alpha: null },
+      body,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+  }
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("hovering the pin (unselected) shows the compact preview with the comment's body", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("p1", "a quick note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.queryByTestId("comment-preview-p1")).toBeNull();
+    act(() => useAnnotationStore.getState().setHovered("p1"));
+    const body = screen.getByTestId("comment-preview-body-p1") as HTMLTextAreaElement;
+    expect(body.value).toBe("a quick note");
+  });
+
+  it("does NOT show the compact preview while the comment is selected (the full bubble takes over)", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("p2", "note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("p2"));
+    act(() => useAnnotationStore.getState().setHovered("p2"));
+    expect(screen.queryByTestId("comment-preview-p2")).toBeNull();
+    expect(screen.getByTestId("comment-body-p2")).toBeTruthy(); // the full bubble, instead
+  });
+
+  it("typing in the compact preview writes body through retextAnnotation, group-aware", () => {
+    const c1 = rectComment("p3a", "", "annotation-default", "g1");
+    const c2 = rectComment("p3b", "", "annotation-default", "g1");
+    useAnnotationStore.getState().addAnnotation(c1);
+    useAnnotationStore.getState().addAnnotation(c2);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setHovered("p3a"));
+    fireEvent.change(screen.getByTestId("comment-preview-body-p3a"), { target: { value: "typed" } });
+    // Group-aware, same as the full bubble's retext (Codex HIGH precedent): both
+    // siblings carry the note.
+    expect(useAnnotationStore.getState().annotations.get("p3a")!.body).toBe("typed");
+    expect(useAnnotationStore.getState().annotations.get("p3b")!.body).toBe("typed");
+  });
+
+  it("un-hovering closes the preview after the grace window, not instantly (hover-intent)", async () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("p4", "note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setHovered("p4"));
+    expect(screen.getByTestId("comment-preview-p4")).toBeTruthy();
+    act(() => useAnnotationStore.getState().setHovered(null));
+    // Still open immediately after the pointer leaves — the gap-crossing window.
+    expect(screen.getByTestId("comment-preview-p4")).toBeTruthy();
+    await tick(HOVER_CLOSE_DELAY_MS);
+    expect(screen.queryByTestId("comment-preview-p4")).toBeNull();
+  });
+
+  it("re-hovering within the grace window cancels the close (no flicker)", async () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("p5", "note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setHovered("p5"));
+    act(() => useAnnotationStore.getState().setHovered(null));
+    await tick(HOVER_CLOSE_DELAY_MS / 2);
+    // Pointer reached the box itself (or re-entered the pin) before the close fired.
+    act(() => useAnnotationStore.getState().setHovered("p5"));
+    await tick(HOVER_CLOSE_DELAY_MS);
+    expect(screen.getByTestId("comment-preview-p5")).toBeTruthy();
+  });
+
+  it("hovering the preview box itself (onPointerEnter) keeps hoveredId alive", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("p6", "note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setHovered("p6"));
+    fireEvent.pointerEnter(screen.getByTestId("comment-preview-p6"));
+    expect(useAnnotationStore.getState().hoveredId).toBe("p6");
+    fireEvent.pointerLeave(screen.getByTestId("comment-preview-p6"));
+    expect(useAnnotationStore.getState().hoveredId).toBeNull();
+  });
+
+  it("does not render the compact preview for a mark with no comment (sanity: gated on comment marks only)", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("h1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setHovered("h1"));
+    expect(screen.queryByTestId("comment-preview-h1")).toBeNull();
   });
 });
 
