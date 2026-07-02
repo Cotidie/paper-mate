@@ -183,6 +183,24 @@
   box-shadow: var(--shadow-card);
 }
 
+/* The memo selection quick-box (user fix request): a vertical bar to the
+   LEFT of the box instead of the default row below it — below covered the
+   .memo-collapse-toggle straddling the box's bottom-center edge. */
+.quick-box--vertical {
+  flex-direction: column;
+}
+
+.quick-box--vertical .color-swatch-row {
+  flex-direction: column;
+}
+
+.quick-box--vertical .quick-box__divider {
+  width: auto;
+  height: var(--hairline-width);
+  margin-block: 0;
+  margin-inline: var(--space-xxs);
+}
+
 .quick-box__action {
   height: var(--quick-box-action-height);
   padding: 0 var(--quick-box-action-padding-x);

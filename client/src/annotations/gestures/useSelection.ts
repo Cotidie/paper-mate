@@ -55,6 +55,8 @@ export function useSelection(opts: {
 
   const annotations = useAnnotationStore((s) => s.annotations);
   const selectedId = useAnnotationStore((s) => s.selectedId);
+  const dragPreview = useAnnotationStore((s) => s.dragPreview);
+  const groupDragPreview = useAnnotationStore((s) => s.groupDragPreview);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const recolorAnnotation = useAnnotationStore((s) => s.recolorAnnotation);
@@ -79,6 +81,19 @@ export function useSelection(opts: {
   // box or be mutated here. (The clear-on-doc-switch effect is the primary guard.)
   const selectedRaw = selectedId ? annotations.get(selectedId) ?? null : null;
   const selectedAnno = selectedRaw && selectedRaw.doc_id === docId ? selectedRaw : null;
+
+  // The selected mark's LIVE anchor (bug fix: moving/resizing it via the edit
+  // frame's drag handles only commits to `annotations` on release — the quick-box
+  // used to keep computing its position from the stale pre-drag anchor, which
+  // never updated because neither `selectedId` nor `scale` change during a move,
+  // so it landed on top of the mark's NEW spot after the drag. Mirrors
+  // AnnotationLayer's own `effAnchor`: prefer the transient drag/group-drag
+  // preview over the committed anchor, tracking the mark live during the drag too.
+  const effectiveAnchor: Annotation["anchor"] | null = selectedAnno
+    ? (dragPreview && dragPreview.id === selectedAnno.id
+        ? dragPreview.anchor
+        : (groupDragPreview?.find((g) => g.id === selectedAnno.id)?.anchor ?? selectedAnno.anchor))
+    : null;
 
   // A doc switch (the singleton store survives it) must drop any prior selection so
   // it can't be recolored/deleted from the new reader. Runs once on mount too.
@@ -284,15 +299,17 @@ export function useSelection(opts: {
 
   // Project the selected mark to the box-anchor viewport point, re-derived from the
   // anchor service so it tracks zoom (clamped in layout). Anchored just BELOW the
-  // mark (left-aligned to its start) so the floating box never covers it.
+  // mark (left-aligned to its start) so the floating box never covers it. Reads
+  // `effectiveAnchor` (not `selectedAnno.anchor` directly) so a move/resize drag
+  // — live preview OR just-committed — is reflected immediately (bug fix above).
   const selectionPoint = (): { x: number; y: number } => {
-    if (!selectedAnno) return { x: 0, y: 0 };
-    const page = getPagesRef.current().find((p) => p.pageIndex === selectedAnno.anchor.page_index);
+    if (!selectedAnno || !effectiveAnchor) return { x: 0, y: 0 };
+    const page = getPagesRef.current().find((p) => p.pageIndex === effectiveAnchor.page_index);
     if (!page) return { x: 0, y: 0 };
     const cardRect = page.cardEl.getBoundingClientRect();
     const s = scaleRef.current;
-    if (selectedAnno.anchor.kind === "text" && selectedAnno.anchor.rects.length > 0) {
-      const rects = selectedAnno.anchor.rects;
+    if (effectiveAnchor.kind === "text" && effectiveAnchor.rects.length > 0) {
+      const rects = effectiveAnchor.rects;
       const first = denormalizeRect(rects[0], page.box, s);
       let bottom = first.top + first.height;
       for (const r of rects) {
@@ -301,22 +318,24 @@ export function useSelection(opts: {
       }
       return { x: cardRect.left + first.left, y: cardRect.top + bottom + QUICK_BOX_GAP };
     }
-    if (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0) {
+    if (effectiveAnchor.kind === "path" && effectiveAnchor.points.length > 0) {
       let left = Infinity;
       let bottom = -Infinity;
-      for (const pt of selectedAnno.anchor.points) {
+      for (const pt of effectiveAnchor.points) {
         const d = denormalizePoint(pt, page.box, s);
         left = Math.min(left, d.x);
         bottom = Math.max(bottom, d.y);
       }
       return { x: cardRect.left + left, y: cardRect.top + bottom + QUICK_BOX_GAP };
     }
-    if (selectedAnno.anchor.kind === "rect") {
-      // A memo: anchor below the box, left-aligned to it. The box's on-screen bottom
-      // is the denormalized rect bottom (its min-height; typed content can push it
-      // lower, but the rect bottom is a stable, zoom-glued anchor).
-      const r = denormalizeRect(selectedAnno.anchor.rect, page.box, s);
-      return { x: cardRect.left + r.left, y: cardRect.top + r.top + r.height + QUICK_BOX_GAP };
+    if (effectiveAnchor.kind === "rect") {
+      // A memo: anchor to the box's top-LEFT corner, top-aligned (user fix request
+      // — anchoring BELOW the box, like the other kinds, covered the
+      // .memo-collapse-toggle straddling the box's bottom-center edge). The
+      // leftward shift by the quick-box's own (now vertical) width happens in the
+      // layout effect below, once it's measured.
+      const r = denormalizeRect(effectiveAnchor.rect, page.box, s);
+      return { x: cardRect.left + r.left, y: cardRect.top + r.top };
     }
     return { x: 0, y: 0 };
   };
@@ -355,16 +374,22 @@ export function useSelection(opts: {
       }
       const { x, y } = selectionPoint();
       const rect = el.getBoundingClientRect();
-      const c = clampToViewport(x, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
+      // A memo's box sits to the LEFT of the mark, so shift by the box's own
+      // (measured) width + gap; every other kind anchors below and needs no shift.
+      const shiftedX = isMemoSelected ? x - rect.width - QUICK_BOX_GAP : x;
+      const c = clampToViewport(shiftedX, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
       el.style.left = `${c.x}px`;
       el.style.top = `${c.y}px`;
     } else if (restoreSelectionFocusRef.current) {
       restoreSelectionFocusRef.current.focus?.();
       restoreSelectionFocusRef.current = null;
     }
-    // Re-run on open/close and on zoom (rect re-derives).
+    // Re-run on open/close, on zoom (rect re-derives), and whenever the mark's
+    // effective position changes — a move/resize drag, live (preview) or just
+    // committed (bug fix: the box used to stay frozen at its pre-drag spot since
+    // neither `selectedId` nor `scale` change from a plain move/resize).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showSelectionBox, selectedId, scale]);
+  }, [showSelectionBox, selectedId, scale, effectiveAnchor]);
 
   return {
     selectedAnno,

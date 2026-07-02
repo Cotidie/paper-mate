@@ -1310,6 +1310,21 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     expect(useAnnotationStore.getState().annotations.get("m1")!.style.color).toBe("annotation-blue");
   });
 
+  it("a selected memo's quick-box is the VERTICAL variant (user fix request: horizontal-below covered the collapse toggle); a highlight's is not", async () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "n", "annotation-default"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    const box = await screen.findByTestId("selection-quick-box");
+    expect(box.className).toContain("quick-box--vertical");
+
+    act(() => useAnnotationStore.getState().clearSelection());
+    useAnnotationStore.getState().addAnnotation(textMark("h1", "annotation-default"));
+    act(() => useAnnotationStore.getState().select("h1"));
+    const box2 = await screen.findByTestId("selection-quick-box");
+    expect(box2.className).not.toContain("quick-box--vertical");
+  });
+
   it("Del deletes the selected memo", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
     const pages = [fakeCard(0, 0)];

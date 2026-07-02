@@ -485,13 +485,22 @@ export default function AnnotationLayer({
     if (anchor.kind === "rect") fb = denormalizeRect(anchor.rect, box, scale);
     else if (anchor.kind === "path") fb = denormalizeRect(pointsBounds(anchor.points), box, scale);
     if (!fb) return null;
+    // A collapsed memo (user fix request) renders at an intrinsic CSS height that
+    // no longer matches its stored anchor rect, so the frame's stored-height corner
+    // handles (esp. sw/se) float below the actual collapsed box. Rather than try to
+    // track the intrinsic CSS height from pure anchor math, just drop the resize
+    // corners entirely while collapsed — only the move grip remains (it anchors to
+    // the frame's TOP edge, unaffected by frame height, so it stays put correctly).
+    // Matches the feature's own "must expand first, then edit" precedent.
+    const collapsedMemo = a.type === "memo" && a.style.collapsed === true;
+    const handles = collapsedMemo ? (["move"] as const) : (["move", "nw", "ne", "sw", "se"] as const);
     return (
       <div
         className="annotation-edit-frame"
         data-testid={`annotation-edit-frame-${a.id}`}
         style={{ left: fb.left, top: fb.top, width: fb.width, height: fb.height }}
       >
-        {(["move", "nw", "ne", "sw", "se"] as const).map((hh) => (
+        {handles.map((hh) => (
           <button
             key={hh}
             type="button"

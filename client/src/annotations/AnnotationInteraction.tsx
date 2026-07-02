@@ -815,7 +815,7 @@ export default function AnnotationInteraction({
       {showSelectionBox && selectedAnno && selectedSpec && (
         <div
           ref={selectionBoxRef}
-          className="quick-box"
+          className={selectedAnno.type === "memo" ? "quick-box quick-box--vertical" : "quick-box"}
           role="menu"
           aria-label={selectedSpec.ariaLabel}
           data-testid="selection-quick-box"
