@@ -64,8 +64,16 @@ beforeEach(() =>
   useAnnotationStore.setState({
     annotations: new Map(),
     selectedId: null,
+    multiSelectedIds: [],
     hoveredId: null,
-    activeColor: "annotation-default",
+    groupDragPreview: null,
+    activeColors: {
+      highlight: "annotation-default",
+      underline: "annotation-default",
+      pen: "annotation-default",
+      memo: "annotation-default",
+      comment: "annotation-default",
+    },
     activeStrokeWidth: 8,
     activeMemoSize: DEFAULT_MEMO_SIZE,
   }),
@@ -268,9 +276,9 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     if (all[0].anchor.kind === "rect") {
       expect(all[0].anchor.rect.x0).toBeCloseTo(60 / 600, 5);
       expect(all[0].anchor.rect.y0).toBeCloseTo(160 / 800, 5);
-      // default square 112x112 (Story 3.1; the seed default).
-      expect(all[0].anchor.rect.x1).toBeCloseTo((60 + 112) / 600, 5);
-      expect(all[0].anchor.rect.y1).toBeCloseTo((160 + 112) / 800, 5);
+      // default square 90x90 (Story 3.1 seed default, 20% smaller per user fix request).
+      expect(all[0].anchor.rect.x1).toBeCloseTo((60 + 90) / 600, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo((160 + 90) / 800, 5);
     }
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
     expect(screen.queryByTestId("quick-box")).toBeNull();
@@ -404,10 +412,10 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     expect(screen.queryByTestId("quick-box-highlight")).toBeNull();
   });
 
-  it("Story 2.6: a drag-release lands the mark in the ACTIVE color (create reads activeColor, not a hardcode)", async () => {
+  it("Story 2.6: a drag-release lands the mark in the ACTIVE color (create reads activeColors, not a hardcode)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    useAnnotationStore.getState().setActiveColor("highlight", "annotation-blue");
     render(
       <AnnotationInteraction
         docId="doc-1"
@@ -429,7 +437,7 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     expect(screen.getByTestId("color-swatch-annotation-blue").getAttribute("aria-checked")).toBe("true");
   });
 
-  it("picking a swatch recolors the just-landed highlight and dismisses the box (selection stays)", async () => {
+  it("picking a swatch recolors the just-landed highlight and KEEPS the box open (user fix request; selection stays)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(
@@ -441,8 +449,9 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     const all = useAnnotationStore.getState().all();
     expect(all).toHaveLength(1);
     expect(all[0].style.color).toBe("annotation-green");
-    // Pick dismisses the box; the mark stays selected (ring persists).
-    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    // A color pick no longer dismisses the box (matches restroke/realpha, which
+    // already kept it open) — the mark stays selected AND the box stays visible.
+    expect(screen.getByTestId("selection-quick-box")).toBeTruthy();
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
   });
 
@@ -533,7 +542,7 @@ describe("AnnotationInteraction underline tool (Story 2.7 — AC1,2,3)", () => {
   it("with underline armed, a drag-release LANDS a type=underline mark in the active color and SELECTS it", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-green");
+    useAnnotationStore.getState().setActiveColor("underline", "annotation-green");
     render(
       <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="underline" />,
     );
@@ -601,7 +610,7 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
   it("with pen armed, a pointer drag stores ONE kind=path mark and does NOT auto-select it", async () => {
     const canvas = canvasTarget();
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    useAnnotationStore.getState().setActiveColor("pen", "annotation-blue");
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
 
     fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
@@ -900,23 +909,26 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
   });
 
-  it("picking a swatch recolors the selected mark and dismisses the box; the selection stays", async () => {
+  it("picking a swatch recolors the selected mark and KEEPS the box open (user fix request); the selection stays", async () => {
     setup([textMark("m1", "annotation-default")], "m1");
     await screen.findByTestId("selection-quick-box");
     fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
     expect(useAnnotationStore.getState().annotations.get("m1")!.style.color).toBe("annotation-pink");
-    // Pick dismisses the box but the mark stays selected (ring persists).
-    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    // A color pick no longer dismisses the box — the mark stays selected AND the
+    // box stays visible, matching restroke/realpha's existing behavior.
+    expect(screen.getByTestId("selection-quick-box")).toBeTruthy();
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
   });
 
   it("Story 2.6 req3: recoloring an existing mark also updates the active/default color (remember last choice)", async () => {
     setup([textMark("m1", "annotation-default")], "m1");
     await screen.findByTestId("selection-quick-box");
-    expect(useAnnotationStore.getState().activeColor).toBe("annotation-default");
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-default");
     fireEvent.click(screen.getByTestId("color-swatch-annotation-purple"));
-    // Editing a highlight's color carries into the session default for new marks.
-    expect(useAnnotationStore.getState().activeColor).toBe("annotation-purple");
+    // Editing a highlight's color carries into the session default for new HIGHLIGHT
+    // marks only (per-tool split — recoloring a highlight must not touch pen/memo/etc).
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-purple");
+    expect(useAnnotationStore.getState().activeColors.pen).toBe("annotation-default");
   });
 
   it("recolors the whole group together (two-page highlight)", async () => {
@@ -1161,7 +1173,7 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
   it("with memo armed, a click on a page places a type=memo/kind=rect mark with empty body, in the active color, and selects it", async () => {
     const surf = canvasTarget();
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-pink");
+    useAnnotationStore.getState().setActiveColor("memo", "annotation-pink");
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="memo" />);
 
     fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
@@ -1177,9 +1189,9 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
       // top-left normalized: (60,160)/(600,800) = (0.1, 0.2)
       expect(all[0].anchor.rect.x0).toBeCloseTo(0.1, 5);
       expect(all[0].anchor.rect.y0).toBeCloseTo(0.2, 5);
-      // default square 112x112 (Story 3.1; the seed default) → 112/600 x, 112/800 y.
-      expect(all[0].anchor.rect.x1).toBeCloseTo(0.1 + 112 / 600, 5);
-      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2 + 112 / 800, 5);
+      // default square 90x90 (Story 3.1 seed default, 20% smaller per user fix request) → 90/600 x, 90/800 y.
+      expect(all[0].anchor.rect.x1).toBeCloseTo(0.1 + 90 / 600, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2 + 90 / 800, 5);
     }
     // Selected → the memo selection quick-box (color + delete; no size picker since 3.1).
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
@@ -1298,6 +1310,21 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     expect(useAnnotationStore.getState().annotations.get("m1")!.style.color).toBe("annotation-blue");
   });
 
+  it("a selected memo's quick-box is the VERTICAL variant (user fix request: horizontal-below covered the collapse toggle); a highlight's is not", async () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "n", "annotation-default"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    const box = await screen.findByTestId("selection-quick-box");
+    expect(box.className).toContain("quick-box--vertical");
+
+    act(() => useAnnotationStore.getState().clearSelection());
+    useAnnotationStore.getState().addAnnotation(textMark("h1", "annotation-default"));
+    act(() => useAnnotationStore.getState().select("h1"));
+    const box2 = await screen.findByTestId("selection-quick-box");
+    expect(box2.className).not.toContain("quick-box--vertical");
+  });
+
   it("Del deletes the selected memo", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
     const pages = [fakeCard(0, 0)];
@@ -1305,6 +1332,41 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     act(() => useAnnotationStore.getState().select("m1"));
     fireEvent.keyDown(document, { key: "Delete" });
     expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+  });
+
+  it("Del deletes the selected memo even while its OWN textarea has focus (user bug: typing in the memo blocked Del)", () => {
+    const surf = canvasTarget();
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
+    // AnnotationInteraction doesn't render the layer; stand in the real MemoBox
+    // structure (outer box data-testid="annotation-mark-*" wrapping an inner
+    // data-testid="memo-body-*" textarea, memo collapse/expand restructure) so
+    // the fix's exact-testid match can be exercised.
+    const box = document.createElement("div");
+    box.className = "annotation-memo";
+    box.setAttribute("data-testid", "annotation-mark-m1");
+    const ta = document.createElement("textarea");
+    ta.setAttribute("data-testid", "memo-body-m1");
+    box.appendChild(ta);
+    surf.appendChild(box);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    ta.focus();
+    expect(document.activeElement).toBe(ta);
+    fireEvent.keyDown(ta, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+  });
+
+  it("Del on a DIFFERENT unrelated textarea still does NOT delete the selected memo (bypass stays scoped)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    const other = document.createElement("textarea");
+    document.body.appendChild(other);
+    fireEvent.keyDown(other, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
+    other.remove();
   });
 });
 
@@ -1324,7 +1386,7 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
   it("comment DRAG (text selection) lands a type=comment/kind=text mark with body='' and selects it", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-purple");
+    useAnnotationStore.getState().setActiveColor("comment", "annotation-purple");
     render(
       <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="comment" />,
     );
@@ -1346,7 +1408,7 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
   it("comment CLICK (no selection) on a page surface drops a type=comment/kind=rect pin via buildCommentPin and selects it", () => {
     const surf = canvasTarget();
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    useAnnotationStore.getState().setActiveColor("comment", "annotation-blue");
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="comment" />);
 
     // A real click: pointerdown then pointerup at (near) the same point.
@@ -1476,7 +1538,7 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
   it("a box drag with boxActive=true creates a region highlight with kind=rect, canonical rect, selected, opens the selection quick-box", async () => {
     const surf = pageSurface();
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-green");
+    useAnnotationStore.getState().setActiveColor("highlight", "annotation-green");
     render(
       <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />,
     );
@@ -1616,5 +1678,221 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     // The selection quick-box must open (no region picker for pre-existing mark).
     await screen.findByTestId("selection-quick-box");
     expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
+  });
+});
+
+describe("AnnotationInteraction multi-select (box-select) gesture (user feature request)", () => {
+  function pageSurface(): HTMLElement {
+    const canvas = document.createElement("div");
+    canvas.className = "pdf-canvas";
+    const surf = document.createElement("div");
+    surf.className = "page-surface";
+    canvas.appendChild(surf);
+    document.body.appendChild(canvas);
+    stubNodes.push(canvas);
+    return surf;
+  }
+
+  /** A memo (kind=rect) whose denormalized px box (page box 600x800, scale 1,
+   *  card top=0) is easy to reason about in client-px marquee coordinates. */
+  function memoAt(id: string, rect: { x0: number; y0: number; x1: number; y1: number }): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "memo",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: "",
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+  }
+
+  it("a marquee drag selects every mark it overlaps on the drag's page", () => {
+    const surf = pageSurface();
+    // px (60,80)-(180,240): inside a (50,70)-(200,250) marquee.
+    useAnnotationStore.getState().addAnnotation(memoAt("caught", { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.3 }));
+    // px (420,560)-(540,720): far outside the marquee.
+    useAnnotationStore.getState().addAnnotation(memoAt("missed", { x0: 0.7, y0: 0.7, x1: 0.9, y1: 0.9 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    fireEvent.pointerDown(surf, { button: 0, clientX: 50, clientY: 70 });
+    fireEvent.pointerMove(document, { clientX: 200, clientY: 250 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 250 });
+
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual(["caught"]);
+  });
+
+  it("catches multiple overlapping marks in one drag", () => {
+    const surf = pageSurface();
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    useAnnotationStore.getState().addAnnotation(memoAt("b", { x0: 0.3, y0: 0.3, x1: 0.4, y1: 0.4 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    fireEvent.pointerDown(surf, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(document, { clientX: 300, clientY: 300 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 300, clientY: 300 });
+
+    expect(useAnnotationStore.getState().multiSelectedIds.sort()).toEqual(["a", "b"]);
+  });
+
+  it("a below-threshold drag does not change the multi-selection (stray click guard)", () => {
+    const surf = pageSurface();
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.3 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 64, clientY: 80 }); // 4px, below the 8px threshold
+    fireEvent.pointerUp(document, { button: 0, clientX: 64, clientY: 80 });
+
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("a marquee CAN start over an existing mark (unlike box-highlight's create gesture)", () => {
+    const surf = pageSurface();
+    const existingMark = document.createElement("div");
+    existingMark.className = "annotation-highlight";
+    surf.appendChild(existingMark);
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.3 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    fireEvent.pointerDown(existingMark, { button: 0, clientX: 50, clientY: 70 });
+    fireEvent.pointerMove(document, { clientX: 200, clientY: 250 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 250 });
+
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual(["a"]);
+  });
+
+  it("does NOT marquee-select when multiSelectActive=false", () => {
+    const surf = pageSurface();
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.3 }));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    fireEvent.pointerDown(surf, { button: 0, clientX: 50, clientY: 70 });
+    fireEvent.pointerMove(document, { clientX: 200, clientY: 250 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 250 });
+
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("renders the live marquee preview rect while dragging, cleared on release", () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    fireEvent.pointerDown(surf, { button: 0, clientX: 50, clientY: 70 });
+    fireEvent.pointerMove(document, { clientX: 200, clientY: 250 });
+    expect(screen.getByTestId("multi-select-preview")).toBeTruthy();
+    fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 250 });
+    expect(screen.queryByTestId("multi-select-preview")).toBeNull();
+  });
+
+  it("Del deletes every multi-selected mark", () => {
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    useAnnotationStore.getState().addAnnotation(memoAt("b", { x0: 0.3, y0: 0.3, x1: 0.4, y1: 0.4 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    act(() => useAnnotationStore.getState().setMultiSelected(["a", "b"]));
+    fireEvent.keyDown(document, { key: "Delete" });
+    const annotations = useAnnotationStore.getState().annotations;
+    expect(annotations.has("a")).toBe(false);
+    expect(annotations.has("b")).toBe(false);
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("a pointerdown on the group frame's delete button ICON does NOT clear the multi-selection first (live bug: Trash svg is a child of the button, isExempt's exact-tagName check misses it, deselect fired before the click landed)", () => {
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    useAnnotationStore.getState().addAnnotation(memoAt("b", { x0: 0.3, y0: 0.3, x1: 0.4, y1: 0.4 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    act(() => useAnnotationStore.getState().setMultiSelected(["a", "b"]));
+
+    // AnnotationInteraction doesn't render AnnotationLayer's group frame; stand in
+    // a real `.annotation-multi-select-frame` containing a nested <svg> icon (like
+    // the real Trash glyph) so a pointerdown's e.target is the SVG, not the button.
+    const frame = document.createElement("div");
+    frame.className = "annotation-multi-select-frame";
+    const btn = document.createElement("button");
+    btn.setAttribute("data-testid", "multi-select-delete");
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    btn.appendChild(icon);
+    frame.appendChild(btn);
+    document.body.appendChild(frame);
+
+    fireEvent.pointerDown(icon);
+    // The multi-selection must survive a pointerdown that lands on the icon
+    // (the group frame's own interior), same as a click landing on the button
+    // proper would be exempt.
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual(["a", "b"]);
+    frame.remove();
+  });
+
+  it("Esc clears the multi-selection without deleting", () => {
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    act(() => useAnnotationStore.getState().setMultiSelected(["a"]));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
+  });
+
+  it("does not delete on Del while typing in an input (editable exempt)", () => {
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    act(() => useAnnotationStore.getState().setMultiSelected(["a"]));
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    fireEvent.keyDown(input, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
+    input.remove();
+  });
+
+  it("a pointerdown on empty space clears the multi-selection", () => {
+    const surf = pageSurface();
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    act(() => useAnnotationStore.getState().setMultiSelected(["a"]));
+    fireEvent.pointerDown(surf, { button: 0, clientX: 500, clientY: 700 });
+    // A plain empty-space click below the marquee threshold: no new drag commits,
+    // but the deselect-on-empty-click listener still fires on pointerdown itself.
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("aborts on Escape mid-drag without committing a selection change", () => {
+    const surf = pageSurface();
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.3 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    fireEvent.pointerDown(surf, { button: 0, clientX: 50, clientY: 70 });
+    fireEvent.pointerMove(document, { clientX: 200, clientY: 250 });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByTestId("multi-select-preview")).toBeNull();
+    fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 250 });
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
   });
 });

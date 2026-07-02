@@ -201,6 +201,15 @@ components:
     rounded: "{rounded.pill}"
     size: 20px
     border: "1px {colors.hairline-strong}"
+  multi-select-preview:
+    borderColor: "{colors.ink}"
+    backgroundColor: "rgba(13, 116, 206, 0.25)" # --color-text-selection (components.css; matches the native text-selection tint, not a colors.* scale token)
+  multi-select-frame-delete:
+    backgroundColor: "{colors.surface-card}"
+    borderColor: "{colors.ink}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.pill}"
+    size: 20px
   annotation-highlight:
     backgroundColor: "{colors.annotation-default}"
     opacity: 0.4
@@ -209,12 +218,17 @@ components:
   annotation-pen:
     strokeColor: "{colors.ink}"
   annotation-memo:
-    backgroundColor: "{colors.surface-card}"
+    backgroundColor: "color-mix(in srgb, {colors.annotation-default} 35%, {colors.surface-card})" # softened tint, not the raw accent (user fix request)
     textColor: "{colors.ink}"
     typography: "{typography.body-sm}"
     rounded: "{rounded.sm}"
     padding: "{spacing.xs}"
-    border: "1px {colors.hairline-strong}"
+    border: "1px {colors.annotation-default}" # border stays full-strength
+  memo-collapse-toggle:
+    backgroundColor: "{colors.surface-card}"
+    borderColor: "{colors.ink}"
+    rounded: "{rounded.pill}"
+    size: 20px
   annotation-comment-pin:
     backgroundColor: "{colors.surface-card}"
     borderColor: "{colors.ink}"
@@ -437,7 +451,7 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 
 ### Tool Rail
 
-**`tool-rail`** — Floating left toolbar. Background `{colors.surface-card}`, `{rounded.lg}`, 1px `{colors.hairline}`, soft drop, 48px wide. Overlays the canvas; collapsible (`[` toggle). Holds tool buttons top→bottom: cursor (with flyout), highlight, underline, pen, memo, comment, box-select, ToC.
+**`tool-rail`** — Floating left toolbar. Background `{colors.surface-card}`, `{rounded.lg}`, 1px `{colors.hairline}`, soft drop, 48px wide. Overlays the canvas; collapsible (`[` toggle). Holds tool buttons top→bottom: cursor (flyout: cursor / hand / box-select), highlight, underline, pen, memo, comment.
 
 **`tool-button`** — 36px, transparent, icon in `{colors.body}`, `{rounded.md}`. Hover → `{colors.surface-strong}`.
 
@@ -455,7 +469,7 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 
 ### Quick-Box (contextual)
 
-**`quick-box`** — Floating popup at drag-release, **contents depend on active mode** (see EXPERIENCE.md interaction specs). Background `{colors.surface-card}`, `{rounded.md}`, 1px `{colors.hairline}`, soft drop. Never shifts the canvas.
+**`quick-box`** — Floating popup at drag-release, **contents depend on active mode** (see EXPERIENCE.md interaction specs). Background `{colors.surface-card}`, `{rounded.md}`, 1px `{colors.hairline}`, soft drop. Never shifts the canvas. A selected mark's own quick-box (recolor + actions) anchors BELOW-left of the mark for every kind except memo, which anchors as a VERTICAL bar to the mark's LEFT instead (user fix request: below covered the `memo-collapse-toggle` straddling the box's bottom-center edge).
 - *Selection mode* → tool-type picker (highlight / underline / comment / memo icons).
 - *Highlight or underline mode* → `color-swatch` row.
 - *Pen mode* → `color-swatch` row + stroke-width steps.
@@ -463,6 +477,10 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 - *Comment mode* → `comment-bubble` opens directly.
 
 **`color-swatch`** — 20px pill, the annotation accent token as fill, 1px `{colors.hairline-strong}` ring; armed swatch gets a 2px `{colors.ink}` ring.
+
+**`multi-select-preview`** — The box-select marquee's live rubber-band rect while dragging. Dashed `{colors.ink}` border, `{colors.text-selection}` fill (the same neutral tint as a pending text selection, since the drag selects existing marks rather than creating one). The drag itself calls `preventDefault()` on pointerdown (user fix request: dragging the marquee over page text was also highlighting it via the browser's own native text selection — the anchor gets set at mousedown, so suppressing default only on pointermove was too late).
+
+**`multi-select-frame`** — The bulk-selection's own group frame: an invisible outline (each caught mark already shows its own selected ring) over the union of the selection's bounding box, carrying a move grip (`edit-handle--move`, drag-moves the whole group) and a `multi-select-frame-delete` button (top-right corner, bulk delete). No resize corners — bulk resize is out of scope.
 
 ### Annotations (on the page)
 
@@ -472,7 +490,9 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 
 **`annotation-pen`** — Freehand vector stroke in the chosen accent or `{colors.ink}`; stroke width from the pen quick-box.
 
-**`annotation-memo`** — Free-floating text box typed onto the page. Background `{colors.surface-card}`, `{rounded.sm}`, 1px `{colors.hairline-strong}`, `{typography.body-sm}`. Does not displace page text.
+**`annotation-memo`** — Free-floating text box typed onto the page. Border is the mark's own accent color (`style.color`) at full strength; background is the SAME accent SOFTENED via `color-mix()` (35% accent / 65% `{colors.surface-card}`, user fix request — full-strength read "thick"), `{rounded.sm}`, `{typography.body-sm}`, `{colors.ink}` text, no visible focus ring on the textarea itself (the outer box's own hover/selected ring is the only indicator, user fix request). Does not displace page text. Collapsible (user feature request, persisted on `style.collapsed`): expanded shows the editable body; collapsed shows a single non-editable line (the memo's first line + a literal `(...)` tell) and shrinks the box to fit. The `memo-collapse-toggle` chevron (below) switches between the two; must expand before editing. A SELECTED collapsed memo's edit frame shows ONLY the move grip, no corner resize handles (user fix request: the frame's corners follow the STORED anchor rect, which no longer matches the intrinsic collapsed height, so they floated below the visible box; height resize is meaningless while collapsed anyway) — must expand before resizing too. A memo is also draggable-to-move from its own EMPTY space even while unselected (user feature request): the outer box carries the move handle unconditionally, but a press directly on real text still places the cursor / extends a selection like any normal textarea — only a press below the wrapped content (or on the padding rim) starts a move. Yields entirely to the box-select marquee while that tool is armed.
+
+**`memo-collapse-toggle`** — A small pill badge straddling the memo's bottom-center edge (half outside the box, below it) — not a corner or top-center, since a selected memo's edit frame occupies all four corners plus top-center. Same size/shape as `annotation-comment-pin`'s badge. `{colors.surface-card}` fill, `{colors.ink}` border, `{rounded.pill}`. Shows a down caret when collapsed (click to expand), up caret when expanded (click to collapse). Always present, independent of selection.
 
 **`annotation-comment-pin`** — A comment both **highlights the underlying text** (accent at ~0.4) **and** anchors a fixed comment-bubble glyph (`{colors.surface-card}` body, `{colors.ink}` border, not tinted to the mark's own accent), straddling the run's top edge at ~0.6 opacity (full opacity, no outline ring, on hover/select), to mark it as a comment. Click opens the `comment-bubble`.
 

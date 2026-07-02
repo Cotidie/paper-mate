@@ -40,6 +40,7 @@ import { useBoxGesture } from "./gestures/useBoxGesture";
 import { useMemoPlacement } from "./gestures/useMemoPlacement";
 import { useEditGesture } from "./gestures/useEditGesture";
 import { useSelection } from "./gestures/useSelection";
+import { useMultiSelectGesture } from "./gestures/useMultiSelectGesture";
 import { useUndoRedo } from "./gestures/useUndoRedo";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
@@ -70,6 +71,7 @@ export default function AnnotationInteraction({
   enabled,
   armedTool = null,
   boxActive = false,
+  multiSelectActive = false,
   rectReader,
 }: {
   docId: string;
@@ -87,6 +89,11 @@ export default function AnnotationInteraction({
    *  MODE of Highlight, not its own tool; this separate signal lets the box-drag
    *  gesture gate on it (the armed tool is "highlight", but a box drag, not text). */
   boxActive?: boolean;
+  /** True when the Box-select pointer tool is armed (user feature request): lets
+   *  `useMultiSelectGesture`'s marquee drag gate on it. A pointer tool (like
+   *  cursor/hand), not a mode of an annotation tool — `armedTool` stays null while
+   *  it's active. */
+  multiSelectActive?: boolean;
   /** Test seam: how a text-node sub-range yields client rects. Omit in
    *  production (uses the real `getClientRects`); jsdom tests inject a reader
    *  since they have no layout. */
@@ -104,7 +111,7 @@ export default function AnnotationInteraction({
   // selection quick-box reads its own copies inside `useSelection`; these feed the
   // create gestures (via `defaultsRef`) and the live previews. The store keeps the
   // single public `active*` API (two writers: the rail + the selection box).
-  const activeColor = useAnnotationStore((s) => s.activeColor);
+  const activeColors = useAnnotationStore((s) => s.activeColors);
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
   const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
   const activeMemoSize = useAnnotationStore((s) => s.activeMemoSize);
@@ -122,18 +129,19 @@ export default function AnnotationInteraction({
   getPagesRef.current = getPages;
   const armedToolRef = useRef(armedTool);
   armedToolRef.current = armedTool;
-  // Story 5.0: the four active-default mirrors (color, stroke width, alpha, memo
-  // size) collapse into ONE object ref the document-level listeners read without
-  // re-binding. Same values, refreshed every render exactly like the prior scalar
-  // refs — internal-only (the store's public `active*` API is unchanged).
+  // Story 5.0: the four active-default mirrors (per-tool colors, stroke width,
+  // alpha, memo size) collapse into ONE object ref the document-level listeners
+  // read without re-binding. Same values, refreshed every render exactly like the
+  // prior scalar refs — internal-only (the store's public `active*` API is
+  // unchanged).
   const defaultsRef = useRef({
-    color: activeColor,
+    colors: activeColors,
     strokeWidth: activeStrokeWidth,
     alpha: activeAlpha,
     memoSize: activeMemoSize,
   });
   defaultsRef.current = {
-    color: activeColor,
+    colors: activeColors,
     strokeWidth: activeStrokeWidth,
     alpha: activeAlpha,
     memoSize: activeMemoSize,
@@ -165,11 +173,24 @@ export default function AnnotationInteraction({
   const { penPreview } = usePenGesture(gestureCtx, armedTool);
   const { boxPreview } = useBoxGesture(gestureCtx, boxActive);
   useMemoPlacement(gestureCtx);
-  // Drag-handle move/resize of a selected pen/rect mark (Story 3.1). A document-
-  // level gesture (the edit frame + handles render in AnnotationLayer); it commits
-  // ONE setAnnotationGeometry on release via the transient dragPreview.
-  useEditGesture({ enabled, getPagesRef, scaleRef });
+  // Drag-handle move/resize of a selected pen/rect mark (Story 3.1), PLUS the
+  // group-move path for a box-select multi-selection (user feature request). A
+  // document-level gesture (the edit frame(s) render in AnnotationLayer); it
+  // commits ONE setAnnotationGeometry (or the batched setAnnotationGeometries for
+  // a group) via the transient dragPreview/groupDragPreview.
+  useEditGesture({ enabled, getPagesRef, scaleRef, multiSelectActive });
   useUndoRedo({ enabled });
+  // Box-select marquee gesture (user feature request): drag to select existing
+  // annotations for bulk Move/Delete. A SEPARATE selection mode from the
+  // single-mark quick-box below (AD-12 extended) — its own group frame renders in
+  // AnnotationLayer, and it owns its own Del/Esc handling internally.
+  const { multiSelectPreview } = useMultiSelectGesture({
+    enabled,
+    docId,
+    getPagesRef,
+    scaleRef,
+    active: multiSelectActive,
+  });
   // The selected-mark quick-box (Story 2.5/AD-12), encapsulated as its own hook
   // (Story 5.0). Owns selection state + effects + the recolor/restroke/realpha/
   // resize/delete actions; the component renders the box from what it returns.
@@ -280,7 +301,7 @@ export default function AnnotationInteraction({
         now: new Date().toISOString(),
         newId,
         type: tool,
-        color: defaultsRef.current.color,
+        color: defaultsRef.current.colors[tool],
         ...(tool === "comment" ? { body: "" } : {}),
       });
       addAnnotations(created);
@@ -394,7 +415,7 @@ export default function AnnotationInteraction({
           const created = buildCommentPin({ page_index: page.pageIndex, rect }, docId, {
             now: new Date().toISOString(),
             newId,
-            color: defaultsRef.current.color,
+            color: defaultsRef.current.colors.comment,
           });
           addAnnotation(created);
           select(created.id);
@@ -617,7 +638,7 @@ export default function AnnotationInteraction({
           const created = buildCommentPin({ page_index: page.pageIndex, rect }, docId, {
             now,
             newId,
-            color: defaultsRef.current.color,
+            color: defaultsRef.current.colors.comment,
           });
           addAnnotation(created);
           window.getSelection()?.removeAllRanges();
@@ -633,7 +654,7 @@ export default function AnnotationInteraction({
           const created = buildMemoAnnotation({ page_index: page.pageIndex, rect }, docId, {
             now,
             newId,
-            color: defaultsRef.current.color,
+            color: defaultsRef.current.colors.memo,
           });
           addAnnotation(created);
           window.getSelection()?.removeAllRanges();
@@ -645,7 +666,7 @@ export default function AnnotationInteraction({
     [pending, docId, addAnnotation, select, createTextTool],
   );
 
-  if (!pending && !showSelectionBox && !penPreview && !boxPreview) return null;
+  if (!pending && !showSelectionBox && !penPreview && !boxPreview && !multiSelectPreview) return null;
 
   const selInit = showSelectionBox ? selection.selectionPoint() : { x: 0, y: 0 };
 
@@ -661,7 +682,7 @@ export default function AnnotationInteraction({
     <>
       {penPreview && previewPath && (
         <svg className="pen-preview" data-testid="pen-preview" aria-hidden="true">
-          <path d={previewPath} fill={`var(--color-${activeColor})`} fillOpacity={activeAlpha} />
+          <path d={previewPath} fill={`var(--color-${activeColors.pen})`} fillOpacity={activeAlpha} />
         </svg>
       )}
       {boxPreview && (
@@ -674,7 +695,23 @@ export default function AnnotationInteraction({
             top: Math.min(boxPreview.y0, boxPreview.y1),
             width: Math.abs(boxPreview.x1 - boxPreview.x0),
             height: Math.abs(boxPreview.y1 - boxPreview.y0),
-            borderColor: `var(--color-${activeColor})`,
+            borderColor: `var(--color-${activeColors.highlight})`,
+          }}
+        />
+      )}
+      {multiSelectPreview && (
+        // The marquee rubber-band, neutral (ink) styling — not tinted to any
+        // annotation-tool accent, since this drag SELECTS existing marks rather
+        // than creating a colored one (unlike box-highlight's boxPreview above).
+        <div
+          className="multi-select-preview"
+          data-testid="multi-select-preview"
+          aria-hidden="true"
+          style={{
+            left: Math.min(multiSelectPreview.x0, multiSelectPreview.x1),
+            top: Math.min(multiSelectPreview.y0, multiSelectPreview.y1),
+            width: Math.abs(multiSelectPreview.x1 - multiSelectPreview.x0),
+            height: Math.abs(multiSelectPreview.y1 - multiSelectPreview.y0),
           }}
         />
       )}
@@ -778,7 +815,7 @@ export default function AnnotationInteraction({
       {showSelectionBox && selectedAnno && selectedSpec && (
         <div
           ref={selectionBoxRef}
-          className="quick-box"
+          className={selectedAnno.type === "memo" ? "quick-box quick-box--vertical" : "quick-box"}
           role="menu"
           aria-label={selectedSpec.ariaLabel}
           data-testid="selection-quick-box"

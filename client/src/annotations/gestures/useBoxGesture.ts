@@ -111,7 +111,9 @@ export function useBoxGesture(
       const created = buildRegionAnnotation({ page_index: page.pageIndex, rect }, docId, {
         now: new Date().toISOString(),
         newId,
-        color: defaultsRef.current.color,
+        // Box-highlight is a MODE of the Highlight tool (not its own tool), so it
+        // reads the Highlight tool's own remembered default color.
+        color: defaultsRef.current.colors.highlight,
       });
       addAnnotation(created);
       select(created.id);

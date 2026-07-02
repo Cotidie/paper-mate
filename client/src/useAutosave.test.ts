@@ -40,9 +40,17 @@ beforeEach(() => {
   useAnnotationStore.setState({
     annotations: new Map(),
     selectedId: null,
+    multiSelectedIds: [],
     hoveredId: null,
     dragPreview: null,
-    activeColor: "annotation-default",
+    groupDragPreview: null,
+    activeColors: {
+      highlight: "annotation-default",
+      underline: "annotation-default",
+      pen: "annotation-default",
+      memo: "annotation-default",
+      comment: "annotation-default",
+    },
     activeStrokeWidth: 8,
     activeMemoSize: DEFAULT_MEMO_SIZE,
     activeAlpha: 0.4,

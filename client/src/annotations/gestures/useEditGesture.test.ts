@@ -26,14 +26,69 @@ function pages(): PageCardRef[] {
   return [{ pageIndex: 0, cardEl: document.createElement("div"), box: BOX }];
 }
 
-function mountGesture() {
-  renderHook(() => useEditGesture({ enabled: true, getPagesRef: { current: pages }, scaleRef: { current: 1 } }));
+function mountGesture(multiSelectActive = false) {
+  renderHook(() =>
+    useEditGesture({
+      enabled: true,
+      getPagesRef: { current: pages },
+      scaleRef: { current: 1 },
+      multiSelectActive,
+    }),
+  );
 }
 
 function handle(kind: string, id: string): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.dataset.editHandle = kind;
   btn.dataset.editId = id;
+  document.body.appendChild(btn);
+  return btn;
+}
+
+/** A memo's own wrapper (data-edit-handle carried UNCONDITIONALLY — user feature
+ *  request: drag-to-move from empty space even unselected), nesting a collapse
+ *  toggle and a textarea. jsdom has no real layout, so scrollHeight/rect are
+ *  stubbed directly, letting each test control whether a given clientY reads as
+ *  "on text" or "below it" (isBelowMemoText's threshold). */
+function memoWrapper(
+  id: string,
+  opts: { naturalHeight: number; top: number; height: number },
+): { wrapper: HTMLDivElement; textarea: HTMLTextAreaElement; toggle: HTMLButtonElement } {
+  const wrapper = document.createElement("div");
+  wrapper.dataset.editHandle = "move";
+  wrapper.dataset.editId = id;
+  wrapper.className = "annotation-memo";
+
+  const toggle = document.createElement("button");
+  toggle.className = "memo-collapse-toggle";
+  wrapper.appendChild(toggle);
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "annotation-memo__body";
+  Object.defineProperty(textarea, "scrollHeight", { value: opts.naturalHeight, configurable: true });
+  textarea.getBoundingClientRect = () =>
+    ({
+      left: 0,
+      top: opts.top,
+      right: 200,
+      bottom: opts.top + opts.height,
+      width: 200,
+      height: opts.height,
+      x: 0,
+      y: opts.top,
+    }) as DOMRect;
+  wrapper.appendChild(textarea);
+
+  document.body.appendChild(wrapper);
+  return { wrapper, textarea, toggle };
+}
+
+/** The multi-select group frame's move grip: `data-edit-group` instead of a
+ *  per-mark `data-edit-id` (targets `multiSelectedIds`, read live at pointerdown). */
+function groupMoveHandle(): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.dataset.editHandle = "move";
+  btn.dataset.editGroup = "";
   document.body.appendChild(btn);
   return btn;
 }
@@ -48,9 +103,17 @@ beforeEach(() => {
   useAnnotationStore.setState({
     annotations: new Map(),
     selectedId: null,
+    multiSelectedIds: [],
     hoveredId: null,
     dragPreview: null,
-    activeColor: "annotation-default",
+    groupDragPreview: null,
+    activeColors: {
+      highlight: "annotation-default",
+      underline: "annotation-default",
+      pen: "annotation-default",
+      memo: "annotation-default",
+      comment: "annotation-default",
+    },
     activeStrokeWidth: 4,
     activeMemoSize: DEFAULT_MEMO_SIZE,
     activeAlpha: 0.4,
@@ -238,5 +301,239 @@ describe("useEditGesture pen resize (Codex review fix — 1-D strokes + edge ove
     const pts = penPoints("c");
     expect(pts[1].x).toBeGreaterThan(pts[0].x); // still x0 < x1 (no flip)
     expect(pts[1].y).toBeGreaterThan(pts[0].y);
+  });
+});
+
+function pen2(id: string, points: { x: number; y: number }[]): Annotation {
+  return {
+    id,
+    doc_id: "doc-1",
+    type: "pen",
+    group_id: null,
+    anchor: { kind: "path", page_index: 0, points },
+    style: { color: "annotation-default", stroke_width: 8, alpha: 0.4 },
+    body: null,
+    created_at: "2026-06-30T00:00:00Z",
+    updated_at: "2026-06-30T00:00:00Z",
+  };
+}
+
+describe("useEditGesture group move (box-select multi-selection, user feature request)", () => {
+  it("moves every multi-selected mark by the SAME delta and commits ONE batch on release", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    useAnnotationStore.getState().addAnnotation(memo("m2", { x0: 0.6, y0: 0.6, x1: 0.7, y1: 0.7 }));
+    useAnnotationStore.getState().setMultiSelected(["m1", "m2"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(350, 350); // dx = dy = 0.25
+
+    // The group drag previews live; neither mark is committed mid-drag.
+    const gp = useAnnotationStore.getState().groupDragPreview;
+    expect(gp).not.toBeNull();
+    expect(gp!.map((g) => g.id).sort()).toEqual(["m1", "m2"]);
+    expect(useAnnotationStore.getState().annotations.get("m1")!.updated_at).toBe("2026-06-30T00:00:00Z");
+
+    up();
+    const a1 = useAnnotationStore.getState().annotations.get("m1")!;
+    const a2 = useAnnotationStore.getState().annotations.get("m2")!;
+    if (a1.anchor.kind === "rect") expect(a1.anchor.rect).toEqual({ x0: 0.5, y0: 0.5, x1: 0.75, y1: 0.75 });
+    if (a2.anchor.kind === "rect") expect(a2.anchor.rect).toEqual({ x0: 0.85, y0: 0.85, x1: 0.95, y1: 0.95 });
+    expect(useAnnotationStore.getState().groupDragPreview).toBeNull();
+    expect(a1.updated_at).not.toBe("2026-06-30T00:00:00Z"); // committed → bumped
+    expect(a2.updated_at).not.toBe("2026-06-30T00:00:00Z");
+  });
+
+  it("moves a mixed group (rect memo + path pen) together, each per its own kind", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    useAnnotationStore.getState().addAnnotation(pen2("p1", [{ x: 0.5, y: 0.5 }, { x: 0.6, y: 0.6 }]));
+    useAnnotationStore.getState().setMultiSelected(["m1", "p1"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(200, 100); // dx = 0.1, dy = 0
+    up();
+    const a1 = useAnnotationStore.getState().annotations.get("m1")!;
+    const a2 = useAnnotationStore.getState().annotations.get("p1")!;
+    if (a1.anchor.kind === "rect") {
+      expect(a1.anchor.rect.x0).toBeCloseTo(0.2, 10);
+      expect(a1.anchor.rect.y0).toBeCloseTo(0.1, 10);
+      expect(a1.anchor.rect.x1).toBeCloseTo(0.3, 10);
+      expect(a1.anchor.rect.y1).toBeCloseTo(0.2, 10);
+    }
+    if (a2.anchor.kind === "path") {
+      expect(a2.anchor.points[0].x).toBeCloseTo(0.6, 10);
+      expect(a2.anchor.points[0].y).toBeCloseTo(0.5, 10);
+      expect(a2.anchor.points[1].x).toBeCloseTo(0.7, 10);
+      expect(a2.anchor.points[1].y).toBeCloseTo(0.6, 10);
+    }
+  });
+
+  it("a group press with no real drag commits nothing (no updated_at bump)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    useAnnotationStore.getState().setMultiSelected(["m1"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    up();
+    expect(useAnnotationStore.getState().annotations.get("m1")!.updated_at).toBe("2026-06-30T00:00:00Z");
+    expect(useAnnotationStore.getState().groupDragPreview).toBeNull();
+  });
+
+  it("aborts on Escape WITHOUT committing (preview cleared, marks unchanged)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    useAnnotationStore.getState().setMultiSelected(["m1"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(350, 350);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(useAnnotationStore.getState().groupDragPreview).toBeNull();
+    up();
+    const m1 = useAnnotationStore.getState().annotations.get("m1")!;
+    if (m1.anchor.kind === "rect") expect(m1.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 });
+    expect(m1.updated_at).toBe("2026-06-30T00:00:00Z");
+  });
+
+  it("excludes a text-anchor mark from the group drag (Story 3.8 territory) even if listed in multiSelectedIds", () => {
+    function textMark(id: string): Annotation {
+      return {
+        id,
+        doc_id: "doc-1",
+        type: "highlight",
+        group_id: null,
+        anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.2 }], text: "x" },
+        style: { color: "annotation-default", stroke_width: null, alpha: null },
+        body: null,
+        created_at: "2026-06-30T00:00:00Z",
+        updated_at: "2026-06-30T00:00:00Z",
+      };
+    }
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.5, y0: 0.5, x1: 0.6, y1: 0.6 }));
+    useAnnotationStore.getState().addAnnotation(textMark("h1"));
+    useAnnotationStore.getState().setMultiSelected(["m1", "h1"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(200, 100);
+    up();
+    const h1 = useAnnotationStore.getState().annotations.get("h1")!;
+    // The text mark's rects are untouched; only m1 moved.
+    if (h1.anchor.kind === "text") expect(h1.anchor.rects).toEqual([{ x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.2 }]);
+    const m1 = useAnnotationStore.getState().annotations.get("m1")!;
+    if (m1.anchor.kind === "rect") expect(m1.anchor.rect).toEqual({ x0: 0.6, y0: 0.5, x1: 0.7, y1: 0.6 });
+  });
+
+  it("does nothing when multiSelectedIds is empty (no group frame, no marks to drag)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(350, 350);
+    up();
+    expect(useAnnotationStore.getState().groupDragPreview).toBeNull();
+    const m1 = useAnnotationStore.getState().annotations.get("m1")!;
+    if (m1.anchor.kind === "rect") expect(m1.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 });
+  });
+
+  it("a single-mark drag and a group drag do not interfere (mutually exclusive DragState refs)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("solo", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    useAnnotationStore.getState().addAnnotation(memo("g1", { x0: 0.5, y0: 0.5, x1: 0.6, y1: 0.6 }));
+    useAnnotationStore.getState().setMultiSelected(["g1"]);
+    mountGesture();
+    // Single-mark move first.
+    down(handle("move", "solo"), 100, 100);
+    move(200, 100);
+    up();
+    const solo = useAnnotationStore.getState().annotations.get("solo")!;
+    if (solo.anchor.kind === "rect") {
+      expect(solo.anchor.rect.x0).toBeCloseTo(0.2, 10);
+      expect(solo.anchor.rect.x1).toBeCloseTo(0.3, 10);
+    }
+    // The solo move must NOT clobber the pre-existing, UNRELATED g1
+    // multi-selection (user feature request's select()-on-move guard) — the
+    // regression this exact assertion caught: an earlier version called select()
+    // unconditionally, wiping multiSelectedIds here and silently no-op-ing the
+    // group move below (empty `members`).
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual(["g1"]);
+    // Then a group move.
+    down(groupMoveHandle(), 100, 100);
+    move(200, 100);
+    up();
+    const g1 = useAnnotationStore.getState().annotations.get("g1")!;
+    if (g1.anchor.kind === "rect") {
+      expect(g1.anchor.rect.x0).toBeCloseTo(0.6, 10);
+      expect(g1.anchor.rect.x1).toBeCloseTo(0.7, 10);
+    }
+  });
+});
+
+describe("useEditGesture memo empty-space drag-to-move (user feature request)", () => {
+  it("dragging EMPTY space inside an UNSELECTED memo's textarea moves it and selects it on commit", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const { textarea } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    // clientY=150 is well below naturalHeight=20 -> empty space.
+    down(textarea, 100, 150);
+    move(350, 150);
+    expect(useAnnotationStore.getState().dragPreview?.id).toBe("m");
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    if (m.anchor.kind === "rect") {
+      expect(m.anchor.rect.x0).toBeCloseTo(0.5, 10);
+      expect(m.anchor.rect.x1).toBeCloseTo(0.75, 10);
+    }
+    expect(useAnnotationStore.getState().selectedId).toBe("m");
+  });
+
+  it("pressing ON the text itself (above naturalHeight) does NOT start a move (normal textarea click/select proceeds)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const { textarea } = memoWrapper("m", { naturalHeight: 100, top: 0, height: 200 });
+    // clientY=10 is within naturalHeight=100 -> real text.
+    down(textarea, 100, 10);
+    move(350, 10);
+    expect(useAnnotationStore.getState().dragPreview).toBeNull();
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 });
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
+  it("pressing the collapse toggle never starts a move, even though it is nested in the data-edit-handle wrapper", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const { toggle } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    down(toggle, 100, 100);
+    move(350, 100);
+    expect(useAnnotationStore.getState().dragPreview).toBeNull();
+  });
+
+  it("empty-space press on the WRAPPER itself (not the textarea, e.g. the padding rim) also moves it", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const { wrapper } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    down(wrapper, 100, 100);
+    move(350, 100);
+    expect(useAnnotationStore.getState().dragPreview?.id).toBe("m");
+  });
+
+  it("does NOT start a move while box-select is armed (yields the gesture to the marquee)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture(true);
+    const { textarea } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    down(textarea, 100, 150);
+    move(350, 150);
+    expect(useAnnotationStore.getState().dragPreview).toBeNull();
+  });
+
+  it("moving an unrelated, UNSELECTED memo does not clobber an active multi-selection", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    useAnnotationStore.getState().addAnnotation(memo("g1", { x0: 0.6, y0: 0.6, x1: 0.7, y1: 0.7 }));
+    useAnnotationStore.getState().setMultiSelected(["g1"]);
+    mountGesture();
+    const { textarea } = memoWrapper("m", { naturalHeight: 20, top: 0, height: 200 });
+    down(textarea, 100, 150);
+    move(350, 150);
+    up();
+    // Moved, but left the g1 multi-selection alone and did NOT promote "m" into
+    // selectedId (AD-12 mutual exclusion: select() would have cleared g1's
+    // selection out from under the user).
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual(["g1"]);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
   });
 });

@@ -61,7 +61,7 @@ export function useMemoPlacement(ctx: GestureContext): void {
       const created = buildMemoAnnotation({ page_index: page.pageIndex, rect }, docId, {
         now: new Date().toISOString(),
         newId,
-        color: defaultsRef.current.color,
+        color: defaultsRef.current.colors.memo,
       });
       addAnnotation(created);
       select(created.id);

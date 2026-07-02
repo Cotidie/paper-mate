@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-02 (dev-story: 4-2-column-aware-selection-highlight -> review; Part A shipped, Part B deferred)"
+last_updated: "2026-07-02 (4-3-distinct-on-page-mark-treatment DESCOPED from v1 -> blocked, never attempted; epic-4 closeable after 4-2 merges)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -122,7 +122,11 @@ development_status:
   epic-4: in-progress
   4-1-text-layer-copy-selection-fidelity: done
   4-2-column-aware-selection-highlight: review
-  4-3-distinct-on-page-mark-treatment: backlog
+  # 2026-07-02: DESCOPED from v1 (product decision, never attempted — no story
+  # file, no code). Marked blocked (not the 3.8 attempted-and-reverted flavor) so
+  # epic-4 can still reach done after 4-2 merges. See deferred-work.md "Descoped:
+  # Story 4.3" + the epics.md Story 4.3 section (kept, marked descoped).
+  4-3-distinct-on-page-mark-treatment: blocked
   epic-4-retrospective: optional
 
   # Epic 5: Reader preferences & polish (refactor enabler + preferences + UX polish)

@@ -50,20 +50,21 @@ export default function App() {
   useEffect(() => {
     if (activeTool !== "highlight") setBoxHighlight(false);
   }, [activeTool]);
-  // The active/default annotation color (Story 2.6) lives in the annotation store,
-  // not App state: it is written from two unrelated subtrees (the rail's color
-  // sub-toolbox AND the overlay's recolor-a-mark), and the create path reads it.
-  // App subscribes only to pass it (and its setter) to the rail; the overlay reads
-  // the store directly. It remembers the last color chosen for the session.
-  const activeColor = useAnnotationStore((s) => s.activeColor);
+  // The active/default annotation color, PER TOOL (Story 2.6, split per-tool by
+  // user request), lives in the annotation store, not App state: it is written
+  // from two unrelated subtrees (the rail's color sub-toolbox AND the overlay's
+  // recolor-a-mark), and the create paths read it. App subscribes only to pass it
+  // (and its setter) to the rail; the overlay reads the store directly. Each tool
+  // remembers its own last-chosen color for the session.
+  const activeColors = useAnnotationStore((s) => s.activeColors);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   // Story 2.8: the active pen stroke width is store-backed for the same reason as
-  // activeColor (the rail's stroke-width row + the pen quick-box's restroke both
+  // activeColors (the rail's stroke-width row + the pen quick-box's restroke both
   // write it, the create path reads it). App passes it + its setter to the rail.
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
   const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
   // Story 2.13: the active pen alpha is store-backed for the same reason as
-  // activeColor/activeStrokeWidth (the rail's AlphaRow + the pen quick-box's
+  // activeColors/activeStrokeWidth (the rail's AlphaRow + the pen quick-box's
   // realpha both write it, the create path reads it). App threads it down.
   const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
   const setActiveAlpha = useAnnotationStore((s) => s.setActiveAlpha);
@@ -321,6 +322,10 @@ export default function App() {
           // Box-highlight is a mode of Highlight; the overlay's box-drag gesture
           // gates on this signal (true only while Highlight is active + box mode on).
           boxActive={activeTool === "highlight" && boxHighlight}
+          // Box-select (user feature request) is its own POINTER tool (Cursor's
+          // flyout, not a mode of another tool); the overlay's marquee gesture
+          // gates on this signal.
+          multiSelectActive={activeTool === "boxSelect"}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
           onOutline={setToc}
@@ -330,9 +335,10 @@ export default function App() {
           // One setter; the rail commits a tool in a single click. Mutual
           // exclusion is intrinsic to `activeTool`, so no cross-setting closures.
           onSelectTool={setActiveTool}
-          // Story 2.6: the Highlight tool's color sub-toolbox reads `activeColor`
-          // and sets it via `onPickColor` (the default for new marks).
-          activeColor={activeColor}
+          // Story 2.6: each tool's color sub-toolbox reads its OWN entry in
+          // `activeColors` and sets it via `onPickColor(tool, token)` (the default
+          // for that tool's new marks; per-tool split by user request).
+          activeColors={activeColors}
           onPickColor={setActiveColor}
           // Box-highlight mode lives under the Highlight tool's flyout (a toggle).
           boxHighlight={boxHighlight}

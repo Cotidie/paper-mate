@@ -55,6 +55,8 @@ export function useSelection(opts: {
 
   const annotations = useAnnotationStore((s) => s.annotations);
   const selectedId = useAnnotationStore((s) => s.selectedId);
+  const dragPreview = useAnnotationStore((s) => s.dragPreview);
+  const groupDragPreview = useAnnotationStore((s) => s.groupDragPreview);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const recolorAnnotation = useAnnotationStore((s) => s.recolorAnnotation);
@@ -79,6 +81,19 @@ export function useSelection(opts: {
   // box or be mutated here. (The clear-on-doc-switch effect is the primary guard.)
   const selectedRaw = selectedId ? annotations.get(selectedId) ?? null : null;
   const selectedAnno = selectedRaw && selectedRaw.doc_id === docId ? selectedRaw : null;
+
+  // The selected mark's LIVE anchor (bug fix: moving/resizing it via the edit
+  // frame's drag handles only commits to `annotations` on release — the quick-box
+  // used to keep computing its position from the stale pre-drag anchor, which
+  // never updated because neither `selectedId` nor `scale` change during a move,
+  // so it landed on top of the mark's NEW spot after the drag. Mirrors
+  // AnnotationLayer's own `effAnchor`: prefer the transient drag/group-drag
+  // preview over the committed anchor, tracking the mark live during the drag too.
+  const effectiveAnchor: Annotation["anchor"] | null = selectedAnno
+    ? (dragPreview && dragPreview.id === selectedAnno.id
+        ? dragPreview.anchor
+        : (groupDragPreview?.find((g) => g.id === selectedAnno.id)?.anchor ?? selectedAnno.anchor))
+    : null;
 
   // A doc switch (the singleton store survives it) must drop any prior selection so
   // it can't be recolored/deleted from the new reader. Runs once on mount too.
@@ -126,11 +141,15 @@ export function useSelection(opts: {
     (color: string) => {
       recolorAnnotation(selectedGroupIds(), color, new Date().toISOString());
       // Remember the choice: recoloring an existing mark also sets the default for
-      // the next new mark (Story 2.6 request 3 — last-choice-wins, either path).
-      setActiveColor(color);
-      setSelectionBoxOpen(false); // pick dismisses the box; the mark stays selected/ringed
+      // the next new mark OF THE SAME TOOL (Story 2.6 request 3 — last-choice-wins,
+      // either path; per-tool split so recoloring a pen never touches the
+      // highlight/memo/etc default).
+      if (selectedAnno) setActiveColor(selectedAnno.type, color);
+      // KEEPS the box open (user fix request), matching restrokeSelected/
+      // realphaSelected below: the mark is still selected, so the user may want to
+      // try another color (or another row) without re-opening the box each time.
     },
-    [recolorAnnotation, selectedGroupIds, setActiveColor],
+    [recolorAnnotation, selectedGroupIds, setActiveColor, selectedAnno],
   );
 
   // Restroke the selected pen mark to a new width (Story 2.8). Also sets the default
@@ -200,7 +219,20 @@ export function useSelection(opts: {
       // so handling them while the box holds focus is safe.
       if (e.ctrlKey || e.altKey || e.metaKey) return;
       const inSelectionBox = selectionBoxRef.current?.contains(e.target as Node) ?? false;
-      if (!inSelectionBox && isExempt(e.target)) return;
+      // A selected memo's OWN textarea is also exempt from the editable-field skip
+      // below, for Delete only: the user must be able to remove the memo with Del
+      // even mid-typing (user bug report), unlike a normal input where Delete is a
+      // text edit. Scoped by the exact data-testid MemoBox's inner textarea
+      // carries (the OUTER box keeps `annotation-mark-${id}`; the textarea child
+      // is `memo-body-${id}`, memo collapse/expand feature), so this can only ever
+      // match the currently selected memo's own textarea, never a bystander field
+      // (mirrors CommentBubble's own Delete override for its bubble textarea). A
+      // COLLAPSED memo has no textarea at all, so this naturally never matches then.
+      const inOwnMemoTextarea =
+        selectedAnno.type === "memo" &&
+        (e.target as HTMLElement | null)?.getAttribute?.("data-testid") ===
+          `memo-body-${selectedAnno.id}`;
+      if (!inSelectionBox && !inOwnMemoTextarea && isExempt(e.target)) return;
       if (e.key === "Escape") {
         // Esc clears the selection (the App-level Esc->cursor also runs).
         clearSelection();
@@ -267,15 +299,17 @@ export function useSelection(opts: {
 
   // Project the selected mark to the box-anchor viewport point, re-derived from the
   // anchor service so it tracks zoom (clamped in layout). Anchored just BELOW the
-  // mark (left-aligned to its start) so the floating box never covers it.
+  // mark (left-aligned to its start) so the floating box never covers it. Reads
+  // `effectiveAnchor` (not `selectedAnno.anchor` directly) so a move/resize drag
+  // — live preview OR just-committed — is reflected immediately (bug fix above).
   const selectionPoint = (): { x: number; y: number } => {
-    if (!selectedAnno) return { x: 0, y: 0 };
-    const page = getPagesRef.current().find((p) => p.pageIndex === selectedAnno.anchor.page_index);
+    if (!selectedAnno || !effectiveAnchor) return { x: 0, y: 0 };
+    const page = getPagesRef.current().find((p) => p.pageIndex === effectiveAnchor.page_index);
     if (!page) return { x: 0, y: 0 };
     const cardRect = page.cardEl.getBoundingClientRect();
     const s = scaleRef.current;
-    if (selectedAnno.anchor.kind === "text" && selectedAnno.anchor.rects.length > 0) {
-      const rects = selectedAnno.anchor.rects;
+    if (effectiveAnchor.kind === "text" && effectiveAnchor.rects.length > 0) {
+      const rects = effectiveAnchor.rects;
       const first = denormalizeRect(rects[0], page.box, s);
       let bottom = first.top + first.height;
       for (const r of rects) {
@@ -284,22 +318,24 @@ export function useSelection(opts: {
       }
       return { x: cardRect.left + first.left, y: cardRect.top + bottom + QUICK_BOX_GAP };
     }
-    if (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0) {
+    if (effectiveAnchor.kind === "path" && effectiveAnchor.points.length > 0) {
       let left = Infinity;
       let bottom = -Infinity;
-      for (const pt of selectedAnno.anchor.points) {
+      for (const pt of effectiveAnchor.points) {
         const d = denormalizePoint(pt, page.box, s);
         left = Math.min(left, d.x);
         bottom = Math.max(bottom, d.y);
       }
       return { x: cardRect.left + left, y: cardRect.top + bottom + QUICK_BOX_GAP };
     }
-    if (selectedAnno.anchor.kind === "rect") {
-      // A memo: anchor below the box, left-aligned to it. The box's on-screen bottom
-      // is the denormalized rect bottom (its min-height; typed content can push it
-      // lower, but the rect bottom is a stable, zoom-glued anchor).
-      const r = denormalizeRect(selectedAnno.anchor.rect, page.box, s);
-      return { x: cardRect.left + r.left, y: cardRect.top + r.top + r.height + QUICK_BOX_GAP };
+    if (effectiveAnchor.kind === "rect") {
+      // A memo: anchor to the box's top-LEFT corner, top-aligned (user fix request
+      // — anchoring BELOW the box, like the other kinds, covered the
+      // .memo-collapse-toggle straddling the box's bottom-center edge). The
+      // leftward shift by the quick-box's own (now vertical) width happens in the
+      // layout effect below, once it's measured.
+      const r = denormalizeRect(effectiveAnchor.rect, page.box, s);
+      return { x: cardRect.left + r.left, y: cardRect.top + r.top };
     }
     return { x: 0, y: 0 };
   };
@@ -338,16 +374,22 @@ export function useSelection(opts: {
       }
       const { x, y } = selectionPoint();
       const rect = el.getBoundingClientRect();
-      const c = clampToViewport(x, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
+      // A memo's box sits to the LEFT of the mark, so shift by the box's own
+      // (measured) width + gap; every other kind anchors below and needs no shift.
+      const shiftedX = isMemoSelected ? x - rect.width - QUICK_BOX_GAP : x;
+      const c = clampToViewport(shiftedX, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
       el.style.left = `${c.x}px`;
       el.style.top = `${c.y}px`;
     } else if (restoreSelectionFocusRef.current) {
       restoreSelectionFocusRef.current.focus?.();
       restoreSelectionFocusRef.current = null;
     }
-    // Re-run on open/close and on zoom (rect re-derives).
+    // Re-run on open/close, on zoom (rect re-derives), and whenever the mark's
+    // effective position changes — a move/resize drag, live (preview) or just
+    // committed (bug fix: the box used to stay frozen at its pre-drag spot since
+    // neither `selectedId` nor `scale` change from a plain move/resize).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showSelectionBox, selectedId, scale]);
+  }, [showSelectionBox, selectedId, scale, effectiveAnchor]);
 
   return {
     selectedAnno,

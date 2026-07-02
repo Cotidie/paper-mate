@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Cursor,
   Hand,
+  Selection,
   BoundingBox,
   Highlighter,
   TextUnderline,
@@ -12,7 +13,7 @@ import {
   CaretDoubleRight,
   type Icon,
 } from "@phosphor-icons/react";
-import { type ActiveTool, type PointerTool, isPointerTool } from "./tools";
+import { type ActiveTool, type AnnotationTool, type PointerTool, isPointerTool } from "./tools";
 import { ColorSwatchRow, StrokeWidthRow, AlphaRow } from "./annotations";
 import ToolFlyout from "./ToolFlyout";
 
@@ -20,11 +21,19 @@ import ToolFlyout from "./ToolFlyout";
  * The cursor-family (pointer) options, in flyout order. `Icon` is the Phosphor
  * (regular) monochrome glyph — it paints with `currentColor`, so it inherits the
  * button's token color (body, or ink when armed). `hint` is the hover tooltip
- * (native `title`); `label` is the accessible name (aria-label).
+ * (native `title`); `label` is the accessible name (aria-label). `boxSelect`
+ * (user feature request): a marquee drag selects existing annotations for bulk
+ * Move/Delete — see `useMultiSelectGesture`.
  */
 const OPTIONS: { value: PointerTool; label: string; hint: string; Icon: Icon }[] = [
   { value: "cursor", label: "Cursor", hint: "Cursor: select & read text (V)", Icon: Cursor },
   { value: "hand", label: "Hand", hint: "Hand: drag to pan, or hold Space", Icon: Hand },
+  {
+    value: "boxSelect",
+    label: "Box select",
+    hint: "Box select: drag to select multiple annotations",
+    Icon: Selection,
+  },
 ];
 
 /**
@@ -35,7 +44,8 @@ const OPTIONS: { value: PointerTool; label: string; hint: string; Icon: Icon }[]
  * (underline/pen/memo/comment/ToC) arrive with their own stories.
  *
  * Presentational, mirroring `ZoomControl`: `App` holds the single `activeTool`
- * (AD-11), subscribes to the store-backed `activeColor`, and wires the callbacks.
+ * (AD-11), subscribes to the store-backed per-tool `activeColors`, and wires the
+ * callbacks.
  * The rail reads `activeTool` for its active/armed styling and calls
  * `onSelectTool` to switch (always one click; mutual exclusion is intrinsic to
  * `activeTool`). Pan itself lives in the Reader (it owns the scroll container).
@@ -44,7 +54,7 @@ const OPTIONS: { value: PointerTool; label: string; hint: string; Icon: Icon }[]
 export default function ToolRail({
   activeTool,
   onSelectTool,
-  activeColor,
+  activeColors,
   onPickColor,
   boxHighlight,
   onSetBoxHighlight,
@@ -60,12 +70,12 @@ export default function ToolRail({
   /** Commit a tool switch. One click always switches; Story 2.6 opens the
    *  Highlight color picker after the parent makes Highlight active. */
   onSelectTool: (t: ActiveTool) => void;
-  /** The active annotation color (store-backed; App subscribes and passes it down).
-   *  The Highlight tool's color sub-toolbox shows this armed and sets it via
-   *  `onPickColor`. */
-  activeColor: string;
-  /** Set the active color (the default new marks land in). */
-  onPickColor: (token: string) => void;
+  /** The active annotation color, PER TOOL (store-backed; App subscribes and
+   *  passes it down). Each tool's color sub-toolbox shows its OWN entry armed and
+   *  sets it via `onPickColor`. */
+  activeColors: Record<AnnotationTool, string>;
+  /** Set the active color for ONE tool (the default that tool's new marks land in). */
+  onPickColor: (tool: AnnotationTool, token: string) => void;
   /** Whether box-highlight mode is on (a mode of the Highlight tool): false = a
    *  drag highlights the TEXT it crosses (the default), true = a drag makes a
    *  rectangular region highlight instead. The Highlight flyout shows both as an
@@ -267,13 +277,14 @@ export default function ToolRail({
             </button>
             <div className="tool-flyout__divider" data-testid="highlight-box-divider" />
             {/* The shared swatch row (DESIGN.md#color-swatch): the armed swatch
-                (= activeColor) shows the 2px ink ring. Picking sets the default
-                color for new marks and closes the flyout (pick-is-dismiss; color is
-                not a tool change, so the open-on-switch effect won't reopen). */}
+                (= this tool's own activeColors entry) shows the 2px ink ring.
+                Picking sets the default color for new HIGHLIGHT marks only and
+                closes the flyout (pick-is-dismiss; color is not a tool change, so
+                the open-on-switch effect won't reopen). */}
             <ColorSwatchRow
-              value={activeColor}
+              value={activeColors.highlight}
               onPick={(token) => {
-                onPickColor(token);
+                onPickColor("highlight", token);
                 setFlyoutOpen(false);
               }}
             />
@@ -283,8 +294,8 @@ export default function ToolRail({
 
       {/* Underline — twin of Highlight: a text-anchor color tool. Switching to it
           arms in one click and opens its color sub-toolbox (the activeTool-change
-          effect); a click on the already-active button toggles it. Shares the one
-          `activeColor` with Highlight. */}
+          effect); a click on the already-active button toggles it. Its own entry in
+          `activeColors` (per-tool default, split from Highlight by user request). */}
       <div className="tool-rail__item">
         <button
           type="button"
@@ -308,9 +319,9 @@ export default function ToolRail({
         {underlineActive && flyoutOpen && (
           <ToolFlyout testId="underline-color-flyout">
             <ColorSwatchRow
-              value={activeColor}
+              value={activeColors.underline}
               onPick={(token) => {
-                onPickColor(token);
+                onPickColor("underline", token);
                 setFlyoutOpen(false);
               }}
             />
@@ -320,7 +331,7 @@ export default function ToolRail({
 
       {/* Pen — a freehand kind=path tool (Story 2.8). Same arm-in-one-click model;
           its sub-toolbox carries BOTH a color row AND a stroke-width row (UX-DR5).
-          Color is the shared activeColor; width is the shared activeStrokeWidth. */}
+          Color is Pen's own activeColors entry; width is the shared activeStrokeWidth. */}
       <div className="tool-rail__item">
         <button
           type="button"
@@ -342,9 +353,9 @@ export default function ToolRail({
         {penActive && flyoutOpen && (
           <ToolFlyout testId="pen-flyout">
             <ColorSwatchRow
-              value={activeColor}
+              value={activeColors.pen}
               onPick={(token) => {
-                onPickColor(token);
+                onPickColor("pen", token);
                 setFlyoutOpen(false);
               }}
             />
@@ -387,9 +398,9 @@ export default function ToolRail({
         {memoActive && flyoutOpen && (
           <ToolFlyout testId="memo-flyout">
             <ColorSwatchRow
-              value={activeColor}
+              value={activeColors.memo}
               onPick={(token) => {
-                onPickColor(token);
+                onPickColor("memo", token);
                 setFlyoutOpen(false);
               }}
             />
@@ -400,7 +411,7 @@ export default function ToolRail({
       {/* Comment — a text+pin annotation (Story 2.10), below Memo in the
           DESIGN.md#tool-rail order. Same arm-in-one-click model; its sub-toolbox
           carries a color row only (no width/size). A drag highlights the run + a
-          pin; a click drops a pin only. Shares the one activeColor. */}
+          pin; a click drops a pin only. Its own entry in activeColors. */}
       <div className="tool-rail__item">
         <button
           type="button"
@@ -422,9 +433,9 @@ export default function ToolRail({
         {commentActive && flyoutOpen && (
           <ToolFlyout testId="comment-flyout">
             <ColorSwatchRow
-              value={activeColor}
+              value={activeColors.comment}
               onPick={(token) => {
-                onPickColor(token);
+                onPickColor("comment", token);
                 setFlyoutOpen(false);
               }}
             />

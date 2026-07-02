@@ -13,8 +13,8 @@ Items surfaced during review that are real but intentionally not actioned now.
 | Flaky `Reader.test.tsx` Ctrl+wheel test | Epic 4 Story 4.1 (co-located de-flake) |
 | Highlights join across the gutter (`mergeRects`) | Epic 4 Story 4.2 — **done** (Part A, 2026-07-02) |
 | Multi-column selection controller | Epic 4 Story 4.2 — **deferred again** (Part B design-gated, no 5th attempt; see "Discarded: Story 4.2 Part B") |
-| Text-comment must read differently from highlight | Epic 4 Story 4.3 |
-| Memo transparent bg / drop color row (visual) | Epic 4 Story 4.3 |
+| Text-comment must read differently from highlight | Epic 4 Story 4.3 — **descoped from v1 (2026-07-02, product decision, never attempted). See "Descoped: Story 4.3" below.** |
+| Memo transparent bg / drop color row (visual) | Epic 4 Story 4.3 — **descoped from v1 (2026-07-02, see above).** |
 | Memo movable + corner drag-resize | Epic 3 Story 3.1 |
 | Route memo/comment text re-edit through command path | Epic 3 Story 3.1 |
 | Cross-type recent-wins / unified hit-layer | Epic 3 Story 3.1 + Epic 5 Story 5.0 |
@@ -33,6 +33,10 @@ Items surfaced during review that are real but intentionally not actioned now.
 | Dim ToC panel until hovered | Epic 5 Story 5.5 |
 
 **Not promoted (stay out of v1 / the new epics):** upload size cap (backend hardening, only if multi-user) · ToC synthesis + persist + schema bump (Phase 2) · directly edit PDF text + style (Phase 2/3, needs a feasibility spike).
+
+## Descoped: Story 4.3 — distinct on-page mark treatment (2026-07-02)
+
+> Story 4.3 (comment reads differently from a highlight + memo transparent bg / drop color row) is **descoped from v1**. Product decision, never attempted (no create-story run, no code). `sprint-status.yaml` marks `4-3-distinct-on-page-mark-treatment: blocked` so Epic 4 can still close after 4.2 merges; the epics.md Story 4.3 section is kept, marked descoped. The two original detail specs stay below as the source if this is ever revisited: the memo transparent-bg / no-color-row change (see "memo box is movable + drag-resizable, transparent background by default") and the comment-vs-highlight distinct treatment (see "a text-comment must read differently from a plain highlight"). Both are token-driven `style-on-type` paint changes (AD-5) with no contract impact, so re-promoting them later is low-cost.
 
 ## Deferred from: code review of story-1-2-open-a-pdf-from-disk (2026-06-28)
 

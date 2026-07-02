@@ -83,7 +83,7 @@ function memoMark(
   };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null, flashId: null }));
+beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, multiSelectedIds: [], hoveredId: null, flashId: null, groupDragPreview: null }));
 afterEach(cleanup);
 
 describe("AnnotationLayer (AC-3, AC-4, AC-6)", () => {
@@ -276,14 +276,24 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(container.querySelector(".annotation-pens")).toBeNull();
   });
 
-  it("renders a type=memo mark as a <textarea> in the memos group, not the highlight/pen groups (Story 2.9)", () => {
+  it("renders a type=memo mark as a wrapper div holding the collapse toggle + an editable <textarea> body, in the memos group not the highlight/pen groups (Story 2.9; memo collapse/expand restructure)", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
     const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     const mark = screen.getByTestId("annotation-mark-m1");
-    expect(mark.tagName.toLowerCase()).toBe("textarea");
-    // value reflects body; accent (border) from style.color.
-    expect((mark as HTMLTextAreaElement).value).toBe("a note");
+    // The outer hit-surface is now a div (holds the toggle + body/preview child);
+    // the editable content lives in the inner memo-body-* textarea.
+    expect(mark.tagName.toLowerCase()).toBe("div");
+    const body = screen.getByTestId("memo-body-m1") as HTMLTextAreaElement;
+    expect(body.tagName.toLowerCase()).toBe("textarea");
+    expect(body.value).toBe("a note");
+    expect(screen.getByTestId("memo-collapse-toggle-m1")).toBeTruthy();
+    // Accent (border AND background, user request) is on the OUTER wrapper. The
+    // border is full-strength; the background is SOFTENED via color-mix (a later
+    // user fix request: full-strength read "thick").
     expect(mark.style.borderColor).toBe("var(--color-annotation-pink)");
+    expect(mark.style.backgroundColor).toBe(
+      "color-mix(in srgb, var(--color-annotation-pink) var(--annotation-memo-bg-mix), var(--color-surface-card))",
+    );
     // denormalize at scale 1: left=0.1*600=60, top=0.2*800=160, w=0.4*600=240, minHeight=0.2*800=160.
     expect(mark.style.left).toBe("60px");
     expect(mark.style.top).toBe("160px");
@@ -304,13 +314,13 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(mark.style.width).toBe("480px");
   });
 
-  it("a memo is the 2.5 hit surface: click selects, typing writes through retext, selected class applies", () => {
+  it("a memo is the 2.5 hit surface: click selects (via the outer box), typing writes through retext (via the inner body), selected class applies to the outer box", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     const mark = screen.getByTestId("annotation-mark-m1");
     fireEvent.click(mark);
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
-    fireEvent.change(mark, { target: { value: "typed" } });
+    fireEvent.change(screen.getByTestId("memo-body-m1"), { target: { value: "typed" } });
     expect(useAnnotationStore.getState().annotations.get("m1")!.body).toBe("typed");
     act(() => useAnnotationStore.getState().select("m1"));
     expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--selected");
@@ -322,9 +332,9 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     act(() => useAnnotationStore.getState().select("m1"));
-    const mark = screen.getByTestId("annotation-mark-m1") as HTMLTextAreaElement;
-    mark.focus();
-    fireEvent.keyDown(mark, { key: "Escape" });
+    const body = screen.getByTestId("memo-body-m1") as HTMLTextAreaElement;
+    body.focus();
+    fireEvent.keyDown(body, { key: "Escape" });
     // Selection cleared; the (non-empty) memo survives.
     expect(useAnnotationStore.getState().selectedId).toBeNull();
     expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
@@ -428,7 +438,9 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     // Recolor tints the comment (fill + pin) AND sets the default (last-choice-wins).
     fireEvent.click(screen.getByTestId("color-swatch-annotation-green"));
     expect(useAnnotationStore.getState().annotations.get("c4")!.style.color).toBe("annotation-green");
-    expect(useAnnotationStore.getState().activeColor).toBe("annotation-green");
+    // Comment recolor sets ONLY the comment tool's default (per-tool split).
+    expect(useAnnotationStore.getState().activeColors.comment).toBe("annotation-green");
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-default");
     // Delete removes the comment.
     fireEvent.click(screen.getByTestId("comment-delete-c4"));
     expect(useAnnotationStore.getState().annotations.has("c4")).toBe(false);
@@ -610,7 +622,7 @@ describe("AnnotationLayer region fills (Story 2.11 — AC3,4,6)", () => {
     };
   }
 
-  beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null, flashId: null }));
+  beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, multiSelectedIds: [], hoveredId: null, flashId: null, groupDragPreview: null }));
 
   it("kind=rect + type=highlight renders a fill div in .annotation-regions, NOT memo/pen groups", () => {
     useAnnotationStore.getState().addAnnotation(regionHighlight("r1"));
@@ -721,10 +733,17 @@ describe("AnnotationLayer edit frame (Story 3.1)", () => {
     act(() => useAnnotationStore.getState().select(a.id));
   }
 
-  it("shows a move grip + four corner handles for a selected memo", () => {
+  it("shows a move grip + four corner handles for a selected EXPANDED memo", () => {
     seedAndSelect(memoMark("m1", 0));
     expect(screen.getByTestId("edit-handle-move-m1")).toBeTruthy();
     for (const c of ["nw", "ne", "sw", "se"]) expect(screen.getByTestId(`edit-handle-${c}-m1`)).toBeTruthy();
+  });
+
+  it("shows ONLY the move grip for a selected COLLAPSED memo (user fix request: the stored-rect corner handles floated below the intrinsic collapsed box, and height resize is meaningless while collapsed)", () => {
+    const collapsed = { ...memoMark("m1", 0), style: { color: "annotation-pink", collapsed: true } };
+    seedAndSelect(collapsed);
+    expect(screen.getByTestId("edit-handle-move-m1")).toBeTruthy();
+    for (const c of ["nw", "ne", "sw", "se"]) expect(screen.queryByTestId(`edit-handle-${c}-m1`)).toBeNull();
   });
 
   it("shows handles for a selected pen mark", () => {
@@ -756,11 +775,81 @@ describe("AnnotationLayer edit frame (Story 3.1)", () => {
   });
 });
 
+describe("AnnotationLayer multi-selection (box-select, user feature request)", () => {
+  it("rings every multi-selected mark on this page (like the single --selected ring)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(penMark("p1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1", "p1"]));
+    expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--selected");
+    // Pen renders an SVG <path>: .className there is an SVGAnimatedString object,
+    // not a plain string (matches the existing pen hover/select assertions above).
+    expect(screen.getByTestId("annotation-mark-p1").getAttribute("class")).toContain("annotation-pen--selected");
+  });
+
+  it("renders the group frame's move grip + delete button when marks on this page are multi-selected", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(penMark("p1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1", "p1"]));
+    expect(screen.getByTestId("annotation-multi-select-frames-0")).toBeTruthy();
+    expect(screen.getByTestId("multi-select-move-handle")).toBeTruthy();
+    expect(screen.getByTestId("multi-select-delete")).toBeTruthy();
+  });
+
+  it("the move grip carries data-edit-group (not a per-mark data-edit-id)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1"]));
+    const grip = screen.getByTestId("multi-select-move-handle");
+    expect(grip.getAttribute("data-edit-group")).toBe("");
+    expect(grip.getAttribute("data-edit-id")).toBeNull();
+  });
+
+  it("clicking the delete button calls deleteMany with every multi-selected id", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(penMark("p1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1", "p1"]));
+    fireEvent.click(screen.getByTestId("multi-select-delete"));
+    const annotations = useAnnotationStore.getState().annotations;
+    expect(annotations.has("m1")).toBe(false);
+    expect(annotations.has("p1")).toBe(false);
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("renders no group frame when nothing is multi-selected", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.queryByTestId("annotation-multi-select-frames-0")).toBeNull();
+  });
+
+  it("renders no group frame on a page with no multi-selected members (scoped per page)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(memoMark("m2", 1));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    // Only m2 (page 1) is multi-selected; this layer renders page 0.
+    act(() => useAnnotationStore.getState().setMultiSelected(["m2"]));
+    expect(screen.queryByTestId("annotation-multi-select-frames-0")).toBeNull();
+  });
+
+  it("selecting a single mark clears any multi-selection ring (mutual exclusion)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(memoMark("m2", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1", "m2"]));
+    act(() => useAnnotationStore.getState().select("m1"));
+    expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--selected");
+    expect(screen.getByTestId("annotation-mark-m2").className).not.toContain("annotation-memo--selected");
+    expect(screen.queryByTestId("annotation-multi-select-frames-0")).toBeNull();
+  });
+});
+
 describe("AnnotationLayer memo re-edit (Story 3.1, AE-3)", () => {
   it("double-click focuses the memo textarea for re-editing", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "note"));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    const ta = screen.getByTestId("annotation-mark-m1");
+    const ta = screen.getByTestId("memo-body-m1");
     fireEvent.doubleClick(ta);
     expect(document.activeElement).toBe(ta);
   });
@@ -768,9 +857,104 @@ describe("AnnotationLayer memo re-edit (Story 3.1, AE-3)", () => {
   it("editing a memo routes through retextAnnotation (the command path)", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, ""));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    const ta = screen.getByTestId("annotation-mark-m1") as HTMLTextAreaElement;
+    const ta = screen.getByTestId("memo-body-m1") as HTMLTextAreaElement;
     fireEvent.change(ta, { target: { value: "hello" } });
     expect(useAnnotationStore.getState().annotations.get("m1")!.body).toBe("hello");
+  });
+});
+
+describe("AnnotationLayer memo collapse/expand (user feature request)", () => {
+  function collapsedMemo(id: string, body: string): Annotation {
+    const m = memoMark(id, 0, body);
+    return { ...m, style: { ...m.style, collapsed: true } };
+  }
+
+  it("an expanded memo (default, collapsed=null/false) renders the editable body, no preview", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.getByTestId("memo-body-m1")).toBeTruthy();
+    expect(screen.queryByTestId("memo-preview-m1")).toBeNull();
+  });
+
+  it("a collapsed memo renders a non-editable one-line preview instead of the textarea", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.queryByTestId("memo-body-m1")).toBeNull();
+    const preview = screen.getByTestId("memo-preview-m1");
+    expect(preview.tagName.toLowerCase()).toBe("div");
+    expect(preview.textContent).toBe("a note (...)");
+  });
+
+  it("a collapsed multi-line memo shows only the FIRST line + (...)", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "line one\nline two\nline three"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.getByTestId("memo-preview-m1").textContent).toBe("line one (...)");
+  });
+
+  it("a collapsed memo drops the minHeight constraint (shrinks to fit one line)", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.getByTestId("annotation-mark-m1").style.minHeight).toBe("");
+  });
+
+  it("an expanded memo keeps the minHeight constraint (NFR-3, unchanged from before)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.getByTestId("annotation-mark-m1").style.minHeight).toBe("160px");
+  });
+
+  it("the collapse toggle is always present, expanded or collapsed", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    const { rerender } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.getByTestId("memo-collapse-toggle-m1")).toBeTruthy();
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    rerender(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.getByTestId("memo-collapse-toggle-m1")).toBeTruthy();
+  });
+
+  it("clicking the toggle on an expanded memo calls setMemoCollapsed(id, true, ...)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    fireEvent.click(screen.getByTestId("memo-collapse-toggle-m1"));
+    expect(useAnnotationStore.getState().annotations.get("m1")!.style.collapsed).toBe(true);
+  });
+
+  it("clicking the toggle on a collapsed memo calls setMemoCollapsed(id, false, ...) (expands it back)", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    fireEvent.click(screen.getByTestId("memo-collapse-toggle-m1"));
+    expect(useAnnotationStore.getState().annotations.get("m1")!.style.collapsed).toBe(false);
+  });
+
+  it("toggling collapse bumps updated_at (persisted, undoable command path)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    const before = useAnnotationStore.getState().annotations.get("m1")!.updated_at;
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    fireEvent.click(screen.getByTestId("memo-collapse-toggle-m1"));
+    expect(useAnnotationStore.getState().annotations.get("m1")!.updated_at).not.toBe(before);
+  });
+
+  it("clicking the toggle does NOT also select the memo (stopPropagation)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    fireEvent.click(screen.getByTestId("memo-collapse-toggle-m1"));
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
+  it("clicking a collapsed memo's preview still selects it (the outer box remains the hit surface)", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    fireEvent.click(screen.getByTestId("memo-preview-m1"));
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+  });
+
+  it("toggling collapse on a selected memo keeps it selected (ring survives the swap)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    fireEvent.click(screen.getByTestId("memo-collapse-toggle-m1"));
+    expect(useAnnotationStore.getState().selectedId).toBe("m1");
+    expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--selected");
   });
 });
 

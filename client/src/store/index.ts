@@ -23,12 +23,14 @@
 // objects are shared across Map snapshots so memory is bounded). Undo/redo is
 // client-only, in-memory, discarded on reload (AR-7).
 // Access: `useAnnotationStore.temporal.getState().{undo,redo,clear,pause,resume}`.
-// Partialize exclusions: selectedId, hoveredId, dragPreview, flashId, activeColor,
-// activeStrokeWidth, activeAlpha, activeMemoSize, and all action functions.
+// Partialize exclusions: selectedId, multiSelectedIds, hoveredId, dragPreview,
+// groupDragPreview, flashId, activeColors, activeStrokeWidth, activeAlpha,
+// activeMemoSize, and all action functions.
 
 import { create } from "zustand";
 import { temporal } from "zundo";
 import type { Annotation } from "../api/client";
+import type { AnnotationTool } from "../tools";
 
 /** A memo box-size preset (Story 2.9). The box dimensions ARE the memo's size:
  *  the rect the placement bakes (and `resizeMemoAnnotation` rewrites) carries
@@ -54,36 +56,54 @@ export const MEMO_SIZES: MemoSize[] = [
  *  handles, so the default is just a compact starting box). Once the user resizes a
  *  memo, that size becomes the session default (`activeMemoSize`, last-resize-wins),
  *  so this is only the very first box. `key` stays "medium" for back-compat with
- *  `MemoSize`; the dimensions are independent of the legacy `MEMO_SIZES` presets. */
-export const DEFAULT_MEMO_SIZE: MemoSize = { key: "medium", width: 112, height: 112 };
+ *  `MemoSize`; the dimensions are independent of the legacy `MEMO_SIZES` presets.
+ *  90 = 112 * 0.8 (user fix request: the original default read too large). */
+export const DEFAULT_MEMO_SIZE: MemoSize = { key: "medium", width: 90, height: 90 };
 
 export interface AnnotationStore {
   /** All annotations, keyed by `id` (AD-7). */
   annotations: Map<string, Annotation>;
   /** The one selected annotation (AD-12), or `null` when nothing is selected.
-   *  The single source of truth for selection — no parallel field exists. UI
-   *  affordances (the selected ring + selection quick-box) read this. Client-only;
-   *  not persisted. Hover (`hoveredId`) is the transient sibling of this. */
+   *  The single source of truth for SINGLE selection — no parallel field exists
+   *  for this mode. UI affordances (the selected ring + selection quick-box) read
+   *  this. Client-only; not persisted. Hover (`hoveredId`) is the transient
+   *  sibling of this. Mutually exclusive with `multiSelectedIds` (below): setting
+   *  one always clears the other, so exactly one selection mode is ever active. */
   selectedId: string | null;
+  /** The marks caught by a box-select marquee drag (user feature request), or
+   *  `[]` for none. A SEPARATE selection mode from `selectedId` (AD-12 governs
+   *  single selection only): multi-select supports bulk Delete + bulk Move, not
+   *  recolor/restroke/retext, so it deliberately does not reuse the single
+   *  quick-box. Scoped to one page (the page the marquee was dragged on) by the
+   *  gesture that populates it. Client-only, not persisted, excluded from the
+   *  zundo partialize. */
+  multiSelectedIds: string[];
+  /** Replace the multi-selection and clear `selectedId` (mutual exclusion). */
+  setMultiSelected: (ids: string[]) => void;
+  /** Clear the multi-selection (sugar for `setMultiSelected([])`). */
+  clearMultiSelection: () => void;
   /** The one hovered annotation, or `null`. Lives in the store (not local layer
    *  state) so a two-page highlight — two annotations in two per-page layers —
    *  outlines as ONE: every layer reads it and matches by `group_id`. Transient;
    *  never persisted, cleared on pointer-leave. */
   hoveredId: string | null;
-  /** The active annotation color (Story 2.6): the DEFAULT new marks land in. It
-   *  is the LAST color the user chose — set by the Highlight color sub-toolbox OR
-   *  by recoloring an existing mark (so editing a highlight updates the default
-   *  too). Lives in the store because two unrelated subtrees write it (the rail's
-   *  sub-toolbox and the overlay's recolor) and the create path reads it. A bare
-   *  token name (DESIGN.md `{colors.annotation-*}`); client-only, not persisted. */
-  activeColor: string;
-  /** Set the active/default color (remembers the last choice for the session). */
-  setActiveColor: (color: string) => void;
+  /** The active annotation color, PER TOOL (Story 2.6, split per-tool by user
+   *  request): the DEFAULT a new mark of that tool lands in. Each tool's entry is
+   *  the LAST color chosen for THAT tool — set by its own rail sub-toolbox OR by
+   *  recoloring an existing mark of that type (so editing a highlight updates only
+   *  the highlight default, not underline/pen/memo/comment). Lives in the store
+   *  because two unrelated subtrees write it (the rail's sub-toolbox and the
+   *  overlay's recolor) and the create paths read it. Bare token names (DESIGN.md
+   *  `{colors.annotation-*}`); client-only, not persisted. */
+  activeColors: Record<AnnotationTool, string>;
+  /** Set the active/default color for ONE tool (remembers the last choice for
+   *  that tool only, for the session). */
+  setActiveColor: (tool: AnnotationTool, color: string) => void;
   /** The active pen stroke width (Story 2.8): the DEFAULT new pen strokes land
    *  in, in scale-1.0 CSS px (the renderer multiplies by the current zoom). The
-   *  stroke-width twin of `activeColor` — set by the Pen tool's stroke-width
+   *  stroke-width twin of `activeColors` — set by the Pen tool's stroke-width
    *  sub-toolbox OR by restroking an existing pen mark (last-choice-wins). Lives
-   *  in the store for the same reason `activeColor` does (two writers + the create
+   *  in the store for the same reason `activeColors` does (two writers + the create
    *  path reads it); client-only, not persisted. */
   activeStrokeWidth: number;
   /** Set the active/default pen stroke width (remembers the last choice). */
@@ -106,7 +126,8 @@ export interface AnnotationStore {
   activeAlpha: number;
   /** Set the active/default pen alpha (remembers the last choice). */
   setActiveAlpha: (alpha: number) => void;
-  /** Select an annotation by id, or clear with `null`. */
+  /** Select an annotation by id, or clear with `null`. Also clears any active
+   *  multi-selection (mutual exclusion with `multiSelectedIds`). */
   select: (id: string | null) => void;
   /** Clear the selection (sugar for `select(null)`). */
   clearSelection: () => void;
@@ -121,6 +142,16 @@ export interface AnnotationStore {
   dragPreview: { id: string; anchor: Annotation["anchor"] } | null;
   /** Set or clear the transient drag preview. */
   setDragPreview: (preview: { id: string; anchor: Annotation["anchor"] } | null) => void;
+  /** Transient live GROUP-drag preview: the `dragPreview` twin for a box-select
+   *  multi-selection move (user feature request) — every member's IN-PROGRESS
+   *  anchor while the group drag is in flight, so the layer renders the whole
+   *  group moving without a per-pointermove commit. The ONE commit on release is
+   *  `setAnnotationGeometries` (batched, one undo step for the whole group).
+   *  UI-only, never persisted, excluded from the zundo partialize. Null = no
+   *  group drag in flight. */
+  groupDragPreview: { id: string; anchor: Annotation["anchor"] }[] | null;
+  /** Set or clear the transient group-drag preview. */
+  setGroupDragPreview: (preview: { id: string; anchor: Annotation["anchor"] }[] | null) => void;
   /** The one annotation to briefly emphasize (Annotation Bank jump, Story 3.6):
    *  a `--flash` ring `AnnotationLayer` renders, group-aware like hover/select.
    *  The transient sibling of `hoveredId`/`selectedId` — excluded from the zundo
@@ -135,6 +166,12 @@ export interface AnnotationStore {
    *  removed set includes `selectedId`, the selection clears. This is the
    *  client-side delete SEED Story 3.3 reuses — no command stack / undo yet. */
   deleteAnnotation: (id: string) => void;
+  /** Remove multiple annotations (by id) AND each one's group siblings, in ONE
+   *  batch (so a box-select bulk delete is one undo step, mirroring
+   *  `addAnnotations`) — the multi-select twin of `deleteAnnotation`. Clears
+   *  `selectedId` if it was among the removed, and always clears
+   *  `multiSelectedIds` (nothing is selected after a bulk delete). */
+  deleteMany: (ids: string[]) => void;
   /** Insert (or replace by id) an annotation. */
   addAnnotation: (annotation: Annotation) => void;
   /** Insert multiple annotations atomically in a single `set()` so a grouped
@@ -180,6 +217,14 @@ export interface AnnotationStore {
    *  so a stale text/path id is never mutated (AR-5). Creation-time edit; no
    *  command stack yet. */
   resizeMemoAnnotation: (ids: string[], size: { w: number; h: number }, now: string) => void;
+  /** Collapse/expand one or more memos (by id) and bump `updated_at` — the
+   *  collapse twin of `resizeMemoAnnotation`, from the memo's own toggle chevron
+   *  (user feature request). Persisted on `style.collapsed` (AD-8, additive
+   *  optional field); `None`/`false` = expanded (default), `true` = show only
+   *  the memo's first line. Guarded to `kind=rect`+`type=memo`, same as
+   *  `resizeMemoAnnotation`. Routes through the normal command path, so it is
+   *  undoable like every other restyle (AD-7) — no special-casing. */
+  setMemoCollapsed: (ids: string[], collapsed: boolean, now: string) => void;
   /** Replace a mark's anchor GEOMETRY (a moved/resized rect or points) and bump
    *  `updated_at` — the Story 3.1 move/resize command-path action, shared by
    *  kind=rect (memo/region/comment-pin) and kind=path (pen). The CALLER (the edit
@@ -188,6 +233,13 @@ export interface AnnotationStore {
    *  rewrites VALUES only, so a kind change is rejected as a no-op (AC-8). No-op for
    *  an unknown id. kind=text marks are not moved here (Story 3.8 re-resolves them). */
   setAnnotationGeometry: (id: string, anchor: Annotation["anchor"], now: string) => void;
+  /** Batch twin of `setAnnotationGeometry`: commits every `{id, anchor}` pair in
+   *  ONE `set()` (so a box-select group move is one undo step, mirroring
+   *  `addAnnotations`/`retextAnnotations`). Same guards per entry (unknown id or
+   *  a kind change is skipped, not written). The CALLER (the group-move gesture)
+   *  computes each next anchor via the `anchor/` helpers — the store still does
+   *  no coordinate math (AD-9). */
+  setAnnotationGeometries: (updates: { id: string; anchor: Annotation["anchor"] }[], now: string) => void;
   /** Replace the whole working copy with a freshly loaded set (hydrate-on-open,
    *  Story 3.5). This is a LOAD, not a user edit — the ONLY non-mutation way the
    *  annotation set is set wholesale. Builds the Map keyed by `id` and clears the
@@ -197,6 +249,24 @@ export interface AnnotationStore {
   hydrate: (annotations: Annotation[]) => void;
   /** Every annotation, ordered by `created_at` ascending — the Bank order (AR-12). */
   all: () => Annotation[];
+}
+
+/** Expand a set of ids to include every sibling sharing a non-null `group_id`
+ *  (AR-4: a two-page mark deletes/moves together). Shared by `deleteAnnotation`/
+ *  `deleteMany`; unknown ids are ignored. */
+function withGroupSiblings(annotations: Map<string, Annotation>, ids: string[]): Set<string> {
+  const doomed = new Set<string>();
+  for (const id of ids) {
+    const target = annotations.get(id);
+    if (!target) continue;
+    doomed.add(id);
+    if (target.group_id) {
+      for (const a of annotations.values()) {
+        if (a.group_id === target.group_id) doomed.add(a.id);
+      }
+    }
+  }
+  return doomed;
 }
 
 /** Apply a per-id patch across a set of annotations. For each id present in the
@@ -231,8 +301,15 @@ export const useAnnotationStore = create<AnnotationStore>()(
       annotations: new Map(),
       selectedId: null,
       hoveredId: null,
-      activeColor: "annotation-default",
-      setActiveColor: (color) => set({ activeColor: color }),
+      activeColors: {
+        highlight: "annotation-default",
+        underline: "annotation-default",
+        pen: "annotation-default",
+        memo: "annotation-default",
+        comment: "annotation-default",
+      },
+      setActiveColor: (tool, color) =>
+        set((state) => ({ activeColors: { ...state.activeColors, [tool]: color } })),
       // Default pen width = the medium step (scale-1.0 px); matches --pen-stroke-medium (8px).
       activeStrokeWidth: 8,
       setActiveStrokeWidth: (width) => set({ activeStrokeWidth: width }),
@@ -242,29 +319,46 @@ export const useAnnotationStore = create<AnnotationStore>()(
       // Default alpha = highlighter opacity (0.4); mirrors --annotation-highlight-opacity.
       activeAlpha: 0.4,
       setActiveAlpha: (alpha) => set({ activeAlpha: alpha }),
-      select: (id) => set({ selectedId: id }),
-      clearSelection: () => set({ selectedId: null }),
+      // Mutual exclusion (AD-12 extended, user feature request): selecting one
+      // mode always clears the other, so a stale selection can never linger in
+      // both places (e.g. a leftover multi-selection ring surviving a plain
+      // single click, or vice versa).
+      select: (id) => set({ selectedId: id, multiSelectedIds: [] }),
+      clearSelection: () => set({ selectedId: null, multiSelectedIds: [] }),
+      multiSelectedIds: [],
+      setMultiSelected: (ids) => set({ multiSelectedIds: ids, selectedId: null }),
+      clearMultiSelection: () => set({ multiSelectedIds: [] }),
       setHovered: (id) => set({ hoveredId: id }),
       dragPreview: null,
       setDragPreview: (preview) => set({ dragPreview: preview }),
+      groupDragPreview: null,
+      setGroupDragPreview: (preview) => set({ groupDragPreview: preview }),
       flashId: null,
       flash: (id) => set({ flashId: id }),
       deleteAnnotation: (id) =>
         set((state) => {
           const target = state.annotations.get(id);
           if (!target) return state;
-          // Gather the id plus every sibling sharing a non-null group_id (AR-4).
-          const doomed = new Set<string>([id]);
-          if (target.group_id) {
-            for (const a of state.annotations.values()) {
-              if (a.group_id === target.group_id) doomed.add(a.id);
-            }
-          }
+          const doomed = withGroupSiblings(state.annotations, [id]);
           const next = new Map(state.annotations);
           for (const did of doomed) next.delete(did);
           const selectedId =
             state.selectedId && doomed.has(state.selectedId) ? null : state.selectedId;
           return { annotations: next, selectedId };
+        }),
+      deleteMany: (ids) =>
+        set((state) => {
+          const doomed = withGroupSiblings(state.annotations, ids);
+          // Clear the multi-selection UNCONDITIONALLY, even if every id turned out
+          // stale (doomed empty): deleteMany means "the multi-selection's bulk
+          // delete action fired," so leaving a ghost selection behind on the
+          // no-op path would strand its group frame with no live marks to ring.
+          if (doomed.size === 0) return { multiSelectedIds: [] };
+          const next = new Map(state.annotations);
+          for (const did of doomed) next.delete(did);
+          const selectedId =
+            state.selectedId && doomed.has(state.selectedId) ? null : state.selectedId;
+          return { annotations: next, selectedId, multiSelectedIds: [] };
         }),
       addAnnotation: (annotation) =>
         // New Map each mutation so Zustand sees a fresh reference and re-renders.
@@ -341,6 +435,15 @@ export const useAnnotationStore = create<AnnotationStore>()(
             return { ...a, anchor: { ...a.anchor, rect } };
           }),
         })),
+      setMemoCollapsed: (ids, collapsed, now) =>
+        set((state) => ({
+          // Collapsed is memo-only style (AR-5), same guard shape as resizeMemoAnnotation.
+          annotations: patchAnnotations(state.annotations, ids, now, (a) =>
+            a.anchor.kind === "rect" && a.type === "memo"
+              ? { ...a, style: { ...a.style, collapsed } }
+              : null,
+          ),
+        })),
       setAnnotationGeometry: (id, anchor, now) =>
         set((state) => {
           const a = state.annotations.get(id);
@@ -351,14 +454,28 @@ export const useAnnotationStore = create<AnnotationStore>()(
           next.set(id, { ...a, anchor, updated_at: now });
           return { annotations: next };
         }),
+      setAnnotationGeometries: (updates, now) =>
+        set((state) => {
+          let next: Map<string, Annotation> | null = null;
+          for (const { id, anchor } of updates) {
+            const a = (next ?? state.annotations).get(id);
+            // Same guards as setAnnotationGeometry: unknown id or a kind change skips.
+            if (!a || anchor.kind !== a.anchor.kind) continue;
+            if (!next) next = new Map(state.annotations);
+            next.set(id, { ...a, anchor, updated_at: now });
+          }
+          return next ? { annotations: next } : state;
+        }),
       hydrate: (annotations) =>
         // A LOAD, not a user edit: replace the Map keyed by id and clear all
         // transient UI state so nothing from a prior state survives (Story 3.5).
         set(() => ({
           annotations: new Map(annotations.map((a) => [a.id, a])),
           selectedId: null,
+          multiSelectedIds: [],
           hoveredId: null,
           dragPreview: null,
+          groupDragPreview: null,
           flashId: null,
         })),
       all: () =>

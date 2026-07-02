@@ -18,8 +18,10 @@
 export const ANNOTATION_TOOLS = ["highlight", "underline", "pen", "memo", "comment"] as const;
 export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
 
-/** The pointer tools: cursor reads/selects text, hand pans. */
-export const POINTER_TOOLS = ["cursor", "hand"] as const;
+/** The pointer tools: cursor reads/selects text, hand pans, boxSelect marquee-
+ *  selects multiple existing annotations (a sub-mode of Cursor's flyout, not a
+ *  competing top-level tool; user feature request). */
+export const POINTER_TOOLS = ["cursor", "hand", "boxSelect"] as const;
 export type PointerTool = (typeof POINTER_TOOLS)[number];
 
 /** The one tool that is active. Setting it implicitly disarms the previous. */
@@ -32,7 +34,8 @@ export function isAnnotationTool(t: ActiveTool): t is AnnotationTool {
 }
 
 /** Membership test used to derive the Reader's pan flag and the rail's
- *  pointer-button active styling (`true` for cursor/hand). */
+ *  pointer-button active styling (`true` for cursor/hand/boxSelect; pan itself
+ *  stays gated on exactly `"hand"`, App.tsx computes that separately). */
 export function isPointerTool(t: ActiveTool): t is PointerTool {
   return (POINTER_TOOLS as readonly string[]).includes(t);
 }

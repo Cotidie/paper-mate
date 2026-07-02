@@ -12,9 +12,11 @@ import type { Annotation } from "../../api/client";
 import type { AnnotationTool } from "../../tools";
 import type { MemoSize } from "../../store";
 
-/** The live active-tool defaults a create gesture reads at commit time. */
+/** The live active-tool defaults a create gesture reads at commit time. `colors`
+ *  is keyed per tool (each tool remembers its own last-picked color); a gesture
+ *  that creates one specific type reads its own slot (e.g. `colors.pen`). */
 export interface ActiveDefaults {
-  color: string;
+  colors: Record<AnnotationTool, string>;
   strokeWidth: number;
   alpha: number;
   memoSize: MemoSize;

@@ -29,8 +29,8 @@
 // non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
 
 import { useRef } from "react";
-import { ChatCircle } from "@phosphor-icons/react";
-import type { Annotation } from "../api/client";
+import { ChatCircle, Trash } from "@phosphor-icons/react";
+import type { Annotation, Rect } from "../api/client";
 import { useAnnotationStore } from "../store";
 import { denormalizeRect, denormalizePoint, pointsBounds, type PageBox, type ScreenRect } from "../anchor";
 import { strokeOutline, svgPathFromOutline } from "./pen";
@@ -76,6 +76,24 @@ function markClass(
   );
 }
 
+/** Union of two normalized rects (min top-left, max bottom-right). Pure
+ *  aggregation for the multi-select group frame's outline (below). */
+function unionRect(a: Rect, b: Rect): Rect {
+  return { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) };
+}
+
+/** A mark's own normalized bounding rect regardless of kind (text -> the union
+ *  of its per-line rects; rect -> itself; path -> `pointsBounds`). Used ONLY for
+ *  the multi-select group frame's single approximate outline over N marks (user
+ *  feature request) — per-kind PAINT geometry elsewhere is unaffected. `null` for
+ *  a text mark with no rects (nothing to bound). */
+function markBounds(anchor: Annotation["anchor"]): Rect | null {
+  if (anchor.kind === "rect") return anchor.rect;
+  if (anchor.kind === "path") return pointsBounds(anchor.points);
+  if (anchor.rects.length === 0) return null;
+  return anchor.rects.reduce(unionRect);
+}
+
 export default function AnnotationLayer({
   docId,
   pageIndex,
@@ -99,6 +117,13 @@ export default function AnnotationLayer({
   // pointer on overlap, matching the opacity-group "topmost wins on shared text".
   const annotations = useAnnotationStore((s) => s.annotations);
   const selectedId = useAnnotationStore((s) => s.selectedId);
+  // The box-select marquee's multi-selection (user feature request): a SEPARATE
+  // selection mode from selectedId (AD-12 extended) — see markState below for how
+  // it joins the ring, and renderMultiSelectFrame for its own bulk Move/Delete
+  // group frame (no recolor/restroke — deliberately not routed through the
+  // single-mark quick-box).
+  const multiSelectedIds = useAnnotationStore((s) => s.multiSelectedIds);
+  const deleteMany = useAnnotationStore((s) => s.deleteMany);
   const hoveredId = useAnnotationStore((s) => s.hoveredId);
   // The Annotation Bank's jump target (Story 3.6): a transient, group-aware
   // emphasis rendered exactly like hover/select — see markState below.
@@ -106,11 +131,15 @@ export default function AnnotationLayer({
   // Transient move/resize preview (Story 3.1): while a drag is in flight, render
   // the dragged mark + its frame at this anchor instead of the committed one.
   const dragPreview = useAnnotationStore((s) => s.dragPreview);
+  // Transient GROUP move preview (user feature request): the dragPreview twin for
+  // a box-select multi-selection move in flight — see effAnchor below.
+  const groupDragPreview = useAnnotationStore((s) => s.groupDragPreview);
   const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const setHovered = useAnnotationStore((s) => s.setHovered);
   const retextAnnotation = useAnnotationStore((s) => s.retextAnnotation);
   const retextAnnotations = useAnnotationStore((s) => s.retextAnnotations);
+  const setMemoCollapsed = useAnnotationStore((s) => s.setMemoCollapsed);
   // Text-edit session coalescing (Story 3.2, AC-4): a memo or comment textarea
   // editing session (focus→blur) must land as ONE undo step, not one per keystroke.
   // On focus: pause the temporal store and save the pre-session annotations Map.
@@ -190,17 +219,24 @@ export default function AnnotationLayer({
   // A mark's hover/selected/flashed state, group-aware (a two-page mark lights
   // as one). The shared preamble every render func used to recompute inline
   // (Story 5.0; `flashed` added Story 3.6 — the Bank jump's target emphasis).
+  // `selected` also rings a box-select multi-selection member (user feature
+  // request) — a SEPARATE mode from `selectedId`, so both are OR'd here rather
+  // than one superseding the other.
   const markState = (a: Annotation) => ({
     hovered: inActiveGroup(a, hoveredId, annotations),
-    selected: inActiveGroup(a, selectedId, annotations),
+    selected: inActiveGroup(a, selectedId, annotations) || multiSelectedIds.includes(a.id),
     flashed: inActiveGroup(a, flashId, annotations),
   });
 
   // While a move/resize drag is in flight, render the dragged mark (and its edit
   // frame) at the transient preview geometry instead of the committed anchor, so it
-  // follows the pointer without a per-pointermove store commit (Story 3.1).
+  // follows the pointer without a per-pointermove store commit (Story 3.1). A
+  // GROUP drag (box-select multi-move) previews through the parallel
+  // `groupDragPreview` list instead of the single `dragPreview` slot.
   const effAnchor = (a: Annotation): Annotation["anchor"] =>
-    dragPreview && dragPreview.id === a.id ? dragPreview.anchor : a.anchor;
+    dragPreview && dragPreview.id === a.id
+      ? dragPreview.anchor
+      : (groupDragPreview?.find((g) => g.id === a.id)?.anchor ?? a.anchor);
 
   // A mark that gets drag-handle move/resize in Story 3.1: pen (path) + rect
   // memo/region. Comments (bubble-edited) and text marks (Story 3.8 re-resolves
@@ -316,7 +352,9 @@ export default function AnnotationLayer({
   // color comes from style.color (inline); the body text stays ink. The box is
   // the selection hit surface (Story 2.5 seam): pointer-events + select/hover.
   // value = a.body, every edit writes through retextAnnotation. Autofocus when it
-  // is the selected memo so a just-placed box is ready to type into.
+  // is the selected memo so a just-placed box is ready to type into. Collapse/
+  // expand (user feature request) is a memo-only style toggle, persisted via
+  // setMemoCollapsed — the same command path as recolor, so it is undoable.
   const renderMemo = (a: Annotation) => {
     const anchor = effAnchor(a);
     if (anchor.kind !== "rect") return null;
@@ -333,6 +371,7 @@ export default function AnnotationLayer({
         onSelect={select}
         onHover={setHovered}
         onClearSelection={clearSelection}
+        onToggleCollapse={(id, collapsed) => setMemoCollapsed([id], collapsed, new Date().toISOString())}
         onTextFocus={startTextEditSession}
         onTextBlur={commitTextEditSession}
       />
@@ -416,7 +455,7 @@ export default function AnnotationLayer({
             }}
             onRecolor={(color) => {
               recolorAnnotation(commentGroupIds(a), color, new Date().toISOString());
-              setActiveColor(color);
+              setActiveColor("comment", color);
             }}
             onConvertToHighlight={() =>
               // Reverse (Story 3.7, AC2): drops body -> null unconditionally (even a
@@ -446,13 +485,22 @@ export default function AnnotationLayer({
     if (anchor.kind === "rect") fb = denormalizeRect(anchor.rect, box, scale);
     else if (anchor.kind === "path") fb = denormalizeRect(pointsBounds(anchor.points), box, scale);
     if (!fb) return null;
+    // A collapsed memo (user fix request) renders at an intrinsic CSS height that
+    // no longer matches its stored anchor rect, so the frame's stored-height corner
+    // handles (esp. sw/se) float below the actual collapsed box. Rather than try to
+    // track the intrinsic CSS height from pure anchor math, just drop the resize
+    // corners entirely while collapsed — only the move grip remains (it anchors to
+    // the frame's TOP edge, unaffected by frame height, so it stays put correctly).
+    // Matches the feature's own "must expand first, then edit" precedent.
+    const collapsedMemo = a.type === "memo" && a.style.collapsed === true;
+    const handles = collapsedMemo ? (["move"] as const) : (["move", "nw", "ne", "sw", "se"] as const);
     return (
       <div
         className="annotation-edit-frame"
         data-testid={`annotation-edit-frame-${a.id}`}
         style={{ left: fb.left, top: fb.top, width: fb.width, height: fb.height }}
       >
-        {(["move", "nw", "ne", "sw", "se"] as const).map((hh) => (
+        {handles.map((hh) => (
           <button
             key={hh}
             type="button"
@@ -463,6 +511,56 @@ export default function AnnotationLayer({
             aria-label={hh === "move" ? "Move annotation" : "Resize annotation"}
           />
         ))}
+      </div>
+    );
+  };
+
+  // The box-select multi-selection's own group frame (user feature request): a
+  // single outline over the UNION of every selected mark's bounding rect on this
+  // page, with a move grip (drags the WHOLE group, useEditGesture's group-move
+  // path — `data-edit-group` instead of a per-mark `data-edit-id`) and a Delete
+  // button (bulk `deleteMany`). Deliberately NO recolor/restroke/resize — that is
+  // the single-select quick-box's territory (AD-12), this is bulk Delete + Move
+  // only. Computed here (not inside the render func) so the WRAPPER group below
+  // can gate on marks present on THIS page specifically — `multiSelectedIds` is
+  // global, so gating the wrapper on its raw length would render an empty
+  // `.annotation-multi-select-frames` div on every OTHER page too (mirrors why
+  // `editMark`, above, is a page-scoped `marks.find`, not a raw `selectedId` check).
+  const multiSelectMarks = marks.filter((a) => multiSelectedIds.includes(a.id));
+
+  const renderMultiSelectFrame = () => {
+    if (multiSelectMarks.length === 0) return null;
+    let bbox: Rect | null = null;
+    for (const a of multiSelectMarks) {
+      const b = markBounds(effAnchor(a));
+      if (b) bbox = bbox ? unionRect(bbox, b) : b;
+    }
+    if (!bbox) return null;
+    const fb = denormalizeRect(bbox, box, scale);
+    return (
+      <div
+        className="annotation-multi-select-frame"
+        data-testid={`annotation-multi-select-frame-${pageIndex}`}
+        style={{ left: fb.left, top: fb.top, width: fb.width, height: fb.height }}
+      >
+        <button
+          type="button"
+          className="edit-handle edit-handle--move"
+          data-edit-handle="move"
+          data-edit-group=""
+          data-testid="multi-select-move-handle"
+          aria-label={`Move ${multiSelectMarks.length} selected annotations`}
+        />
+        <button
+          type="button"
+          className="multi-select-frame__delete"
+          data-testid="multi-select-delete"
+          aria-label="Delete selected annotations"
+          title="Delete selected"
+          onClick={() => deleteMany(multiSelectedIds)}
+        >
+          <Trash aria-hidden />
+        </button>
       </div>
     );
   };
@@ -531,6 +629,14 @@ export default function AnnotationLayer({
       {editMark && (
         <div className="annotation-edit-frames" data-testid={`annotation-edit-frames-${pageIndex}`}>
           {renderEditFrame(editMark)}
+        </div>
+      )}
+      {/* Box-select multi-selection's group frame (user feature request): its own
+          NOT-aria-hidden, pointer-transparent group (the move grip + delete are
+          the only interactive controls), mirroring the single-mark edit frame. */}
+      {multiSelectMarks.length > 0 && (
+        <div className="annotation-multi-select-frames" data-testid={`annotation-multi-select-frames-${pageIndex}`}>
+          {renderMultiSelectFrame()}
         </div>
       )}
     </>
