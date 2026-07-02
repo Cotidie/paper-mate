@@ -8,12 +8,12 @@
 // interrupted gesture can't strand a draft (the recurring held-state bug).
 
 import { useEffect, useRef, useState } from "react";
-import { normalizePoint, pickPage } from "../../anchor";
-import { useAnnotationStore } from "../../store";
-import { newId } from "../../lib/uuid";
-import { buildPenAnnotation } from "../create";
-import type { StrokeInputPoint } from "../pen";
-import type { AnnotationTool } from "../../lib/tools";
+import { normalizePoint, pickPage } from "@/anchor";
+import { useAnnotationStore } from "@/store";
+import { newId } from "@/lib/uuid";
+import { buildPenAnnotation } from "@/annotations/create";
+import type { StrokeInputPoint } from "@/annotations/pen";
+import type { AnnotationTool } from "@/lib/tools";
 import { isExempt, type GestureContext } from "./shared";
 
 export function usePenGesture(

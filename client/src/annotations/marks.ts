@@ -8,8 +8,8 @@
 // AD-9-clean: imports only the generated contract type + the zero-import tools
 // leaf. No store/anchor/render import, no React — pure data, unit-testable.
 
-import type { Annotation } from "../api/client";
-import type { AnnotationTool } from "../lib/tools";
+import type { Annotation } from "@/api/client";
+import type { AnnotationTool } from "@/lib/tools";
 
 /** Which selection quick-box rows a selected mark of a given tool offers, plus the
  *  box's aria-label. Replaces the scattered `isPenSelected` / `isMemoSelected` /

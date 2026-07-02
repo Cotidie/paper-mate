@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { Annotation } from "../api/client";
-import { ANNOTATION_TOOLS } from "../lib/tools";
+import type { Annotation } from "@/api/client";
+import { ANNOTATION_TOOLS } from "@/lib/tools";
 import { MARK_DESCRIPTORS, quickBoxSpec } from "./marks";
 
 function anno(type: Annotation["type"], kind: Annotation["anchor"]["kind"]): Annotation {

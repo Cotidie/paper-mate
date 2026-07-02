@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useEditGesture } from "./useEditGesture";
-import { useAnnotationStore, DEFAULT_MEMO_SIZE } from "../../store";
-import type { Annotation } from "../../api/client";
-import type { PageCardRef } from "../../anchor";
+import { useAnnotationStore, DEFAULT_MEMO_SIZE } from "@/store";
+import type { Annotation } from "@/api/client";
+import type { PageCardRef } from "@/anchor";
 
 // box = 1000x1000 so a 250px drag at scale 1 is a clean 0.25 normalized delta.
 const BOX = { width: 1000, height: 1000 };

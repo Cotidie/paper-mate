@@ -10,8 +10,8 @@
 // (memo, comment-pin, region) collapse onto one `RectPlacement`. No behavior or
 // contract change: the builders assemble the same `Annotation` shape as before.
 
-import type { Annotation, Point, Rect } from "../api/client";
-import type { PageSelection } from "../anchor";
+import type { Annotation, Point, Rect } from "@/api/client";
+import type { PageSelection } from "@/anchor";
 import type { AnnotationTool } from "./machine";
 
 /** The fields every create request shares: the injected clock + id factory

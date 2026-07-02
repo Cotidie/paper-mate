@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { bankItems } from "./bank";
-import type { Annotation, Rect } from "../api/client";
+import type { Annotation, Rect } from "@/api/client";
 
 function textMark(
   id: string,

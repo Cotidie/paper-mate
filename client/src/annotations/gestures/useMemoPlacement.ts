@@ -17,10 +17,10 @@
 // place anyway.
 
 import { useEffect } from "react";
-import { normalizeRect, pickPage } from "../../anchor";
-import { useAnnotationStore } from "../../store";
-import { newId } from "../../lib/uuid";
-import { buildMemoAnnotation } from "../create";
+import { normalizeRect, pickPage } from "@/anchor";
+import { useAnnotationStore } from "@/store";
+import { newId } from "@/lib/uuid";
+import { buildMemoAnnotation } from "@/annotations/create";
 import { isExempt, type GestureContext } from "./shared";
 
 export function useMemoPlacement(ctx: GestureContext): void {

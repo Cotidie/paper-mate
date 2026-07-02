@@ -7,12 +7,13 @@
 // `document`, phase-gated (AP-1); editable/buttons exempt.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { denormalizeRect, denormalizePoint, type PageCardRef } from "../../anchor";
-import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "../../store";
-import type { Annotation } from "../../api/client";
-import { clampToViewport } from "../position";
-import { quickBoxSpec, type QuickBoxSpec } from "../marks";
+import { denormalizeRect, denormalizePoint, type PageCardRef } from "@/anchor";
+import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "@/store";
+import type { Annotation } from "@/api/client";
+import { clampToViewport } from "@/annotations/position";
+import { quickBoxSpec, type QuickBoxSpec } from "@/annotations/marks";
 import { isExempt } from "./shared";
+import { isEditableTarget } from "@/lib/domFocus";
 
 /** Vertical gap (viewport px) between the marked text and the floating quick-box
  *  anchored below it, so the box clears the run instead of covering it. */
@@ -211,28 +212,30 @@ export function useSelection(opts: {
   useEffect(() => {
     if (!enabled || !selectedAnno) return;
     const onKey = (e: KeyboardEvent) => {
-      // Skip chords first. Then exempt editable/button targets BEFORE acting — EXCEPT
-      // a button INSIDE the selection box: after a create the box auto-focuses its
-      // first swatch button (useLayoutEffect below), so a blanket BUTTON exemption
-      // would swallow the very next Del/Esc (the user's first delete attempt silently
-      // failed). Esc/Delete are not a button's own activation keys (Enter/Space are),
-      // so handling them while the box holds focus is safe.
+      // Skip chords first. Then exempt only EDITABLE fields (INPUT/TEXTAREA/
+      // contentEditable) via the NARROW `isEditableTarget`, NOT buttons: Delete/
+      // Escape are not a button's own activation keys (Enter/Space are), so a
+      // focused control must never swallow them. The broad `isExempt`/
+      // `isControlTarget` used here before silently ate the user's first Del/Esc
+      // after clicking ANY button that kept focus (a tool-rail button, an Annotation
+      // Bank pill, or the selection box's own auto-focused first swatch) until they
+      // clicked elsewhere. `domFocus.ts` documents exactly this split: keyboard
+      // handlers want `isEditableTarget`, pointer handlers (the deselect one below)
+      // want `isExempt`.
       if (e.ctrlKey || e.altKey || e.metaKey) return;
-      const inSelectionBox = selectionBoxRef.current?.contains(e.target as Node) ?? false;
-      // A selected memo's OWN textarea is also exempt from the editable-field skip
-      // below, for Delete only: the user must be able to remove the memo with Del
-      // even mid-typing (user bug report), unlike a normal input where Delete is a
-      // text edit. Scoped by the exact data-testid MemoBox's inner textarea
-      // carries (the OUTER box keeps `annotation-mark-${id}`; the textarea child
-      // is `memo-body-${id}`, memo collapse/expand feature), so this can only ever
-      // match the currently selected memo's own textarea, never a bystander field
-      // (mirrors CommentBubble's own Delete override for its bubble textarea). A
-      // COLLAPSED memo has no textarea at all, so this naturally never matches then.
+      // The one editable field we DO still act through: the selected memo's OWN
+      // textarea, so Delete removes the memo even mid-typing (user bug report),
+      // unlike a normal input where Delete is a text edit. Scoped by the exact
+      // data-testid MemoBox's inner textarea carries (the OUTER box keeps
+      // `annotation-mark-${id}`; the textarea child is `memo-body-${id}`), so this
+      // can only ever match the currently selected memo's own textarea, never a
+      // bystander field (mirrors CommentBubble's own Delete override for its bubble
+      // textarea). A COLLAPSED memo has no textarea, so this naturally never matches.
       const inOwnMemoTextarea =
         selectedAnno.type === "memo" &&
         (e.target as HTMLElement | null)?.getAttribute?.("data-testid") ===
           `memo-body-${selectedAnno.id}`;
-      if (!inSelectionBox && !inOwnMemoTextarea && isExempt(e.target)) return;
+      if (!inOwnMemoTextarea && isEditableTarget(e.target)) return;
       if (e.key === "Escape") {
         // Esc clears the selection (the App-level Esc->cursor also runs).
         clearSelection();

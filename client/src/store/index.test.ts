@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useAnnotationStore, hydrateStore, flashAnnotation, FLASH_MS, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "./index";
-import type { Annotation } from "../api/client";
+import type { Annotation } from "@/api/client";
 
 function mark(id: string, color: string, createdAt: string, groupId: string | null = null): Annotation {
   return {

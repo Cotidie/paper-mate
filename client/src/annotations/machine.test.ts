@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { overlayReducer, initialOverlayState, type OverlayState } from "./machine";
-import type { PageSelection } from "../anchor";
+import type { PageSelection } from "@/anchor";
 
 const sel: PageSelection[] = [{ page_index: 0, rects: [{ x0: 0, y0: 0, x1: 1, y1: 1 }], text: "x" }];
 const at = { x: 10, y: 20 };

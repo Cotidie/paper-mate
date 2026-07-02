@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { inActiveGroup, markClass, unionRect, markBounds } from "./markGeometry";
-import type { Annotation } from "../api/client";
+import type { Annotation } from "@/api/client";
 
 function textMark(id: string, groupId: string | null = null): Annotation {
   return {

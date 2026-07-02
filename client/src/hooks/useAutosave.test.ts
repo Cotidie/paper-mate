@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { useAutosave, DEBOUNCE_MS } from "./useAutosave";
-import { useAnnotationStore, DEFAULT_MEMO_SIZE } from "../store";
-import * as api from "../api/client";
-import type { Annotation } from "../api/client";
+import { useAnnotationStore, DEFAULT_MEMO_SIZE } from "@/store";
+import * as api from "@/api/client";
+import type { Annotation } from "@/api/client";
 
 function mark(id: string, docId = "doc-1"): Annotation {
   return {

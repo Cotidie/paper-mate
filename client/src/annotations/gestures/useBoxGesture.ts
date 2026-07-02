@@ -7,9 +7,9 @@
 // addAnnotation → select (the 2.5 selection quick-box takes over).
 
 import { useEffect, useRef, useState } from "react";
-import { normalizeRect, pickPage } from "../../anchor";
-import { newId } from "../../lib/uuid";
-import { buildRegionAnnotation } from "../create";
+import { normalizeRect, pickPage } from "@/anchor";
+import { newId } from "@/lib/uuid";
+import { buildRegionAnnotation } from "@/annotations/create";
 import { isExempt, type GestureContext } from "./shared";
 
 /** Minimum pointer travel (px) for a box-select drag to commit a region. Below

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildAnnotations, buildPenAnnotation, buildMemoAnnotation, buildCommentPin, buildRegionAnnotation } from "./create";
-import type { PageSelection } from "../anchor";
+import type { PageSelection } from "@/anchor";
 
 function counter() {
   let n = 0;

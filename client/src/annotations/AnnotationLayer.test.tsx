@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import AnnotationLayer from "./AnnotationLayer";
-import { useAnnotationStore } from "../store";
-import type { Annotation } from "../api/client";
-import type { PageBox } from "../anchor";
+import { useAnnotationStore } from "@/store";
+import type { Annotation } from "@/api/client";
+import type { PageBox } from "@/anchor";
 
 const box: PageBox = { width: 600, height: 800 };
 

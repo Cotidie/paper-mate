@@ -9,8 +9,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Highlighter, Trash } from "@phosphor-icons/react";
-import type { Annotation } from "../api/client";
-import type { ScreenRect } from "../anchor";
+import type { Annotation } from "@/api/client";
+import type { ScreenRect } from "@/anchor";
 import ColorSwatchRow from "./ColorSwatchRow";
 import { clampToViewport } from "./position";
 import "./Annotations.css";

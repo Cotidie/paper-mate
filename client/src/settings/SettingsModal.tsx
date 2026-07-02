@@ -27,7 +27,17 @@ const REASON_COPY: Record<"conflict" | "reserved", string> = {
  * becomes the candidate binding. `Escape` while capturing cancels the
  * capture only, leaving the modal open.
  */
-export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function SettingsModal({
+  open,
+  onClose,
+  version,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** App version (from `GET /api/health`), shown as a quiet footer line. `null`
+   *  until the fetch resolves (or on failure), in which case the line is omitted. */
+  version?: string | null;
+}) {
   const keymap = useSettingsStore((s) => s.keymap);
   const rebind = useSettingsStore((s) => s.rebind);
   const resetKeymap = useSettingsStore((s) => s.resetKeymap);
@@ -172,6 +182,12 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           <ArrowCounterClockwise aria-hidden />
           Reset to defaults
         </button>
+
+        {version && (
+          <p className="settings-modal__version" data-testid="settings-version">
+            Paper Mate v{version}
+          </p>
+        )}
       </div>
     </div>
   );

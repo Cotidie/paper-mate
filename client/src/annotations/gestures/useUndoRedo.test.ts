@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useUndoRedo } from "./useUndoRedo";
-import { useAnnotationStore, DEFAULT_MEMO_SIZE } from "../../store";
-import type { Annotation } from "../../api/client";
+import { useAnnotationStore, DEFAULT_MEMO_SIZE } from "@/store";
+import type { Annotation } from "@/api/client";
 
 function mark(id: string): Annotation {
   return {

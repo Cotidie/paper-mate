@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import CommentBubble from "./CommentBubble";
-import type { Annotation } from "../api/client";
-import type { ScreenRect } from "../anchor";
+import type { Annotation } from "@/api/client";
+import type { ScreenRect } from "@/anchor";
 
 function comment(id: string, body = ""): Annotation {
   return {

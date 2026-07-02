@@ -149,3 +149,13 @@
 .settings-modal__reset:hover {
   background: var(--color-surface-strong);
 }
+
+/* version: a quiet mono caption at the modal's foot (moved off the top-bar). */
+.settings-modal__version {
+  margin: 0 var(--settings-modal-padding) var(--settings-modal-padding);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-leading);
+  color: var(--color-muted);
+}

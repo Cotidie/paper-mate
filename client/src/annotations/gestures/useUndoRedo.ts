@@ -8,8 +8,8 @@
 // its first swatch <button> — still undoes the annotation.
 
 import { useEffect } from "react";
-import { useAnnotationStore } from "../../store";
-import { isEditableTarget } from "../../lib/domFocus";
+import { useAnnotationStore } from "@/store";
+import { isEditableTarget } from "@/lib/domFocus";
 
 export function useUndoRedo({ enabled }: { enabled: boolean }) {
   useEffect(() => {
