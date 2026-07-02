@@ -24,8 +24,8 @@ Items surfaced during review that are real but intentionally not actioned now.
 | Unify conditional logic + FSM-isolated state | Epic 5 Story 5.0 |
 | src folder / module structural refactoring | Epic 5 Story 5.0 |
 | Settings modal + hotkey rebinding | Epic 5 Story 5.1 |
-| Per-tool remembered default color | Epic 5 Story 5.2 |
-| Custom color slots + picker | Epic 5 Story 5.2 |
+| Per-tool remembered default color | Epic 5 Story 5.2 — **descoped from v1 (2026-07-02, product decision, never attempted). See "Descoped: Story 5.2" below.** |
+| Custom color slots + picker | Epic 5 Story 5.2 — **descoped from v1 (2026-07-02, see above).** |
 | Hide/show all annotations toggle | Epic 5 Story 5.3 |
 | Layered Esc | Epic 5 Story 5.4 |
 | Confirm (check) on memo + comment editors | Epic 5 Story 5.4 |
@@ -37,6 +37,10 @@ Items surfaced during review that are real but intentionally not actioned now.
 ## Descoped: Story 4.3 — distinct on-page mark treatment (2026-07-02)
 
 > Story 4.3 (comment reads differently from a highlight + memo transparent bg / drop color row) is **descoped from v1**. Product decision, never attempted (no create-story run, no code). `sprint-status.yaml` marks `4-3-distinct-on-page-mark-treatment: blocked` so Epic 4 can still close after 4.2 merges; the epics.md Story 4.3 section is kept, marked descoped. The two original detail specs stay below as the source if this is ever revisited: the memo transparent-bg / no-color-row change (see "memo box is movable + drag-resizable, transparent background by default") and the comment-vs-highlight distinct treatment (see "a text-comment must read differently from a plain highlight"). Both are token-driven `style-on-type` paint changes (AD-5) with no contract impact, so re-promoting them later is low-cost.
+
+## Descoped: Story 5.2 — color system, per-tool default + custom slots (2026-07-02)
+
+> Story 5.2 (per-tool remembered default color + custom color slots/picker) is **descoped from v1**. Product decision, never attempted (no create-story run, no code). `sprint-status.yaml` marks `5-2-color-system-per-tool-custom: blocked` so Epic 5 can still close once its remaining stories reach `done`; the epics.md Story 5.2 section is kept, marked descoped. The original spec stays there as the source if this is ever revisited: reshaping the single shared `activeColor` into a per-tool `activeColorByTool` map, plus a FIFO custom-color-slot window seeded from `localStorage` and mapped to runtime CSS vars (`--color-annotation-custom-N`) to keep `no-raw-values` honored.
 
 ## Deferred from: code review of story-1-2-open-a-pdf-from-disk (2026-06-28)
 

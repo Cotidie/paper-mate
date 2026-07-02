@@ -143,7 +143,7 @@ From DESIGN.md (visual identity / tokens / component catalog) and EXPERIENCE.md 
 - **FR-22** Restore annotations exactly on reopen → Epic 3
 - **FR-23** Hide/show all annotations toggle → Epic 5 (post-v1)
 - **FR-24** Settings modal + hotkey rebinding → Epic 5 (post-v1; keymap-as-data enabler)
-- **FR-25** Per-tool default color + custom color slots → Epic 5 (post-v1)
+- **FR-25** Per-tool default color + custom color slots → Epic 5 Story 5.2 — **descoped from v1 (2026-07-02, product decision, never attempted; see `deferred-work.md`)**
 - **FR-26** Adjust annotation text range → Epic 3 Story 3.8 — **attempted 2026-07-02, discarded on a hard Chromium `caretRangeFromPoint`/`caretPositionFromPoint` blocker during live smoke (see `deferred-work.md`); descoped from v1, open for a future revisit**
 - **FR-27** Convert highlight ↔ comment → Epic 3 Story 3.7 (post-v1 slice on the command path)
 
@@ -994,7 +994,9 @@ So that the keyboard map fits my habits.
 **Given** a rebind
 **Then** conflict detection blocks two actions on one key, a reset-to-defaults exists, browser/OS-critical combos are reserved; preferences persist in `localStorage` (app-global, not per-doc `~/.paper-mate`); token-driven, no em-dash in copy; no contract change (FR-24)
 
-### Story 5.2: Color system — per-tool default + custom slots
+### Story 5.2: Color system — per-tool default + custom slots — DESCOPED from v1 (2026-07-02)
+
+> **DESCOPED (2026-07-02, product decision, never attempted).** No longer needed for v1; not built. `sprint-status.yaml` marks it `blocked` so Epic 5 can still close once its remaining stories reach `done`. The spec below is retained as the source if it is ever re-promoted (see `deferred-work.md` "Descoped: Story 5.2").
 
 > deferred-work: "per-tool remembered default color" + "custom color slot(s) + color picker, cached in the browser". Both reshape the single shared `activeColor`; do together.
 
