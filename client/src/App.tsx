@@ -15,6 +15,9 @@ import { uploadDoc, getAnnotations, fetchHealth, type Doc } from "./api/client";
 import type { TocEntry } from "./render";
 import { useAutosave } from "./useAutosave";
 import SaveIndicator from "./SaveIndicator";
+import { matchAction } from "./settings/keymap";
+import { useSettingsStore } from "./settings/store";
+import SettingsModal from "./settings/SettingsModal";
 
 /**
  * App shell. Holds the current-doc state and switches between:
@@ -69,6 +72,10 @@ export default function App() {
   const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
   const setActiveAlpha = useAnnotationStore((s) => s.setActiveAlpha);
   const [railCollapsed, setRailCollapsed] = useState(false);
+  // Settings modal (Story 5.1): App owns open/closed, same pattern as
+  // tocOpen/bankOpen. Threaded to ToolRail's Gear trigger and SettingsModal.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const keymap = useSettingsStore((s) => s.keymap);
   // ToC panel: open/closed + the PDF's outline (reported up by the Reader once
   // the document is ready). `null` until the Reader reports, so the panel shows
   // a loading note instead of the no-outline empty state mid-load. Lightweight
@@ -109,16 +116,24 @@ export default function App() {
     if (saveStatus.status === "error") setSaveErrorDismissed(false);
   }, [saveStatus.status]);
 
-  // Document-level tool keys (UX-DR15), mirroring the Reader's zoom-key effect:
-  // `V`/`Esc` → cursor, `[` → toggle the rail. Only active while a doc is open.
-  // `Space` is deliberately NOT handled here — it is a Reader-internal temp-pan
-  // (a document-level Space handler would fight the scroll container). Ctrl/Alt/
-  // Meta chords and editable targets are ignored so adjacent shortcuts pass.
+  // Document-level tool keys (UX-DR15), unified onto the keymap (Story 5.1,
+  // AC-1): ONE effect resolves the pressed key/chord to an action via
+  // `matchAction`, replacing the old inline `e.key === "…"` literals AND the
+  // separate Ctrl B effect (`toggleBank` is now just another keymap chord).
+  // Only active while a doc is open, and entirely suppressed while the
+  // Settings modal is open (so a captured rebind key never leaks through to
+  // arm a tool behind the modal). `Escape` stays hard-coded and reserved: it
+  // always returns to cursor and is never routed through the keymap, so a
+  // rebind can never remove it. `Space` is deliberately NOT handled here — it
+  // is a Reader-internal temp-pan (a document-level Space handler would fight
+  // the scroll container). Alt/Meta chords are ignored (keymap bindings
+  // support only a Ctrl modifier) and editable targets/BUTTON are exempt
+  // (Epic-1 retro AP-1).
   const docOpen = doc !== null;
   useEffect(() => {
-    if (!docOpen) return;
+    if (!docOpen || settingsOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.altKey || e.metaKey) return;
       // Exempt editable fields AND controls (SELECT/BUTTON) so a focused control
       // keeps its own keys — matches the annotations-layer `isExempt` convention
       // and AC1's document-level handler requirement (Epic-1 retro AP-1).
@@ -132,75 +147,55 @@ export default function App() {
           t.isContentEditable)
       )
         return;
-      if (e.key === "v" || e.key === "V" || e.key === "Escape") {
+      if (e.key === "Escape") {
         e.preventDefault();
-        // V/Esc → plain cursor. One setter; no second field to clear.
         setActiveTool("cursor");
-      } else if (e.key === "h" || e.key === "H") {
-        e.preventDefault();
-        // Arm highlight. Mutual exclusion is automatic: setting `activeTool`
-        // disarms whatever pointer/annotation tool was active (one tool active),
-        // so a still-armed hand/box pan can't eat the highlight drag.
-        setActiveTool("highlight");
-      } else if (e.key === "u" || e.key === "U") {
-        e.preventDefault();
-        // Arm underline (UX-DR15). Same single-field switch as highlight.
-        setActiveTool("underline");
-      } else if (e.key === "d" || e.key === "D") {
-        e.preventDefault();
-        // Arm pen (UX-DR15: D = pen). Same single-field switch.
-        setActiveTool("pen");
-      } else if (e.key === "t" || e.key === "T") {
-        e.preventDefault();
-        // Arm memo (UX-DR15: T = memo). Same single-field switch.
-        setActiveTool("memo");
-      } else if (e.key === "c" || e.key === "C") {
-        e.preventDefault();
-        // Arm comment (UX-DR15: C = comment). Same single-field switch.
-        setActiveTool("comment");
-      } else if (e.key === "m" || e.key === "M") {
-        e.preventDefault();
-        // M = box-highlight: arm Highlight AND switch on its box mode. (Box is a
-        // mode of Highlight, not a tool — the reset effect leaves it untouched
-        // because activeTool becomes "highlight".)
-        setActiveTool("highlight");
-        setBoxHighlight(true);
-      } else if (e.key === "[") {
-        e.preventDefault();
-        setRailCollapsed((c) => !c);
+        return;
+      }
+      const action = matchAction(keymap, e);
+      if (!action) return;
+      e.preventDefault();
+      switch (action) {
+        case "cursor":
+          // Same setter as Escape; no second field to clear.
+          setActiveTool("cursor");
+          break;
+        case "highlight":
+          // Mutual exclusion is automatic: setting `activeTool` disarms
+          // whatever pointer/annotation tool was active (one tool active), so
+          // a still-armed hand/box pan can't eat the highlight drag.
+          setActiveTool("highlight");
+          break;
+        case "underline":
+          setActiveTool("underline");
+          break;
+        case "pen":
+          setActiveTool("pen");
+          break;
+        case "memo":
+          setActiveTool("memo");
+          break;
+        case "comment":
+          setActiveTool("comment");
+          break;
+        case "boxHighlight":
+          // Arm Highlight AND switch on its box mode. (Box is a mode of
+          // Highlight, not a tool — the reset effect leaves it untouched
+          // because activeTool becomes "highlight".)
+          setActiveTool("highlight");
+          setBoxHighlight(true);
+          break;
+        case "toggleRail":
+          setRailCollapsed((c) => !c);
+          break;
+        case "toggleBank":
+          setBankOpen((o) => !o);
+          break;
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [docOpen]);
-
-  // Ctrl B toggles the Annotation Bank (Story 3.6, AC-1). A SEPARATE document-
-  // level effect (not folded into the tool-key effect above, which early-returns
-  // on any Ctrl/Alt/Meta chord): preventDefault blocks the browser's own
-  // bookmark-bar shortcut. Exempt editable targets so typing a note is never
-  // hijacked (same isExempt shape as the tool-key effect). Document-level,
-  // phase/doc-gated — never bound to `.pdf-canvas` (Epic-1 retro AP-1).
-  useEffect(() => {
-    if (!docOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.altKey || e.metaKey) return;
-      if (e.key !== "b" && e.key !== "B") return;
-      const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === "INPUT" ||
-          t.tagName === "TEXTAREA" ||
-          t.tagName === "SELECT" ||
-          t.tagName === "BUTTON" ||
-          t.isContentEditable)
-      )
-        return;
-      e.preventDefault();
-      setBankOpen((o) => !o);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [docOpen]);
+  }, [docOpen, settingsOpen, keymap]);
 
   // Annotation Bank row click (Story 3.6, AC-4): jump the canvas to the mark's
   // page + fractional position, then flash it. Flash only — no `select` (that
@@ -353,7 +348,9 @@ export default function App() {
           onPickAlpha={setActiveAlpha}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
+        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         <TocPanel
           open={tocOpen}
           entries={toc}

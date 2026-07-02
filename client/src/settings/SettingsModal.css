@@ -1,0 +1,151 @@
+/* settings-modal (Story 5.1; DESIGN.md components.settings-modal). A centered
+   dialog over a full-viewport scrim, above every other overlay (toc/bank
+   panels sit at z-index 5, the rail at 4). Tokens only. */
+
+.settings-modal__scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--color-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.settings-modal {
+  width: var(--settings-modal-width);
+  max-width: calc(100% - var(--space-base) * 2);
+  max-height: var(--settings-modal-max-height);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.settings-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--settings-modal-padding);
+  border-bottom: var(--hairline-width) solid var(--color-hairline);
+}
+
+.settings-modal__title {
+  font-family: var(--font-sans);
+  font-size: var(--type-title-md-size);
+  font-weight: var(--type-title-md-weight);
+  line-height: var(--type-title-md-leading);
+  color: var(--color-ink);
+}
+
+.settings-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-body);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.settings-modal__close svg {
+  width: var(--settings-modal-icon-size);
+  height: var(--settings-modal-icon-size);
+  display: block;
+}
+
+.settings-modal__close:hover {
+  background: var(--color-surface-strong);
+}
+
+.settings-modal__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--settings-modal-padding);
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-modal-row-gap);
+  overflow-y: auto;
+}
+
+.settings-modal__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+}
+
+.settings-modal__row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.settings-modal__label {
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  color: var(--color-body);
+}
+
+.settings-modal__capture {
+  min-width: var(--settings-capture-chip-min-width);
+  height: var(--settings-capture-chip-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+  cursor: pointer;
+}
+
+.settings-modal__capture:hover {
+  background: var(--color-hairline-strong);
+}
+
+.settings-modal__error {
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-leading);
+  color: var(--color-semantic-error);
+}
+
+.settings-modal__reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  margin: var(--space-xs) var(--settings-modal-padding) var(--settings-modal-padding);
+  padding: var(--space-xxs) var(--space-sm);
+  background: transparent;
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  cursor: pointer;
+}
+
+.settings-modal__reset svg {
+  width: var(--settings-modal-icon-size);
+  height: var(--settings-modal-icon-size);
+  display: block;
+}
+
+.settings-modal__reset:hover {
+  background: var(--color-surface-strong);
+}

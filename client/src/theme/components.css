@@ -84,6 +84,19 @@
      annotation-*--flash modifiers in Annotations.css consume this. */
   --bank-flash-ring-width: 3px;
 
+  /* settings-modal (Story 5.1; DESIGN.md components.settings-modal). A
+     centered dialog over a full-viewport scrim (`{colors.scrim}`), not an
+     edge-docked panel like toc/bank, so it has no `-offset` var. */
+  --settings-modal-width: 400px;
+  --settings-modal-max-height: 80vh;
+  --settings-modal-padding: 20px;
+  --settings-modal-row-gap: 4px;
+  --settings-modal-icon-size: 18px;
+  /* The current-binding chip / capture control (DESIGN.md
+     components.settings-capture-chip). */
+  --settings-capture-chip-min-width: 96px;
+  --settings-capture-chip-height: 28px;
+
   /* zoom-control (top-bar pill, left of ToC; DESIGN.md components.zoom-control) */
   --zoom-control-gap: 4px;
   /* Reserve room for the widest % readout ("400%") so the pill doesn't jitter

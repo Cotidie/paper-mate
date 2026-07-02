@@ -27,6 +27,7 @@ colors:
   on-primary: "#ffffff"
   on-dark: "#ffffff"
   on-dark-soft: "#b0b4ba"
+  scrim: "rgba(0,0,0,0.32)"
   reader-backdrop: "#f5f5f7"
   accent-warning: "#ab6400"
   accent-preview: "#8145b5"
@@ -273,6 +274,14 @@ components:
     typography: "{typography.body-sm}"
     border: "1px {colors.hairline}"
     width: 280px
+  settings-modal:
+    backgroundColor: "{colors.surface-card}"
+    textColor: "{colors.ink}"
+    typography: "{typography.body-sm}"
+    rounded: "{rounded.lg}"
+    border: "1px {colors.hairline}"
+    shadow: "0 4px 12px rgba(0,0,0,0.04)"
+    width: 400px
   empty-dropzone:
     backgroundColor: "{colors.canvas-soft}"
     textColor: "{colors.muted}"
@@ -357,6 +366,7 @@ The only saturated color in the product, and only on the paper. Applied to highl
 - **Surface Card** (`{colors.surface-card}` — #ffffff): Floating chrome (rail, panels, quick-boxes).
 - **Surface Strong** (`{colors.surface-strong}` — #f0f0f3): Armed tool state, hover rows, badges.
 - **Surface Dark** (`{colors.surface-dark}` — #171717): Toast/notification only.
+- **Scrim** (`{colors.scrim}` — rgba(0,0,0,0.32)): Modal backdrop, dims the reader behind the Settings modal.
 
 ### Hairlines
 - **Hairline** (`{colors.hairline}` — #f0f0f3): Default 1px divider and panel border.
@@ -503,6 +513,12 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 **`annotation-bank-panel`** — 320px floating panel, overlays the canvas right edge, toggled (`Ctrl B`). Background `{colors.surface-card}`, 1px `{colors.hairline}`, soft drop. Title in `{typography.title-md}`; scrollable list of `bank-list-item`.
 
 **`bank-list-item`** — One annotation row: type glyph + color dot + snippet/page. `{typography.body-sm}`, `{colors.body}`, `{rounded.sm}`. Hover → `bank-list-item-hover` (`{colors.surface-strong}`). Click jumps the canvas to the annotation and flashes the target.
+
+### Settings
+
+**`settings-modal`** — Focus-trapped, Esc-dismissable dialog (UX-DR17), centered over a `{colors.scrim}` backdrop. Background `{colors.surface-card}`, `{rounded.lg}`, 1px `{colors.hairline}`, soft drop, 400px wide. One row per rebindable action: label + current-binding chip + a "press a key" capture control. Focus moves to the first row on open and returns to the tool-rail Gear trigger on close.
+
+**`settings-capture-chip`** — The current-binding readout / capture trigger. `{colors.surface-strong}` fill, `{rounded.sm}`, `{typography.caption}`. Reads "Press a key" while armed for capture.
 
 ### Navigation & Entry
 

@@ -11,6 +11,7 @@ import {
   ChatCircle,
   CaretDoubleLeft,
   CaretDoubleRight,
+  Gear,
   type Icon,
 } from "@phosphor-icons/react";
 import { type ActiveTool, type AnnotationTool, type PointerTool, isPointerTool } from "./tools";
@@ -64,6 +65,7 @@ export default function ToolRail({
   onPickAlpha,
   collapsed,
   onToggleCollapse,
+  onOpenSettings,
 }: {
   /** The single active tool (App owns it; AD-11). */
   activeTool: ActiveTool;
@@ -95,6 +97,9 @@ export default function ToolRail({
   onPickAlpha: (alpha: number) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  /** Opens the Settings modal (Story 5.1). The Gear trigger sits at the
+   *  rail's tail, matching the existing `.tool-button` idiom. */
+  onOpenSettings: () => void;
 }) {
   // ONE open/close bit for the active tool's sub-toolbar — whichever tool is
   // active, its flyout (pointer cursor/hand/box, or the Highlight color row) is
@@ -442,6 +447,21 @@ export default function ToolRail({
           </ToolFlyout>
         )}
       </div>
+
+      {/* Settings (Story 5.1): opens the keybinding-rebinding modal. A plain
+          BUTTON (not a `tool-rail__item`, no flyout) so the global tool-key
+          handler already exempts it while it holds focus. Sits at the rail's
+          tail, above the collapse toggle. */}
+      <button
+        type="button"
+        className="tool-button"
+        aria-label="Settings"
+        title="Settings"
+        data-testid="tool-settings-button"
+        onClick={onOpenSettings}
+      >
+        <Gear aria-hidden />
+      </button>
 
       <button
         type="button"
