@@ -1897,6 +1897,26 @@ describe("AnnotationInteraction multi-select (box-select) gesture (user feature 
     expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
   });
 
+  it("Esc clears the multi-selection while a button holds focus (Codex MED, Story 5.6: was swallowed by the broad isExempt, mirroring useSelection.ts's own already-fixed twin bug)", () => {
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    act(() => useAnnotationStore.getState().setMultiSelected(["a"]));
+    // A stale-focused button (e.g. the last-clicked tool-rail button) must not
+    // swallow Esc — App now DEFERS Esc whenever multiSelectedIds is non-empty
+    // (Story 5.6 rung 2), so if this handler ALSO ignored it, Esc became a
+    // total no-op (neither listener acted).
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.focus();
+    stubNodes.push(button);
+    fireEvent.keyDown(button, { key: "Escape" });
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
+  });
+
   it("does not delete on Del while typing in an input (editable exempt)", () => {
     useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
     const pages = [fakeCard(0, 0)];

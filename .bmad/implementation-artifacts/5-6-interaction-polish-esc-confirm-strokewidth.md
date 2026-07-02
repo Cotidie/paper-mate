@@ -4,7 +4,7 @@ baseline_commit: 1ae56d813b91530d1dd4d592cd1e9af63188f163
 
 # Story 5.6: Layered Esc
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -65,7 +65,7 @@ so that one Esc never both clears my selection AND drops the tool I am holding.
   - [x] Bump `server/pyproject.toml` `[project].version` `0.3.13 → 0.3.14` (PATCH +1 per story; single source). Sync `server/uv.lock` `paper-mate-server` version to match (`uv lock`), so the `test_version.py` AE3-6 guard (pyproject == uv.lock) passes.
   - [x] No `/api` change → `docs/API.md` untouched.
   - [x] Live smoke on YOUR OWN servers (never the user's :8000/:5173 — CLAUDE.md engineering principle). Sequence, tool armed the whole time (e.g. arm Highlight): (a) select a committed mark → first Esc clears the selection, the Highlight tool is STILL armed (rail still shows Highlight armed); second Esc returns to cursor. (b) Drag-select text to open the quick-box → Esc dismisses the box, Highlight STILL armed. (c) Place a memo, type text → Esc blurs + keeps it, tool armed; place a memo, leave it empty → Esc removes it, tool armed. (d) With NOTHING selected → Esc returns to cursor (rung 3). (e) Open the Bank / ToC / Settings and press Esc → the panel/modal closes as before (not regressed). Use trusted input (real `click`/`press_key`), not `dispatchEvent` (memory: use-trusted-input-for-focus-sensitive-smoke — this is focus/consume-sensitive). Shut the servers down after.
-  - [ ] Cross-model Codex review (`bmad-code-review` via `codex exec`) after dev-story; resolve High/Med before done. Fill the Dev Agent Record fully (AE3-2) before flipping status to `done`; flip `sprint-status.yaml` at PR-merge (AE3-1).
+  - [x] Cross-model Codex review (`bmad-code-review` via `codex exec`) after dev-story; resolve High/Med before done. Fill the Dev Agent Record fully (AE3-2) before flipping status to `done`; flip `sprint-status.yaml` at PR-merge (AE3-1).
 
 ## Dev Notes
 
@@ -161,8 +161,9 @@ None — no blockers, no failing-test debugging needed. All tasks landed green o
 - `client/src/App.tsx`
 - `client/src/App.test.tsx`
 - `client/src/annotations/gestures/useCreateQuickBox.ts`
+- `client/src/annotations/gestures/useMultiSelectGesture.ts` (Codex MED fix)
 - `client/src/annotations/AnnotationInteraction.test.tsx`
-- `server/pyproject.toml`
+- `server/pyproject.toml` (two bumps: story 0.3.13->0.3.14, same-branch follow-on fix 0.3.14->0.3.15)
 - `server/uv.lock`
 - `.bmad/implementation-artifacts/sprint-status.yaml` (5-6 status transitions + 5-7 discard housekeeping)
 - `.bmad/planning-artifacts/epics.md` (5-7 discard housekeeping, not story-5-6 scope)
@@ -171,3 +172,9 @@ None — no blockers, no failing-test debugging needed. All tasks landed green o
 ## Change Log
 
 - 2026-07-03: Story implemented end-to-end (Tasks 1-5) via `bmad-dev-story`. Made `App`'s hard-coded `Esc → cursor` the fallback rung (defers when a selection exists) and the pending create quick-box's Esc capture-phase + `stopImmediatePropagation` so it consumes ahead of App's fallback. Version bumped 0.3.13 -> 0.3.14. Status: ready-for-dev -> review.
+- 2026-07-03: Cross-model Codex code review (`bmad-code-review` via `codex exec`, working-tree diff vs `HEAD`/`1ae56d8`). 1 High, 1 Med, 1 Low. Both High/Med fixed:
+  - **High** (App's re-registered listener can lose the race): `App`'s keydown effect re-registers on `settingsOpen`/`keymap` changes; if that re-attach lands it AFTER the overlay's still-mounted bubble-phase selection listeners (e.g. open then close Settings while a mark stays selected), Esc broke again — confirmed by locally reverting to bubble phase, which made the new regression test fail with `selectedId` never clearing (Esc going fully inert, not the originally-assumed double-action). Fixed: `App`'s listener is now capture-phase (`addEventListener("keydown", onKey, true)`), which always runs before any bubble-phase listener on `document` regardless of attachment order, so the layered-Esc ladder no longer depends on registration order at all. Regression test added (`App.test.tsx`): selects a real mark, toggles Settings open/closed to force the listener re-attach, then asserts Esc still defers correctly.
+  - **Med** (multi-select Esc swallowed by a focused button): `useMultiSelectGesture.ts`'s keydown handler used the broad `isExempt`/`isControlTarget`, which also exempts a plain BUTTON — the exact bug `useSelection.ts`'s twin handler already fixed in a prior story (its own comment documents it), just never carried over to the multi-select sibling. Since `App` now defers Esc whenever `multiSelectedIds` is non-empty, a stale-focused button meant NEITHER listener acted (Esc a total no-op) for a marquee selection. Fixed: swapped to the narrow `isEditableTarget`, matching `useSelection.ts`. Regression test added (`AnnotationInteraction.test.tsx`).
+  - **Low** (dismissed as adequately covered): new tests didn't exercise the real overlay `clearSelection()` path end-to-end. The High-finding's regression test now does (real `addAnnotation`/`select`, real Settings toggle, real document dispatch) — no separate change made for this item.
+  - Full suite re-verified green (844/844 frontend, typecheck/build clean, backend 72/72). Status: review -> done.
+- 2026-07-03: Same-branch follow-on (user bug report, screenshot): after clicking a tool-rail/top-bar-pill button then pressing Esc (or any hotkey) to change tool state, a black border lingered on the button's icon. Root cause: `index.css`'s global `:focus-visible` outline plus the deliberate choice (Epic-1 retro precedent) to never blur a stale-focused button so hotkeys keep firing — the WHATWG `:focus-visible` heuristic flips ON the instant a KEYBOARD event fires on an already-(mouse-)focused element, and nothing then moves focus away, so the ring visually outlives whatever tool state it was showing. Fixed in `App.tsx`'s keydown handler: blur `document.activeElement` on every HANDLED key (Escape or a matched action, never an unrecognized keystroke) — hotkeys are unaffected since the listener is document-level and never depended on which element holds focus. Regression test added (`App.test.tsx`); live-smoked on fresh own-launched servers (`:8322`/`:5322`) confirming no lingering border on Pen (Esc) and ToC (Esc) after the fix, screenshot-verified. Version bumped 0.3.14 -> 0.3.15 (standalone fix, same branch, mirrors the Story 5.5 PR #39 same-branch-follow-on precedent).

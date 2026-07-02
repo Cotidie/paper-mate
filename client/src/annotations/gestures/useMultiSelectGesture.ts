@@ -19,6 +19,7 @@ import { normalizeRect, pickPage, pointsBounds, rectsIntersect, type PageCardRef
 import { useAnnotationStore } from "@/store";
 import type { Annotation, Rect } from "@/api/client";
 import { isExempt } from "./shared";
+import { isEditableTarget } from "@/lib/domFocus";
 
 /** Minimum pointer travel (px) for a marquee drag to commit a selection. Below
  *  this the drag is treated as a stray click and the selection is left
@@ -181,7 +182,14 @@ export function useMultiSelectGesture(opts: {
       const ids = useAnnotationStore.getState().multiSelectedIds;
       if (ids.length === 0) return;
       if (e.ctrlKey || e.altKey || e.metaKey) return;
-      if (isExempt(e.target)) return;
+      // Narrow isEditableTarget, not the broad isExempt (Codex MED, Story 5.6):
+      // isExempt also exempts a plain BUTTON, so a stale-focused tool-rail
+      // button (or the group frame's own delete button) silently swallowed
+      // Del/Esc here, exactly the bug useSelection.ts's twin handler already
+      // fixed (see its own comment). App now DEFERS Esc whenever
+      // multiSelectedIds is non-empty (Story 5.6, layered Esc rung 2), so if
+      // this handler ALSO swallowed it, Esc became a total no-op.
+      if (isEditableTarget(e.target)) return;
       if (e.key === "Escape") {
         useAnnotationStore.getState().clearMultiSelection();
         return;
