@@ -149,6 +149,97 @@ describe("mergeRects (per-line merge, anti-stacking #3)", () => {
   });
 });
 
+describe("mergeRects (column-aware gutter split, Story 4.2 AC-1)", () => {
+  it("does NOT union same-line rects separated by a gutter-scale horizontal gap", () => {
+    const merged = mergeRects([
+      { x0: 0.1, y0: 0.2, x1: 0.45, y1: 0.23 },
+      { x0: 0.55, y0: 0.2, x1: 0.9, y1: 0.23 },
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("still unions same-line rects separated by normal inter-run spacing (below gutter threshold)", () => {
+    const merged = mergeRects([
+      { x0: 0.1, y0: 0.2, x1: 0.3, y1: 0.23 },
+      { x0: 0.31, y0: 0.2, x1: 0.5, y1: 0.23 },
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual({ x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.23 });
+  });
+
+  it("merges a gap just at/under 0.5x row height, splits a gap just over it (boundary is inclusive, not exclusive)", () => {
+    const underThreshold = mergeRects([
+      { x0: 0.1, y0: 0.2, x1: 0.3, y1: 0.23 }, // height 0.03, threshold gap = 0.015
+      { x0: 0.3145, y0: 0.2, x1: 0.5, y1: 0.23 }, // gap 0.0145, just under
+    ]);
+    expect(underThreshold).toHaveLength(1);
+
+    const overThreshold = mergeRects([
+      { x0: 0.1, y0: 0.2, x1: 0.3, y1: 0.23 },
+      { x0: 0.3155, y0: 0.2, x1: 0.5, y1: 0.23 }, // gap 0.0155, just over
+    ]);
+    expect(overThreshold).toHaveLength(2);
+  });
+
+  it("splits a narrow real-world gutter that is small relative to page width but wide relative to line height (regression: Microsoft COCO paper, arXiv:1405.0312)", () => {
+    // Reproduces the exact geometry found via live smoke on a real two-column
+    // paper: an actual column gutter of only ~2% of page width (narrower than
+    // the earlier fixed 3%-of-page-width threshold this replaced, which missed
+    // it and bridged the highlight across both columns) but ~1.4x the row's
+    // own height — the height-relative check must still split it.
+    const merged = mergeRects([
+      { x0: 0.0805, y0: 0.6886, x1: 0.4909, y1: 0.7027 }, // left column line (height ~0.0141)
+      { x0: 0.5098, y0: 0.6886, x1: 0.9201, y1: 0.7027 }, // right column line, gap ~0.019 (~1.35x height)
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("still unions a same-line gap that is small relative to BOTH page width and line height (not just page width)", () => {
+    // A fixed page-width-fraction threshold would treat this identically to
+    // the regression case above (same absolute gap); the height-relative
+    // check must tell them apart because this gap is small relative to a
+    // much TALLER line.
+    const merged = mergeRects([
+      { x0: 0.0805, y0: 0.6886, x1: 0.4909, y1: 0.7886 }, // tall row (height 0.1)
+      { x0: 0.5098, y0: 0.6886, x1: 0.9201, y1: 0.7886 }, // gap ~0.019 (~0.19x this row's height)
+    ]);
+    expect(merged).toHaveLength(1);
+  });
+
+  it("merges a column's own fragments with each other, not with the other column's row processed earlier (ordering trap)", () => {
+    // Right column's first fragment is processed BEFORE the left column's
+    // fragment, so it occupies rows[0]. A naive "match first vertically-
+    // overlapping row, then reject the union" implementation would wrongly
+    // bridge the left fragment into rows[0] (it only rejects AFTER matching,
+    // it doesn't keep scanning). The gap check must live inside the `find`
+    // predicate so `find` skips rows[0] and creates a genuine new row for the
+    // left fragment, leaving rows[0] free to correctly absorb the right
+    // column's second fragment.
+    const merged = mergeRects([
+      { x0: 0.55, y0: 0.2, x1: 0.7, y1: 0.23 }, // right col, fragment 1 (processed first)
+      { x0: 0.1, y0: 0.2, x1: 0.2, y1: 0.23 }, // left col, single fragment
+      { x0: 0.71, y0: 0.2, x1: 0.85, y1: 0.23 }, // right col, fragment 2 (must join fragment 1)
+    ]);
+    expect(merged).toHaveLength(2);
+    const right = merged.find((r) => r.x0 === 0.55);
+    const left = merged.find((r) => r.x0 === 0.1);
+    expect(right).toEqual({ x0: 0.55, y0: 0.2, x1: 0.85, y1: 0.23 });
+    expect(left).toEqual({ x0: 0.1, y0: 0.2, x1: 0.2, y1: 0.23 });
+  });
+
+  it("returns bands in stable, first-appearance (reading) order", () => {
+    const merged = mergeRects([
+      { x0: 0.1, y0: 0.2, x1: 0.2, y1: 0.23 }, // left col
+      { x0: 0.21, y0: 0.2, x1: 0.35, y1: 0.23 }, // left col, merges into band 0
+      { x0: 0.55, y0: 0.2, x1: 0.7, y1: 0.23 }, // right col
+      { x0: 0.71, y0: 0.2, x1: 0.85, y1: 0.23 }, // right col, merges into band 1
+    ]);
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toEqual({ x0: 0.1, y0: 0.2, x1: 0.35, y1: 0.23 });
+    expect(merged[1]).toEqual({ x0: 0.55, y0: 0.2, x1: 0.85, y1: 0.23 });
+  });
+});
+
 describe("pickPage (two-page split logic, AC-5)", () => {
   const cards = [
     { left: 0, top: 0, right: 600, bottom: 800 },
