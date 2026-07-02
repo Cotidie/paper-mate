@@ -81,10 +81,11 @@ export default function MemoBox({
         ...(collapsed ? {} : { minHeight: pos.height }),
         borderColor: `var(--color-${anno.style.color})`,
         // Background also carries the mark's accent (user request: border-only
-        // made too little difference). Safe at full strength: the 5 annotation
-        // tokens are all light pastels (DESIGN.md), so ink-black body text stays
-        // legible over any of them.
-        backgroundColor: `var(--color-${anno.style.color})`,
+        // made too little difference), but SOFTENED (a later user fix request:
+        // full-strength read "thick") by blending toward the surface-card white
+        // via color-mix — the border stays full-strength for contrast/legibility,
+        // only the fill lightens. Ink-black body text stays legible either way.
+        backgroundColor: `color-mix(in srgb, var(--color-${anno.style.color}) var(--annotation-memo-bg-mix), var(--color-surface-card))`,
       }}
     >
       <button

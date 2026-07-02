@@ -287,9 +287,13 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(body.tagName.toLowerCase()).toBe("textarea");
     expect(body.value).toBe("a note");
     expect(screen.getByTestId("memo-collapse-toggle-m1")).toBeTruthy();
-    // Accent (border AND background, user request) is on the OUTER wrapper.
+    // Accent (border AND background, user request) is on the OUTER wrapper. The
+    // border is full-strength; the background is SOFTENED via color-mix (a later
+    // user fix request: full-strength read "thick").
     expect(mark.style.borderColor).toBe("var(--color-annotation-pink)");
-    expect(mark.style.backgroundColor).toBe("var(--color-annotation-pink)");
+    expect(mark.style.backgroundColor).toBe(
+      "color-mix(in srgb, var(--color-annotation-pink) var(--annotation-memo-bg-mix), var(--color-surface-card))",
+    );
     // denormalize at scale 1: left=0.1*600=60, top=0.2*800=160, w=0.4*600=240, minHeight=0.2*800=160.
     expect(mark.style.left).toBe("60px");
     expect(mark.style.top).toBe("160px");

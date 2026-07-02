@@ -520,16 +520,12 @@
   margin: 0;
   padding: 0;
   border: none;
+  outline: none;
   background: transparent;
   color: inherit;
   font: inherit;
   resize: none;
   overflow: hidden;
-}
-
-.annotation-memo__body:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-ink);
-  outline-offset: var(--color-swatch-ring-offset);
 }
 
 /* The collapsed preview (user feature request): the memo's first line only,

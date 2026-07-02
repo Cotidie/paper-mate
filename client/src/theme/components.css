@@ -139,6 +139,12 @@
   --memo-size-preview-small: 14px;
   --memo-size-preview-medium: 18px;
   --memo-size-preview-large: 22px;
+  /* The memo BACKGROUND's accent strength (user fix request: full-strength read
+     "thick"): a color-mix() ratio blending style.color toward surface-card white,
+     applied inline in MemoBox.tsx. The border stays full-strength (unaffected) —
+     only the fill softens. A unitless mix percentage, not a raw px/hex, so
+     no-raw-values.test.ts (which only flags #hex/\d+px) does not apply. */
+  --annotation-memo-bg-mix: 35%;
 
   /* annotation-comment-pin + comment-bubble (DESIGN.md components.annotation-
      comment-pin / comment-bubble): the white/ink ChatCircle badge straddling a

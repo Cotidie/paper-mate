@@ -130,7 +130,9 @@ export function useSelection(opts: {
       // either path; per-tool split so recoloring a pen never touches the
       // highlight/memo/etc default).
       if (selectedAnno) setActiveColor(selectedAnno.type, color);
-      setSelectionBoxOpen(false); // pick dismisses the box; the mark stays selected/ringed
+      // KEEPS the box open (user fix request), matching restrokeSelected/
+      // realphaSelected below: the mark is still selected, so the user may want to
+      // try another color (or another row) without re-opening the box each time.
     },
     [recolorAnnotation, selectedGroupIds, setActiveColor, selectedAnno],
   );

@@ -276,9 +276,9 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     if (all[0].anchor.kind === "rect") {
       expect(all[0].anchor.rect.x0).toBeCloseTo(60 / 600, 5);
       expect(all[0].anchor.rect.y0).toBeCloseTo(160 / 800, 5);
-      // default square 112x112 (Story 3.1; the seed default).
-      expect(all[0].anchor.rect.x1).toBeCloseTo((60 + 112) / 600, 5);
-      expect(all[0].anchor.rect.y1).toBeCloseTo((160 + 112) / 800, 5);
+      // default square 90x90 (Story 3.1 seed default, 20% smaller per user fix request).
+      expect(all[0].anchor.rect.x1).toBeCloseTo((60 + 90) / 600, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo((160 + 90) / 800, 5);
     }
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
     expect(screen.queryByTestId("quick-box")).toBeNull();
@@ -437,7 +437,7 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     expect(screen.getByTestId("color-swatch-annotation-blue").getAttribute("aria-checked")).toBe("true");
   });
 
-  it("picking a swatch recolors the just-landed highlight and dismisses the box (selection stays)", async () => {
+  it("picking a swatch recolors the just-landed highlight and KEEPS the box open (user fix request; selection stays)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(
@@ -449,8 +449,9 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     const all = useAnnotationStore.getState().all();
     expect(all).toHaveLength(1);
     expect(all[0].style.color).toBe("annotation-green");
-    // Pick dismisses the box; the mark stays selected (ring persists).
-    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    // A color pick no longer dismisses the box (matches restroke/realpha, which
+    // already kept it open) — the mark stays selected AND the box stays visible.
+    expect(screen.getByTestId("selection-quick-box")).toBeTruthy();
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
   });
 
@@ -908,13 +909,14 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
   });
 
-  it("picking a swatch recolors the selected mark and dismisses the box; the selection stays", async () => {
+  it("picking a swatch recolors the selected mark and KEEPS the box open (user fix request); the selection stays", async () => {
     setup([textMark("m1", "annotation-default")], "m1");
     await screen.findByTestId("selection-quick-box");
     fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
     expect(useAnnotationStore.getState().annotations.get("m1")!.style.color).toBe("annotation-pink");
-    // Pick dismisses the box but the mark stays selected (ring persists).
-    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
+    // A color pick no longer dismisses the box — the mark stays selected AND the
+    // box stays visible, matching restroke/realpha's existing behavior.
+    expect(screen.getByTestId("selection-quick-box")).toBeTruthy();
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
   });
 
@@ -1187,9 +1189,9 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
       // top-left normalized: (60,160)/(600,800) = (0.1, 0.2)
       expect(all[0].anchor.rect.x0).toBeCloseTo(0.1, 5);
       expect(all[0].anchor.rect.y0).toBeCloseTo(0.2, 5);
-      // default square 112x112 (Story 3.1; the seed default) → 112/600 x, 112/800 y.
-      expect(all[0].anchor.rect.x1).toBeCloseTo(0.1 + 112 / 600, 5);
-      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2 + 112 / 800, 5);
+      // default square 90x90 (Story 3.1 seed default, 20% smaller per user fix request) → 90/600 x, 90/800 y.
+      expect(all[0].anchor.rect.x1).toBeCloseTo(0.1 + 90 / 600, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2 + 90 / 800, 5);
     }
     // Selected → the memo selection quick-box (color + delete; no size picker since 3.1).
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);

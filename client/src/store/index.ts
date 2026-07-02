@@ -56,8 +56,9 @@ export const MEMO_SIZES: MemoSize[] = [
  *  handles, so the default is just a compact starting box). Once the user resizes a
  *  memo, that size becomes the session default (`activeMemoSize`, last-resize-wins),
  *  so this is only the very first box. `key` stays "medium" for back-compat with
- *  `MemoSize`; the dimensions are independent of the legacy `MEMO_SIZES` presets. */
-export const DEFAULT_MEMO_SIZE: MemoSize = { key: "medium", width: 112, height: 112 };
+ *  `MemoSize`; the dimensions are independent of the legacy `MEMO_SIZES` presets.
+ *  90 = 112 * 0.8 (user fix request: the original default read too large). */
+export const DEFAULT_MEMO_SIZE: MemoSize = { key: "medium", width: 90, height: 90 };
 
 export interface AnnotationStore {
   /** All annotations, keyed by `id` (AD-7). */

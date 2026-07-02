@@ -218,12 +218,12 @@ components:
   annotation-pen:
     strokeColor: "{colors.ink}"
   annotation-memo:
-    backgroundColor: "{colors.annotation-default}"
+    backgroundColor: "color-mix(in srgb, {colors.annotation-default} 35%, {colors.surface-card})" # softened tint, not the raw accent (user fix request)
     textColor: "{colors.ink}"
     typography: "{typography.body-sm}"
     rounded: "{rounded.sm}"
     padding: "{spacing.xs}"
-    border: "1px {colors.annotation-default}"
+    border: "1px {colors.annotation-default}" # border stays full-strength
   memo-collapse-toggle:
     backgroundColor: "{colors.surface-card}"
     borderColor: "{colors.ink}"
@@ -490,7 +490,7 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 
 **`annotation-pen`** — Freehand vector stroke in the chosen accent or `{colors.ink}`; stroke width from the pen quick-box.
 
-**`annotation-memo`** — Free-floating text box typed onto the page. Background AND 1px border both the mark's own accent color (`style.color`; `{colors.annotation-default}` shown as the representative default), `{rounded.sm}`, `{typography.body-sm}`, `{colors.ink}` text. Does not displace page text. Collapsible (user feature request, persisted on `style.collapsed`): expanded shows the editable body; collapsed shows a single non-editable line (the memo's first line + a literal `(...)` tell) and shrinks the box to fit. The `memo-collapse-toggle` chevron (below) switches between the two; must expand before editing.
+**`annotation-memo`** — Free-floating text box typed onto the page. Border is the mark's own accent color (`style.color`) at full strength; background is the SAME accent SOFTENED via `color-mix()` (35% accent / 65% `{colors.surface-card}`, user fix request — full-strength read "thick"), `{rounded.sm}`, `{typography.body-sm}`, `{colors.ink}` text, no visible focus ring on the textarea itself (the outer box's own hover/selected ring is the only indicator, user fix request). Does not displace page text. Collapsible (user feature request, persisted on `style.collapsed`): expanded shows the editable body; collapsed shows a single non-editable line (the memo's first line + a literal `(...)` tell) and shrinks the box to fit. The `memo-collapse-toggle` chevron (below) switches between the two; must expand before editing.
 
 **`memo-collapse-toggle`** — A small pill badge straddling the memo's bottom-center edge (half outside the box, below it) — not a corner or top-center, since a selected memo's edit frame occupies all four corners plus top-center. Same size/shape as `annotation-comment-pin`'s badge. `{colors.surface-card}` fill, `{colors.ink}` border, `{rounded.pill}`. Shows a down caret when collapsed (click to expand), up caret when expanded (click to collapse). Always present, independent of selection.
 
