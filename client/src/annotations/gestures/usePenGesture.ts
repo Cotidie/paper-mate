@@ -10,10 +10,10 @@
 import { useEffect, useRef, useState } from "react";
 import { normalizePoint, pickPage } from "../../anchor";
 import { useAnnotationStore } from "../../store";
-import { newId } from "../../uuid";
+import { newId } from "../../lib/uuid";
 import { buildPenAnnotation } from "../create";
 import type { StrokeInputPoint } from "../pen";
-import type { AnnotationTool } from "../../tools";
+import type { AnnotationTool } from "../../lib/tools";
 import { isExempt, type GestureContext } from "./shared";
 
 export function usePenGesture(

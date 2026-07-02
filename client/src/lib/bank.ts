@@ -4,8 +4,8 @@
 // types + the `anchor/` bbox helper, no store/DOM — so it is unit-testable
 // with plain data, mirroring the anchor/render "pure math vs DOM wiring" split.
 
-import type { Annotation } from "./api/client";
-import { pointsBounds } from "./anchor";
+import type { Annotation } from "../api/client";
+import { pointsBounds } from "../anchor";
 
 /** One Bank row: the display-ready projection of an annotation (or, for a
  *  two-page group, its earliest sibling). `topFraction` is a `[0,1]` page-box

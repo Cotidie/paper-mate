@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import BankPanel from "./BankPanel";
 import { useAnnotationStore } from "../../store";
 import type { Annotation } from "../../api/client";
-import type { BankItem } from "../../bank";
+import type { BankItem } from "../../lib/bank";
 
 function textMark(id: string, overrides: Partial<Annotation> = {}, text = "Selected run"): Annotation {
   return {

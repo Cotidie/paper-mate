@@ -19,7 +19,7 @@
 import { useEffect } from "react";
 import { normalizeRect, pickPage } from "../../anchor";
 import { useAnnotationStore } from "../../store";
-import { newId } from "../../uuid";
+import { newId } from "../../lib/uuid";
 import { buildMemoAnnotation } from "../create";
 import { isExempt, type GestureContext } from "./shared";
 

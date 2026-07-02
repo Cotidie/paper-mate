@@ -43,11 +43,11 @@ so that a component, hook, or helper lives in an obvious place and the root stop
   - [x] Update importers: `useAutosave` -> `App.tsx`, `App.test.tsx`, `components/SaveIndicator/SaveIndicator.tsx` (moved in Task 1); `useLiveRef` -> `annotations/AnnotationInteraction.tsx`.
   - [x] `npm test` + `npm run typecheck` green; commit.
 
-- [ ] **Task 3 - Move the pure leaves into `lib/`.** (AC: 1, 3, 4)
-  - [ ] Move `tools.ts` (+test), `bank.ts` (+test), `uuid.ts` (+test), `domFocus.ts` into `lib/`.
-  - [ ] **Verify each is a true zero-import leaf** (imports nothing from `render/`/`anchor/`/`annotations/`/`store/`/`reader/`) BEFORE moving, so the relocation cannot invert a dependency (AD-9). If one is not a leaf, stop and flag.
-  - [ ] Update ALL importers (widest blast radius here): `tools` has 9 importers (`App.tsx`, moved `ToolRail`+test, `annotations/gestures/shared.ts`, `annotations/gestures/usePenGesture.ts`, `annotations/machine.ts`, `annotations/marks.ts`+test, `store/index.ts`); `domFocus` 4 (`App.tsx`, `annotations/gestures/shared.ts`, `annotations/gestures/useUndoRedo.ts`, `reader/usePanControl.ts`); `uuid` 4 (four `annotations/gestures/*`); `bank` 3 (`App.tsx`, moved `BankPanel`+test).
-  - [ ] `npm test` + `npm run typecheck` green; commit.
+- [x] **Task 3 - Move the pure leaves into `lib/`.** (AC: 1, 3, 4)
+  - [x] Move `tools.ts` (+test), `bank.ts` (+test), `uuid.ts` (+test), `domFocus.ts` into `lib/`.
+  - [x] **Verify each is a true zero-import leaf** (imports nothing from `render/`/`anchor/`/`annotations/`/`store/`/`reader/`) BEFORE moving, so the relocation cannot invert a dependency (AD-9). If one is not a leaf, stop and flag.
+  - [x] Update ALL importers (widest blast radius here): `tools` has 9 importers (`App.tsx`, moved `ToolRail`+test, `annotations/gestures/shared.ts`, `annotations/gestures/usePenGesture.ts`, `annotations/machine.ts`, `annotations/marks.ts`+test, `store/index.ts`); `domFocus` 4 (`App.tsx`, `annotations/gestures/shared.ts`, `annotations/gestures/useUndoRedo.ts`, `reader/usePanControl.ts`); `uuid` 4 (four `annotations/gestures/*`); `bank` 3 (`App.tsx`, moved `BankPanel`+test).
+  - [x] `npm test` + `npm run typecheck` green; commit.
 
 - [ ] **Task 4 - Close out + verify.** (AC: 2, 3, 4)
   - [ ] Confirm the guard suites still pass in place: `focus-ring.test.ts` (reads `./index.css`) and `no-raw-values.test.ts` (recurses from `src/`, sanity-asserts `App.css`) both stay at the `src/` root next to `index.css`/`App.css`. Do NOT move them.
@@ -156,6 +156,7 @@ Variance from the CRA scaffold (deliberate, per AC-2): no `pages/` (single-view 
 - Baseline (before any move): `npm test` from `client/` = 41 test files, 803 tests, all pass. `npm run typecheck` clean. Contract byte-clean: `server` `export_openapi` -> `openapi.json` no diff, `client` `gen:api` -> `src/api/schema.d.ts` no diff.
 - Task 1: moved the 9 components with `git mv`. Found ONE importer not listed in the story's move-map: `reader/PageCard.tsx` has a bare `import "../Reader.css"` (Reader's CSS reused for the page-card canvas/text-layer styling) -> updated to `../components/Reader/Reader.css`. After fix: `npm test` = 41/803 pass (matches baseline), `npm run typecheck` clean. Reader home decision: `components/Reader/` (uniform component convention, per Dev Notes recommendation); `reader/` stays Reader's pure sub-hook/sub-view layer, unchanged.
 - Task 2: moved `useAutosave.ts`/`.test.ts` + `useLiveRef.ts` into `hooks/`. Importers matched the story's list exactly (`App.tsx`, `App.test.tsx`, `components/SaveIndicator/SaveIndicator.tsx`, `annotations/AnnotationInteraction.tsx`). `npm test` = 41/803 pass, `npm run typecheck` clean.
+- Task 3: leaf-check confirmed `tools.ts`/`uuid.ts`/`domFocus.ts` are TRUE zero-import leaves (grep for `^import` found none). `bank.ts` is NOT zero-import: its own AD-9 comment already documents it as "imports only `api/` types + the `anchor/` bbox helper, no store/DOM" (Story 3.6), and the Dev Notes' "Zero-import-leaf convention" paragraph only names `tools`/`domFocus`/`uuid` as leaves, deliberately excluding `bank`. This is a pre-existing, documented exception, not a relocation-induced cycle (`anchor/` does not import `lib/`), and the move-map explicitly places `bank` in `lib/` anyway, so proceeded without stopping. All importers matched the story's counts exactly (tools=9, domFocus=4, uuid=4, bank=3). `npm test` = 41/803 pass, `npm run typecheck` clean.
 
 ### Completion Notes List
 
@@ -174,3 +175,5 @@ Variance from the CRA scaffold (deliberate, per AC-2): no `pages/` (single-view 
 - client/src/reader/PageCard.tsx (CSS import path fixed for Reader.css move; not in the original move-map)
 - client/src/hooks/useAutosave.ts, useAutosave.test.ts, useLiveRef.ts (moved from src/, imports updated)
 - client/src/annotations/AnnotationInteraction.tsx (useLiveRef import path updated)
+- client/src/lib/tools.ts, tools.test.ts, bank.ts, bank.test.ts, uuid.ts, uuid.test.ts, domFocus.ts (moved from src/, imports updated)
+- client/src/App.tsx, components/ToolRail/ToolRail.tsx, components/ToolRail/ToolRail.test.tsx, components/BankPanel/BankPanel.tsx, components/BankPanel/BankPanel.test.tsx, annotations/machine.ts, annotations/marks.ts, annotations/marks.test.ts, annotations/gestures/shared.ts, annotations/gestures/usePenGesture.ts, annotations/gestures/useCreateQuickBox.ts, annotations/gestures/useUndoRedo.ts, annotations/gestures/useMemoPlacement.ts, annotations/gestures/useBoxGesture.ts, store/index.ts, reader/usePanControl.ts (importer paths updated for Task 3 moves)
