@@ -416,7 +416,7 @@ export default function AnnotationLayer({
             }}
             onRecolor={(color) => {
               recolorAnnotation(commentGroupIds(a), color, new Date().toISOString());
-              setActiveColor(color);
+              setActiveColor("comment", color);
             }}
             onConvertToHighlight={() =>
               // Reverse (Story 3.7, AC2): drops body -> null unconditionally (even a

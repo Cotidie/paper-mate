@@ -104,7 +104,7 @@ export default function AnnotationInteraction({
   // selection quick-box reads its own copies inside `useSelection`; these feed the
   // create gestures (via `defaultsRef`) and the live previews. The store keeps the
   // single public `active*` API (two writers: the rail + the selection box).
-  const activeColor = useAnnotationStore((s) => s.activeColor);
+  const activeColors = useAnnotationStore((s) => s.activeColors);
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
   const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
   const activeMemoSize = useAnnotationStore((s) => s.activeMemoSize);
@@ -122,18 +122,19 @@ export default function AnnotationInteraction({
   getPagesRef.current = getPages;
   const armedToolRef = useRef(armedTool);
   armedToolRef.current = armedTool;
-  // Story 5.0: the four active-default mirrors (color, stroke width, alpha, memo
-  // size) collapse into ONE object ref the document-level listeners read without
-  // re-binding. Same values, refreshed every render exactly like the prior scalar
-  // refs — internal-only (the store's public `active*` API is unchanged).
+  // Story 5.0: the four active-default mirrors (per-tool colors, stroke width,
+  // alpha, memo size) collapse into ONE object ref the document-level listeners
+  // read without re-binding. Same values, refreshed every render exactly like the
+  // prior scalar refs — internal-only (the store's public `active*` API is
+  // unchanged).
   const defaultsRef = useRef({
-    color: activeColor,
+    colors: activeColors,
     strokeWidth: activeStrokeWidth,
     alpha: activeAlpha,
     memoSize: activeMemoSize,
   });
   defaultsRef.current = {
-    color: activeColor,
+    colors: activeColors,
     strokeWidth: activeStrokeWidth,
     alpha: activeAlpha,
     memoSize: activeMemoSize,
@@ -280,7 +281,7 @@ export default function AnnotationInteraction({
         now: new Date().toISOString(),
         newId,
         type: tool,
-        color: defaultsRef.current.color,
+        color: defaultsRef.current.colors[tool],
         ...(tool === "comment" ? { body: "" } : {}),
       });
       addAnnotations(created);
@@ -394,7 +395,7 @@ export default function AnnotationInteraction({
           const created = buildCommentPin({ page_index: page.pageIndex, rect }, docId, {
             now: new Date().toISOString(),
             newId,
-            color: defaultsRef.current.color,
+            color: defaultsRef.current.colors.comment,
           });
           addAnnotation(created);
           select(created.id);
@@ -617,7 +618,7 @@ export default function AnnotationInteraction({
           const created = buildCommentPin({ page_index: page.pageIndex, rect }, docId, {
             now,
             newId,
-            color: defaultsRef.current.color,
+            color: defaultsRef.current.colors.comment,
           });
           addAnnotation(created);
           window.getSelection()?.removeAllRanges();
@@ -633,7 +634,7 @@ export default function AnnotationInteraction({
           const created = buildMemoAnnotation({ page_index: page.pageIndex, rect }, docId, {
             now,
             newId,
-            color: defaultsRef.current.color,
+            color: defaultsRef.current.colors.memo,
           });
           addAnnotation(created);
           window.getSelection()?.removeAllRanges();
@@ -661,7 +662,7 @@ export default function AnnotationInteraction({
     <>
       {penPreview && previewPath && (
         <svg className="pen-preview" data-testid="pen-preview" aria-hidden="true">
-          <path d={previewPath} fill={`var(--color-${activeColor})`} fillOpacity={activeAlpha} />
+          <path d={previewPath} fill={`var(--color-${activeColors.pen})`} fillOpacity={activeAlpha} />
         </svg>
       )}
       {boxPreview && (
@@ -674,7 +675,7 @@ export default function AnnotationInteraction({
             top: Math.min(boxPreview.y0, boxPreview.y1),
             width: Math.abs(boxPreview.x1 - boxPreview.x0),
             height: Math.abs(boxPreview.y1 - boxPreview.y0),
-            borderColor: `var(--color-${activeColor})`,
+            borderColor: `var(--color-${activeColors.highlight})`,
           }}
         />
       )}

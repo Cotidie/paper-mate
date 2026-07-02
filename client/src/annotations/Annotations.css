@@ -462,17 +462,16 @@
 }
 
 /* A memo box = a free-floating <textarea> over the page card (DESIGN.md
-   #annotation-memo: surface-card bg, rounded.sm, hairline-strong border,
-   body-sm). Positioned + sized inline from the denormalized rect (so it rides
-   zoom, NFR-3) and never reflows the canvas (absolute overlay). The accent
-   (border) color is applied inline from style.color; this rule supplies the
-   chrome. The box is the selection hit surface (pointer-events:auto). */
+   #annotation-memo: rounded.sm, body-sm). Positioned + sized inline from the
+   denormalized rect (so it rides zoom, NFR-3) and never reflows the canvas
+   (absolute overlay). Both the border AND background colors are applied inline
+   from style.color (the mark's accent); this rule supplies the chrome only. The
+   box is the selection hit surface (pointer-events:auto). */
 .annotation-memo {
   position: absolute;
   box-sizing: border-box;
   margin: 0;
   padding: var(--annotation-memo-padding);
-  background-color: var(--color-surface-card);
   border: var(--hairline-width) solid var(--color-hairline-strong);
   border-radius: var(--radius-sm);
   color: var(--color-ink);

@@ -23,12 +23,13 @@
 // objects are shared across Map snapshots so memory is bounded). Undo/redo is
 // client-only, in-memory, discarded on reload (AR-7).
 // Access: `useAnnotationStore.temporal.getState().{undo,redo,clear,pause,resume}`.
-// Partialize exclusions: selectedId, hoveredId, dragPreview, flashId, activeColor,
+// Partialize exclusions: selectedId, hoveredId, dragPreview, flashId, activeColors,
 // activeStrokeWidth, activeAlpha, activeMemoSize, and all action functions.
 
 import { create } from "zustand";
 import { temporal } from "zundo";
 import type { Annotation } from "../api/client";
+import type { AnnotationTool } from "../tools";
 
 /** A memo box-size preset (Story 2.9). The box dimensions ARE the memo's size:
  *  the rect the placement bakes (and `resizeMemoAnnotation` rewrites) carries
@@ -70,20 +71,23 @@ export interface AnnotationStore {
    *  outlines as ONE: every layer reads it and matches by `group_id`. Transient;
    *  never persisted, cleared on pointer-leave. */
   hoveredId: string | null;
-  /** The active annotation color (Story 2.6): the DEFAULT new marks land in. It
-   *  is the LAST color the user chose — set by the Highlight color sub-toolbox OR
-   *  by recoloring an existing mark (so editing a highlight updates the default
-   *  too). Lives in the store because two unrelated subtrees write it (the rail's
-   *  sub-toolbox and the overlay's recolor) and the create path reads it. A bare
-   *  token name (DESIGN.md `{colors.annotation-*}`); client-only, not persisted. */
-  activeColor: string;
-  /** Set the active/default color (remembers the last choice for the session). */
-  setActiveColor: (color: string) => void;
+  /** The active annotation color, PER TOOL (Story 2.6, split per-tool by user
+   *  request): the DEFAULT a new mark of that tool lands in. Each tool's entry is
+   *  the LAST color chosen for THAT tool — set by its own rail sub-toolbox OR by
+   *  recoloring an existing mark of that type (so editing a highlight updates only
+   *  the highlight default, not underline/pen/memo/comment). Lives in the store
+   *  because two unrelated subtrees write it (the rail's sub-toolbox and the
+   *  overlay's recolor) and the create paths read it. Bare token names (DESIGN.md
+   *  `{colors.annotation-*}`); client-only, not persisted. */
+  activeColors: Record<AnnotationTool, string>;
+  /** Set the active/default color for ONE tool (remembers the last choice for
+   *  that tool only, for the session). */
+  setActiveColor: (tool: AnnotationTool, color: string) => void;
   /** The active pen stroke width (Story 2.8): the DEFAULT new pen strokes land
    *  in, in scale-1.0 CSS px (the renderer multiplies by the current zoom). The
-   *  stroke-width twin of `activeColor` — set by the Pen tool's stroke-width
+   *  stroke-width twin of `activeColors` — set by the Pen tool's stroke-width
    *  sub-toolbox OR by restroking an existing pen mark (last-choice-wins). Lives
-   *  in the store for the same reason `activeColor` does (two writers + the create
+   *  in the store for the same reason `activeColors` does (two writers + the create
    *  path reads it); client-only, not persisted. */
   activeStrokeWidth: number;
   /** Set the active/default pen stroke width (remembers the last choice). */
@@ -231,8 +235,15 @@ export const useAnnotationStore = create<AnnotationStore>()(
       annotations: new Map(),
       selectedId: null,
       hoveredId: null,
-      activeColor: "annotation-default",
-      setActiveColor: (color) => set({ activeColor: color }),
+      activeColors: {
+        highlight: "annotation-default",
+        underline: "annotation-default",
+        pen: "annotation-default",
+        memo: "annotation-default",
+        comment: "annotation-default",
+      },
+      setActiveColor: (tool, color) =>
+        set((state) => ({ activeColors: { ...state.activeColors, [tool]: color } })),
       // Default pen width = the medium step (scale-1.0 px); matches --pen-stroke-medium (8px).
       activeStrokeWidth: 8,
       setActiveStrokeWidth: (width) => set({ activeStrokeWidth: width }),

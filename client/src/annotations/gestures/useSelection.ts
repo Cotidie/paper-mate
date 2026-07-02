@@ -126,11 +126,13 @@ export function useSelection(opts: {
     (color: string) => {
       recolorAnnotation(selectedGroupIds(), color, new Date().toISOString());
       // Remember the choice: recoloring an existing mark also sets the default for
-      // the next new mark (Story 2.6 request 3 — last-choice-wins, either path).
-      setActiveColor(color);
+      // the next new mark OF THE SAME TOOL (Story 2.6 request 3 — last-choice-wins,
+      // either path; per-tool split so recoloring a pen never touches the
+      // highlight/memo/etc default).
+      if (selectedAnno) setActiveColor(selectedAnno.type, color);
       setSelectionBoxOpen(false); // pick dismisses the box; the mark stays selected/ringed
     },
-    [recolorAnnotation, selectedGroupIds, setActiveColor],
+    [recolorAnnotation, selectedGroupIds, setActiveColor, selectedAnno],
   );
 
   // Restroke the selected pen mark to a new width (Story 2.8). Also sets the default
@@ -200,7 +202,18 @@ export function useSelection(opts: {
       // so handling them while the box holds focus is safe.
       if (e.ctrlKey || e.altKey || e.metaKey) return;
       const inSelectionBox = selectionBoxRef.current?.contains(e.target as Node) ?? false;
-      if (!inSelectionBox && isExempt(e.target)) return;
+      // A selected memo's OWN textarea is also exempt from the editable-field skip
+      // below, for Delete only: the user must be able to remove the memo with Del
+      // even mid-typing (user bug report), unlike a normal input where Delete is a
+      // text edit. Scoped by the exact data-testid MemoBox renders, so this can
+      // only ever match the currently selected memo's own textarea, never a
+      // bystander field (mirrors CommentBubble's own Delete override, which
+      // handles this the same way for its bubble textarea).
+      const inOwnMemoTextarea =
+        selectedAnno.type === "memo" &&
+        (e.target as HTMLElement | null)?.getAttribute?.("data-testid") ===
+          `annotation-mark-${selectedAnno.id}`;
+      if (!inSelectionBox && !inOwnMemoTextarea && isExempt(e.target)) return;
       if (e.key === "Escape") {
         // Esc clears the selection (the App-level Esc->cursor also runs).
         clearSelection();

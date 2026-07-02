@@ -23,7 +23,13 @@ beforeEach(() => {
     hoveredId: null,
     dragPreview: null,
     flashId: null,
-    activeColor: "annotation-default",
+    activeColors: {
+      highlight: "annotation-default",
+      underline: "annotation-default",
+      pen: "annotation-default",
+      memo: "annotation-default",
+      comment: "annotation-default",
+    },
     activeStrokeWidth: 4,
     activeMemoSize: DEFAULT_MEMO_SIZE,
     activeAlpha: 0.4,
@@ -144,13 +150,26 @@ describe("selection + delete (Story 2.5)", () => {
   });
 });
 
-describe("active/default color (Story 2.6)", () => {
+describe("active/default color, per tool (Story 2.6 + user fix request)", () => {
   it("defaults to annotation-default and setActiveColor remembers the last choice", () => {
-    expect(useAnnotationStore.getState().activeColor).toBe("annotation-default");
-    useAnnotationStore.getState().setActiveColor("annotation-pink");
-    expect(useAnnotationStore.getState().activeColor).toBe("annotation-pink");
-    useAnnotationStore.getState().setActiveColor("annotation-blue");
-    expect(useAnnotationStore.getState().activeColor).toBe("annotation-blue");
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-default");
+    useAnnotationStore.getState().setActiveColor("highlight", "annotation-pink");
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-pink");
+    useAnnotationStore.getState().setActiveColor("highlight", "annotation-blue");
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-blue");
+  });
+
+  it("each tool remembers its OWN color independently (changing one does not change the others)", () => {
+    useAnnotationStore.getState().setActiveColor("highlight", "annotation-pink");
+    useAnnotationStore.getState().setActiveColor("pen", "annotation-blue");
+    useAnnotationStore.getState().setActiveColor("memo", "annotation-green");
+    const colors = useAnnotationStore.getState().activeColors;
+    expect(colors.highlight).toBe("annotation-pink");
+    expect(colors.pen).toBe("annotation-blue");
+    expect(colors.memo).toBe("annotation-green");
+    // Untouched tools stay at the default.
+    expect(colors.underline).toBe("annotation-default");
+    expect(colors.comment).toBe("annotation-default");
   });
 });
 

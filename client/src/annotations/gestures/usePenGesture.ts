@@ -103,7 +103,7 @@ export function usePenGesture(
       const created = buildPenAnnotation({ page_index: page.pageIndex, points }, docId, {
         now: new Date().toISOString(),
         newId,
-        color: defaultsRef.current.color,
+        color: defaultsRef.current.colors.pen,
         strokeWidth: defaultsRef.current.strokeWidth,
         alpha: defaultsRef.current.alpha,
       });

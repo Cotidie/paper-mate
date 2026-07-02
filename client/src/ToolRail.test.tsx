@@ -1,18 +1,32 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import ToolRail from "./ToolRail";
-import type { ActiveTool } from "./tools";
+import type { ActiveTool, AnnotationTool } from "./tools";
 
 afterEach(cleanup);
 
 type RailProps = {
   activeTool: ActiveTool;
-  activeColor: string;
+  activeColors: Record<AnnotationTool, string>;
   boxHighlight: boolean;
   activeStrokeWidth: number;
   activeAlpha: number;
   collapsed: boolean;
 };
+
+const DEFAULT_COLORS: Record<AnnotationTool, string> = {
+  highlight: "annotation-default",
+  underline: "annotation-default",
+  pen: "annotation-default",
+  memo: "annotation-default",
+  comment: "annotation-default",
+};
+
+/** Every tool at the default color except ONE, armed to `value` (per-tool split
+ *  by user request: each tool's color sub-toolbox only ever reads its own slot). */
+function colorsFor(tool: AnnotationTool, value: string): Record<AnnotationTool, string> {
+  return { ...DEFAULT_COLORS, [tool]: value };
+}
 
 // Render helper: supplies all required props with overridable defaults, keeps the
 // spies STABLE across rerenders, and exposes `update(over)` to change props (e.g.
@@ -26,7 +40,7 @@ function renderRail(over: Partial<RailProps> = {}) {
   const onToggleCollapse = vi.fn();
   let props: RailProps = {
     activeTool: "cursor",
-    activeColor: "annotation-default",
+    activeColors: DEFAULT_COLORS,
     boxHighlight: false,
     activeStrokeWidth: 4,
     activeAlpha: 0.4,
@@ -37,7 +51,7 @@ function renderRail(over: Partial<RailProps> = {}) {
     <ToolRail
       activeTool={p.activeTool}
       onSelectTool={onSelectTool}
-      activeColor={p.activeColor}
+      activeColors={p.activeColors}
       onPickColor={onPickColor}
       boxHighlight={p.boxHighlight}
       onSetBoxHighlight={onSetBoxHighlight}
@@ -196,7 +210,7 @@ describe("ToolRail", () => {
       <ToolRail
         activeTool="highlight"
         onSelectTool={vi.fn()}
-        activeColor="annotation-default"
+        activeColors={DEFAULT_COLORS}
         onPickColor={vi.fn()}
         boxHighlight={false}
         onSetBoxHighlight={vi.fn()}
@@ -239,8 +253,8 @@ describe("ToolRail", () => {
   });
 
   // ── Story 2.6: the color sub-toolbox itself ────────────────────────────────
-  it("the highlight color sub-toolbox shows the 5-color swatch row with activeColor armed", () => {
-    armHighlight({ activeColor: "annotation-green" });
+  it("the highlight color sub-toolbox shows the 5-color swatch row with activeColors.highlight armed", () => {
+    armHighlight({ activeColors: colorsFor("highlight", "annotation-green") });
     const flyout = screen.getByTestId("highlight-color-flyout");
     expect(flyout).toBeTruthy();
     // Exactly 5 swatches (trimmed palette); the active color is armed.
@@ -250,10 +264,10 @@ describe("ToolRail", () => {
     );
   });
 
-  it("picking a swatch sets the active color (onPickColor) and closes the flyout (Story 2.6)", () => {
-    const { onPickColor } = armHighlight({ activeColor: "annotation-default" });
+  it("picking a swatch sets the active color for HIGHLIGHT ONLY (onPickColor) and closes the flyout (Story 2.6)", () => {
+    const { onPickColor } = armHighlight();
     fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
-    expect(onPickColor).toHaveBeenCalledWith("annotation-blue");
+    expect(onPickColor).toHaveBeenCalledWith("highlight", "annotation-blue");
     expect(screen.queryByTestId("highlight-color-flyout")).toBeNull();
   });
 
@@ -364,13 +378,13 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("underline-color-flyout")).toBeTruthy();
   });
 
-  it("the underline color sub-toolbox shows the 5-swatch row with activeColor armed; picking sets it + closes", () => {
-    const { onPickColor } = armUnderline({ activeColor: "annotation-green" });
+  it("the underline color sub-toolbox shows the 5-swatch row with its OWN activeColors entry armed; picking sets underline only + closes", () => {
+    const { onPickColor } = armUnderline({ activeColors: colorsFor("underline", "annotation-green") });
     const flyout = screen.getByTestId("underline-color-flyout");
     expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
     expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
     fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
-    expect(onPickColor).toHaveBeenCalledWith("annotation-blue");
+    expect(onPickColor).toHaveBeenCalledWith("underline", "annotation-blue");
     expect(screen.queryByTestId("underline-color-flyout")).toBeNull();
   });
 
@@ -403,7 +417,7 @@ describe("ToolRail", () => {
   });
 
   it("the pen sub-toolbox shows the color row + collapsible thickness and opacity pickers (Story 2.13)", () => {
-    armPen({ activeColor: "annotation-green", activeStrokeWidth: 8, activeAlpha: 0.4 });
+    armPen({ activeColors: colorsFor("pen", "annotation-green"), activeStrokeWidth: 8, activeAlpha: 0.4 });
     const flyout = screen.getByTestId("pen-flyout");
     expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
     expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
@@ -442,10 +456,10 @@ describe("ToolRail", () => {
     expect(screen.queryByTestId("alpha-0.6")).toBeNull();
   });
 
-  it("picking a pen color calls onPickColor and closes the flyout", () => {
-    const { onPickColor } = armPen({ activeColor: "annotation-default" });
+  it("picking a pen color calls onPickColor for PEN ONLY and closes the flyout", () => {
+    const { onPickColor } = armPen();
     fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
-    expect(onPickColor).toHaveBeenCalledWith("annotation-pink");
+    expect(onPickColor).toHaveBeenCalledWith("pen", "annotation-pink");
     expect(screen.queryByTestId("pen-flyout")).toBeNull();
   });
 
@@ -488,7 +502,7 @@ describe("ToolRail", () => {
   });
 
   it("the memo sub-toolbox shows the color swatch row only (Story 3.1 dropped the size picker)", () => {
-    armMemo({ activeColor: "annotation-green" });
+    armMemo({ activeColors: colorsFor("memo", "annotation-green") });
     const flyout = screen.getByTestId("memo-flyout");
     expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
     expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
@@ -496,10 +510,10 @@ describe("ToolRail", () => {
     expect(screen.queryByTestId("memo-size-trigger")).toBeNull();
   });
 
-  it("picking a memo color calls onPickColor and closes the flyout", () => {
-    const { onPickColor } = armMemo({ activeColor: "annotation-default" });
+  it("picking a memo color calls onPickColor for MEMO ONLY and closes the flyout", () => {
+    const { onPickColor } = armMemo();
     fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
-    expect(onPickColor).toHaveBeenCalledWith("annotation-pink");
+    expect(onPickColor).toHaveBeenCalledWith("memo", "annotation-pink");
     expect(screen.queryByTestId("memo-flyout")).toBeNull();
   });
 
@@ -537,7 +551,7 @@ describe("ToolRail", () => {
   });
 
   it("the comment sub-toolbox shows ONLY the color swatch row (no width/size)", () => {
-    armComment({ activeColor: "annotation-green" });
+    armComment({ activeColors: colorsFor("comment", "annotation-green") });
     const flyout = screen.getByTestId("comment-flyout");
     expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
     expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
@@ -545,11 +559,21 @@ describe("ToolRail", () => {
     expect(flyout.querySelector(".size-row")).toBeNull();
   });
 
-  it("picking a comment color calls onPickColor and closes the flyout", () => {
-    const { onPickColor } = armComment({ activeColor: "annotation-default" });
+  it("picking a comment color calls onPickColor for COMMENT ONLY and closes the flyout", () => {
+    const { onPickColor } = armComment();
     fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
-    expect(onPickColor).toHaveBeenCalledWith("annotation-pink");
+    expect(onPickColor).toHaveBeenCalledWith("comment", "annotation-pink");
     expect(screen.queryByTestId("comment-flyout")).toBeNull();
+  });
+
+  it("changing one tool's color does NOT change another tool's armed swatch (user fix: colors were global)", () => {
+    // Highlight is armed to pink; underline stays at the default even though
+    // the SAME activeColors object is passed to both flyouts.
+    const colors = colorsFor("highlight", "annotation-pink");
+    const r = armHighlight({ activeColors: colors });
+    expect(screen.getByTestId("color-swatch-annotation-pink").className).toContain("color-swatch--armed");
+    r.update({ activeTool: "underline" });
+    expect(screen.getByTestId("color-swatch-annotation-default").className).toContain("color-swatch--armed");
   });
 
   it("re-clicking the active Comment button toggles its sub-toolbox, never disarms; Esc / switch-away close it", () => {

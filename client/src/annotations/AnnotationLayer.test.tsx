@@ -281,9 +281,10 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     const mark = screen.getByTestId("annotation-mark-m1");
     expect(mark.tagName.toLowerCase()).toBe("textarea");
-    // value reflects body; accent (border) from style.color.
+    // value reflects body; accent (border AND background, user request) from style.color.
     expect((mark as HTMLTextAreaElement).value).toBe("a note");
     expect(mark.style.borderColor).toBe("var(--color-annotation-pink)");
+    expect(mark.style.backgroundColor).toBe("var(--color-annotation-pink)");
     // denormalize at scale 1: left=0.1*600=60, top=0.2*800=160, w=0.4*600=240, minHeight=0.2*800=160.
     expect(mark.style.left).toBe("60px");
     expect(mark.style.top).toBe("160px");
@@ -428,7 +429,9 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     // Recolor tints the comment (fill + pin) AND sets the default (last-choice-wins).
     fireEvent.click(screen.getByTestId("color-swatch-annotation-green"));
     expect(useAnnotationStore.getState().annotations.get("c4")!.style.color).toBe("annotation-green");
-    expect(useAnnotationStore.getState().activeColor).toBe("annotation-green");
+    // Comment recolor sets ONLY the comment tool's default (per-tool split).
+    expect(useAnnotationStore.getState().activeColors.comment).toBe("annotation-green");
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-default");
     // Delete removes the comment.
     fireEvent.click(screen.getByTestId("comment-delete-c4"));
     expect(useAnnotationStore.getState().annotations.has("c4")).toBe(false);

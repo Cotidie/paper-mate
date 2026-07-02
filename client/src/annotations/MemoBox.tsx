@@ -83,6 +83,11 @@ export default function MemoBox({
         width: pos.width,
         minHeight: pos.height,
         borderColor: `var(--color-${anno.style.color})`,
+        // Background also carries the mark's accent (user request: border-only
+        // made too little difference). Safe at full strength: the 5 annotation
+        // tokens are all light pastels (DESIGN.md), so ink-black body text stays
+        // legible over any of them.
+        backgroundColor: `var(--color-${anno.style.color})`,
       }}
     />
   );

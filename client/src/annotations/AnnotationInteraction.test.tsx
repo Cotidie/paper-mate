@@ -65,7 +65,13 @@ beforeEach(() =>
     annotations: new Map(),
     selectedId: null,
     hoveredId: null,
-    activeColor: "annotation-default",
+    activeColors: {
+      highlight: "annotation-default",
+      underline: "annotation-default",
+      pen: "annotation-default",
+      memo: "annotation-default",
+      comment: "annotation-default",
+    },
     activeStrokeWidth: 8,
     activeMemoSize: DEFAULT_MEMO_SIZE,
   }),
@@ -404,10 +410,10 @@ describe("AnnotationInteraction highlight tool (Story 2.3 + 2.5 unification — 
     expect(screen.queryByTestId("quick-box-highlight")).toBeNull();
   });
 
-  it("Story 2.6: a drag-release lands the mark in the ACTIVE color (create reads activeColor, not a hardcode)", async () => {
+  it("Story 2.6: a drag-release lands the mark in the ACTIVE color (create reads activeColors, not a hardcode)", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    useAnnotationStore.getState().setActiveColor("highlight", "annotation-blue");
     render(
       <AnnotationInteraction
         docId="doc-1"
@@ -533,7 +539,7 @@ describe("AnnotationInteraction underline tool (Story 2.7 — AC1,2,3)", () => {
   it("with underline armed, a drag-release LANDS a type=underline mark in the active color and SELECTS it", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-green");
+    useAnnotationStore.getState().setActiveColor("underline", "annotation-green");
     render(
       <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="underline" />,
     );
@@ -601,7 +607,7 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
   it("with pen armed, a pointer drag stores ONE kind=path mark and does NOT auto-select it", async () => {
     const canvas = canvasTarget();
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    useAnnotationStore.getState().setActiveColor("pen", "annotation-blue");
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
 
     fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
@@ -913,10 +919,12 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
   it("Story 2.6 req3: recoloring an existing mark also updates the active/default color (remember last choice)", async () => {
     setup([textMark("m1", "annotation-default")], "m1");
     await screen.findByTestId("selection-quick-box");
-    expect(useAnnotationStore.getState().activeColor).toBe("annotation-default");
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-default");
     fireEvent.click(screen.getByTestId("color-swatch-annotation-purple"));
-    // Editing a highlight's color carries into the session default for new marks.
-    expect(useAnnotationStore.getState().activeColor).toBe("annotation-purple");
+    // Editing a highlight's color carries into the session default for new HIGHLIGHT
+    // marks only (per-tool split — recoloring a highlight must not touch pen/memo/etc).
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-purple");
+    expect(useAnnotationStore.getState().activeColors.pen).toBe("annotation-default");
   });
 
   it("recolors the whole group together (two-page highlight)", async () => {
@@ -1161,7 +1169,7 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
   it("with memo armed, a click on a page places a type=memo/kind=rect mark with empty body, in the active color, and selects it", async () => {
     const surf = canvasTarget();
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-pink");
+    useAnnotationStore.getState().setActiveColor("memo", "annotation-pink");
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="memo" />);
 
     fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
@@ -1306,6 +1314,37 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     fireEvent.keyDown(document, { key: "Delete" });
     expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
   });
+
+  it("Del deletes the selected memo even while its OWN textarea has focus (user bug: typing in the memo blocked Del)", () => {
+    const surf = canvasTarget();
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
+    // AnnotationInteraction doesn't render the layer; stand in the real MemoBox
+    // textarea (same class + data-testid AnnotationLayer/MemoBox render) so the
+    // fix's exact-testid match can be exercised.
+    const ta = document.createElement("textarea");
+    ta.className = "annotation-memo";
+    ta.setAttribute("data-testid", "annotation-mark-m1");
+    surf.appendChild(ta);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    ta.focus();
+    expect(document.activeElement).toBe(ta);
+    fireEvent.keyDown(ta, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+  });
+
+  it("Del on a DIFFERENT unrelated textarea still does NOT delete the selected memo (bypass stays scoped)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    const other = document.createElement("textarea");
+    document.body.appendChild(other);
+    fireEvent.keyDown(other, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(true);
+    other.remove();
+  });
 });
 
 describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () => {
@@ -1324,7 +1363,7 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
   it("comment DRAG (text selection) lands a type=comment/kind=text mark with body='' and selects it", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-purple");
+    useAnnotationStore.getState().setActiveColor("comment", "annotation-purple");
     render(
       <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} armedTool="comment" />,
     );
@@ -1346,7 +1385,7 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
   it("comment CLICK (no selection) on a page surface drops a type=comment/kind=rect pin via buildCommentPin and selects it", () => {
     const surf = canvasTarget();
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-blue");
+    useAnnotationStore.getState().setActiveColor("comment", "annotation-blue");
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="comment" />);
 
     // A real click: pointerdown then pointerup at (near) the same point.
@@ -1476,7 +1515,7 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
   it("a box drag with boxActive=true creates a region highlight with kind=rect, canonical rect, selected, opens the selection quick-box", async () => {
     const surf = pageSurface();
     const pages = [fakeCard(0, 0)];
-    useAnnotationStore.getState().setActiveColor("annotation-green");
+    useAnnotationStore.getState().setActiveColor("highlight", "annotation-green");
     render(
       <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />,
     );
