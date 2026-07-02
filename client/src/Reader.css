@@ -5,24 +5,23 @@
 /* Visible live selection over the pdf.js text layer. The vendor pdf_viewer.css
    sets `.textLayer ::selection { background: transparent }` (pdf.js paints its
    own selection; we use the raw text layer, AD-2), so the drag selection would
-   be invisible. Re-show it with a token tint. Scoped under `.pdf-canvas` to win
-   on specificity over the vendor rule regardless of stylesheet order. */
-.pdf-canvas .textLayer ::selection {
+   be invisible. Re-show it with a token tint, scoped to glyph SPANS only (not
+   the per-line `<br>`s) so the vendor's `br::selection { background:
+   transparent }` (pdf_viewer.css) keeps suppressing the brs' own paint — a
+   higher-specificity `::selection` on `.textLayer` would otherwise repaint
+   their caret-height slivers in the left margin. Scoped under `.pdf-canvas` to
+   win on specificity over the vendor rule regardless of stylesheet order.
+   Un-gated on `.selecting` (Story 4.1): a reader expects the highlighted band
+   to persist after releasing the drag, not vanish on mouseup like pdf.js's own
+   (unused here) highlighter overlay. The brs stay selectable (no `user-select:
+   none`) so pdf.js's per-line `\n` reaches `selection.toString()` and copy
+   keeps inter-line whitespace (`render/textSelection.ts` bounds the selection
+   instead, via `endOfContent`, so an unbounded br sliver never appears). */
+.pdf-canvas .textLayer span::selection {
   background: var(--color-text-selection);
 }
-.pdf-canvas .textLayer ::-moz-selection {
+.pdf-canvas .textLayer span::-moz-selection {
   background: var(--color-text-selection);
-}
-
-/* pdf.js positions the glyph spans `position:absolute`, but the per-line `<br>`
-   line-break elements stay in normal flow at the text layer's TOP-LEFT origin.
-   A multi-line drag selection includes those brs, and the browser paints each
-   one's selection as a caret-height sliver stacked at top-left — a stray
-   vertical strip in the left margin. The brs carry no glyphs (text lives in the
-   spans), so excluding them from selection drops the strip with no visible loss
-   (copy joins lines into a paragraph, which suits prose reading anyway). */
-.pdf-canvas .textLayer br {
-  user-select: none;
 }
 
 /* pdf-canvas: the scroll region on the reader-backdrop floor. Pixel-stable —

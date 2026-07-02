@@ -23,6 +23,9 @@ import "pdfjs-dist/web/pdf_viewer.css";
 import { docFileUrl } from "../api/client";
 // The single home for pdf.js asset URLs (decoders/cmaps/iccs/standard fonts).
 import { PDFJS_ASSET_CONFIG } from "./config";
+// Selection/copy fidelity over the live text layer (Story 4.1); not
+// re-exported from this barrel, see textSelection.ts header.
+import { textSelectionController } from "./textSelection";
 
 // Configure the worker once, at module load.
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -341,6 +344,9 @@ export function renderPage(
     container: offText,
     viewport,
   });
+  // Set once the swapped-in div is registered with the shared selection
+  // controller (Story 4.1); `cancel()` below unregisters it.
+  let unregisterSelection: (() => void) | null = null;
 
   const done = (async () => {
     await task!.promise;
@@ -369,6 +375,9 @@ export function renderPage(
     textLayerDiv.style.setProperty("--scale-factor", String(scale));
     textLayerDiv.style.setProperty("--total-scale-factor", String(scale));
     textLayerDiv.replaceChildren(...offText.childNodes);
+    // Reproduce pdf.js TextLayerBuilder's post-render selection handling over
+    // the now-live div: appends `endOfContent` + binds the shared listener.
+    unregisterSelection = textSelectionController.register(textLayerDiv);
   })();
   // Swallow the cancel rejection so an aborted render never surfaces as an
   // unhandled rejection; real failures still reject `done` for the caller.
@@ -380,6 +389,8 @@ export function renderPage(
       task?.cancel();
       task = null;
       textLayer.cancel();
+      unregisterSelection?.();
+      unregisterSelection = null;
     },
   };
 }

@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-02 (correct-course sprint-change-proposal-2026-07-02: AE-6/AE-7/AE3-1/AE3-2/AE3-4/AE3-6 -> done; AE-4/AE3-3 -> in-progress via new story 5-6-doc-scope-store [backlog]; AE-5 stays in-progress, AE3-5/AE3-7 stay open. Added server/tests/test_version.py + CLAUDE.md conventions.)"
+last_updated: "2026-07-02 (dev-story 4-1-text-layer-copy-selection-fidelity: 4-1 -> review)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -119,8 +119,8 @@ development_status:
   # 2026-06-30 correct-course (sprint-change-proposal-2026-06-30.md): grouped the
   # deferred-work polish/quality items into two POST-v1 (Phase-1.5) epics.
   # Epic 4: Reading & annotation fidelity (render/anchor correctness + on-page treatment)
-  epic-4: backlog
-  4-1-text-layer-copy-selection-fidelity: backlog
+  epic-4: in-progress
+  4-1-text-layer-copy-selection-fidelity: review
   4-2-column-aware-selection-highlight: backlog
   4-3-distinct-on-page-mark-treatment: backlog
   epic-4-retrospective: optional
