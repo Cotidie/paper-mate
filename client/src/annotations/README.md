@@ -14,7 +14,7 @@ Built in Story 2.2 (foundation the tool stories 2.3-2.9 reuse):
   ONE tool model (AD-11): the armed annotation tool is derived from App's single
   `activeTool` and mirrored down via the `armedTool` prop, which is its sole
   writer — the machine never self-arms (it only carries the armed tool through
-  its transient states). The tool union lives in the zero-import `tools.ts` leaf;
+  its transient states). The tool union lives in the zero-import `lib/tools.ts` leaf;
   `AnnotationTool` is re-exported from this barrel for back-compat.
 - `AnnotationInteraction`: document-level selection handling + the
   `{component.quick-box}` shell with one proof action (creates a default
@@ -358,7 +358,7 @@ kind/type facts that used to be re-encoded as `if (type === ...)` / `if (kind ==
 tool (`{ type, kind, quickBox }`); `quickBoxSpec(anno)` is what the selection
 quick-box reads to decide its rows (stroke-width / alpha / size), its aria-label,
 and whether the mark routes to the comment bubble instead. Adding a tool is one
-entry here. AD-9-clean (imports `api/` + `tools.ts` only; pure data).
+entry here. AD-9-clean (imports `api/` + `lib/tools.ts` only; pure data).
 
 **Data contracts (`create.ts`).** The five `Build*Options` twins collapsed onto one
 `CreateBase` (now/newId/color) + per-tool extensions (`TextCreateRequest`,

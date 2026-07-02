@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { panScroll } from "../render";
-import { isControlTarget } from "../domFocus";
+import { isControlTarget } from "../lib/domFocus";
 
 export interface PanControlApi {
   canPan: boolean;

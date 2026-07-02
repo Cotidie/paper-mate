@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { normalizeRect, pickPage } from "../../anchor";
-import { newId } from "../../uuid";
+import { newId } from "../../lib/uuid";
 import { buildRegionAnnotation } from "../create";
 import { isExempt, type GestureContext } from "./shared";
 

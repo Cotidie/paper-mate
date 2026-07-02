@@ -9,7 +9,7 @@
 
 import { useEffect } from "react";
 import { useAnnotationStore } from "../../store";
-import { isEditableTarget } from "../../domFocus";
+import { isEditableTarget } from "../../lib/domFocus";
 
 export function useUndoRedo({ enabled }: { enabled: boolean }) {
   useEffect(() => {

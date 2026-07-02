@@ -9,7 +9,7 @@ ascending (the Bank order, AR-12).
 
 Story 3.2 added the do/undo command stack (zundo) over this same Map. The dirty
 flag + debounced single-flight autosave (Story 3.4) is NOT here: it is a
-passive observer in `../useAutosave.ts`, reading `annotations`/`all()` and
+passive observer in `../hooks/useAutosave.ts`, reading `annotations`/`all()` and
 calling the api module, so this module stays a pure working copy.
 
 Story 3.5 added hydrate-on-open as the READ half of the persistence boundary:

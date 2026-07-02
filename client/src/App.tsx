@@ -1,24 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { ListBullets, Cards } from "@phosphor-icons/react";
 import "./App.css";
-import EmptyDropzone from "./EmptyDropzone";
-import Reader, { type ReaderHandle } from "./Reader";
-import ToolRail from "./ToolRail";
-import { type ActiveTool, isAnnotationTool } from "./tools";
+import EmptyDropzone from "./components/EmptyDropzone/EmptyDropzone";
+import Reader, { type ReaderHandle } from "./components/Reader/Reader";
+import ToolRail from "./components/ToolRail/ToolRail";
+import { type ActiveTool, isAnnotationTool } from "./lib/tools";
 import { useAnnotationStore, hydrateStore, flashAnnotation } from "./store";
-import ZoomControl from "./ZoomControl";
-import TocPanel from "./TocPanel";
-import BankPanel from "./BankPanel";
-import type { BankItem } from "./bank";
-import Toast from "./Toast";
+import ZoomControl from "./components/ZoomControl/ZoomControl";
+import TocPanel from "./components/TocPanel/TocPanel";
+import BankPanel from "./components/BankPanel/BankPanel";
+import type { BankItem } from "./lib/bank";
+import Toast from "./components/Toast/Toast";
 import { uploadDoc, getAnnotations, fetchHealth, type Doc } from "./api/client";
 import type { TocEntry } from "./render";
-import { useAutosave } from "./useAutosave";
-import SaveIndicator from "./SaveIndicator";
+import { useAutosave } from "./hooks/useAutosave";
+import SaveIndicator from "./components/SaveIndicator/SaveIndicator";
 import { matchAction } from "./settings/keymap";
 import { useSettingsStore } from "./settings/store";
 import SettingsModal from "./settings/SettingsModal";
-import { isEditableTarget } from "./domFocus";
+import { isEditableTarget } from "./lib/domFocus";
 
 /**
  * App shell. Holds the current-doc state and switches between:

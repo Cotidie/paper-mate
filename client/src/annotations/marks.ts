@@ -9,7 +9,7 @@
 // leaf. No store/anchor/render import, no React — pure data, unit-testable.
 
 import type { Annotation } from "../api/client";
-import type { AnnotationTool } from "../tools";
+import type { AnnotationTool } from "../lib/tools";
 
 /** Which selection quick-box rows a selected mark of a given tool offers, plus the
  *  box's aria-label. Replaces the scattered `isPenSelected` / `isMemoSelected` /

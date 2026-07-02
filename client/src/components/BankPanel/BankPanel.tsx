@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { X, Highlighter, TextUnderline, PencilSimple, TextT, ChatCircle, type Icon } from "@phosphor-icons/react";
-import { useAnnotationStore } from "./store";
-import { bankItems, TYPE_LABEL, type BankItem } from "./bank";
+import { useAnnotationStore } from "../../store";
+import { bankItems, TYPE_LABEL, type BankItem } from "../../lib/bank";
 import "./BankPanel.css";
 
 /** The rail's own per-tool glyph (ToolRail.tsx), reused so a Bank row reads as

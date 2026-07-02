@@ -1,24 +1,24 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import type { Doc } from "./api/client";
-import { loadDocument, destroyDocument, getPageBox, getOutline, type PageBox, type TocEntry } from "./render";
+import type { Doc } from "../../api/client";
+import { loadDocument, destroyDocument, getPageBox, getOutline, type PageBox, type TocEntry } from "../../render";
 // The single IntersectionObserver lives here (imported by sub-path, NOT the
-// `./render` barrel, so `vi.mock("./render")` in the tests leaves it real).
-import { usePageViewport } from "./render/usePageViewport";
+// render barrel, so `vi.mock("../../render")` in the tests leaves it real).
+import { usePageViewport } from "../../render/usePageViewport";
 // Annotation overlay (Epic 2). Reader is the composition root that wires the
 // overlay to the live page-card geometry + scale; the overlay lives in
 // annotations/ and consumes anchor/ + store/ — render/ stays annotation-free
 // (AD-9). Importing the view here does NOT make render/ annotation-aware.
-import { AnnotationInteraction, type AnnotationTool } from "./annotations";
-import type { PageCardRef } from "./anchor";
+import { AnnotationInteraction, type AnnotationTool } from "../../annotations";
+import type { PageCardRef } from "../../anchor";
 // Reader's own interaction concerns (Story 5.3 extraction, mirrors the Story
 // 5.0 `annotations/gestures/*` pattern): zoom, pan, and page-nav each own
 // their synchronous refs/effects in their own hook so Reader itself stays a
 // composition root.
-import { useZoomControl } from "./reader/useZoomControl";
-import { usePanControl } from "./reader/usePanControl";
-import { usePageNav } from "./reader/usePageNav";
-import PageCard from "./reader/PageCard";
+import { useZoomControl } from "../../reader/useZoomControl";
+import { usePanControl } from "../../reader/usePanControl";
+import { usePageNav } from "../../reader/usePageNav";
+import PageCard from "../../reader/PageCard";
 import "./Reader.css";
 
 /** Imperative API the top-bar chrome (owned by `App`) drives: zoom buttons +

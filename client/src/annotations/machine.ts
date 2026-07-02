@@ -14,7 +14,7 @@ import type { PageSelection } from "../anchor";
 // `activeTool`, mirrored down via the `armedTool` prop and the prop-sync effect
 // in AnnotationInteraction — the machine never self-arms (it only carries the
 // armed tool through its transient states).
-import type { AnnotationTool } from "../tools";
+import type { AnnotationTool } from "../lib/tools";
 
 export type { AnnotationTool };
 

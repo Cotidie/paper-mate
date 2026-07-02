@@ -179,7 +179,7 @@ Make the annotated record durable and curatable: select, move, resize, restyle, 
 > Added 2026-06-30 via correct-course, grouping the preferences / color-system / UX-refinement / structural-refactor items from `deferred-work.md`. Add user-facing preferences (settings + hotkey rebinding, per-tool + custom colors, hide/show-all toggle), the small interaction-polish refinements (layered Esc, in-editor confirm, collapsed stroke-width control, dimmed ToC), and the standing codebase structural refactor (data contracts + conditional/FSM unification + src module split) as an enabler.
 > **FRs covered:** FR-23, FR-24, FR-25 (post-v1)
 > **NFRs:** NFR-1, NFR-5 (immersion), NFR-3 (unchanged by polish)
-> **Architecture:** AR-3 (contract preserved by refactor), AR-9 (layering), AD-11 (FSM)
+> **Architecture:** AR-3 (contract preserved by refactor), AR-6/AR-7 (doc-scoped store + autosave), AR-9 (layering), AD-11 (FSM)
 
 ## Epic 1: Read a paper
 
@@ -969,7 +969,7 @@ So that adding a tool or an edit is one registration, not edits across five `if`
 **Then** they become typed data contracts (one "create request" per tool, one "active-tool defaults" object — ties into Story 5.2, narrower prop bundles); any data class WRAPS the generated `Annotation` type, never shadows it (AR-3)
 
 **Given** the fragmented interaction state (selection / quick-box / pen-draft / memo-cleanup / flyout / Esc across components)
-**Then** the overlay lifecycle consolidates into one explicit FSM (extends `machine.ts`, AD-11/PREP-3); the duplicated App+overlay Esc logic collapses (enables Story 5.5 layered Esc)
+**Then** the overlay lifecycle consolidates into one explicit FSM (extends `machine.ts`, AD-11/PREP-3); the duplicated App+overlay Esc logic collapses (enables Story 5.6 layered Esc)
 
 **Given** the refactor
 **Then** client + server suites stay green and the tracked OpenAPI contract is byte-identical; both `vi.mock("./render")` barrels updated if any `render/` export moves; `no-raw-values` re-run after CSS moves; its own PR(s), never folded into a feature story
@@ -1038,7 +1038,29 @@ So that the overlay/reader composition root stays legible and the next tool/stor
 **Given** AD-9 layering (`render/` → `anchor/` → `annotations/` → `App`) and the zero-import-leaf convention (`tools.ts`, `domFocus.ts`)
 **Then** the new module boundaries respect it; no upward imports introduced
 
-### Story 5.4: Hide/show all annotations toggle
+### Story 5.4: React client `src/` module layout (folder-structure refactor)
+
+> User request (2026-07-02): `client/src/` root is flat: 38 files (`.tsx`/`.ts`/`.css`/`.test.*`) piled beside the existing layer dirs (`anchor/`, `annotations/`, `render/`, `store/`, `api/`, `reader/`, `settings/`, `theme/`). Adopt the `/scaffold-react` folder convention (adapted to this Vite + TS + Zustand stack): colocate each component with its CSS + test, give hooks and pure leaves a home, keep only entry/config files at the root. A pure refactor thread, same footing as Story 5.0 / 5.3, so it gets its own PR(s), never folded into a feature story. No behavior/contract change.
+
+As a developer,
+I want `client/src/` reorganized into the scaffold-react folder layout instead of 38 flat root files,
+So that a component, hook, or helper lives in an obvious place and the root stops being a dumping ground.
+
+**Acceptance Criteria:**
+
+**Given** the flat `client/src/` root (component `.tsx` + colocated `.css` + `.test.tsx` for `Reader`/`BankPanel`/`EmptyDropzone`/`SaveIndicator`/`Toast`/`TocPanel`/`ToolRail`/`ToolFlyout`/`ZoomControl`, plus loose `bank.ts`/`tools.ts`/`domFocus.ts`/`uuid.ts`/`useAutosave.ts`/`useLiveRef.ts` and their `.test.*` siblings)
+**Then** each reusable component moves into `components/<Name>/` (its `.tsx` + `.css` + `.test.tsx` colocated, one folder per component, per the scaffold-react convention); hooks (`use*`) get a hooks home; pure zero-import leaves (`tools.ts`, `domFocus.ts`, `uuid.ts`, `bank.ts`) get a `lib/`-style home, so no reusable component or helper is left loose at the root
+
+**Given** this repo's stack differs from the CRA source scaffold (Vite + TS + Zustand + generated tokens; a single-view reader with no `react-router` `pages/`)
+**Then** the scaffold's ARCHITECTURE is adapted, not copied literally: the existing AD-9 layer dirs (`render/`, `anchor/`, `annotations/`, `store/`, `api/`, `reader/`, `settings/`, `theme/`) are preserved as-is (they already ARE the modular boundaries), only the flat root files are foldered, and no toolchain / token / generated-file / Storybook rules are introduced or changed (scaffold rule: preserve the target toolchain)
+
+**Given** the entry + composition-root files (`main.tsx`, `App.tsx`/`App.css`, `index.css`, `vite-env.d.ts`) and the cross-cutting guard suites (`no-raw-values.test.ts`, `focus-ring.test.ts`)
+**Then** the entry + `App` root stay at `src/` root (the scaffold keeps the app entry at root); the guard suites land wherever keeps their file-globbing valid; every moved file's imports AND every importer are updated, including both `vi.mock("./render")` barrels (`App.test`, `Reader.test`) fixed for their new relative paths
+
+**Given** the refactor
+**Then** it is BEHAVIOR- and CONTRACT-identical: client + server suites stay green, `server/openapi.json` / `client/src/api/schema.d.ts` byte-identical, `no-raw-values` re-run after any CSS move, no upward imports introduced (AD-9 downward-only layering), and re-smoked live at DPR>1 cross-page (the standing `annotations/` selection-geometry risk); its own PR(s), never folded into a feature story
+
+### Story 5.5: Hide/show all annotations toggle
 
 > deferred-work: "hide/show all annotations toggle".
 
@@ -1055,7 +1077,7 @@ So that I can read the clean page and bring my marks back.
 **Given** the toggle
 **Then** it is ONE global view-only flag (composition root or store, sibling of `activeTool`/`selectedId`), threaded to `AnnotationLayer` (skip render) and `AnnotationInteraction` (suppress create/select while hidden); it NEVER mutates/deletes an annotation; clear `selectedId` on hide; decide whether the flag survives reload (FR-23)
 
-### Story 5.5: Interaction polish — layered Esc, in-editor confirm, collapsed stroke-width
+### Story 5.6: Interaction polish — layered Esc, in-editor confirm, collapsed stroke-width
 
 > deferred-work: "layered Esc", "confirm (check) affordance on memo + comment editors", "collapse the pen stroke-width row into a single dropdown". Small UX refinements; layered Esc depends on Story 5.0's Esc consolidation.
 
@@ -1074,7 +1096,7 @@ So that the annotate interactions feel precise and uncluttered.
 **Given** the pen `StrokeWidthRow` (three preset dots in a row)
 **Then** it becomes a compact collapsible control (trigger shows current width + caret → vertical thin/medium/thick list; pick collapses) matching the memo `SizeRow` pattern; update the Story 2.8 tests that asserted all three step buttons visible; presentation only, no model/contract change
 
-### Story 5.6: Dim the Table-of-Contents panel until hovered
+### Story 5.7: Dim the Table-of-Contents panel until hovered
 
 > deferred-work: "dim the Table-of-Contents panel until hovered". UX polish toward immersion (NFR-5).
 
@@ -1089,3 +1111,22 @@ So that it recedes while reading but is there when I reach for it.
 
 **Given** the fade
 **Then** it respects `prefers-reduced-motion` (degrade to instant, UX-DR17), is token-driven (`--toc-panel-resting-opacity`, no raw values), and changes nothing in the contract/store — pure presentation
+
+### Story 5.8: Doc-scope the annotation store (retire the cross-doc autosave guard)
+
+> Correct-course 2026-07-02 (`sprint-change-proposal-2026-07-02.md`), closing action items AE-4 / AE3-3. The store holds `annotations` without owning which doc they belong to, so autosave leans on a `useAutosave` `generationRef` guard to stop one doc's marks flushing onto another across a doc switch (the Story 3.4 HIGH Codex finding). Make ownership atomic instead. A developer refactor story: no new FR, no contract change. Needs a doc-switch DPR>1 live smoke (AE-5) before done.
+
+As a developer,
+I want the store to own `(docId, annotations)` as one atomic unit,
+So that a doc switch swaps both together and autosave can bind to the store's own `docId` instead of a defensive generation-counter guard.
+
+**Acceptance Criteria:**
+
+**Given** the store holds `annotations` without the owning `docId`, and `useAutosave` uses a `generationRef` to guard a stale flush from landing on the wrong doc (AR-6, the Story 3.4 HIGH finding)
+**Then** the store owns `(docId, annotations)` atomically: opening/switching a doc sets both in one update, hydrate-on-open replaces both, and there is no window where `annotations` belong to one doc while `docId` reads another
+
+**Given** the atomic ownership
+**Then** autosave binds to `store.docId` (a flush targets the doc the store currently owns), and the `useAutosave` `generationRef` cross-doc guard is deleted, not left as a redundant belt-and-braces check (AR-6, AR-7)
+
+**Given** the refactor
+**Then** it is BEHAVIOR- and CONTRACT-identical: client + server suites stay green, `server/openapi.json` / `client/src/api/schema.d.ts` byte-identical, and it is live-smoked across a doc SWITCH at DPR>1 (open doc A, annotate, open doc B, confirm A's marks never flush onto B and B restores its own) (AE-5, AR-6)

@@ -23,7 +23,7 @@ import {
   type PageSelection,
 } from "../../anchor";
 import { useAnnotationStore } from "../../store";
-import { newId } from "../../uuid";
+import { newId } from "../../lib/uuid";
 import { buildAnnotations, buildMemoAnnotation, buildCommentPin } from "../create";
 import { clampToViewport } from "../position";
 import { initialOverlayState, overlayReducer, type AnnotationTool, type OverlayState } from "../machine";

@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import ToolRail from "./ToolRail";
-import type { ActiveTool, AnnotationTool } from "./tools";
+import type { ActiveTool, AnnotationTool } from "../../lib/tools";
 
 afterEach(cleanup);
 
