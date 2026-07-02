@@ -13,7 +13,7 @@ import type { BankItem } from "./bank";
 import Toast from "./components/Toast/Toast";
 import { uploadDoc, getAnnotations, fetchHealth, type Doc } from "./api/client";
 import type { TocEntry } from "./render";
-import { useAutosave } from "./useAutosave";
+import { useAutosave } from "./hooks/useAutosave";
 import SaveIndicator from "./components/SaveIndicator/SaveIndicator";
 import { matchAction } from "./settings/keymap";
 import { useSettingsStore } from "./settings/store";

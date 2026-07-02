@@ -38,10 +38,10 @@ so that a component, hook, or helper lives in an obvious place and the root stop
   - [x] Decide Reader's target (see Dev Notes "Decisions"): `components/Reader/` vs folding into the existing `reader/` feature dir. Pick one, note the rationale in Project Structure Notes.
   - [x] `npm test` + `npm run typecheck` green; commit.
 
-- [ ] **Task 2 - Move the hooks into `hooks/`.** (AC: 1, 3, 4)
-  - [ ] Move `useAutosave.ts` (+ `useAutosave.test.ts`) and `useLiveRef.ts` into `hooks/`.
-  - [ ] Update importers: `useAutosave` -> `App.tsx`, `App.test.tsx`, `components/SaveIndicator/SaveIndicator.tsx` (moved in Task 1); `useLiveRef` -> `annotations/AnnotationInteraction.tsx`.
-  - [ ] `npm test` + `npm run typecheck` green; commit.
+- [x] **Task 2 - Move the hooks into `hooks/`.** (AC: 1, 3, 4)
+  - [x] Move `useAutosave.ts` (+ `useAutosave.test.ts`) and `useLiveRef.ts` into `hooks/`.
+  - [x] Update importers: `useAutosave` -> `App.tsx`, `App.test.tsx`, `components/SaveIndicator/SaveIndicator.tsx` (moved in Task 1); `useLiveRef` -> `annotations/AnnotationInteraction.tsx`.
+  - [x] `npm test` + `npm run typecheck` green; commit.
 
 - [ ] **Task 3 - Move the pure leaves into `lib/`.** (AC: 1, 3, 4)
   - [ ] Move `tools.ts` (+test), `bank.ts` (+test), `uuid.ts` (+test), `domFocus.ts` into `lib/`.
@@ -155,6 +155,7 @@ Variance from the CRA scaffold (deliberate, per AC-2): no `pages/` (single-view 
 
 - Baseline (before any move): `npm test` from `client/` = 41 test files, 803 tests, all pass. `npm run typecheck` clean. Contract byte-clean: `server` `export_openapi` -> `openapi.json` no diff, `client` `gen:api` -> `src/api/schema.d.ts` no diff.
 - Task 1: moved the 9 components with `git mv`. Found ONE importer not listed in the story's move-map: `reader/PageCard.tsx` has a bare `import "../Reader.css"` (Reader's CSS reused for the page-card canvas/text-layer styling) -> updated to `../components/Reader/Reader.css`. After fix: `npm test` = 41/803 pass (matches baseline), `npm run typecheck` clean. Reader home decision: `components/Reader/` (uniform component convention, per Dev Notes recommendation); `reader/` stays Reader's pure sub-hook/sub-view layer, unchanged.
+- Task 2: moved `useAutosave.ts`/`.test.ts` + `useLiveRef.ts` into `hooks/`. Importers matched the story's list exactly (`App.tsx`, `App.test.tsx`, `components/SaveIndicator/SaveIndicator.tsx`, `annotations/AnnotationInteraction.tsx`). `npm test` = 41/803 pass, `npm run typecheck` clean.
 
 ### Completion Notes List
 
@@ -171,3 +172,5 @@ Variance from the CRA scaffold (deliberate, per AC-2): no `pages/` (single-view 
 - client/src/components/ToolRail/ToolRail.tsx, ToolRail.test.tsx (moved from src/, imports updated)
 - client/src/components/ZoomControl/ZoomControl.tsx, ZoomControl.test.tsx (moved from src/)
 - client/src/reader/PageCard.tsx (CSS import path fixed for Reader.css move; not in the original move-map)
+- client/src/hooks/useAutosave.ts, useAutosave.test.ts, useLiveRef.ts (moved from src/, imports updated)
+- client/src/annotations/AnnotationInteraction.tsx (useLiveRef import path updated)

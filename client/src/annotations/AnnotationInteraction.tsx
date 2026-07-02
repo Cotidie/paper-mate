@@ -34,7 +34,7 @@ import { useSelection } from "./gestures/useSelection";
 import { useMultiSelectGesture } from "./gestures/useMultiSelectGesture";
 import { useUndoRedo } from "./gestures/useUndoRedo";
 import { useCreateQuickBox } from "./gestures/useCreateQuickBox";
-import { useLiveRef } from "../useLiveRef";
+import { useLiveRef } from "../hooks/useLiveRef";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";

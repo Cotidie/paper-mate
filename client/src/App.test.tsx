@@ -5,7 +5,7 @@ import * as api from "./api/client";
 import type { Annotation } from "./api/client";
 import * as renderLayer from "./render";
 import { useAnnotationStore } from "./store";
-import { DEBOUNCE_MS } from "./useAutosave";
+import { DEBOUNCE_MS } from "./hooks/useAutosave";
 import { useSettingsStore } from "./settings/store";
 import { DEFAULT_KEYMAP } from "./settings/keymap";
 
