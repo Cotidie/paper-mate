@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-02 (5-1-settings-hotkey-rebinding: in-progress -> review, code review via codex exec: 1 patch fixed; 4-2-column-aware-selection-highlight: review -> done, PR #33 merged; epic-4 -> done)"
+last_updated: "2026-07-02 (5-1-settings-hotkey-rebinding: review -> done; 4-2-column-aware-selection-highlight: review -> done, PR #33 merged; epic-4 -> done)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -133,7 +133,7 @@ development_status:
   epic-5: in-progress
   # 5-0 structural refactor: ideally pulled to the Epic-2/3 boundary (before 3.1).
   5-0-structural-refactor: done
-  5-1-settings-hotkey-rebinding: review
+  5-1-settings-hotkey-rebinding: done
   5-2-color-system-per-tool-custom: backlog
   5-3-hide-show-all-annotations: backlog
   5-4-interaction-polish-esc-confirm-strokewidth: backlog

@@ -4,7 +4,7 @@ baseline_commit: 33da559cd16f5d90deca68120db177cd17a75b50
 
 # Story 5.1: Settings modal + custom hotkey rebinding
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
