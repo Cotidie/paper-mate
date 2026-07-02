@@ -316,15 +316,60 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     expect(screen.queryByTestId("quick-box")).toBeNull();
   });
 
-  it("dismisses the quick-box on scroll (transient overlay, #1)", async () => {
+  it("clears the native selection immediately on present (the preview highlight represents it visually from then on)", async () => {
+    const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    await screen.findByTestId("quick-box");
+    expect(removeAllRanges).toHaveBeenCalled();
+  });
+
+  it("renders a preview highlight standing in for the (now-cleared) native selection", async () => {
     stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     await screen.findByTestId("quick-box");
-    // Scrolling the canvas pins-detaches the popup, so it dismisses.
+    expect(screen.getByTestId("pending-selection-preview")).toBeTruthy();
+  });
+
+  it("re-derives (does NOT dismiss) the quick-box position on scroll — it now tracks the selection instead of disappearing (Story 4.x fix)", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    let cardTop = 0;
+    const el = document.createElement("div");
+    el.getBoundingClientRect = () =>
+      ({ left: 0, top: cardTop, right: 600, bottom: cardTop + 800, width: 600, height: 800, x: 0, y: cardTop }) as DOMRect;
+    const pages: PageCardRef[] = [{ pageIndex: 0, cardEl: el, box }];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    const quickBox = await screen.findByTestId("quick-box");
+    const initialTop = quickBox.style.top;
+
+    // Simulate the canvas scrolling 200px: the card's LIVE rect moves.
+    cardTop = -200;
     fireEvent.scroll(document, {});
-    await waitFor(() => expect(screen.queryByTestId("quick-box")).toBeNull());
+
+    // Still open (not dismissed) AND its position followed the card.
+    expect(screen.queryByTestId("quick-box")).not.toBeNull();
+    await waitFor(() => expect(quickBox.style.top).not.toBe(initialTop));
+  });
+
+  it("re-derives the quick-box position and preview on a zoom (scale change), instead of going stale", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    const { rerender } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />,
+    );
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    const quickBox = await screen.findByTestId("quick-box");
+    const initialTop = quickBox.style.top;
+
+    // Zoom: scale doubles. The stored (scale-independent) selection rects
+    // denormalize to different card-local pixels, so the box must move.
+    rerender(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={2} enabled rectReader={reader} />);
+
+    await waitFor(() => expect(quickBox.style.top).not.toBe(initialTop));
   });
 
   it("does nothing when disabled (phase not ready)", () => {

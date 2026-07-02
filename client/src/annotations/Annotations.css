@@ -133,6 +133,28 @@
   border: var(--hairline-width) dashed;
 }
 
+/* The pending-selection preview: fixed rects standing in for a text-drag
+   selection while its CREATE quick-box is open (Story 4.x fix — "selection
+   resets on zoom/scroll"). The mark doesn't exist yet, so there is no
+   AnnotationLayer fill to ride out a zoom re-render; these are re-derived
+   from the stored (scale-independent) selection on every scroll/resize/zoom
+   instead of relying on the native ::selection, which a text-layer DOM swap
+   destroys outright. Same z-tier as the other live previews. Tinted with the
+   neutral `--color-text-selection` token (the SAME one Reader.css uses for
+   the raw text layer's native ::selection) — NOT the armed tool's active
+   color: nothing has been chosen as highlight/underline/comment yet, so a
+   yellow (or other tool-colored) band here reads as "this is already a
+   highlight," which it isn't. A plain blue-ish selection is the reader's
+   familiar "text is selected" affordance (matches any normal reader/browser),
+   independent of which mark it becomes. */
+.pending-selection-preview {
+  position: fixed;
+  pointer-events: none;
+  z-index: 40;
+  border-radius: var(--radius-xs);
+  background-color: var(--color-text-selection);
+}
+
 /* quick-box: floating popup at the drag-release point. position:fixed keeps it
    off the canvas layout, so it never shifts the page (AC-4). */
 .quick-box {
