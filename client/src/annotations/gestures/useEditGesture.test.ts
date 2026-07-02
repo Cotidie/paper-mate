@@ -38,6 +38,16 @@ function handle(kind: string, id: string): HTMLButtonElement {
   return btn;
 }
 
+/** The multi-select group frame's move grip: `data-edit-group` instead of a
+ *  per-mark `data-edit-id` (targets `multiSelectedIds`, read live at pointerdown). */
+function groupMoveHandle(): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.dataset.editHandle = "move";
+  btn.dataset.editGroup = "";
+  document.body.appendChild(btn);
+  return btn;
+}
+
 const down = (btn: HTMLElement, x: number, y: number) =>
   btn.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: x, clientY: y, button: 0 }));
 const move = (x: number, y: number) => document.dispatchEvent(new MouseEvent("pointermove", { clientX: x, clientY: y }));
@@ -48,8 +58,10 @@ beforeEach(() => {
   useAnnotationStore.setState({
     annotations: new Map(),
     selectedId: null,
+    multiSelectedIds: [],
     hoveredId: null,
     dragPreview: null,
+    groupDragPreview: null,
     activeColors: {
       highlight: "annotation-default",
       underline: "annotation-default",
@@ -244,5 +256,157 @@ describe("useEditGesture pen resize (Codex review fix — 1-D strokes + edge ove
     const pts = penPoints("c");
     expect(pts[1].x).toBeGreaterThan(pts[0].x); // still x0 < x1 (no flip)
     expect(pts[1].y).toBeGreaterThan(pts[0].y);
+  });
+});
+
+function pen2(id: string, points: { x: number; y: number }[]): Annotation {
+  return {
+    id,
+    doc_id: "doc-1",
+    type: "pen",
+    group_id: null,
+    anchor: { kind: "path", page_index: 0, points },
+    style: { color: "annotation-default", stroke_width: 8, alpha: 0.4 },
+    body: null,
+    created_at: "2026-06-30T00:00:00Z",
+    updated_at: "2026-06-30T00:00:00Z",
+  };
+}
+
+describe("useEditGesture group move (box-select multi-selection, user feature request)", () => {
+  it("moves every multi-selected mark by the SAME delta and commits ONE batch on release", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    useAnnotationStore.getState().addAnnotation(memo("m2", { x0: 0.6, y0: 0.6, x1: 0.7, y1: 0.7 }));
+    useAnnotationStore.getState().setMultiSelected(["m1", "m2"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(350, 350); // dx = dy = 0.25
+
+    // The group drag previews live; neither mark is committed mid-drag.
+    const gp = useAnnotationStore.getState().groupDragPreview;
+    expect(gp).not.toBeNull();
+    expect(gp!.map((g) => g.id).sort()).toEqual(["m1", "m2"]);
+    expect(useAnnotationStore.getState().annotations.get("m1")!.updated_at).toBe("2026-06-30T00:00:00Z");
+
+    up();
+    const a1 = useAnnotationStore.getState().annotations.get("m1")!;
+    const a2 = useAnnotationStore.getState().annotations.get("m2")!;
+    if (a1.anchor.kind === "rect") expect(a1.anchor.rect).toEqual({ x0: 0.5, y0: 0.5, x1: 0.75, y1: 0.75 });
+    if (a2.anchor.kind === "rect") expect(a2.anchor.rect).toEqual({ x0: 0.85, y0: 0.85, x1: 0.95, y1: 0.95 });
+    expect(useAnnotationStore.getState().groupDragPreview).toBeNull();
+    expect(a1.updated_at).not.toBe("2026-06-30T00:00:00Z"); // committed → bumped
+    expect(a2.updated_at).not.toBe("2026-06-30T00:00:00Z");
+  });
+
+  it("moves a mixed group (rect memo + path pen) together, each per its own kind", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    useAnnotationStore.getState().addAnnotation(pen2("p1", [{ x: 0.5, y: 0.5 }, { x: 0.6, y: 0.6 }]));
+    useAnnotationStore.getState().setMultiSelected(["m1", "p1"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(200, 100); // dx = 0.1, dy = 0
+    up();
+    const a1 = useAnnotationStore.getState().annotations.get("m1")!;
+    const a2 = useAnnotationStore.getState().annotations.get("p1")!;
+    if (a1.anchor.kind === "rect") {
+      expect(a1.anchor.rect.x0).toBeCloseTo(0.2, 10);
+      expect(a1.anchor.rect.y0).toBeCloseTo(0.1, 10);
+      expect(a1.anchor.rect.x1).toBeCloseTo(0.3, 10);
+      expect(a1.anchor.rect.y1).toBeCloseTo(0.2, 10);
+    }
+    if (a2.anchor.kind === "path") {
+      expect(a2.anchor.points[0].x).toBeCloseTo(0.6, 10);
+      expect(a2.anchor.points[0].y).toBeCloseTo(0.5, 10);
+      expect(a2.anchor.points[1].x).toBeCloseTo(0.7, 10);
+      expect(a2.anchor.points[1].y).toBeCloseTo(0.6, 10);
+    }
+  });
+
+  it("a group press with no real drag commits nothing (no updated_at bump)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    useAnnotationStore.getState().setMultiSelected(["m1"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    up();
+    expect(useAnnotationStore.getState().annotations.get("m1")!.updated_at).toBe("2026-06-30T00:00:00Z");
+    expect(useAnnotationStore.getState().groupDragPreview).toBeNull();
+  });
+
+  it("aborts on Escape WITHOUT committing (preview cleared, marks unchanged)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    useAnnotationStore.getState().setMultiSelected(["m1"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(350, 350);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(useAnnotationStore.getState().groupDragPreview).toBeNull();
+    up();
+    const m1 = useAnnotationStore.getState().annotations.get("m1")!;
+    if (m1.anchor.kind === "rect") expect(m1.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 });
+    expect(m1.updated_at).toBe("2026-06-30T00:00:00Z");
+  });
+
+  it("excludes a text-anchor mark from the group drag (Story 3.8 territory) even if listed in multiSelectedIds", () => {
+    function textMark(id: string): Annotation {
+      return {
+        id,
+        doc_id: "doc-1",
+        type: "highlight",
+        group_id: null,
+        anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.2 }], text: "x" },
+        style: { color: "annotation-default", stroke_width: null, alpha: null },
+        body: null,
+        created_at: "2026-06-30T00:00:00Z",
+        updated_at: "2026-06-30T00:00:00Z",
+      };
+    }
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.5, y0: 0.5, x1: 0.6, y1: 0.6 }));
+    useAnnotationStore.getState().addAnnotation(textMark("h1"));
+    useAnnotationStore.getState().setMultiSelected(["m1", "h1"]);
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(200, 100);
+    up();
+    const h1 = useAnnotationStore.getState().annotations.get("h1")!;
+    // The text mark's rects are untouched; only m1 moved.
+    if (h1.anchor.kind === "text") expect(h1.anchor.rects).toEqual([{ x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.2 }]);
+    const m1 = useAnnotationStore.getState().annotations.get("m1")!;
+    if (m1.anchor.kind === "rect") expect(m1.anchor.rect).toEqual({ x0: 0.6, y0: 0.5, x1: 0.7, y1: 0.6 });
+  });
+
+  it("does nothing when multiSelectedIds is empty (no group frame, no marks to drag)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m1", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    down(groupMoveHandle(), 100, 100);
+    move(350, 350);
+    up();
+    expect(useAnnotationStore.getState().groupDragPreview).toBeNull();
+    const m1 = useAnnotationStore.getState().annotations.get("m1")!;
+    if (m1.anchor.kind === "rect") expect(m1.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 });
+  });
+
+  it("a single-mark drag and a group drag do not interfere (mutually exclusive DragState refs)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("solo", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    useAnnotationStore.getState().addAnnotation(memo("g1", { x0: 0.5, y0: 0.5, x1: 0.6, y1: 0.6 }));
+    useAnnotationStore.getState().setMultiSelected(["g1"]);
+    mountGesture();
+    // Single-mark move first.
+    down(handle("move", "solo"), 100, 100);
+    move(200, 100);
+    up();
+    const solo = useAnnotationStore.getState().annotations.get("solo")!;
+    if (solo.anchor.kind === "rect") {
+      expect(solo.anchor.rect.x0).toBeCloseTo(0.2, 10);
+      expect(solo.anchor.rect.x1).toBeCloseTo(0.3, 10);
+    }
+    // Then a group move.
+    down(groupMoveHandle(), 100, 100);
+    move(200, 100);
+    up();
+    const g1 = useAnnotationStore.getState().annotations.get("g1")!;
+    if (g1.anchor.kind === "rect") {
+      expect(g1.anchor.rect.x0).toBeCloseTo(0.6, 10);
+      expect(g1.anchor.rect.x1).toBeCloseTo(0.7, 10);
+    }
   });
 });

@@ -13,6 +13,7 @@ import {
   resizeRectCorner,
   scalePoints,
   pointsBounds,
+  rectsIntersect,
   pendingSelectionGeometry,
   clipRectToViewport,
   type PageBox,
@@ -412,6 +413,34 @@ describe("pointsBounds (pen stroke bounding box, Story 3.1)", () => {
   });
   it("returns a zero rect for no points", () => {
     expect(pointsBounds([])).toEqual({ x0: 0, y0: 0, x1: 0, y1: 0 });
+  });
+});
+
+describe("rectsIntersect (box-select marquee hit-test, user feature request)", () => {
+  it("true for two overlapping rects", () => {
+    expect(rectsIntersect({ x0: 0.1, y0: 0.1, x1: 0.4, y1: 0.4 }, { x0: 0.3, y0: 0.3, x1: 0.6, y1: 0.6 })).toBe(true);
+  });
+
+  it("true when one rect fully contains the other", () => {
+    expect(rectsIntersect({ x0: 0, y0: 0, x1: 1, y1: 1 }, { x0: 0.4, y0: 0.4, x1: 0.5, y1: 0.5 })).toBe(true);
+  });
+
+  it("false for disjoint rects (gap on the x axis)", () => {
+    expect(rectsIntersect({ x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }, { x0: 0.3, y0: 0.1, x1: 0.4, y1: 0.2 })).toBe(false);
+  });
+
+  it("false for disjoint rects (gap on the y axis)", () => {
+    expect(rectsIntersect({ x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }, { x0: 0.1, y0: 0.3, x1: 0.2, y1: 0.4 })).toBe(false);
+  });
+
+  it("false for merely TOUCHING edges (strict overlap, not inclusive)", () => {
+    expect(rectsIntersect({ x0: 0, y0: 0, x1: 0.5, y1: 0.5 }, { x0: 0.5, y0: 0, x1: 1, y1: 0.5 })).toBe(false);
+  });
+
+  it("is symmetric (order of arguments does not matter)", () => {
+    const a = { x0: 0.1, y0: 0.1, x1: 0.4, y1: 0.4 };
+    const b = { x0: 0.3, y0: 0.3, x1: 0.6, y1: 0.6 };
+    expect(rectsIntersect(a, b)).toBe(rectsIntersect(b, a));
   });
 });
 

@@ -20,8 +20,10 @@ beforeEach(() => {
   useAnnotationStore.setState({
     annotations: new Map(),
     selectedId: null,
+    multiSelectedIds: [],
     hoveredId: null,
     dragPreview: null,
+    groupDragPreview: null,
     flashId: null,
     activeColors: {
       highlight: "annotation-default",
@@ -147,6 +149,145 @@ describe("selection + delete (Story 2.5)", () => {
     useAnnotationStore.getState().select("b");
     useAnnotationStore.getState().deleteAnnotation("a");
     expect(useAnnotationStore.getState().selectedId).toBe("b");
+  });
+});
+
+describe("multi-selection (box-select, user feature request) — mutual exclusion with selectedId", () => {
+  it("starts with no multi-selection", () => {
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("setMultiSelected sets the ids AND clears any single selection", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.select("a");
+    useAnnotationStore.getState().setMultiSelected(["a", "b"]);
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual(["a", "b"]);
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+  });
+
+  it("select(id) clears any active multi-selection", () => {
+    useAnnotationStore.getState().setMultiSelected(["a", "b"]);
+    useAnnotationStore.getState().select("a");
+    expect(useAnnotationStore.getState().selectedId).toBe("a");
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("clearSelection also clears a multi-selection", () => {
+    useAnnotationStore.getState().setMultiSelected(["a", "b"]);
+    useAnnotationStore.getState().clearSelection();
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("clearMultiSelection clears only the multi-selection", () => {
+    useAnnotationStore.getState().setMultiSelected(["a", "b"]);
+    useAnnotationStore.getState().clearMultiSelection();
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+});
+
+describe("deleteMany (box-select bulk delete, user feature request)", () => {
+  it("removes every listed mark in ONE batch", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.addAnnotation(mark("b", "annotation-default", "2026-06-29T00:00:02Z"));
+    s.addAnnotation(mark("c", "annotation-default", "2026-06-29T00:00:03Z"));
+    useAnnotationStore.getState().deleteMany(["a", "c"]);
+    const map = useAnnotationStore.getState().annotations;
+    expect(map.has("a")).toBe(false);
+    expect(map.has("b")).toBe(true);
+    expect(map.has("c")).toBe(false);
+  });
+
+  it("also removes each id's group siblings (AR-4), even a sibling not explicitly listed", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z", "g1"));
+    s.addAnnotation(mark("b", "annotation-default", "2026-06-29T00:00:01Z", "g1"));
+    s.addAnnotation(mark("c", "annotation-default", "2026-06-29T00:00:02Z", null));
+    useAnnotationStore.getState().deleteMany(["a"]);
+    const map = useAnnotationStore.getState().annotations;
+    expect(map.has("a")).toBe(false);
+    expect(map.has("b")).toBe(false); // sibling, not explicitly listed
+    expect(map.has("c")).toBe(true);
+  });
+
+  it("clears the multi-selection unconditionally, even for a no-op call", () => {
+    useAnnotationStore.getState().setMultiSelected(["a", "b"]);
+    useAnnotationStore.getState().deleteMany([]);
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("clears selectedId only if it was among the deleted", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("a", "annotation-default", "2026-06-29T00:00:01Z"));
+    s.addAnnotation(mark("b", "annotation-default", "2026-06-29T00:00:02Z"));
+    useAnnotationStore.getState().select("b");
+    // A direct select() call, not setMultiSelected — mimics a mixed state where a
+    // single mark stays selected while a bulk delete runs elsewhere.
+    useAnnotationStore.getState().deleteMany(["a"]);
+    expect(useAnnotationStore.getState().selectedId).toBe("b");
+  });
+
+  it("ignores unknown ids without throwing", () => {
+    useAnnotationStore.getState().deleteMany(["missing"]);
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
+});
+
+describe("setAnnotationGeometries (box-select group move, user feature request)", () => {
+  it("commits every {id, anchor} pair in ONE batch", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m1", { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.3 }, "2026-06-29T00:00:01Z"));
+    s.addAnnotation(memoMark("m2", { x0: 0.5, y0: 0.5, x1: 0.7, y1: 0.7 }, "2026-06-29T00:00:02Z"));
+    useAnnotationStore.getState().setAnnotationGeometries(
+      [
+        { id: "m1", anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.2, x1: 0.4, y1: 0.4 } } },
+        { id: "m2", anchor: { kind: "rect", page_index: 0, rect: { x0: 0.6, y0: 0.6, x1: 0.8, y1: 0.8 } } },
+      ],
+      "2026-06-29T12:00:00Z",
+    );
+    const map = useAnnotationStore.getState().annotations;
+    const a1 = map.get("m1")!;
+    const a2 = map.get("m2")!;
+    if (a1.anchor.kind === "rect") expect(a1.anchor.rect).toEqual({ x0: 0.2, y0: 0.2, x1: 0.4, y1: 0.4 });
+    if (a2.anchor.kind === "rect") expect(a2.anchor.rect).toEqual({ x0: 0.6, y0: 0.6, x1: 0.8, y1: 0.8 });
+    expect(a1.updated_at).toBe("2026-06-29T12:00:00Z");
+    expect(a2.updated_at).toBe("2026-06-29T12:00:00Z");
+  });
+
+  it("skips an unknown id without throwing, committing the rest", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m1", { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.3 }, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().setAnnotationGeometries(
+      [
+        { id: "missing", anchor: { kind: "rect", page_index: 0, rect: { x0: 0, y0: 0, x1: 0.1, y1: 0.1 } } },
+        { id: "m1", anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.2, x1: 0.4, y1: 0.4 } } },
+      ],
+      "2026-06-29T12:00:00Z",
+    );
+    const a1 = useAnnotationStore.getState().annotations.get("m1")!;
+    if (a1.anchor.kind === "rect") expect(a1.anchor.rect).toEqual({ x0: 0.2, y0: 0.2, x1: 0.4, y1: 0.4 });
+  });
+
+  it("skips a kind change (rejects a discriminator mismatch, AC-8), leaving that mark untouched", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m1", { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.3 }, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().setAnnotationGeometries(
+      [{ id: "m1", anchor: { kind: "path", page_index: 0, points: [{ x: 0.1, y: 0.1 }] } }],
+      "2026-06-29T12:00:00Z",
+    );
+    const a1 = useAnnotationStore.getState().annotations.get("m1")!;
+    expect(a1.anchor.kind).toBe("rect"); // unchanged
+    expect(a1.updated_at).toBe("2026-06-29T00:00:01Z"); // not bumped
+  });
+
+  it("an all-skipped batch is a true no-op (preserves the Map reference, zundo equality guard)", () => {
+    const before = useAnnotationStore.getState().annotations;
+    useAnnotationStore.getState().setAnnotationGeometries(
+      [{ id: "missing", anchor: { kind: "rect", page_index: 0, rect: { x0: 0, y0: 0, x1: 0.1, y1: 0.1 } } }],
+      "2026-06-29T12:00:00Z",
+    );
+    expect(useAnnotationStore.getState().annotations).toBe(before);
   });
 });
 

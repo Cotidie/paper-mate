@@ -202,6 +202,16 @@ export function pointsBounds(points: Point[]): Rect {
   return { x0, y0, x1, y1 };
 }
 
+/**
+ * Whether two normalized (canonical) rects overlap at all (touching edges do not
+ * count). Pure AABB test, no clamping/mutation. Box-select's marquee hit-test
+ * (a mark counts as caught if the drag rect overlaps ANY of its geometry) is the
+ * only caller today.
+ */
+export function rectsIntersect(a: Rect, b: Rect): boolean {
+  return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+}
+
 /** A rect's corner handle (north/south + west/east). */
 export type RectCorner = "nw" | "ne" | "sw" | "se";
 

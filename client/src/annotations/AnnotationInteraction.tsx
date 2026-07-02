@@ -40,6 +40,7 @@ import { useBoxGesture } from "./gestures/useBoxGesture";
 import { useMemoPlacement } from "./gestures/useMemoPlacement";
 import { useEditGesture } from "./gestures/useEditGesture";
 import { useSelection } from "./gestures/useSelection";
+import { useMultiSelectGesture } from "./gestures/useMultiSelectGesture";
 import { useUndoRedo } from "./gestures/useUndoRedo";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
@@ -70,6 +71,7 @@ export default function AnnotationInteraction({
   enabled,
   armedTool = null,
   boxActive = false,
+  multiSelectActive = false,
   rectReader,
 }: {
   docId: string;
@@ -87,6 +89,11 @@ export default function AnnotationInteraction({
    *  MODE of Highlight, not its own tool; this separate signal lets the box-drag
    *  gesture gate on it (the armed tool is "highlight", but a box drag, not text). */
   boxActive?: boolean;
+  /** True when the Box-select pointer tool is armed (user feature request): lets
+   *  `useMultiSelectGesture`'s marquee drag gate on it. A pointer tool (like
+   *  cursor/hand), not a mode of an annotation tool — `armedTool` stays null while
+   *  it's active. */
+  multiSelectActive?: boolean;
   /** Test seam: how a text-node sub-range yields client rects. Omit in
    *  production (uses the real `getClientRects`); jsdom tests inject a reader
    *  since they have no layout. */
@@ -166,11 +173,24 @@ export default function AnnotationInteraction({
   const { penPreview } = usePenGesture(gestureCtx, armedTool);
   const { boxPreview } = useBoxGesture(gestureCtx, boxActive);
   useMemoPlacement(gestureCtx);
-  // Drag-handle move/resize of a selected pen/rect mark (Story 3.1). A document-
-  // level gesture (the edit frame + handles render in AnnotationLayer); it commits
-  // ONE setAnnotationGeometry on release via the transient dragPreview.
+  // Drag-handle move/resize of a selected pen/rect mark (Story 3.1), PLUS the
+  // group-move path for a box-select multi-selection (user feature request). A
+  // document-level gesture (the edit frame(s) render in AnnotationLayer); it
+  // commits ONE setAnnotationGeometry (or the batched setAnnotationGeometries for
+  // a group) via the transient dragPreview/groupDragPreview.
   useEditGesture({ enabled, getPagesRef, scaleRef });
   useUndoRedo({ enabled });
+  // Box-select marquee gesture (user feature request): drag to select existing
+  // annotations for bulk Move/Delete. A SEPARATE selection mode from the
+  // single-mark quick-box below (AD-12 extended) — its own group frame renders in
+  // AnnotationLayer, and it owns its own Del/Esc handling internally.
+  const { multiSelectPreview } = useMultiSelectGesture({
+    enabled,
+    docId,
+    getPagesRef,
+    scaleRef,
+    active: multiSelectActive,
+  });
   // The selected-mark quick-box (Story 2.5/AD-12), encapsulated as its own hook
   // (Story 5.0). Owns selection state + effects + the recolor/restroke/realpha/
   // resize/delete actions; the component renders the box from what it returns.
@@ -646,7 +666,7 @@ export default function AnnotationInteraction({
     [pending, docId, addAnnotation, select, createTextTool],
   );
 
-  if (!pending && !showSelectionBox && !penPreview && !boxPreview) return null;
+  if (!pending && !showSelectionBox && !penPreview && !boxPreview && !multiSelectPreview) return null;
 
   const selInit = showSelectionBox ? selection.selectionPoint() : { x: 0, y: 0 };
 
@@ -676,6 +696,22 @@ export default function AnnotationInteraction({
             width: Math.abs(boxPreview.x1 - boxPreview.x0),
             height: Math.abs(boxPreview.y1 - boxPreview.y0),
             borderColor: `var(--color-${activeColors.highlight})`,
+          }}
+        />
+      )}
+      {multiSelectPreview && (
+        // The marquee rubber-band, neutral (ink) styling — not tinted to any
+        // annotation-tool accent, since this drag SELECTS existing marks rather
+        // than creating a colored one (unlike box-highlight's boxPreview above).
+        <div
+          className="multi-select-preview"
+          data-testid="multi-select-preview"
+          aria-hidden="true"
+          style={{
+            left: Math.min(multiSelectPreview.x0, multiSelectPreview.x1),
+            top: Math.min(multiSelectPreview.y0, multiSelectPreview.y1),
+            width: Math.abs(multiSelectPreview.x1 - multiSelectPreview.x0),
+            height: Math.abs(multiSelectPreview.y1 - multiSelectPreview.y0),
           }}
         />
       )}

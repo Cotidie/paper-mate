@@ -129,8 +129,11 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-flyout")).toBeTruthy();
     expect(screen.getByTestId("tool-option-cursor")).toBeTruthy();
     expect(screen.getByTestId("tool-option-hand")).toBeTruthy();
-    // Box-select is no longer a pointer sub-mode — it moved under Highlight.
+    // Box-highlight (the OLD box concept) is no longer a pointer sub-mode — it
+    // moved under Highlight (Story 2.11). Box-SELECT (the multi-select marquee,
+    // user feature request) is a DIFFERENT, NEW pointer sub-mode, asserted below.
     expect(screen.queryByTestId("tool-option-box")).toBeNull();
+    expect(screen.getByTestId("tool-option-boxSelect")).toBeTruthy();
   });
 
   it("picking a pointer sub-mode switches the tool; the flyout stays open showing it (unified mechanism)", () => {
@@ -143,6 +146,20 @@ describe("ToolRail", () => {
     r.update({ activeTool: "hand" });
     expect(screen.getByTestId("tool-flyout")).toBeTruthy();
     expect(screen.getByTestId("tool-option-hand").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("picking Box select (user feature request) switches the tool; the flyout stays open showing it armed", () => {
+    const r = renderRail({ activeTool: "cursor" });
+    fireEvent.click(screen.getByTestId("tool-cursor-button"));
+    fireEvent.click(screen.getByTestId("tool-option-boxSelect"));
+    expect(r.onSelectTool).toHaveBeenCalledWith("boxSelect");
+    r.update({ activeTool: "boxSelect" });
+    expect(screen.getByTestId("tool-flyout")).toBeTruthy();
+    expect(screen.getByTestId("tool-option-boxSelect").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("tool-option-hand").getAttribute("aria-pressed")).toBe("false");
+    // The rail's own cursor-family button also shows armed for boxSelect (it is a
+    // pointer tool, isPointerTool("boxSelect") === true).
+    expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
   });
 
   it("reflects the active pointer tool (aria-pressed on the option, armed class on the button)", () => {
@@ -187,7 +204,7 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("tool-rail-collapse").getAttribute("title")).toBeTruthy();
     // Each flyout option has a descriptive tooltip.
     fireEvent.click(screen.getByTestId("tool-cursor-button"));
-    for (const v of ["cursor", "hand"]) {
+    for (const v of ["cursor", "hand", "boxSelect"]) {
       expect(screen.getByTestId(`tool-option-${v}`).getAttribute("title")).toBeTruthy();
     }
     // The hand tooltip mentions panning + the Space shortcut.

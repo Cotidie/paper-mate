@@ -133,6 +133,19 @@
   border: var(--hairline-width) dashed;
 }
 
+/* The live box-select MARQUEE preview (user feature request): a fixed rubber-
+   band rect while the drag is in progress. Neutral styling — NOT tinted to any
+   tool accent (unlike box-preview above, which previews a mark that WILL be
+   created): this drag selects EXISTING marks, so it reuses the same neutral
+   `--color-text-selection` token the pending-selection preview uses. */
+.multi-select-preview {
+  position: fixed;
+  pointer-events: none;
+  z-index: 40;
+  border: var(--hairline-width) dashed var(--color-ink);
+  background-color: var(--color-text-selection);
+}
+
 /* The pending-selection preview: fixed rects standing in for a text-drag
    selection while its CREATE quick-box is open (Story 4.x fix — "selection
    resets on zoom/scroll"). The mark doesn't exist yet, so there is no
@@ -859,6 +872,64 @@
   transform: translate(-50%, calc(-100% - var(--space-xxs)));
   border-radius: var(--radius-pill);
   cursor: move;
+}
+
+/* Box-select multi-selection's own group frame (user feature request): a single
+   outline over the UNION of every caught mark's bounding rect. Mirrors the
+   single-mark edit frame — invisible except its two controls; each caught mark
+   already shows its own --selected ring, so the frame itself needs no visible
+   border. Its move grip reuses .edit-handle/.edit-handle--move VERBATIM (same
+   visual + the same useEditGesture drag wiring, keyed by data-edit-group instead
+   of data-edit-id) — deliberately NO resize corners (bulk resize is out of scope,
+   only Delete + Move). */
+.annotation-multi-select-frames {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.annotation-multi-select-frame {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Bulk delete: a small icon button at the frame's top-right corner (the move
+   grip sits top-center per .edit-handle--move, so the two never collide). Same
+   visual language as .edit-handle (ink-bordered nub) at the pin-size footprint,
+   pill-shaped like the move grip. */
+.multi-select-frame__delete {
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translate(50%, -50%);
+  width: var(--comment-pin-size);
+  height: var(--comment-pin-size);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface-card);
+  border: var(--focus-ring-width) solid var(--color-ink);
+  border-radius: var(--radius-pill);
+  color: var(--color-ink);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.multi-select-frame__delete:hover {
+  background-color: var(--color-hairline-soft);
+}
+
+.multi-select-frame__delete:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--color-swatch-ring-offset);
+}
+
+.multi-select-frame__delete svg {
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  display: block;
 }
 
 /* Pen draw mode: suppress the HOVER treatment on ALL mark types. The user is

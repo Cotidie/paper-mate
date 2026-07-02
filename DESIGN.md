@@ -201,6 +201,15 @@ components:
     rounded: "{rounded.pill}"
     size: 20px
     border: "1px {colors.hairline-strong}"
+  multi-select-preview:
+    borderColor: "{colors.ink}"
+    backgroundColor: "rgba(13, 116, 206, 0.25)" # --color-text-selection (components.css; matches the native text-selection tint, not a colors.* scale token)
+  multi-select-frame-delete:
+    backgroundColor: "{colors.surface-card}"
+    borderColor: "{colors.ink}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.pill}"
+    size: 20px
   annotation-highlight:
     backgroundColor: "{colors.annotation-default}"
     opacity: 0.4
@@ -437,7 +446,7 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 
 ### Tool Rail
 
-**`tool-rail`** — Floating left toolbar. Background `{colors.surface-card}`, `{rounded.lg}`, 1px `{colors.hairline}`, soft drop, 48px wide. Overlays the canvas; collapsible (`[` toggle). Holds tool buttons top→bottom: cursor (with flyout), highlight, underline, pen, memo, comment, box-select, ToC.
+**`tool-rail`** — Floating left toolbar. Background `{colors.surface-card}`, `{rounded.lg}`, 1px `{colors.hairline}`, soft drop, 48px wide. Overlays the canvas; collapsible (`[` toggle). Holds tool buttons top→bottom: cursor (flyout: cursor / hand / box-select), highlight, underline, pen, memo, comment.
 
 **`tool-button`** — 36px, transparent, icon in `{colors.body}`, `{rounded.md}`. Hover → `{colors.surface-strong}`.
 
@@ -463,6 +472,10 @@ One shadow tier only. No atmospheric decoration — restraint keeps the paper do
 - *Comment mode* → `comment-bubble` opens directly.
 
 **`color-swatch`** — 20px pill, the annotation accent token as fill, 1px `{colors.hairline-strong}` ring; armed swatch gets a 2px `{colors.ink}` ring.
+
+**`multi-select-preview`** — The box-select marquee's live rubber-band rect while dragging. Dashed `{colors.ink}` border, `{colors.text-selection}` fill (the same neutral tint as a pending text selection, since the drag selects existing marks rather than creating one).
+
+**`multi-select-frame`** — The bulk-selection's own group frame: an invisible outline (each caught mark already shows its own selected ring) over the union of the selection's bounding box, carrying a move grip (`edit-handle--move`, drag-moves the whole group) and a `multi-select-frame-delete` button (top-right corner, bulk delete). No resize corners — bulk resize is out of scope.
 
 ### Annotations (on the page)
 

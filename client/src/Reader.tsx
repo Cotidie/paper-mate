@@ -68,6 +68,7 @@ export default function Reader({
   panArmed,
   armedTool,
   boxActive,
+  multiSelectActive,
   onVisiblePageChange,
   onZoomChange,
   onOutline,
@@ -84,6 +85,10 @@ export default function Reader({
    * MODE of Highlight, not its own tool; this is the explicit signal the overlay's
    * box-drag gesture gates on. Passed straight to the overlay. */
   boxActive?: boolean;
+  /** True when the Box-select pointer tool is armed (user feature request): a
+   * marquee drag selects existing annotations for bulk Move/Delete. Passed
+   * straight to the overlay's `useMultiSelectGesture`. */
+  multiSelectActive?: boolean;
   /** Reports the 1-based page currently in view, for the top-bar indicator. */
   onVisiblePageChange?: (page: number) => void;
   /** Reports the live zoom percent (rounded) for the top-bar zoom control. */
@@ -614,6 +619,7 @@ export default function Reader({
           enabled={phase === "ready"}
           armedTool={armedTool ?? null}
           boxActive={boxActive ?? false}
+          multiSelectActive={multiSelectActive ?? false}
         />
       )}
     </div>

@@ -28,7 +28,7 @@ describe("tool FSM partition (AD-11)", () => {
   });
 
   it("names the pointer + annotation tools the FSM reserves", () => {
-    expect([...POINTER_TOOLS]).toEqual(["cursor", "hand"]);
+    expect([...POINTER_TOOLS]).toEqual(["cursor", "hand", "boxSelect"]);
     expect([...ANNOTATION_TOOLS]).toEqual(["highlight", "underline", "pen", "memo", "comment"]);
   });
 });

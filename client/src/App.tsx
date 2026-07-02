@@ -322,6 +322,10 @@ export default function App() {
           // Box-highlight is a mode of Highlight; the overlay's box-drag gesture
           // gates on this signal (true only while Highlight is active + box mode on).
           boxActive={activeTool === "highlight" && boxHighlight}
+          // Box-select (user feature request) is its own POINTER tool (Cursor's
+          // flyout, not a mode of another tool); the overlay's marquee gesture
+          // gates on this signal.
+          multiSelectActive={activeTool === "boxSelect"}
           onVisiblePageChange={setCurrentPage}
           onZoomChange={setZoomPercent}
           onOutline={setToc}

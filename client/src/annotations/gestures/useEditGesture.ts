@@ -1,8 +1,9 @@
 // useEditGesture — drag-handle MOVE/RESIZE of a selected pen or rect mark
-// (Story 3.1). The edit frame (AnnotationLayer) renders a move grip + 4 corner
-// handles tagged with `data-edit-handle` + `data-edit-id`; this hook turns a drag
-// on one of them into a geometry edit. The live drag previews through the
-// transient store `dragPreview` (no per-pointermove commit); the ONE
+// (Story 3.1), PLUS the group-MOVE-only twin for a box-select multi-selection
+// (user feature request). The edit frame (AnnotationLayer) renders a move grip +
+// 4 corner handles tagged with `data-edit-handle` + `data-edit-id`; this hook
+// turns a drag on one of them into a geometry edit. The live drag previews
+// through the transient store `dragPreview` (no per-pointermove commit); the ONE
 // `setAnnotationGeometry` lands on release, so Story 3.2's zundo records a single
 // undo step. Document-level handlers (AP-1); abort on Esc / pointercancel / blur
 // WITHOUT committing, so an interrupted drag never strands a preview (the
@@ -13,6 +14,15 @@
 // run instead). This serves kind=rect (memo / region) + kind=path (pen).
 // Coordinate math lives in `anchor/` (AD-9); the store does none — the gesture
 // computes the next anchor and hands it to `setAnnotationGeometry`.
+//
+// Group move: the multi-select group frame's move grip carries `data-edit-group`
+// (no `data-edit-id` — it targets the whole `multiSelectedIds` set, read live at
+// pointerdown) instead of the single-mark path. It is MOVE-ONLY (no resize; the
+// group frame exposes no corner handles) and previews through the PARALLEL
+// `groupDragPreview` store field, committing via the batched
+// `setAnnotationGeometries` (one undo step for the whole group). The two drag
+// states (`dragRef`/`groupDragRef`) are mutually exclusive by construction — only
+// one branch of `onDown` ever starts a gesture per pointerdown.
 
 import { useEffect, useRef, type RefObject } from "react";
 import {
@@ -53,6 +63,17 @@ interface DragState {
   moved: boolean;
 }
 
+/** Group-move state (box-select multi-selection, move-only — no resize). */
+interface GroupDragState {
+  members: { id: string; startAnchor: Annotation["anchor"] }[];
+  box: { width: number; height: number };
+  scale: number;
+  startX: number;
+  startY: number;
+  lastPreview: { id: string; anchor: Annotation["anchor"] }[] | null;
+  moved: boolean;
+}
+
 export function useEditGesture(opts: {
   enabled: boolean;
   getPagesRef: RefObject<() => PageCardRef[]>;
@@ -61,15 +82,23 @@ export function useEditGesture(opts: {
   const { enabled, getPagesRef, scaleRef } = opts;
   const setDragPreview = useAnnotationStore((s) => s.setDragPreview);
   const setAnnotationGeometry = useAnnotationStore((s) => s.setAnnotationGeometry);
+  const setGroupDragPreview = useAnnotationStore((s) => s.setGroupDragPreview);
+  const setAnnotationGeometries = useAnnotationStore((s) => s.setAnnotationGeometries);
   const setActiveMemoSize = useAnnotationStore((s) => s.setActiveMemoSize);
   const dragRef = useRef<DragState | null>(null);
+  const groupDragRef = useRef<GroupDragState | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
     const abort = () => {
-      if (!dragRef.current) return;
-      dragRef.current = null;
-      setDragPreview(null);
+      if (dragRef.current) {
+        dragRef.current = null;
+        setDragPreview(null);
+      }
+      if (groupDragRef.current) {
+        groupDragRef.current = null;
+        setGroupDragPreview(null);
+      }
     };
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
@@ -78,8 +107,38 @@ export function useEditGesture(opts: {
       ) as HTMLElement | null;
       if (!handleEl) return;
       const handle = handleEl.dataset.editHandle as EditHandle | undefined;
+      if (!handle) return;
+      if (handleEl.dataset.editGroup !== undefined) {
+        // Group-move path: the frame exposes only a move grip (no resize corners).
+        if (handle !== "move") return;
+        const ids = useAnnotationStore.getState().multiSelectedIds;
+        const members = ids
+          .map((id) => useAnnotationStore.getState().annotations.get(id))
+          .filter((a): a is Annotation => !!a && a.anchor.kind !== "text")
+          .map((a) => ({ id: a.id, startAnchor: a.anchor }));
+        if (members.length === 0) return;
+        const firstAnno = useAnnotationStore.getState().annotations.get(members[0].id);
+        const page = getPagesRef.current().find((p) => p.pageIndex === firstAnno?.anchor.page_index);
+        if (!page) return;
+        groupDragRef.current = {
+          members,
+          box: page.box,
+          scale: scaleRef.current,
+          startX: e.clientX,
+          startY: e.clientY,
+          lastPreview: null,
+          moved: false,
+        };
+        e.preventDefault();
+        try {
+          handleEl.setPointerCapture?.(e.pointerId);
+        } catch {
+          /* capture refused (e.g. synthetic event) — document listeners still drive it */
+        }
+        return;
+      }
       const id = handleEl.dataset.editId;
-      if (!handle || !id) return;
+      if (!id) return;
       const anno = useAnnotationStore.getState().annotations.get(id);
       if (!anno) return;
       const page = getPagesRef.current().find((p) => p.pageIndex === anno.anchor.page_index);
@@ -106,48 +165,76 @@ export function useEditGesture(opts: {
     };
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
-      if (!d) return;
-      if (!d.moved) {
-        const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
-        if (dist < HANDLE_MOVE_SLOP) return; // still within slop: let a plain click fire on release
-        d.moved = true;
+      if (d) {
+        if (!d.moved) {
+          const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
+          if (dist < HANDLE_MOVE_SLOP) return; // still within slop: let a plain click fire on release
+          d.moved = true;
+        }
+        const w = d.box.width * d.scale;
+        const h = d.box.height * d.scale;
+        const dx = w > 0 ? (e.clientX - d.startX) / w : 0;
+        const dy = h > 0 ? (e.clientY - d.startY) / h : 0;
+        const next = computeAnchor(d, dx, dy);
+        if (!next) return;
+        d.lastAnchor = next;
+        setDragPreview({ id: d.id, anchor: next });
+        e.preventDefault();
+        return;
       }
-      const w = d.box.width * d.scale;
-      const h = d.box.height * d.scale;
-      const dx = w > 0 ? (e.clientX - d.startX) / w : 0;
-      const dy = h > 0 ? (e.clientY - d.startY) / h : 0;
-      const next = computeAnchor(d, dx, dy);
-      if (!next) return;
-      d.lastAnchor = next;
-      setDragPreview({ id: d.id, anchor: next });
+      const g = groupDragRef.current;
+      if (!g) return;
+      if (!g.moved) {
+        const dist = Math.hypot(e.clientX - g.startX, e.clientY - g.startY);
+        if (dist < HANDLE_MOVE_SLOP) return;
+        g.moved = true;
+      }
+      const w = g.box.width * g.scale;
+      const h = g.box.height * g.scale;
+      const dx = w > 0 ? (e.clientX - g.startX) / w : 0;
+      const dy = h > 0 ? (e.clientY - g.startY) / h : 0;
+      const preview = g.members.map((m) => ({ id: m.id, anchor: computeGroupAnchor(m.startAnchor, dx, dy) }));
+      g.lastPreview = preview;
+      setGroupDragPreview(preview);
       e.preventDefault();
     };
     const onUp = () => {
       const d = dragRef.current;
-      if (!d) return;
-      dragRef.current = null;
-      setDragPreview(null);
-      // Commit ONE geometry mutation (so 3.2's zundo records one step). A handle
-      // press with no real drag changes nothing → no commit, no updated_at bump.
-      if (d.moved && d.lastAnchor) {
-        setAnnotationGeometry(d.id, d.lastAnchor, new Date().toISOString());
-        // Remember a memo's last RESIZED size as the session default, so the next
-        // new memo lands at it (user request: last-adjusted-size-wins). Only on a
-        // corner resize (not a move) of a memo; size is scale-1.0 px = normalized
-        // rect * the page box (which is the scale-1.0 box).
-        const anno = useAnnotationStore.getState().annotations.get(d.id);
-        if (d.handle !== "move" && anno?.type === "memo" && d.lastAnchor.kind === "rect") {
-          const r = d.lastAnchor.rect;
-          setActiveMemoSize({
-            key: "medium",
-            width: (r.x1 - r.x0) * d.box.width,
-            height: (r.y1 - r.y0) * d.box.height,
-          });
+      if (d) {
+        dragRef.current = null;
+        setDragPreview(null);
+        // Commit ONE geometry mutation (so 3.2's zundo records one step). A handle
+        // press with no real drag changes nothing → no commit, no updated_at bump.
+        if (d.moved && d.lastAnchor) {
+          setAnnotationGeometry(d.id, d.lastAnchor, new Date().toISOString());
+          // Remember a memo's last RESIZED size as the session default, so the next
+          // new memo lands at it (user request: last-adjusted-size-wins). Only on a
+          // corner resize (not a move) of a memo; size is scale-1.0 px = normalized
+          // rect * the page box (which is the scale-1.0 box).
+          const anno = useAnnotationStore.getState().annotations.get(d.id);
+          if (d.handle !== "move" && anno?.type === "memo" && d.lastAnchor.kind === "rect") {
+            const r = d.lastAnchor.rect;
+            setActiveMemoSize({
+              key: "medium",
+              width: (r.x1 - r.x0) * d.box.width,
+              height: (r.y1 - r.y0) * d.box.height,
+            });
+          }
         }
+        return;
+      }
+      const g = groupDragRef.current;
+      if (!g) return;
+      groupDragRef.current = null;
+      setGroupDragPreview(null);
+      // Commit the WHOLE group in ONE batched write (one undo step). A grip press
+      // with no real drag changes nothing.
+      if (g.moved && g.lastPreview) {
+        setAnnotationGeometries(g.lastPreview, new Date().toISOString());
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && dragRef.current) abort();
+      if (e.key === "Escape" && (dragRef.current || groupDragRef.current)) abort();
     };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("pointermove", onMove);
@@ -194,6 +281,18 @@ function computeAnchor(d: DragState, dx: number, dy: number): Annotation["anchor
     return { ...a, points: scalePoints(a.points, sx, sy, ox, oy) };
   }
   return null; // text marks are not moved here (Story 3.8 re-resolves their run)
+}
+
+/** Compute one group member's next anchor from the shared normalized delta.
+ *  MOVE-ONLY (the group frame exposes no resize corners): each kind still clamps
+ *  independently to the page (translateRect/translatePoints), so a member near
+ *  an edge can lag the rest of the group rather than the whole group stopping —
+ *  an accepted v1 limitation, not a bug. Text marks are filtered out before a
+ *  group drag starts (see `onDown`), so this never sees `kind === "text"`. */
+function computeGroupAnchor(a: Annotation["anchor"], dx: number, dy: number): Annotation["anchor"] {
+  if (a.kind === "rect") return { ...a, rect: translateRect(a.rect, dx, dy) };
+  if (a.kind === "path") return { ...a, points: translatePoints(a.points, dx, dy) };
+  return a;
 }
 
 /**

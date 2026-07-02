@@ -40,8 +40,10 @@ beforeEach(() => {
   useAnnotationStore.setState({
     annotations: new Map(),
     selectedId: null,
+    multiSelectedIds: [],
     hoveredId: null,
     dragPreview: null,
+    groupDragPreview: null,
     activeColors: {
       highlight: "annotation-default",
       underline: "annotation-default",

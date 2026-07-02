@@ -83,7 +83,7 @@ function memoMark(
   };
 }
 
-beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null, flashId: null }));
+beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, multiSelectedIds: [], hoveredId: null, flashId: null, groupDragPreview: null }));
 afterEach(cleanup);
 
 describe("AnnotationLayer (AC-3, AC-4, AC-6)", () => {
@@ -613,7 +613,7 @@ describe("AnnotationLayer region fills (Story 2.11 — AC3,4,6)", () => {
     };
   }
 
-  beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, hoveredId: null, flashId: null }));
+  beforeEach(() => useAnnotationStore.setState({ annotations: new Map(), selectedId: null, multiSelectedIds: [], hoveredId: null, flashId: null, groupDragPreview: null }));
 
   it("kind=rect + type=highlight renders a fill div in .annotation-regions, NOT memo/pen groups", () => {
     useAnnotationStore.getState().addAnnotation(regionHighlight("r1"));
@@ -756,6 +756,76 @@ describe("AnnotationLayer edit frame (Story 3.1)", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     expect(screen.queryByTestId("annotation-edit-frames-0")).toBeNull();
+  });
+});
+
+describe("AnnotationLayer multi-selection (box-select, user feature request)", () => {
+  it("rings every multi-selected mark on this page (like the single --selected ring)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(penMark("p1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1", "p1"]));
+    expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--selected");
+    // Pen renders an SVG <path>: .className there is an SVGAnimatedString object,
+    // not a plain string (matches the existing pen hover/select assertions above).
+    expect(screen.getByTestId("annotation-mark-p1").getAttribute("class")).toContain("annotation-pen--selected");
+  });
+
+  it("renders the group frame's move grip + delete button when marks on this page are multi-selected", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(penMark("p1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1", "p1"]));
+    expect(screen.getByTestId("annotation-multi-select-frames-0")).toBeTruthy();
+    expect(screen.getByTestId("multi-select-move-handle")).toBeTruthy();
+    expect(screen.getByTestId("multi-select-delete")).toBeTruthy();
+  });
+
+  it("the move grip carries data-edit-group (not a per-mark data-edit-id)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1"]));
+    const grip = screen.getByTestId("multi-select-move-handle");
+    expect(grip.getAttribute("data-edit-group")).toBe("");
+    expect(grip.getAttribute("data-edit-id")).toBeNull();
+  });
+
+  it("clicking the delete button calls deleteMany with every multi-selected id", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(penMark("p1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1", "p1"]));
+    fireEvent.click(screen.getByTestId("multi-select-delete"));
+    const annotations = useAnnotationStore.getState().annotations;
+    expect(annotations.has("m1")).toBe(false);
+    expect(annotations.has("p1")).toBe(false);
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+
+  it("renders no group frame when nothing is multi-selected", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    expect(screen.queryByTestId("annotation-multi-select-frames-0")).toBeNull();
+  });
+
+  it("renders no group frame on a page with no multi-selected members (scoped per page)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(memoMark("m2", 1));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    // Only m2 (page 1) is multi-selected; this layer renders page 0.
+    act(() => useAnnotationStore.getState().setMultiSelected(["m2"]));
+    expect(screen.queryByTestId("annotation-multi-select-frames-0")).toBeNull();
+  });
+
+  it("selecting a single mark clears any multi-selection ring (mutual exclusion)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(memoMark("m2", 0));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().setMultiSelected(["m1", "m2"]));
+    act(() => useAnnotationStore.getState().select("m1"));
+    expect(screen.getByTestId("annotation-mark-m1").className).toContain("annotation-memo--selected");
+    expect(screen.getByTestId("annotation-mark-m2").className).not.toContain("annotation-memo--selected");
+    expect(screen.queryByTestId("annotation-multi-select-frames-0")).toBeNull();
   });
 });
 

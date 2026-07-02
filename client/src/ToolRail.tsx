@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Cursor,
   Hand,
+  Selection,
   BoundingBox,
   Highlighter,
   TextUnderline,
@@ -20,11 +21,19 @@ import ToolFlyout from "./ToolFlyout";
  * The cursor-family (pointer) options, in flyout order. `Icon` is the Phosphor
  * (regular) monochrome glyph — it paints with `currentColor`, so it inherits the
  * button's token color (body, or ink when armed). `hint` is the hover tooltip
- * (native `title`); `label` is the accessible name (aria-label).
+ * (native `title`); `label` is the accessible name (aria-label). `boxSelect`
+ * (user feature request): a marquee drag selects existing annotations for bulk
+ * Move/Delete — see `useMultiSelectGesture`.
  */
 const OPTIONS: { value: PointerTool; label: string; hint: string; Icon: Icon }[] = [
   { value: "cursor", label: "Cursor", hint: "Cursor: select & read text (V)", Icon: Cursor },
   { value: "hand", label: "Hand", hint: "Hand: drag to pan, or hold Space", Icon: Hand },
+  {
+    value: "boxSelect",
+    label: "Box select",
+    hint: "Box select: drag to select multiple annotations",
+    Icon: Selection,
+  },
 ];
 
 /**
