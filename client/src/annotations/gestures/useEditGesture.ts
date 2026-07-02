@@ -309,6 +309,13 @@ export function useEditGesture(opts: {
       document.removeEventListener("pointercancel", abort);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", abort);
+      // `enabled` going false (e.g. the hide-all toggle, Story 5.5) tears down these
+      // listeners mid-drag same as any other disable path: abort WITHOUT committing
+      // here too, not just remove listeners — otherwise a physical pointerup landing
+      // with no listener bound leaves dragRef/groupDragRef stale, and the next
+      // enable's fresh onMove/onUp would silently resume + commit a geometry edit
+      // from an unrelated later pointer event (the recurring held-state bug).
+      abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);

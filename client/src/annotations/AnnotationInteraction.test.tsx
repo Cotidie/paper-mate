@@ -749,6 +749,25 @@ describe("AnnotationInteraction pen gesture (Story 2.8 — AC1,2)", () => {
     expect(useAnnotationStore.getState().all().filter((a) => a.type === "pen")).toHaveLength(0);
   });
 
+  it("hiding mid-draft aborts the stroke: no stray mark on a later pointerup after un-hiding (Story 5.5, Codex)", () => {
+    const canvas = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" />);
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    expect(screen.queryByTestId("pen-preview")).toBeTruthy();
+    // Hiding tears down the gesture's document listeners mid-draft, same as any
+    // other disable path (armedTool clearing, doc switch): the draft must be
+    // aborted right then, not left stranded for the next enable to pick up.
+    act(() => useAnnotationStore.getState().setHidden(true));
+    act(() => useAnnotationStore.getState().setHidden(false));
+    // A pointerup arriving after re-show (the physical mouseup that happened while
+    // no listener was bound, or any later unrelated release) must NOT resume and
+    // commit the old draft as a stroke.
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    expect(useAnnotationStore.getState().all().filter((a) => a.type === "pen")).toHaveLength(0);
+  });
+
   it("does not draw with a non-pen tool armed (the gesture is pen-gated)", () => {
     const canvas = canvasTarget();
     const pages = [fakeCard(0, 0)];

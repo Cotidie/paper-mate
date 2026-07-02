@@ -132,6 +132,12 @@ export function useBoxGesture(
       document.removeEventListener("pointercancel", abort);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", abort);
+      // `enabled` going false (e.g. the hide-all toggle, Story 5.5) tears down these
+      // listeners mid-drag same as any other disable path: abort the draft here too,
+      // not just remove listeners, so a physical pointerup landing with no listener
+      // bound can't leave a stale draft for the next enable to pick up (the recurring
+      // held-state bug).
+      abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, docId, addAnnotation, select]);
