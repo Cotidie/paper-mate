@@ -325,6 +325,30 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     expect(screen.queryByTestId("quick-box")).toBeNull();
   });
 
+  it("consumes its own Escape in the capture phase, before a bubble-phase document listener observes it (Story 5.6, rung 1a)", async () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    await screen.findByTestId("quick-box");
+
+    // App's own `Escape -> cursor` fallback is a bubble-phase document
+    // listener (registered well before this effect re-runs on the `pending`
+    // flip). A bubble spy here stands in for it: if the pending quick-box's
+    // capture-phase handler correctly calls stopImmediatePropagation, the
+    // spy must never observe the press.
+    const bubbleSpy = vi.fn();
+    document.addEventListener("keydown", bubbleSpy);
+    try {
+      fireEvent.keyDown(document, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByTestId("quick-box")).toBeNull());
+      expect(bubbleSpy).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener("keydown", bubbleSpy);
+    }
+  });
+
   it("clears the native selection immediately on present (the preview highlight represents it visually from then on)", async () => {
     const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
@@ -1869,6 +1893,26 @@ describe("AnnotationInteraction multi-select (box-select) gesture (user feature 
     );
     act(() => useAnnotationStore.getState().setMultiSelected(["a"]));
     fireEvent.keyDown(document, { key: "Escape" });
+    expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+    expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
+  });
+
+  it("Esc clears the multi-selection while a button holds focus (Codex MED, Story 5.6: was swallowed by the broad isExempt, mirroring useSelection.ts's own already-fixed twin bug)", () => {
+    useAnnotationStore.getState().addAnnotation(memoAt("a", { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 }));
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled multiSelectActive rectReader={reader} />,
+    );
+    act(() => useAnnotationStore.getState().setMultiSelected(["a"]));
+    // A stale-focused button (e.g. the last-clicked tool-rail button) must not
+    // swallow Esc — App now DEFERS Esc whenever multiSelectedIds is non-empty
+    // (Story 5.6 rung 2), so if this handler ALSO ignored it, Esc became a
+    // total no-op (neither listener acted).
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.focus();
+    stubNodes.push(button);
+    fireEvent.keyDown(button, { key: "Escape" });
     expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
     expect(useAnnotationStore.getState().annotations.has("a")).toBe(true);
   });

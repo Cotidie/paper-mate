@@ -144,17 +144,37 @@ export default function App() {
   const docOpen = doc !== null;
   useEffect(() => {
     if (!docOpen || settingsOpen) return;
+    // A hotkey deliberately fires even while a tool-rail button still holds
+    // stale DOM focus from its last click (see the header note above), but
+    // that leftover focus makes the browser's native `:focus-visible` ring
+    // (index.css, UX-DR17) latch onto the button on the very next keypress —
+    // the WHATWG heuristic treats a keyboard event on a focused element as
+    // "now being used via keyboard" and switches the ring on. Nothing then
+    // ever un-focuses the button, so the ring visually outlives whatever
+    // tool state it was showing (e.g. a lingering border after Esc disarms
+    // it). Blurring on every HANDLED key (Escape or a matched action, never
+    // an unrecognized keystroke) drops that stale focus so the ring can't
+    // latch on to begin with; hotkeys are unaffected since this listener is
+    // document-level and never depended on which element holds focus.
+    const clearStaleFocus = () => (document.activeElement as HTMLElement | null)?.blur?.();
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.metaKey) return;
       if (isEditableTarget(e.target)) return;
       if (e.key === "Escape") {
         e.preventDefault();
+        clearStaleFocus();
+        // Fallback rung only (Story 5.6, layered Esc): defer to a more-local
+        // rung (the overlay's selection-clear) when a mark is selected, so a
+        // single Esc never both clears the selection AND disarms the tool.
+        const { selectedId, multiSelectedIds } = useAnnotationStore.getState();
+        if (selectedId || multiSelectedIds.length > 0) return;
         setActiveTool("cursor");
         return;
       }
       const action = matchAction(keymap, e);
       if (!action) return;
       e.preventDefault();
+      clearStaleFocus();
       switch (action) {
         case "cursor":
           // Same setter as Escape; no second field to clear.
@@ -193,8 +213,23 @@ export default function App() {
           break;
       }
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    // Capture phase (Codex HIGH, Story 5.6): this effect re-registers whenever
+    // `settingsOpen`/`keymap` changes (e.g. open then close Settings while a
+    // mark stays selected). Bubble-phase order between independently-mounted
+    // document listeners follows attachment time, not source order in the
+    // tree, so a re-attach here can land this handler in a different relative
+    // position vs. the overlay's own bubble-phase selection listeners
+    // (`useSelection`/`useMultiSelectGesture`) than the "usual" case this
+    // story's Dev Notes assumed — breaking the layered-Esc ladder in ways
+    // that ranged from a resurfaced double-action to Esc going fully inert
+    // (confirmed by reverting this line locally: the regression test below
+    // failed with `selectedId` never clearing at all). Capture always runs
+    // before any bubble-phase listener on the same target regardless of
+    // attachment order, so this handler is guaranteed to evaluate against
+    // PRE-mutation state and defer correctly every time — the ladder no
+    // longer depends on registration order at all.
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
   }, [docOpen, settingsOpen, keymap]);
 
   // Annotation Bank row click (Story 3.6, AC-4): jump the canvas to the mark's

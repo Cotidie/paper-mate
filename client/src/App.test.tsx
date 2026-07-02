@@ -401,6 +401,77 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(screen.getByTestId("highlight-box-toggle").getAttribute("aria-checked")).toBe("false");
   });
 
+  it("Escape defers to the overlay when a mark is selected (does not disarm the tool); a second Escape then returns to cursor (Story 5.6, layered Esc)", async () => {
+    await openReader();
+    const hi = () => screen.getByTestId("tool-highlight-button");
+    fireEvent.keyDown(document, { key: "h" });
+    expect(hi().className).toContain("tool-button--armed");
+
+    // A mark is selected (seeded directly on the store -- the overlay's own
+    // clearSelection is a separate concern, covered by useSelection's Esc
+    // handling and AnnotationInteraction.test.tsx). App's Escape branch must
+    // DEFER, not disarm, so a single press never both clears the selection
+    // AND drops the armed tool (the AC-2 regression this story fixes).
+    act(() => useAnnotationStore.setState({ selectedId: "a1" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).toContain("tool-button--armed");
+
+    // Nothing selected now (as the overlay's clearSelection would have left
+    // it): the SECOND Escape falls through to the fallback rung, cursor.
+    act(() => useAnnotationStore.setState({ selectedId: null }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).not.toContain("tool-button--armed");
+    expect(screen.getByTestId("tool-cursor-button").className).toContain("tool-button--armed");
+  });
+
+  it("Escape defers to the overlay when a marquee multi-selection is active (does not disarm the tool) (Story 5.6, layered Esc)", async () => {
+    await openReader();
+    const hi = () => screen.getByTestId("tool-highlight-button");
+    fireEvent.keyDown(document, { key: "h" });
+    expect(hi().className).toContain("tool-button--armed");
+
+    act(() => useAnnotationStore.setState({ multiSelectedIds: ["a1", "a2"] }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).toContain("tool-button--armed");
+
+    act(() => useAnnotationStore.setState({ multiSelectedIds: [] }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).not.toContain("tool-button--armed");
+  });
+
+  it("Escape still defers correctly even after Settings re-registers App's listener AFTER the overlay's (Codex HIGH, Story 5.6): capture phase, not registration order, makes this safe", async () => {
+    await openReader();
+    const hi = () => screen.getByTestId("tool-highlight-button");
+    fireEvent.keyDown(document, { key: "h" });
+    expect(hi().className).toContain("tool-button--armed");
+
+    // Select a REAL mark through the real store, so the overlay's own
+    // (bubble-phase) useSelection document listener actually mounts.
+    act(() => useAnnotationStore.getState().addAnnotation(mark("a1", fakeDoc.doc_id)));
+    act(() => useAnnotationStore.getState().select("a1"));
+    expect(useAnnotationStore.getState().selectedId).toBe("a1");
+
+    // Open then close Settings: App's own keydown effect unmounts (guard
+    // clause) and re-mounts, re-attaching its listener AFTER the overlay's
+    // still-mounted selection listener — the exact registration-order flip
+    // that broke the old bubble-phase "App reads state" approach (the
+    // overlay would clear the selection FIRST, then App would read the
+    // now-empty store and disarm on the SAME press).
+    fireEvent.click(screen.getByTestId("tool-settings-button"));
+    fireEvent.click(screen.getByTestId("settings-close"));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    // Capture phase guarantees App evaluates against the PRE-clear value
+    // regardless of the flipped bubble order: it must still defer (not
+    // disarm) on this first Escape, while the overlay clears the selection.
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(hi().className).toContain("tool-button--armed");
+
+    // Second Escape (now nothing selected): falls through to cursor.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(hi().className).not.toContain("tool-button--armed");
+  });
+
   it("'H' over a focused button still arms (letter hotkeys have no native button meaning)", async () => {
     await openReader();
     // Bug repro: clicking a tool-rail button leaves it focused; a stale focus
@@ -424,6 +495,27 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     // ...and a later hotkey, fired with the same stale target, must still work.
     fireEvent.keyDown(hi, { key: "u" });
     expect(screen.getByTestId("tool-underline-button").className).toContain("tool-button--armed");
+  });
+
+  it("a handled hotkey blurs a stale-focused tool-rail button, so its native focus ring cannot linger (fix request)", async () => {
+    await openReader();
+    const hi = screen.getByTestId("tool-highlight-button");
+    fireEvent.click(hi);
+    hi.focus();
+    expect(document.activeElement).toBe(hi);
+    // Escape disarms the tool; the button that held stale keyboard focus
+    // must be blurred in the same stroke, or the browser's :focus-visible
+    // ring latches onto it on this very keydown and never lets go (the
+    // black-border-lingers-after-Esc bug).
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).not.toBe(hi);
+
+    // Same for a matched hotkey action (not just the hard-coded Escape branch).
+    fireEvent.click(hi);
+    hi.focus();
+    expect(document.activeElement).toBe(hi);
+    fireEvent.keyDown(document, { key: "v" });
+    expect(document.activeElement).not.toBe(hi);
   });
 
   it("clicking the Highlight rail button arms it; re-click keeps it armed (no toggle-off)", async () => {

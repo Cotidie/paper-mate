@@ -24,6 +24,7 @@ import {
 } from "@/anchor";
 import { useAnnotationStore } from "@/store";
 import { newId } from "@/lib/uuid";
+import { isEditableTarget } from "@/lib/domFocus";
 import { buildAnnotations, buildMemoAnnotation, buildCommentPin } from "@/annotations/create";
 import { clampToViewport } from "@/annotations/position";
 import { initialOverlayState, overlayReducer, type AnnotationTool, type OverlayState } from "@/annotations/machine";
@@ -396,22 +397,29 @@ export function useCreateQuickBox(opts: {
   // programmatic scroll adjustment — as "the user navigated away."
   useEffect(() => {
     if (!pending) return;
+    // Story 5.6 (layered Esc, rung 1a): capture phase + stopImmediatePropagation
+    // so this consumes its own Esc BEFORE App's fallback `Esc -> cursor` runs.
+    // This effect re-registers on every `pending` flip, landing AFTER App's
+    // already-mounted bubble listener — a bubble-phase stop would fire too late,
+    // but capture always precedes bubble regardless of registration order.
+    // Exempt editable targets so a focused editor's own Esc handler still runs.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        dismiss();
-      }
+      if (e.key !== "Escape") return;
+      if (isEditableTarget(e.target)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      dismiss();
     };
     const onPointerDown = (e: PointerEvent) => {
       if (quickBoxRef.current && !quickBoxRef.current.contains(e.target as Node)) {
         dismiss();
       }
     };
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
     // Capture phase so the dismiss runs before a fresh selection's pointerdown.
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => {
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
   }, [pending, dismiss]);
