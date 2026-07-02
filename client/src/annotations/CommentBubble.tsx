@@ -126,16 +126,28 @@ export default function CommentBubble({
       onPointerCancel={() => {
         boxDragRef.current = null;
       }}
-      // Esc dismisses from ANY control in the bubble, not just the textarea
-      // (Codex MED): the swatch/delete buttons are exempt from the document-level
-      // selection keys, so Esc on them would otherwise do nothing. Handling it on
-      // the container catches every focused child.
+      // Esc/Delete act from ANY control in the bubble, not just the textarea
+      // (Codex MED, extended for Delete): the swatch/delete buttons are exempt
+      // from the document-level selection keys (useSelection.ts), and the
+      // textarea autofocuses on open (below) — outside `selectionBoxRef`, the
+      // ONLY element that handler's `inSelectionBox` carve-out recognizes — so
+      // neither key would otherwise reach the annotation at all (bug: the
+      // "Delete (Del)" tooltip on the trash button below promised a shortcut
+      // that silently did nothing). Handling both on the container catches
+      // every focused child, INCLUDING the textarea while typing: Delete here
+      // always removes the comment, never forward-deletes a character (unlike
+      // Backspace, untouched) — a deliberate object-vs-text-edit split, the
+      // same shortcut convention as the generic mark quick-box.
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
           (document.activeElement as HTMLElement | null)?.blur?.();
           onClearSelection();
+        } else if (e.key === "Delete") {
+          e.preventDefault();
+          e.stopPropagation();
+          onDelete();
         }
       }}
     >
