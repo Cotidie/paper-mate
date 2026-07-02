@@ -28,12 +28,13 @@
 // `hoveredId`/`selectedId` and lights any mark that matches by id OR shares a
 // non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
 
-import { useRef } from "react";
 import { ChatCircle, Trash } from "@phosphor-icons/react";
 import type { Annotation, Rect } from "../api/client";
 import { useAnnotationStore } from "../store";
 import { denormalizeRect, denormalizePoint, pointsBounds, type PageBox, type ScreenRect } from "../anchor";
 import { strokeOutline, svgPathFromOutline } from "./pen";
+import { inActiveGroup, markClass, unionRect, markBounds } from "./markGeometry";
+import { useTextEditSession } from "./useTextEditSession";
 import MemoBox from "./MemoBox";
 import CommentBubble from "./CommentBubble";
 import "./Annotations.css";
@@ -43,56 +44,6 @@ import "./Annotations.css";
  *  Kept in sync with the CSS token by the comment; used as the `??` fallback on
  *  every pen path (the CSS var can't be read as a number in TSX). */
 const PEN_DEFAULT_ALPHA = 0.4;
-
-/** Is `a` part of the active set named by `activeId`? True when it IS that mark,
- *  or shares a non-null `group_id` with it — so a two-page highlight's sibling on
- *  another page lights together (hover outline + selected ring). */
-function inActiveGroup(a: Annotation, activeId: string | null, all: Map<string, Annotation>): boolean {
-  if (!activeId) return false;
-  if (a.id === activeId) return true;
-  const active = all.get(activeId);
-  return active != null && active.group_id != null && active.group_id === a.group_id;
-}
-
-/** Build a mark's class string from its base + hover/selected/flash modifiers
- *  (Story 5.0: the one helper for the suffixing that was copy-pasted into all
- *  five render funcs; Story 3.6 adds `flashed`, the Annotation Bank jump's
- *  brief emphasis, following the exact same pattern). `classList` is the full
- *  static class (may carry extra classes like `annotation-region`/`--underline`);
- *  `modifierRoot` is the BEM root the `--hovered`/`--selected`/`--flash` suffixes
- *  attach to (often a prefix of `classList`). */
-function markClass(
-  classList: string,
-  modifierRoot: string,
-  hovered: boolean,
-  selected: boolean,
-  flashed: boolean,
-): string {
-  return (
-    classList +
-    (hovered ? ` ${modifierRoot}--hovered` : "") +
-    (selected ? ` ${modifierRoot}--selected` : "") +
-    (flashed ? ` ${modifierRoot}--flash` : "")
-  );
-}
-
-/** Union of two normalized rects (min top-left, max bottom-right). Pure
- *  aggregation for the multi-select group frame's outline (below). */
-function unionRect(a: Rect, b: Rect): Rect {
-  return { x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) };
-}
-
-/** A mark's own normalized bounding rect regardless of kind (text -> the union
- *  of its per-line rects; rect -> itself; path -> `pointsBounds`). Used ONLY for
- *  the multi-select group frame's single approximate outline over N marks (user
- *  feature request) — per-kind PAINT geometry elsewhere is unaffected. `null` for
- *  a text mark with no rects (nothing to bound). */
-function markBounds(anchor: Annotation["anchor"]): Rect | null {
-  if (anchor.kind === "rect") return anchor.rect;
-  if (anchor.kind === "path") return pointsBounds(anchor.points);
-  if (anchor.rects.length === 0) return null;
-  return anchor.rects.reduce(unionRect);
-}
 
 export default function AnnotationLayer({
   docId,
@@ -140,30 +91,10 @@ export default function AnnotationLayer({
   const retextAnnotation = useAnnotationStore((s) => s.retextAnnotation);
   const retextAnnotations = useAnnotationStore((s) => s.retextAnnotations);
   const setMemoCollapsed = useAnnotationStore((s) => s.setMemoCollapsed);
-  // Text-edit session coalescing (Story 3.2, AC-4): a memo or comment textarea
-  // editing session (focus→blur) must land as ONE undo step, not one per keystroke.
-  // On focus: pause the temporal store and save the pre-session annotations Map.
-  // On blur: resume + push the pre-session snapshot to pastStates so one undo
-  // returns to the state before the editing session started. If nothing changed
-  // (no keystrokes), the Map ref is unchanged and we skip the push.
-  const textSessionRef = useRef<Map<string, Annotation> | null>(null);
-  const startTextEditSession = () => {
-    textSessionRef.current = useAnnotationStore.getState().annotations;
-    useAnnotationStore.temporal.getState().pause();
-  };
-  const commitTextEditSession = () => {
-    useAnnotationStore.temporal.getState().resume();
-    const pre = textSessionRef.current;
-    textSessionRef.current = null;
-    if (!pre) return;
-    const current = useAnnotationStore.getState().annotations;
-    if (current === pre) return; // nothing changed, skip
-    const { pastStates } = useAnnotationStore.temporal.getState();
-    useAnnotationStore.temporal.setState({
-      pastStates: [...pastStates.slice(-99), { annotations: pre }],
-      futureStates: [],
-    });
-  };
+  // Text-edit session coalescing (Story 3.2, AC-4), encapsulated as its own
+  // hook (Story 5.3): a memo or comment textarea editing session (focus→blur)
+  // must land as ONE undo step, not one per keystroke.
+  const { onTextFocus: startTextEditSession, onTextBlur: commitTextEditSession } = useTextEditSession();
   // Story 2.10: a selected comment's bubble recolors/deletes the comment itself
   // (the bubble REPLACES the generic selection quick-box, Decision 4), so the
   // layer owns those actions for comments. Recolor sets the active default too
