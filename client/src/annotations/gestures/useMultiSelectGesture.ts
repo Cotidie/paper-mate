@@ -15,9 +15,9 @@
 // heavily-tested single-select file).
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { normalizeRect, pickPage, pointsBounds, rectsIntersect, type PageCardRef } from "../../anchor";
-import { useAnnotationStore } from "../../store";
-import type { Annotation, Rect } from "../../api/client";
+import { normalizeRect, pickPage, pointsBounds, rectsIntersect, type PageCardRef } from "@/anchor";
+import { useAnnotationStore } from "@/store";
+import type { Annotation, Rect } from "@/api/client";
 import { isExempt } from "./shared";
 
 /** Minimum pointer travel (px) for a marquee drag to commit a selection. Below

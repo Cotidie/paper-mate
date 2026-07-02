@@ -20,8 +20,8 @@
 // snapshot to doc A, or clear `inFlightRef` while doc B's own PUT is
 // genuinely in flight, breaking single-flight (H6) across the switch.
 import { useEffect, useRef, useState } from "react";
-import { useAnnotationStore } from "../store";
-import { putAnnotations } from "../api/client";
+import { useAnnotationStore } from "@/store";
+import { putAnnotations } from "@/api/client";
 
 export const DEBOUNCE_MS = 800;
 export const SETTLE_MS = 1200;

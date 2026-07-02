@@ -2,8 +2,8 @@
 // extraction out of AnnotationLayer.tsx). A zero-React-import leaf so every
 // helper is independently unit-testable.
 
-import type { Annotation, Rect } from "../api/client";
-import { pointsBounds } from "../anchor";
+import type { Annotation, Rect } from "@/api/client";
+import { pointsBounds } from "@/anchor";
 
 /** Is `a` part of the active set named by `activeId`? True when it IS that mark,
  *  or shares a non-null `group_id` with it — so a two-page highlight's sibling on

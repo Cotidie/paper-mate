@@ -21,12 +21,12 @@ import {
   clipRectToViewport,
   type PageCardRef,
   type PageSelection,
-} from "../../anchor";
-import { useAnnotationStore } from "../../store";
-import { newId } from "../../lib/uuid";
-import { buildAnnotations, buildMemoAnnotation, buildCommentPin } from "../create";
-import { clampToViewport } from "../position";
-import { initialOverlayState, overlayReducer, type AnnotationTool, type OverlayState } from "../machine";
+} from "@/anchor";
+import { useAnnotationStore } from "@/store";
+import { newId } from "@/lib/uuid";
+import { buildAnnotations, buildMemoAnnotation, buildCommentPin } from "@/annotations/create";
+import { clampToViewport } from "@/annotations/position";
+import { initialOverlayState, overlayReducer, type AnnotationTool, type OverlayState } from "@/annotations/machine";
 import { isExempt, type ActiveDefaults } from "./shared";
 
 /** Max pointer travel (px) between a comment pointerdown and its release for the

@@ -33,9 +33,9 @@ import {
   pointsBounds,
   type PageCardRef,
   type RectCorner,
-} from "../../anchor";
-import { useAnnotationStore } from "../../store";
-import type { Annotation } from "../../api/client";
+} from "@/anchor";
+import { useAnnotationStore } from "@/store";
+import type { Annotation } from "@/api/client";
 
 /** A handle on the edit frame: the move grip or one of the four resize corners. */
 export type EditHandle = "move" | RectCorner;

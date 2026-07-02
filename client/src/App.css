@@ -27,15 +27,6 @@
   color: var(--color-ink);
 }
 
-/* page-status: quiet caption ("Page N of M"), styled like the save-indicator. */
-.top-bar__page-status {
-  font-family: var(--font-sans);
-  font-size: var(--type-caption-size);
-  font-weight: var(--type-caption-weight);
-  line-height: var(--type-caption-leading);
-  color: var(--color-muted);
-}
-
 .top-bar__actions {
   margin-left: auto;
   display: flex;
@@ -43,13 +34,73 @@
   gap: var(--space-xs);
 }
 
-/* version: quiet mono caption badge at the far right of the top-bar. */
-.top-bar__version {
-  font-family: var(--font-mono);
+/* page-indicator: centered top-bar page nav ( caret / [current] of N / caret ).
+   Absolutely centered so the title (left) and actions (right) never shift it;
+   shares the hairline pill idiom with the zoom-control on the right. */
+.page-indicator {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: var(--page-indicator-gap);
+  background: var(--color-canvas);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-pill);
+  padding: var(--space-xxs) var(--space-xs);
+  font-family: var(--font-sans);
   font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
   line-height: var(--type-caption-leading);
   color: var(--color-muted);
-  padding-left: var(--space-xxs);
+}
+
+/* caret buttons: a real hit target (UX-DR17), quiet until hover; dim + inert at
+   the first/last page. */
+.page-indicator__button {
+  min-width: var(--page-indicator-button-size);
+  min-height: var(--page-indicator-button-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-body);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.page-indicator__button svg {
+  width: var(--page-indicator-icon-size);
+  height: var(--page-indicator-icon-size);
+  display: block;
+}
+
+.page-indicator__button:hover:not(:disabled) {
+  background: var(--color-surface-strong);
+}
+
+.page-indicator__button:disabled {
+  opacity: var(--page-indicator-disabled-opacity);
+  cursor: default;
+}
+
+/* the current page sits in a filled rounded chip; the total is muted alongside. */
+.page-indicator__current {
+  min-width: var(--page-indicator-current-min);
+  text-align: center;
+  padding: var(--space-xxs) var(--space-xs);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.page-indicator__total {
+  padding: 0 var(--space-xxs);
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .pill {

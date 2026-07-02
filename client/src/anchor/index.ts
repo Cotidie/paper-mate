@@ -19,7 +19,7 @@
 // normalization (divide/multiply by `box * scale`), which round-trips correctly
 // across zoom AND rotation because both directions use the same baked box.
 
-import type { Rect, Point } from "../api/client";
+import type { Rect, Point } from "@/api/client";
 
 /**
  * The page box the anchor service normalizes against: logical page dimensions

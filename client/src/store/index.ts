@@ -29,8 +29,8 @@
 
 import { create } from "zustand";
 import { temporal } from "zundo";
-import type { Annotation } from "../api/client";
-import type { AnnotationTool } from "../lib/tools";
+import type { Annotation } from "@/api/client";
+import type { AnnotationTool } from "@/lib/tools";
 
 /** A memo box-size preset (Story 2.9). The box dimensions ARE the memo's size:
  *  the rect the placement bakes (and `resizeMemoAnnotation` rewrites) carries

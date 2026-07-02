@@ -106,7 +106,7 @@ describe("upload → S1 transition (AC-6)", () => {
     expect(screen.getByText("paper.pdf")).toBeTruthy();
   });
 
-  it("shows the app version badge (from /api/health) in the top bar", async () => {
+  it("shows the app version (from /api/health) in the Settings modal, not the top bar", async () => {
     vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
     vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.0.1" });
     render(<App />);
@@ -114,12 +114,18 @@ describe("upload → S1 transition (AC-6)", () => {
     fireEvent.change(screen.getByTestId("dropzone-input"), {
       target: { files: [pdfFile()] },
     });
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
 
-    await waitFor(() => expect(screen.getByText("v0.0.1")).toBeTruthy());
-    expect(screen.getByRole("banner").contains(screen.getByText("v0.0.1"))).toBe(true);
+    // The version no longer lives in the top bar...
+    expect(screen.getByRole("banner").textContent).not.toContain("0.0.1");
+    // ...it moved into the Settings modal footer.
+    fireEvent.click(screen.getByTestId("tool-settings-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("settings-version").textContent).toContain("v0.0.1"),
+    );
   });
 
-  it("shows the 'Page N of M' indicator in the top bar (AC-2)", async () => {
+  it("shows the page indicator (current in a chip + total) in the top bar (AC-2)", async () => {
     vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
     render(<App />);
 
@@ -127,8 +133,9 @@ describe("upload → S1 transition (AC-6)", () => {
       target: { files: [pdfFile()] },
     });
 
-    // Reader (mocked render) reports page 1; M = doc.page_count (3).
-    await waitFor(() => expect(screen.getByText("Page 1 of 3")).toBeTruthy());
+    // Reader (mocked render) reports page 1; total = doc.page_count (3).
+    await waitFor(() => expect(screen.getByTestId("page-indicator-current").textContent).toBe("1"));
+    expect(screen.getByTestId("page-indicator").textContent).toContain("of 3");
   });
 
   it("shows the zoom control in the top bar, left of ToC, driving the Reader (AC-3)", async () => {

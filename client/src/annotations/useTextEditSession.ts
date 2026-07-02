@@ -8,8 +8,8 @@
 // the push is skipped.
 
 import { useRef } from "react";
-import { useAnnotationStore } from "../store";
-import type { Annotation } from "../api/client";
+import { useAnnotationStore } from "@/store";
+import type { Annotation } from "@/api/client";
 
 export function useTextEditSession() {
   const textSessionRef = useRef<Map<string, Annotation> | null>(null);

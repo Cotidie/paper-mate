@@ -21,8 +21,8 @@
 // anchor/ + store/ only; render/ stays annotation-free (geometry via `getPages`).
 
 import { Highlighter, TextUnderline, ChatCircle, TextT, Trash } from "@phosphor-icons/react";
-import type { PageCardRef } from "../anchor";
-import { useAnnotationStore } from "../store";
+import type { PageCardRef } from "@/anchor";
+import { useAnnotationStore } from "@/store";
 import { strokeOutline, svgPathFromOutline } from "./pen";
 import type { AnnotationTool } from "./machine";
 import type { GestureContext } from "./gestures/shared";
@@ -34,7 +34,7 @@ import { useSelection } from "./gestures/useSelection";
 import { useMultiSelectGesture } from "./gestures/useMultiSelectGesture";
 import { useUndoRedo } from "./gestures/useUndoRedo";
 import { useCreateQuickBox } from "./gestures/useCreateQuickBox";
-import { useLiveRef } from "../hooks/useLiveRef";
+import { useLiveRef } from "@/hooks/useLiveRef";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";

@@ -19,8 +19,8 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { CaretDown, CaretUp } from "@phosphor-icons/react";
-import type { Annotation } from "../api/client";
-import type { ScreenRect } from "../anchor";
+import type { Annotation } from "@/api/client";
+import type { ScreenRect } from "@/anchor";
 import "./Annotations.css";
 
 export default function MemoBox({

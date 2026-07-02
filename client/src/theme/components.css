@@ -105,6 +105,16 @@
   /* Hit-size for the −/+ buttons (keyboard + pointer target). */
   --zoom-control-button-size: 24px;
 
+  /* page-indicator (centered top-bar page nav: caret / [current] of N / caret).
+     Shares the zoom-control pill idiom; the caret buttons dim + go inert at the
+     first/last page. */
+  --page-indicator-gap: 2px;
+  --page-indicator-button-size: 24px;
+  --page-indicator-icon-size: 16px;
+  /* Reserve room so the current-page chip doesn't jitter as the number widens. */
+  --page-indicator-current-min: 28px;
+  --page-indicator-disabled-opacity: 0.35;
+
   /* quick-box (floating annotation popup; DESIGN.md components.quick-box). The
      surface (bg / radius / padding / border / shadow) reuses the shared card
      tokens below; these are the action-button hit dims for the proof action. */

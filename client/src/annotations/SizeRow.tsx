@@ -12,7 +12,7 @@
 
 import { useState } from "react";
 import { CaretDown } from "@phosphor-icons/react";
-import { MEMO_SIZES, type MemoSize } from "../store";
+import { MEMO_SIZES, type MemoSize } from "@/store";
 import "./Annotations.css";
 
 /** Plain accessible names (no em-dash). */

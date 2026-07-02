@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import SizeRow from "./SizeRow";
-import { MEMO_SIZES, DEFAULT_MEMO_SIZE } from "../store";
+import { MEMO_SIZES, DEFAULT_MEMO_SIZE } from "@/store";
 
 afterEach(cleanup);
 

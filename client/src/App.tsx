@@ -7,6 +7,7 @@ import ToolRail from "./components/ToolRail/ToolRail";
 import { type ActiveTool, isAnnotationTool } from "./lib/tools";
 import { useAnnotationStore, hydrateStore, flashAnnotation } from "./store";
 import ZoomControl from "./components/ZoomControl/ZoomControl";
+import PageIndicator from "./components/PageIndicator/PageIndicator";
 import TocPanel from "./components/TocPanel/TocPanel";
 import BankPanel from "./components/BankPanel/BankPanel";
 import type { BankItem } from "./lib/bank";
@@ -257,9 +258,14 @@ export default function App() {
       <header className="top-bar" role="banner">
         <span className="top-bar__title">{doc.filename}</span>
         <SaveIndicator status={saveStatus.status} />
-        <span className="top-bar__page-status" role="status" aria-live="polite">
-          Page {currentPage} of {doc.page_count}
-        </span>
+        {/* Centered page nav (absolute, so it stays centered regardless of the
+            title/actions widths). Prev/next drive the Reader's page jump. */}
+        <PageIndicator
+          currentPage={currentPage}
+          pageCount={doc.page_count}
+          onPrev={() => readerRef.current?.jumpToPage(Math.max(1, currentPage - 1))}
+          onNext={() => readerRef.current?.jumpToPage(Math.min(doc.page_count, currentPage + 1))}
+        />
         <div className="top-bar__actions">
           {/* Zoom control sits left of ToC (UX-DR10 revised 2026-06-28). */}
           <ZoomControl
@@ -292,11 +298,6 @@ export default function App() {
           >
             <Cards aria-hidden />
           </button>
-          {version && (
-            <span className="top-bar__version" title="Paper Mate version">
-              v{version}
-            </span>
-          )}
         </div>
       </header>
 
@@ -344,7 +345,11 @@ export default function App() {
           onToggleCollapse={() => setRailCollapsed((c) => !c)}
           onOpenSettings={() => setSettingsOpen(true)}
         />
-        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <SettingsModal
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          version={version}
+        />
         <TocPanel
           open={tocOpen}
           entries={toc}

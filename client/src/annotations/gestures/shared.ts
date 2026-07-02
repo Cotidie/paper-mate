@@ -7,11 +7,11 @@
 // on every scale/tool change.
 
 import type { RefObject } from "react";
-import type { PageCardRef } from "../../anchor";
-import type { Annotation } from "../../api/client";
-import type { AnnotationTool } from "../../lib/tools";
-import type { MemoSize } from "../../store";
-import { isControlTarget } from "../../lib/domFocus";
+import type { PageCardRef } from "@/anchor";
+import type { Annotation } from "@/api/client";
+import type { AnnotationTool } from "@/lib/tools";
+import type { MemoSize } from "@/store";
+import { isControlTarget } from "@/lib/domFocus";
 
 /** The live active-tool defaults a create gesture reads at commit time. `colors`
  *  is keyed per tool (each tool remembers its own last-picked color); a gesture

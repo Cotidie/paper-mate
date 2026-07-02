@@ -4,7 +4,7 @@
 // and the Annotation Bank jump (Story 3.6).
 
 import { useCallback, type RefObject } from "react";
-import { pageNavTarget } from "../render";
+import { pageNavTarget } from "@/render";
 
 export interface PageNavApi {
   scrollToPage: (pageNumber: number) => void;

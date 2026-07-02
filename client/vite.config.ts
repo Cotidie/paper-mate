@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { viteStaticCopy } from "vite-plugin-static-copy";
@@ -30,6 +31,15 @@ export default defineConfig({
       ],
     }),
   ],
+  // `@` → `src` so modules import from the tree root instead of `../../…`
+  // chains (e.g. `@/lib/domFocus`). Shared by dev, build, AND the Vitest run
+  // below (one config), so tests resolve the alias too; the TS side mirrors it
+  // in tsconfig.app.json `paths`.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   server: {
     proxy: {
       "/api": { target: API_TARGET, changeOrigin: true },

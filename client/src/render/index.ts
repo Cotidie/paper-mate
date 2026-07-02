@@ -20,7 +20,7 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 // from the package so we never hand-author .textLayer px/colors in src/.
 import "pdfjs-dist/web/pdf_viewer.css";
 
-import { docFileUrl } from "../api/client";
+import { docFileUrl } from "@/api/client";
 // The single home for pdf.js asset URLs (decoders/cmaps/iccs/standard fonts).
 import { PDFJS_ASSET_CONFIG } from "./config";
 // Selection/copy fidelity over the live text layer (Story 4.1); not

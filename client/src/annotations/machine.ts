@@ -7,14 +7,14 @@
 // machine carries the armed `tool` through and returns to it after a mark
 // (sticky tool).
 
-import type { PageSelection } from "../anchor";
+import type { PageSelection } from "@/anchor";
 // `AnnotationTool` is defined ONCE in the zero-import `tools.ts` leaf (AD-11) and
 // re-exported here so existing `import { AnnotationTool } from "./annotations"`
 // sites keep working. Single writer of "which annotation tool is armed": App's
 // `activeTool`, mirrored down via the `armedTool` prop and the prop-sync effect
 // in AnnotationInteraction — the machine never self-arms (it only carries the
 // armed tool through its transient states).
-import type { AnnotationTool } from "../lib/tools";
+import type { AnnotationTool } from "@/lib/tools";
 
 export type { AnnotationTool };
 

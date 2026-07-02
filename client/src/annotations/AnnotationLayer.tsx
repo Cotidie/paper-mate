@@ -29,9 +29,9 @@
 // non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
 
 import { ChatCircle, Trash } from "@phosphor-icons/react";
-import type { Annotation, Rect } from "../api/client";
-import { useAnnotationStore } from "../store";
-import { denormalizeRect, denormalizePoint, pointsBounds, type PageBox, type ScreenRect } from "../anchor";
+import type { Annotation, Rect } from "@/api/client";
+import { useAnnotationStore } from "@/store";
+import { denormalizeRect, denormalizePoint, pointsBounds, type PageBox, type ScreenRect } from "@/anchor";
 import { strokeOutline, svgPathFromOutline } from "./pen";
 import { inActiveGroup, markClass, unionRect, markBounds } from "./markGeometry";
 import { useTextEditSession } from "./useTextEditSession";

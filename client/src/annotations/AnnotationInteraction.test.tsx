@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react";
 import AnnotationInteraction from "./AnnotationInteraction";
-import { useAnnotationStore, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "../store";
-import type { PageCardRef, PageBox } from "../anchor";
-import type { Annotation } from "../api/client";
+import { useAnnotationStore, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "@/store";
+import type { PageCardRef, PageBox } from "@/anchor";
+import type { Annotation } from "@/api/client";
 
 const box: PageBox = { width: 600, height: 800 };
 
@@ -1894,5 +1894,41 @@ describe("AnnotationInteraction multi-select (box-select) gesture (user feature 
     expect(screen.queryByTestId("multi-select-preview")).toBeNull();
     fireEvent.pointerUp(document, { button: 0, clientX: 200, clientY: 250 });
     expect(useAnnotationStore.getState().multiSelectedIds).toEqual([]);
+  });
+});
+
+describe("selected-mark Delete/Escape are not swallowed by a focused button (bug fix)", () => {
+  // Repro: click a tool-rail / Annotation Bank button (it keeps DOM focus), then
+  // click a mark to select it, then press Del. The document-level selection
+  // handler saw e.target = the focused BUTTON and the broad isControlTarget
+  // exemption bailed, so Del/Esc silently did nothing (the button just showed a
+  // focus ring). The handler now uses the narrow isEditableTarget, which does
+  // NOT exempt buttons.
+  function selectMark(id: string) {
+    const mark = textMark(id);
+    useAnnotationStore.setState({ annotations: new Map([[mark.id, mark]]) });
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [fakeCard(0, 0)]} scale={1} enabled rectReader={reader} />);
+    // Select AFTER mount: useSelection clears the selection once on mount (the
+    // doc-switch guard), so a pre-set selectedId would be wiped before the
+    // keydown effect binds.
+    act(() => useAnnotationStore.setState({ selectedId: id }));
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.focus();
+    stubNodes.push(button);
+    return button;
+  }
+
+  it("Delete deletes the selected mark while a button holds focus (target = BUTTON)", () => {
+    const button = selectMark("m1");
+    fireEvent.keyDown(button, { key: "Delete" });
+    expect(useAnnotationStore.getState().annotations.has("m1")).toBe(false);
+  });
+
+  it("Escape clears the selection (without deleting) while a button holds focus", () => {
+    const button = selectMark("m2");
+    fireEvent.keyDown(button, { key: "Escape" });
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(useAnnotationStore.getState().annotations.has("m2")).toBe(true);
   });
 });

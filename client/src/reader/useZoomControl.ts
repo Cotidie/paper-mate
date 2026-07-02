@@ -6,7 +6,7 @@
 // re-render at the new scale.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { fitToWidthScale, nextZoom, focalScroll, ZOOM_STEP, ZOOM_WHEEL_STEP, type PageBox } from "../render";
+import { fitToWidthScale, nextZoom, focalScroll, ZOOM_STEP, ZOOM_WHEEL_STEP, type PageBox } from "@/render";
 
 /**
  * Read a spacing token (e.g. `--space-lg`) from the theme layer as a number of
