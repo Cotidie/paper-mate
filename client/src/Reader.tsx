@@ -35,6 +35,7 @@ import { usePageViewport } from "./render/usePageViewport";
 // (AD-9). Importing the view here does NOT make render/ annotation-aware.
 import { AnnotationLayer, AnnotationInteraction, type AnnotationTool } from "./annotations";
 import type { PageCardRef } from "./anchor";
+import { isControlTarget } from "./domFocus";
 import "./Reader.css";
 
 /** Imperative API the top-bar chrome (owned by `App`) drives: zoom buttons +
@@ -430,20 +431,8 @@ export default function Reader({
   // armed tool (the active-drag teardown below stops any pan already in flight).
   useEffect(() => {
     if (phase !== "ready") return;
-    const isExempt = (t: EventTarget | null) => {
-      const el = t as HTMLElement | null;
-      if (!el || !el.tagName) return false;
-      const tag = el.tagName;
-      return (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        tag === "BUTTON" ||
-        el.isContentEditable
-      );
-    };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== " " || isExempt(e.target)) return;
+      if (e.key !== " " || isControlTarget(e.target)) return;
       if (!e.repeat) setSpaceHeld(true);
       e.preventDefault();
     };

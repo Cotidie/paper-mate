@@ -18,6 +18,7 @@ import SaveIndicator from "./SaveIndicator";
 import { matchAction } from "./settings/keymap";
 import { useSettingsStore } from "./settings/store";
 import SettingsModal from "./settings/SettingsModal";
+import { isEditableTarget } from "./domFocus";
 
 /**
  * App shell. Holds the current-doc state and switches between:
@@ -127,26 +128,19 @@ export default function App() {
   // rebind can never remove it. `Space` is deliberately NOT handled here — it
   // is a Reader-internal temp-pan (a document-level Space handler would fight
   // the scroll container). Alt/Meta chords are ignored (keymap bindings
-  // support only a Ctrl modifier) and editable targets/BUTTON are exempt
-  // (Epic-1 retro AP-1).
+  // support only a Ctrl modifier) and only EDITABLE targets are exempt, not
+  // buttons (see `domFocus.ts`): a plain BUTTON (e.g. the last-clicked
+  // tool-rail button, still focused after its click) has no native meaning
+  // for a letter/Ctrl chord or Escape to defer to, so hotkeys must still fire
+  // — matching `useUndoRedo`'s existing precedent, NOT the click-oriented
+  // `isExempt` (bug: a stale focus ring silently ate every hotkey, including
+  // Escape, until the user clicked elsewhere).
   const docOpen = doc !== null;
   useEffect(() => {
     if (!docOpen || settingsOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.metaKey) return;
-      // Exempt editable fields AND controls (SELECT/BUTTON) so a focused control
-      // keeps its own keys — matches the annotations-layer `isExempt` convention
-      // and AC1's document-level handler requirement (Epic-1 retro AP-1).
-      const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === "INPUT" ||
-          t.tagName === "TEXTAREA" ||
-          t.tagName === "SELECT" ||
-          t.tagName === "BUTTON" ||
-          t.isContentEditable)
-      )
-        return;
+      if (isEditableTarget(e.target)) return;
       if (e.key === "Escape") {
         e.preventDefault();
         setActiveTool("cursor");

@@ -11,6 +11,7 @@ import type { PageCardRef } from "../../anchor";
 import type { Annotation } from "../../api/client";
 import type { AnnotationTool } from "../../tools";
 import type { MemoSize } from "../../store";
+import { isControlTarget } from "../../domFocus";
 
 /** The live active-tool defaults a create gesture reads at commit time. `colors`
  *  is keyed per tool (each tool remembers its own last-picked color); a gesture
@@ -40,14 +41,9 @@ export interface GestureContext {
   select: (id: string | null) => void;
 }
 
-/** Skip editable fields + buttons so the global handlers never eat a control's
- *  own keys/clicks (mirrors the Reader's hold-Space `isExempt`). Shared by every
- *  gesture hook AND the remaining document-level handlers in the component. */
-export function isExempt(t: EventTarget | null): boolean {
-  const el = t as HTMLElement | null;
-  if (!el || !el.tagName) return false;
-  const tag = el.tagName;
-  return (
-    tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || el.isContentEditable
-  );
-}
+/** Skip editable fields + buttons so the global gesture handlers never eat a
+ *  control's own click (a click IS the control's action). Shared by every
+ *  gesture hook. Keyboard-hotkey handlers want the narrower `isEditableTarget`
+ *  instead (see `domFocus.ts`) — a plain button has no native meaning for a
+ *  letter/Ctrl chord, only for click/Space. */
+export const isExempt = isControlTarget;

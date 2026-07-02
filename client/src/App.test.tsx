@@ -391,12 +391,29 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(screen.getByTestId("highlight-box-toggle").getAttribute("aria-checked")).toBe("false");
   });
 
-  it("'H' over a focused button/select does NOT arm (handler exempts controls)", async () => {
+  it("'H' over a focused button still arms (letter hotkeys have no native button meaning)", async () => {
     await openReader();
+    // Bug repro: clicking a tool-rail button leaves it focused; a stale focus
+    // ring must not swallow every later hotkey (matches useUndoRedo's
+    // editable-only exempt precedent, not the click-oriented isExempt).
     const btn = screen.getByTestId("tool-highlight-button");
-    // Key event whose target is a BUTTON must be ignored by the document handler.
     fireEvent.keyDown(btn, { key: "h" });
-    expect(btn.className).not.toContain("tool-button--armed");
+    expect(btn.className).toContain("tool-button--armed");
+  });
+
+  it("clicking a tool-rail button does not strand keyboard focus and block later hotkeys", async () => {
+    await openReader();
+    const hi = screen.getByTestId("tool-highlight-button");
+    // A real click focuses the clicked button (jsdom mirrors this).
+    fireEvent.click(hi);
+    hi.focus();
+    expect(hi.className).toContain("tool-button--armed");
+    // Escape while that button still has focus must still disarm...
+    fireEvent.keyDown(hi, { key: "Escape" });
+    expect(hi.className).not.toContain("tool-button--armed");
+    // ...and a later hotkey, fired with the same stale target, must still work.
+    fireEvent.keyDown(hi, { key: "u" });
+    expect(screen.getByTestId("tool-underline-button").className).toContain("tool-button--armed");
   });
 
   it("clicking the Highlight rail button arms it; re-click keeps it armed (no toggle-off)", async () => {

@@ -9,25 +9,13 @@
 
 import { useEffect } from "react";
 import { useAnnotationStore } from "../../store";
-
-/** Exempt ONLY editable text fields, NOT buttons. Unlike the shared `isExempt`
- *  (which also skips BUTTON so gestures don't eat a control's clicks), undo/redo
- *  must still fire when focus sits on a button: right after a create, the
- *  selection quick-box opens and focus lands on its first swatch <button>, and a
- *  button has no native text-undo to defer to. Editable fields stay exempt so
- *  Ctrl+Z inside a memo/comment textarea does the browser's text undo. */
-function isEditable(t: EventTarget | null): boolean {
-  const el = t as HTMLElement | null;
-  if (!el || !el.tagName) return false;
-  const tag = el.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
-}
+import { isEditableTarget } from "../../domFocus";
 
 export function useUndoRedo({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
-      if (isEditable(e.target)) return;
+      if (isEditableTarget(e.target)) return;
       const ctrl = e.ctrlKey || e.metaKey;
       if (!ctrl) return;
       const isZ = e.key === "z" || e.key === "Z";
