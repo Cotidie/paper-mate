@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-02 (Epic 3 retrospective -- epic-3 -> done, 3-8-adjust-text-range -> blocked/descoped, epic-3-retrospective -> done, Epic-2 action items AE-1/2/3 closed + AE-5/6 in-progress, Epic-3 action items AE3-1..AE3-7 added)"
+last_updated: "2026-07-02 (correct-course sprint-change-proposal-2026-07-02: AE-6/AE-7/AE3-1/AE3-2/AE3-4/AE3-6 -> done; AE-4/AE3-3 -> in-progress via new story 5-6-doc-scope-store [backlog]; AE-5 stays in-progress, AE3-5/AE3-7 stay open. Added server/tests/test_version.py + CLAUDE.md conventions.)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -134,6 +134,12 @@ development_status:
   5-3-hide-show-all-annotations: backlog
   5-4-interaction-polish-esc-confirm-strokewidth: backlog
   5-5-dim-toc-panel: backlog
+  # 2026-07-02 correct-course (sprint-change-proposal-2026-07-02.md): AE-4/AE3-3
+  # (doc-scope the store) routed to its own story rather than a grooming-pass
+  # hand-edit -- store owns (docId, annotations) atomically, autosave binds to
+  # store.docId, the useAutosave generationRef cross-doc guard retires. Needs a
+  # doc-switch DPR>1 live smoke (AE-5). Run bmad-create-story next.
+  5-6-doc-scope-store: backlog
   epic-5-retrospective: optional
 
 action_items:
@@ -178,45 +184,45 @@ action_items:
     owner: "Wonseok"
     status: done
   - epic: 2
-    action: "AE-4: doc-scope the store when Epic-3 ownership/persistence lands (hydrate-on-open, flush-on-change, AR-6); stop the per-story defensive cross-doc patches"
+    action: "AE-4: doc-scope the store when Epic-3 ownership/persistence lands (hydrate-on-open, flush-on-change, AR-6); stop the per-story defensive cross-doc patches -- 2026-07-02 correct-course: routed to story 5-6-doc-scope-store (backlog); run bmad-create-story next"
     owner: "Wonseok"
-    status: open
+    status: in-progress
   - epic: 2
     action: "AE-5: live-smoke EVERY geometry/placement feature at DPR>1 before done; backfill the missing Story 2.11 box-select smoke"
     owner: "Wonseok"
     status: in-progress
   - epic: 2
-    action: "AE-6 (standing): keep cross-model Codex review on every story; caught HIGH bugs in 2.2/2.5/2.8/2.10"
+    action: "AE-6 (standing): keep cross-model Codex review on every story; caught HIGH bugs in 2.2/2.5/2.8/2.10 -- 2026-07-02 correct-course: codified in CLAUDE.md (Auto code-review after dev-story)"
+    owner: "Wonseok"
+    status: done
+  - epic: 2
+    action: "AE-7: fix the Codex-sandbox backend-pytest friction (UV_CACHE_DIR=/tmp/uv-cache + the TestClient hang) so reviews can run the backend suite -- 2026-07-02 correct-course: documented backend suite as run-it-yourself in CLAUDE.md (Backend-tests Sandbox note + Auto code-review); real root-cause fix left to AE3-4/host"
+    owner: "Wonseok"
+    status: done
+  - epic: 3
+    action: "AE3-1: update sprint-status.yaml at PR-merge time, not batched later -- 2026-07-02 correct-course: codified in CLAUDE.md (BMad workflow)"
+    owner: "Wonseok"
+    status: done
+  - epic: 3
+    action: "AE3-2: fill in every story's Dev Agent Record (model, debug log, completion notes, status) before marking it done -- 2026-07-02 correct-course: codified in CLAUDE.md (BMad workflow)"
+    owner: "Wonseok"
+    status: done
+  - epic: 3
+    action: "AE3-3 (elevated priority): close AE-4 (doc-scope the store) -- no longer purely theoretical, it is the gap behind Story 3.4's HIGH Codex finding -- 2026-07-02 correct-course: routed to story 5-6-doc-scope-store (backlog) with AE-4; run bmad-create-story next"
     owner: "Wonseok"
     status: in-progress
-  - epic: 2
-    action: "AE-7: fix the Codex-sandbox backend-pytest friction (UV_CACHE_DIR=/tmp/uv-cache + the TestClient hang) so reviews can run the backend suite"
-    owner: "Wonseok"
-    status: open
   - epic: 3
-    action: "AE3-1: update sprint-status.yaml at PR-merge time, not batched later"
+    action: "AE3-4: get a real fix for the Codex-sandbox backend-pytest hang, or document backend verification as run-it-yourself in bmad-code-review -- 2026-07-02 correct-course: documented run-it-yourself in CLAUDE.md (took the documented-fallback branch); real root-cause fix stays open if the hang blocks host runs"
     owner: "Wonseok"
-    status: open
-  - epic: 3
-    action: "AE3-2: fill in every story's Dev Agent Record (model, debug log, completion notes, status) before marking it done"
-    owner: "Wonseok"
-    status: open
-  - epic: 3
-    action: "AE3-3 (elevated priority): close AE-4 (doc-scope the store) -- no longer purely theoretical, it is the gap behind Story 3.4's HIGH Codex finding"
-    owner: "Wonseok"
-    status: open
-  - epic: 3
-    action: "AE3-4: get a real fix for the Codex-sandbox backend-pytest hang, or document backend verification as run-it-yourself in bmad-code-review"
-    owner: "Wonseok"
-    status: open
+    status: done
   - epic: 3
     action: "AE3-5: confirm/backfill the DPR>1 live-smoke gaps in Story 2.11 (box-select) and Story 3.3 (cross-page grouped-delete)"
     owner: "Wonseok"
     status: open
   - epic: 3
-    action: "AE3-6: add a pre-commit/CI check that pyproject.toml's version and uv.lock's recorded version match"
+    action: "AE3-6: add a pre-commit/CI check that pyproject.toml's version and uv.lock's recorded version match -- 2026-07-02 correct-course: added server/tests/test_version.py (runs in the backend suite; no CI/pre-commit framework exists in-repo)"
     owner: "Wonseok"
-    status: open
+    status: done
   - epic: 3
     action: "AE3-7 (investigation, no deadline): FR-26/Story 3.8 stays open -- revisit with a resolve-once-on-pointerup anchor strategy, or confirm the Chromium caretRangeFromPoint bug is headless/CDP-only, before re-attempting"
     owner: "Wonseok"
