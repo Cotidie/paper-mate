@@ -107,7 +107,7 @@ The epic + deferred-work explicitly leave "does the toggle survive reload" to pl
 - [Source: client/src/store/index.ts] — the transient-field + zundo-partialize-exclusion pattern `hidden` copies (`selectedId`/`hoveredId`/`dragPreview`/`flashId`; the header comment's exclusion list; `hydrate`'s transient reset; `select`'s selection clear).
 - [Source: client/src/App.tsx#top-bar__actions] + [client/src/App.css#.pill--icon] — the `pill pill--icon` + `aria-pressed` button idiom (ToC/Bank pills) the eye toggle reuses verbatim.
 - [Source: CLAUDE.md#Engineering-principles] — document-level handlers (AP-1, N/A: no hotkey), render mock barrels (AP-2, N/A), adopt-stable, smallest correct structure; live-smoke on your own servers; cross-page DPR>1 for any selection-geometry-adjacent change.
-- [Source: CLAUDE.md#Versioning] — PATCH +1 (`0.3.10 → 0.3.11`); [.bmad/planning-artifacts/sprint-change-proposal-2026-07-02.md] — AE3-6 version-match guard (`pyproject.toml` == `uv.lock`).
+- [Source: CLAUDE.md#Versioning] — PATCH +1 (`0.3.10 → 0.3.11`); [.bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-07-02.md] — AE3-6 version-match guard (`pyproject.toml` == `uv.lock`).
 
 ## Dev Agent Record
 

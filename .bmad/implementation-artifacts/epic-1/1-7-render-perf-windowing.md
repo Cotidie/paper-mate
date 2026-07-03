@@ -8,7 +8,7 @@ Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
-> Added 2026-06-28 via correct-course (`.bmad/planning-artifacts/sprint-change-proposal-2026-06-28-render.md`). Completes the Story 1.4 **NFR-2** claim (scroll was jittery, not ~60fps) and resolves the virtualization item in `deferred-work.md`. **Root cause:** `PageCard` marks a page `visible` once and never releases its painted canvas + text layer, so every page scrolled past keeps a full hi-DPI canvas + a text-layer DOM forever — cost scales with zoom² — amplified by an always-on, off-screen infinite skeleton animation that composites on every unpainted card. Sequenced ahead of pan/ToC (1.8/1.9): it **restructures the render layer those stories build on**, so the refactor lands first.
+> Added 2026-06-28 via correct-course (`.bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-28-render.md`). Completes the Story 1.4 **NFR-2** claim (scroll was jittery, not ~60fps) and resolves the virtualization item in `deferred-work.md`. **Root cause:** `PageCard` marks a page `visible` once and never releases its painted canvas + text layer, so every page scrolled past keeps a full hi-DPI canvas + a text-layer DOM forever — cost scales with zoom² — amplified by an always-on, off-screen infinite skeleton animation that composites on every unpainted card. Sequenced ahead of pan/ToC (1.8/1.9): it **restructures the render layer those stories build on**, so the refactor lands first.
 
 ## Story
 
@@ -117,7 +117,7 @@ Recent commits are the Epic-1 render path: `9411e04` render + text layer (1.3, w
 ### References
 
 - [Source: .bmad/planning-artifacts/epics.md#Story-1.7 (lines 301-325)] — story statement + 5 ACs.
-- [Source: .bmad/planning-artifacts/sprint-change-proposal-2026-06-28-render.md §1.A, §2, §3, §5] — root cause (scroll jitter / unbounded canvases), impact, sequencing, success criteria.
+- [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-28-render.md §1.A, §2, §3, §5] — root cause (scroll jitter / unbounded canvases), impact, sequencing, success criteria.
 - [Source: .bmad/planning-artifacts/epics.md FR-4 (30), NFR-1 (64), NFR-2 (65), NFR-5 (68), AR-9 (82)] — referenced requirements.
 - [Source: .bmad/planning-artifacts/architecture/.../ARCHITECTURE-SPINE.md AD-9 rule (100-101), source-tree (`render/`), NFR-1 capability row (196)] — boundary + layout-stability invariants.
 - [Source: client/src/Reader.tsx:65,74-77,116,235-267,342,417-543] — the registry, the page-tracking effect, the PageCard observer + paint effect to refactor.

@@ -76,7 +76,7 @@ so that I can size the page to read comfortably.
 
 ### Review Follow-ups (AI) — Correct-Course 2026-06-28
 
-Sprint change (see `.bmad/planning-artifacts/sprint-change-proposal-2026-06-28.md`). Implement alongside the Review Findings above; several overlap.
+Sprint change (see `.bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-28.md`). Implement alongside the Review Findings above; several overlap.
 
 - [x] [AI-Review][HIGH] Make zoom shortcuts focus-independent (AC-1/AC-2). Lift the key handler off `.pdf-canvas` to a stage-/document-level owner (guarded to when a doc is open); ensure `Ctrl +/-/0` and `Ctrl+wheel` fire no matter which reader control has focus. Resolves the HIGH Review Finding. [client/src/Reader.tsx, client/src/App.tsx]
 - [x] [AI-Review][MED] Relocate the zoom control into the **top bar, left of the ToC button** (AC-3, overrides UX-DR10). Lift `scale`/zoom commands to `App` (or portal the control); restyle `ZoomControl` as top-bar chrome (drop the floating-card `--zoom-control-*` offset/shadow; keep `−`/`%`/`+`). [client/src/App.tsx, client/src/ZoomControl.tsx, client/src/App.css, client/src/theme/components.css]

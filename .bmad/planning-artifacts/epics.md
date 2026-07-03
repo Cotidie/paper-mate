@@ -1081,7 +1081,7 @@ So that I can read the clean page and bring my marks back.
 
 > deferred-work: "layered Esc", "confirm (check) affordance on memo + comment editors", "collapse the pen stroke-width row into a single dropdown". Small UX refinements; layered Esc depends on Story 5.0's Esc consolidation.
 >
-> **2026-07-03 RESCOPE (user decision):** shipped as **layered-Esc ONLY**. AC-2 (in-editor confirm check) and AC-3 (collapsed pen stroke-width dropdown) below are **DISCARDED** — not built, not deferred. Kept here (marked) for provenance; the delivered scope is AC-1. See `.bmad/implementation-artifacts/5-6-interaction-polish-esc-confirm-strokewidth.md`.
+> **2026-07-03 RESCOPE (user decision):** shipped as **layered-Esc ONLY**. AC-2 (in-editor confirm check) and AC-3 (collapsed pen stroke-width dropdown) below are **DISCARDED** — not built, not deferred. Kept here (marked) for provenance; the delivered scope is AC-1. See `.bmad/implementation-artifacts/epic-5/5-6-interaction-polish-esc-confirm-strokewidth.md`.
 
 As a reader,
 I want Esc to do the most-local thing, an explicit confirm on note editors, and a compact stroke-width control,
