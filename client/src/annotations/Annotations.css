@@ -746,6 +746,16 @@
   outline: var(--focus-ring-width) solid var(--color-ink);
 }
 
+/* Once the bubble has a MANUAL height (the corner-handle resize, user feature
+   request), the box height is user-controlled instead of auto-grown from
+   content (CommentBubble.tsx skips its auto-grow effect in that case) — the
+   textarea fills the fixed box via flex and scrolls its own overflow instead
+   of forcing the box to keep growing. */
+.comment-bubble__text--manual-size {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
 /* The bubble's action row: the recolor swatches + convert/delete icon buttons. */
 .comment-bubble__actions {
   display: flex;

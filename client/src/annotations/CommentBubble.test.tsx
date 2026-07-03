@@ -27,20 +27,64 @@ const PIN_OFFSET_TRANSFORM = "translateY(calc(var(--comment-pin-size) + var(--sp
 
 function renderBubble(
   id: string,
-  overrides: Partial<{ onDelete: () => void; onClearSelection: () => void }> = {},
+  overrides: Partial<{
+    onDelete: () => void;
+    onClearSelection: () => void;
+    onResize: (size: { width: number; height: number }) => void;
+    anno: Annotation;
+  }> = {},
 ) {
   return render(
     <CommentBubble
-      anno={comment(id)}
+      anno={overrides.anno ?? comment(id)}
       pos={pos}
       onRetext={noop}
       onRecolor={noop}
       onConvertToHighlight={noop}
       onDelete={overrides.onDelete ?? noop}
       onClearSelection={overrides.onClearSelection ?? noop}
+      onResize={overrides.onResize ?? noop}
     />,
   );
 }
+
+describe("CommentBubble resize (corner-handle, user feature request)", () => {
+  it("dragging the corner handle grows the bubble from its persisted size and commits the final size on release", () => {
+    const onResize = vi.fn();
+    const anno = { ...comment("c6"), style: { ...comment("c6").style, bubble_width: 220, bubble_height: 100 } };
+    renderBubble("c6", { onResize, anno });
+    const handle = screen.getByTestId("comment-bubble-resize-c6");
+    const bubble = screen.getByTestId("comment-bubble-c6");
+    fireEvent.pointerDown(handle, { clientX: 300, clientY: 300, button: 0 });
+    fireEvent.pointerMove(handle, { clientX: 350, clientY: 340 });
+    // The live preview is applied immediately (before release).
+    expect(bubble.style.width).toBe("270px");
+    expect(bubble.style.height).toBe("140px");
+    fireEvent.pointerUp(handle, { clientX: 350, clientY: 340 });
+    expect(onResize).toHaveBeenCalledWith({ width: 270, height: 140 });
+  });
+
+  it("clamps a shrink drag to the minimum bubble size", () => {
+    const onResize = vi.fn();
+    const anno = { ...comment("c7"), style: { ...comment("c7").style, bubble_width: 220, bubble_height: 100 } };
+    renderBubble("c7", { onResize, anno });
+    const handle = screen.getByTestId("comment-bubble-resize-c7");
+    fireEvent.pointerDown(handle, { clientX: 300, clientY: 300, button: 0 });
+    fireEvent.pointerMove(handle, { clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(handle, { clientX: 50, clientY: 50 });
+    expect(onResize).toHaveBeenCalledWith({ width: 160, height: 96 });
+  });
+
+  it("dragging the corner handle does NOT also move the bubble (excluded like the other buttons)", () => {
+    renderBubble("c8");
+    const bubble = screen.getByTestId("comment-bubble-c8");
+    const handle = screen.getByTestId("comment-bubble-resize-c8");
+    fireEvent.pointerDown(handle, { clientX: 300, clientY: 300, button: 0 });
+    fireEvent.pointerMove(bubble, { clientX: 350, clientY: 340 });
+    fireEvent.pointerUp(bubble, { clientX: 350, clientY: 340 });
+    expect(bubble.style.transform).toBe(`${PIN_OFFSET_TRANSFORM} translate(0px, 0px)`);
+  });
+});
 
 describe("CommentBubble drag (movable comment box)", () => {
   it("dragging the bubble's own empty padding offsets it via transform", () => {

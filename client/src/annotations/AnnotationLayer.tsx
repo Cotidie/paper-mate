@@ -101,6 +101,7 @@ export default function AnnotationLayer({
   // layer owns those actions for comments. Recolor sets the active default too
   // (last-choice-wins, like every other tool).
   const recolorAnnotation = useAnnotationStore((s) => s.recolorAnnotation);
+  const resizeCommentAnnotation = useAnnotationStore((s) => s.resizeCommentAnnotation);
   const retypeAnnotation = useAnnotationStore((s) => s.retypeAnnotation);
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
@@ -405,6 +406,7 @@ export default function AnnotationLayer({
             onClearSelection={clearSelection}
             onTextFocus={startTextEditSession}
             onTextBlur={commitTextEditSession}
+            onResize={(size) => resizeCommentAnnotation(a.id, size, new Date().toISOString())}
           />
         )}
         {/* Hover compact preview (user feature request): glance + quick text

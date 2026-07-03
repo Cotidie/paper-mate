@@ -237,6 +237,10 @@ export interface components {
          *     ``alpha`` is transparency 0..1 for pen strokes (``None`` = render at the
          *     default highlighter opacity); ``collapsed`` is memo-only (``None``/``False``
          *     = expanded, the default; ``True`` = show only the memo's first line).
+         *     ``bubble_width``/``bubble_height`` are comment-only: the note popup's own
+         *     CSS-px chrome size (NOT page-anchored geometry, scale-independent, mirrors
+         *     ``--comment-bubble-width``); ``None`` = the default CSS size, until the
+         *     user drags the bubble's corner handle to resize it.
          *     Additive + optional (AD-8).
          */
         Style: {
@@ -248,6 +252,10 @@ export interface components {
             alpha?: number | null;
             /** Collapsed */
             collapsed?: boolean | null;
+            /** Bubble Width */
+            bubble_width?: number | null;
+            /** Bubble Height */
+            bubble_height?: number | null;
         };
         /**
          * TextAnchor

@@ -178,7 +178,7 @@
      since the bubble is a fixed popup, not page-anchored geometry). The pin's
      OWN opacity is separate from --annotation-highlight-opacity (the highlight
      fill's own opacity) since the two are tuned independently. */
-  --comment-pin-size: 20px;
+  --comment-pin-size: 28px;
   --comment-pin-opacity: 0.6;
   --comment-bubble-width: 220px;
   --comment-bubble-text-min-height: 48px;

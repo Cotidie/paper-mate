@@ -251,6 +251,14 @@ export interface AnnotationStore {
    *  `resizeMemoAnnotation`. Routes through the normal command path, so it is
    *  undoable like every other restyle (AD-7) — no special-casing. */
   setMemoCollapsed: (ids: string[], collapsed: boolean, now: string) => void;
+  /** Resize a comment's OWN note-popup bubble (user feature request) and bump
+   *  `updated_at`. Single `id`, not group-aware (unlike recolor/retext): each
+   *  page's own bubble is resized independently, since the popup is per-instance
+   *  chrome, not shared page-anchored geometry. `size` is CSS px, persisted on
+   *  `style.bubble_width`/`bubble_height` (additive optional fields, AD-8).
+   *  Guarded to `type=comment` so a stale non-comment id is never mutated
+   *  (AR-5). A no-op for an unknown id. */
+  resizeCommentAnnotation: (id: string, size: { width: number; height: number }, now: string) => void;
   /** Replace a mark's anchor GEOMETRY (a moved/resized rect or points) and bump
    *  `updated_at` — the Story 3.1 move/resize command-path action, shared by
    *  kind=rect (memo/region/comment-pin) and kind=path (pen). The CALLER (the edit
@@ -476,6 +484,22 @@ export const useAnnotationStore = create<AnnotationStore>()(
               : null,
           ),
         })),
+      resizeCommentAnnotation: (id, size, now) =>
+        set((state) => {
+          // Single-id (not patchAnnotations' ids-batch): the bubble is a per-
+          // instance popup, not group-shared geometry, so each page's own
+          // comment resizes independently (mirrors retextAnnotation's single-id
+          // scope, not retextAnnotations' group batch).
+          const a = state.annotations.get(id);
+          if (!a || a.type !== "comment") return state;
+          const next = new Map(state.annotations);
+          next.set(id, {
+            ...a,
+            style: { ...a.style, bubble_width: size.width, bubble_height: size.height },
+            updated_at: now,
+          });
+          return { annotations: next };
+        }),
       setAnnotationGeometry: (id, anchor, now) =>
         set((state) => {
           const a = state.annotations.get(id);

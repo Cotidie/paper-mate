@@ -106,10 +106,11 @@ assume these exist until they appear above.
 | `GET /api/docs` | List library documents | TBD |
 | `GET /api/docs/{doc_id}` | Get one document's metadata | TBD |
 
-> **`Style` fields:** `color` (token name), `stroke_width` (pen-only, scale-1.0 px; `null` for text/region marks), `alpha` (pen-only transparency 0..1; `null` = render at the default highlighter opacity `0.4`; additive optional field, Story 2.13, AD-8), `collapsed` (memo-only; `null`/`false` = expanded (default), `true` = show only the memo's first line; additive optional field, user feature request 2026-07-02, AD-8).
+> **`Style` fields:** `color` (token name), `stroke_width` (pen-only, scale-1.0 px; `null` for text/region marks), `alpha` (pen-only transparency 0..1; `null` = render at the default highlighter opacity `0.4`; additive optional field, Story 2.13, AD-8), `collapsed` (memo-only; `null`/`false` = expanded (default), `true` = show only the memo's first line; additive optional field, user feature request 2026-07-02, AD-8), `bubble_width`/`bubble_height` (comment-only, CSS px chrome size of the note popup, NOT page-anchored geometry; `null` = default CSS size until the user drags the bubble's corner handle to resize it; additive optional fields, user feature request 2026-07-03, AD-8).
 
 ## Changelog
 
+- **2026-07-03 (comment bubble resize, user feature request):** `Style` gains `bubble_width: float | null` + `bubble_height: float | null` (comment-only; `null` = default CSS size; additive, no format break, AD-8). No endpoints added.
 - **2026-07-02 (memo collapse/expand, user feature request):** `Style` gains `collapsed: bool | null` (memo-only; `null` = expanded, the default; additive, no format break, AD-8). No endpoints added.
 - **2026-07-01 (Story 3.5):** added `GET /api/docs/{doc_id}/annotations` (hydrate-on-open; bare list, `[]` when unannotated, 500 on a corrupt/unknown-version disk file). `components.schemas` shape unchanged (`list[Annotation]` already emitted by the 3.4 PUT). `GET /api/docs` + `GET /api/docs/{doc_id}` stay reserved.
 - **2026-07-01 (Story 3.4):** added `PUT /api/docs/{doc_id}/annotations` (overwrite full set, atomic). GET stays reserved (3.5). The manual `Annotation` OpenAPI injection in `app/main.py` is removed: the real PUT route now emits `Annotation` (+ its anchor variants) into the contract.
