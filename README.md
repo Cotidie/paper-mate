@@ -28,8 +28,6 @@ Paper Mate runs as a local web app. The browser handles the reading and annotati
 
 The current version is the viewer and annotator. Local AI-assisted reading is planned later, but the first job is simpler: keep the paper stable, make annotation fast, and avoid sending private PDFs to a cloud service.
 
-## Screenshot
-
 ![Paper Mate reader with annotations and table of contents](docs/images/01-readme-paper-mate-main.png)
 
 ## Features
