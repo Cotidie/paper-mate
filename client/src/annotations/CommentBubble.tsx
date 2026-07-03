@@ -20,6 +20,11 @@ import "./Annotations.css";
  *  same `transform` property, and only one `transform` can win per element. */
 const PIN_OFFSET_TRANSFORM = "translateY(calc(var(--comment-pin-size) + var(--space-xxs)))";
 
+/** Smallest the bubble's corner handle may shrink it to (CSS px) — small enough
+ *  to still show a couple of textarea lines + the action row without clipping. */
+const MIN_BUBBLE_WIDTH = 160;
+const MIN_BUBBLE_HEIGHT = 96;
+
 export default function CommentBubble({
   anno,
   pos,
@@ -30,6 +35,7 @@ export default function CommentBubble({
   onClearSelection,
   onTextFocus,
   onTextBlur,
+  onResize,
 }: {
   anno: Annotation;
   pos: ScreenRect;
@@ -44,6 +50,9 @@ export default function CommentBubble({
   onTextFocus?: () => void;
   /** Called when the textarea loses focus (end of a text-edit session). */
   onTextBlur?: () => void;
+  /** Commits a corner-handle resize (user feature request): persisted on
+   *  `anno.style.bubble_width`/`bubble_height` so it survives reselect/reload. */
+  onResize: (size: { width: number; height: number }) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -54,6 +63,15 @@ export default function CommentBubble({
   // reopening the box always shows it back at the default position.
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const boxDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  // Corner-handle resize (user feature request): a LIVE preview while dragging,
+  // committed to the store (persisted per comment, AD-8) on release. `null`
+  // outside a drag, so the render falls through to the committed
+  // `anno.style.bubble_width`/`bubble_height` (or the default CSS size, for a
+  // comment never manually resized).
+  const [resizeDraft, setResizeDraft] = useState<{ width: number; height: number } | null>(null);
+  const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
+  const manualWidth = resizeDraft?.width ?? anno.style.bubble_width ?? null;
+  const manualHeight = resizeDraft?.height ?? anno.style.bubble_height ?? null;
   // Focus moves INTO the textarea on open; on close (unmount) it RETURNS to the
   // element focused before the bubble opened (UX-DR8/DR17). Runs once per open.
   useEffect(() => {
@@ -63,12 +81,17 @@ export default function CommentBubble({
   }, []);
   // Auto-grow the textarea to its content whenever the text OR position changes
   // (zoom re-anchors it). jsdom has no layout (scrollHeight 0) → guarded no-op.
+  // Skipped once the bubble has a MANUAL height (the corner-handle resize, live
+  // or committed): the box height is then user-controlled, and the textarea
+  // fills it via flex + its own scroll (`comment-bubble__text--manual-size`)
+  // instead of forcing the box taller to fit every line.
   useLayoutEffect(() => {
+    if (manualHeight !== null) return;
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
     if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
-  }, [body, pos.left, pos.top]);
+  }, [body, pos.left, pos.top, manualHeight]);
   // Keep the bubble fully on-screen (Codex MED): the bubble is anchored at the
   // pin's page-local point + a downward transform, so a pin near the right/bottom
   // edge would push the textarea/actions partly out of the viewport. Measure the
@@ -87,7 +110,7 @@ export default function CommentBubble({
     const dy = c.y - r.top;
     if (dx !== 0) el.style.left = `${pos.left + dx}px`;
     if (dy !== 0) el.style.top = `${pos.top + dy}px`;
-  }, [body, pos.left, pos.top]);
+  }, [body, pos.left, pos.top, manualWidth, manualHeight]);
   return (
     <div
       ref={boxRef}
@@ -97,6 +120,8 @@ export default function CommentBubble({
         left: pos.left,
         top: pos.top,
         transform: `${PIN_OFFSET_TRANSFORM} translate(${dragOffset.x}px, ${dragOffset.y}px)`,
+        ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),
+        ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
       }}
       // Drag-to-reposition: any EMPTY space inside the bubble starts a drag —
       // excluded by ANCESTRY (closest, not a strict target===boxRef check), so
@@ -153,7 +178,9 @@ export default function CommentBubble({
     >
       <textarea
         ref={ref}
-        className="comment-bubble__text"
+        className={
+          manualHeight !== null ? "comment-bubble__text comment-bubble__text--manual-size" : "comment-bubble__text"
+        }
         data-testid={`comment-body-${anno.id}`}
         aria-label="Comment"
         value={body}
@@ -187,6 +214,52 @@ export default function CommentBubble({
           <Trash aria-hidden />
         </button>
       </div>
+      {/* Corner-handle resize (user feature request): reuses the on-page edit
+          frame's `.edit-handle`/`.edit-handle--se` visual (ink-bordered nub,
+          half outside the corner) for the SAME affordance language, but drives
+          its OWN local drag here — this is chrome (CSS px) geometry, not a
+          page-anchored `anchor` the shared `useEditGesture`/`data-edit-handle`
+          wiring understands, so it must NOT carry those data attributes. */}
+      <button
+        type="button"
+        className="edit-handle edit-handle--se"
+        data-testid={`comment-bubble-resize-${anno.id}`}
+        aria-label="Resize comment"
+        title="Resize comment"
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          e.stopPropagation();
+          e.preventDefault();
+          const rect = boxRef.current?.getBoundingClientRect();
+          const startW = manualWidth ?? rect?.width ?? MIN_BUBBLE_WIDTH;
+          const startH = manualHeight ?? rect?.height ?? MIN_BUBBLE_HEIGHT;
+          resizeRef.current = { startX: e.clientX, startY: e.clientY, startW, startH };
+          setResizeDraft({ width: startW, height: startH });
+          try {
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          } catch {
+            /* capture refused (e.g. a synthetic test event) — the handlers below still fire on this element */
+          }
+        }}
+        onPointerMove={(e) => {
+          const r = resizeRef.current;
+          if (!r) return;
+          setResizeDraft({
+            width: Math.max(MIN_BUBBLE_WIDTH, r.startW + (e.clientX - r.startX)),
+            height: Math.max(MIN_BUBBLE_HEIGHT, r.startH + (e.clientY - r.startY)),
+          });
+        }}
+        onPointerUp={() => {
+          if (!resizeRef.current) return;
+          resizeRef.current = null;
+          if (resizeDraft) onResize(resizeDraft);
+          setResizeDraft(null);
+        }}
+        onPointerCancel={() => {
+          resizeRef.current = null;
+          setResizeDraft(null);
+        }}
+      />
     </div>
   );
 }

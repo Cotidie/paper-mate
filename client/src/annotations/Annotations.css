@@ -705,8 +705,13 @@
    without recomputing the offset in JS (keeps the pin-size token in CSS only). */
 .comment-bubble {
   /* Positioning `transform` (pin-nudge + drag offset) is set inline (CommentBubble.tsx):
-     it shares the property with the drag offset, so only one `transform` source can win. */
-  position: absolute;
+     it shares the property with the drag offset, so only one `transform` source can win.
+     `fixed`, not `absolute` (bug fix, user report): the bubble is rendered from
+     AnnotationInteraction (viewport-relative `pos`, mirroring `.quick-box`), not the
+     per-page AnnotationLayer — it must float free of its own page card's `.page-surface`
+     (`overflow: hidden`), which silently clipped (and made unreachable) any part of the
+     popup extending past the page's edge, including the corner resize handle. */
+  position: fixed;
   display: flex;
   flex-direction: column;
   gap: var(--space-xxs);
@@ -744,6 +749,16 @@
 
 .comment-bubble__text:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-ink);
+}
+
+/* Once the bubble has a MANUAL height (the corner-handle resize, user feature
+   request), the box height is user-controlled instead of auto-grown from
+   content (CommentBubble.tsx skips its auto-grow effect in that case) — the
+   textarea fills the fixed box via flex and scrolls its own overflow instead
+   of forcing the box to keep growing. */
+.comment-bubble__text--manual-size {
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 /* The bubble's action row: the recolor swatches + convert/delete icon buttons. */
@@ -795,7 +810,9 @@
    through. Positioning `transform` is set inline (CommentPreview.tsx), same
    pin-nudge as the full bubble. */
 .comment-preview {
-  position: absolute;
+  /* `fixed`, not `absolute` — same page-edge-clipping bug fix as `.comment-bubble`
+     above (both now render from AnnotationInteraction, viewport-relative `pos`). */
+  position: fixed;
   width: var(--comment-bubble-width);
   padding: var(--space-sm);
   background-color: var(--color-surface-card);

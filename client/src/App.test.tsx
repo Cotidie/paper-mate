@@ -743,12 +743,13 @@ describe("Annotation Bank (Story 3.6)", () => {
     expect(screen.getByTestId("bank-row-a1")).toBeTruthy();
   });
 
-  it("clicking a row flashes the mark and keeps the panel open (unlike ToC's close-on-jump)", async () => {
+  it("clicking a row flashes the mark, selects it (same as an on-page click, user fix request), and keeps the panel open (unlike ToC's close-on-jump)", async () => {
     await openedApp();
     act(() => useAnnotationStore.getState().addAnnotation(mark("a1", fakeDoc.doc_id)));
     fireEvent.click(screen.getByRole("button", { name: "Annotation bank" }));
     fireEvent.click(screen.getByTestId("bank-row-a1"));
     expect(useAnnotationStore.getState().flashId).toBe("a1");
+    expect(useAnnotationStore.getState().selectedId).toBe("a1");
     // The Bank is a review surface (EXPERIENCE.md F2): stays open so the reader
     // can click through several marks, unlike the ToC's one-shot navigation.
     expect(screen.getByTestId("bank-panel")).toBeTruthy();

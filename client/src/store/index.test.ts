@@ -61,6 +61,20 @@ function memoMark(
   };
 }
 
+function commentMark(id: string, createdAt: string, body = ""): Annotation {
+  return {
+    id,
+    doc_id: "doc-1",
+    type: "comment",
+    group_id: null,
+    anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.1, y1: 0.2 } },
+    style: { color: "annotation-default", stroke_width: null, alpha: null },
+    body,
+    created_at: createdAt,
+    updated_at: createdAt,
+  };
+}
+
 describe("annotation store (Story 2.2 + 2.3)", () => {
   it("addAnnotation keys by id; all() orders by created_at ascending", () => {
     const s = useAnnotationStore.getState();
@@ -547,6 +561,32 @@ describe("setMemoCollapsed (memo collapse/expand, user feature request)", () => 
     expect(useAnnotationStore.getState().annotations.get("m")!.style.collapsed).toBe(true);
     useAnnotationStore.temporal.getState().undo();
     expect(useAnnotationStore.getState().annotations.get("m")!.style.collapsed).toBeUndefined();
+  });
+});
+
+describe("resizeCommentAnnotation (comment bubble resize, user feature request)", () => {
+  it("sets style.bubble_width/height and bumps updated_at", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(commentMark("c", "2026-07-03T00:00:01Z"));
+    useAnnotationStore.getState().resizeCommentAnnotation("c", { width: 300, height: 180 }, "2026-07-03T12:00:00Z");
+    const c = useAnnotationStore.getState().annotations.get("c")!;
+    expect(c.style.bubble_width).toBe(300);
+    expect(c.style.bubble_height).toBe(180);
+    expect(c.updated_at).toBe("2026-07-03T12:00:00Z");
+  });
+
+  it("guards non-comment marks (a stale memo/highlight id is untouched)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 }, "2026-07-03T00:00:01Z"));
+    useAnnotationStore.getState().resizeCommentAnnotation("m", { width: 300, height: 180 }, "2026-07-03T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.style.bubble_width).toBeUndefined();
+    expect(m.updated_at).toBe("2026-07-03T00:00:01Z"); // not bumped
+  });
+
+  it("ignores an unknown id without throwing", () => {
+    useAnnotationStore.getState().resizeCommentAnnotation("missing", { width: 300, height: 180 }, "2026-07-03T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
   });
 });
 

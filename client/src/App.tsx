@@ -78,6 +78,7 @@ export default function App() {
   // directly from the store (no prop-drilling).
   const hidden = useAnnotationStore((s) => s.hidden);
   const toggleHidden = useAnnotationStore((s) => s.toggleHidden);
+  const select = useAnnotationStore((s) => s.select);
   const [railCollapsed, setRailCollapsed] = useState(false);
   // Settings modal (Story 5.1): App owns open/closed, same pattern as
   // tocOpen/bankOpen. Threaded to ToolRail's Gear trigger and SettingsModal.
@@ -233,14 +234,16 @@ export default function App() {
     return () => document.removeEventListener("keydown", onKey, true);
   }, [docOpen, settingsOpen, keymap]);
 
-  // Annotation Bank row click (Story 3.6, AC-4): jump the canvas to the mark's
-  // page + fractional position, then flash it. Flash only — no `select` (that
-  // would leave the mark in an edit-frame/quick-box state, heavier than a
-  // review click warrants, Open Q2). The panel itself stays open (Open Q1: a
-  // review surface, not one-shot navigation like the ToC).
+  // Annotation Bank row click (Story 3.6, AC-4, revised by user fix request):
+  // jump the canvas to the mark's page + fractional position, flash it, AND
+  // select it, same as clicking the mark directly on the page — its quick-box
+  // opens and Delete/recolor/etc. all work from the Bank click, not just a
+  // direct on-page click. The panel itself stays open (Open Q1: a review
+  // surface, not one-shot navigation like the ToC).
   function handleBankJump(item: BankItem) {
     readerRef.current?.jumpToAnnotation(item.pageIndex, item.topFraction);
     flashAnnotation(item.id);
+    select(item.id);
   }
 
   async function handleFile(file: File) {

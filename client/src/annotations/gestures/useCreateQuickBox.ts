@@ -318,13 +318,14 @@ export function useCreateQuickBox(opts: {
       // fall through to the cursor-mode picker: that would pop it as if nothing
       // were armed. Only cursor mode (tool === null) reaches it.
       if (tool !== null) return;
-      // Cursor mode with a text drag: pop the H/U/C picker. Clear the native
-      // selection immediately — the custom preview highlight (denormalized
-      // from `pages`, tracked through zoom/scroll by `computePendingGeometry`)
-      // now represents it visually, so the fragile native Selection (destroyed
-      // by any text-layer DOM swap, e.g. every zoom re-render) no longer needs
-      // to survive.
-      window.getSelection()?.removeAllRanges();
+      // Cursor mode with a text drag: pop the H/U/C picker. The native Selection
+      // is deliberately LEFT ALIVE (bug fix) so Ctrl+C still copies the dragged
+      // text — the picker's own preview highlight is denormalized from `pages`
+      // and tracked through zoom/scroll by `computePendingGeometry`, so it never
+      // reads the native Selection back. `dismiss()` still clears it on Esc/
+      // outside-click, and any outside pointerdown runs (capture phase) before
+      // this handler's own next pointerup, so a stale selection can never
+      // re-pop the picker.
       restoreFocusRef.current = document.activeElement as HTMLElement | null;
       dispatch({ type: "present", selection: pages, at: { x: e.clientX, y: e.clientY } });
     };

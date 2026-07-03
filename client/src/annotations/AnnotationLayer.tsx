@@ -36,8 +36,6 @@ import { strokeOutline, svgPathFromOutline } from "./pen";
 import { inActiveGroup, markClass, unionRect, markBounds } from "./markGeometry";
 import { useTextEditSession } from "./useTextEditSession";
 import MemoBox from "./MemoBox";
-import CommentBubble from "./CommentBubble";
-import CommentPreview from "./CommentPreview";
 import "./Annotations.css";
 
 /** Default pen stroke alpha (transparency). Matches --annotation-highlight-opacity
@@ -90,20 +88,12 @@ export default function AnnotationLayer({
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const setHovered = useAnnotationStore((s) => s.setHovered);
   const retextAnnotation = useAnnotationStore((s) => s.retextAnnotation);
-  const retextAnnotations = useAnnotationStore((s) => s.retextAnnotations);
   const setMemoCollapsed = useAnnotationStore((s) => s.setMemoCollapsed);
   // Text-edit session coalescing (Story 3.2, AC-4), encapsulated as its own
-  // hook (Story 5.3): a memo or comment textarea editing session (focus→blur)
-  // must land as ONE undo step, not one per keystroke.
+  // hook (Story 5.3): a memo textarea editing session (focus→blur) must land as
+  // ONE undo step, not one per keystroke. (A comment's own session lives in
+  // AnnotationInteraction now, alongside its bubble/preview — see there.)
   const { onTextFocus: startTextEditSession, onTextBlur: commitTextEditSession } = useTextEditSession();
-  // Story 2.10: a selected comment's bubble recolors/deletes the comment itself
-  // (the bubble REPLACES the generic selection quick-box, Decision 4), so the
-  // layer owns those actions for comments. Recolor sets the active default too
-  // (last-choice-wins, like every other tool).
-  const recolorAnnotation = useAnnotationStore((s) => s.recolorAnnotation);
-  const retypeAnnotation = useAnnotationStore((s) => s.retypeAnnotation);
-  const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
-  const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   // Hide-all toggle (Story 5.5, FR-23): a view-only flag, sibling of selectedId/
   // hoveredId. Early-return null BEFORE building marks/groups so nothing paints
   // and nothing is pointer-interactive; the pdf.js text layer beneath is
@@ -136,23 +126,11 @@ export default function AnnotationLayer({
   // Comment (Story 2.10): a `type=comment` mark of EITHER kind. A `kind=text`
   // comment ALSO appears in `highlightMarks` above (type !== "underline"), so its
   // ~0.4 fill paints for free — do NOT add a second fill path. Here we render only
-  // the comment-specific chrome: a round PIN (both kinds) + the bubble when
-  // selected, in their own NOT-aria-hidden group (focusable controls).
+  // the comment-specific chrome: a round PIN (both kinds). The bubble/preview
+  // popup (which floats free of the page card, so it must escape this layer's
+  // clipped `.page-surface` ancestor) is rendered from `AnnotationInteraction`
+  // instead — see its "Comment overlay" section.
   const commentMarks = marks.filter((a) => a.type === "comment");
-
-  // The ids a comment recolor/retext touches: the comment + its group siblings
-  // (a two-page text comment recolors AND retexts together, AR-4). Scoped to THIS
-  // doc + type=comment (Codex MED): the store is a singleton across doc switches
-  // (until Epic 3), so a matching group_id in another doc must never be touched
-  // from this doc's bubble. Delete is already group-aware in the store.
-  const commentGroupIds = (a: Annotation): string[] => {
-    if (!a.group_id) return [a.id];
-    const ids: string[] = [];
-    for (const x of annotations.values()) {
-      if (x.group_id === a.group_id && x.doc_id === a.doc_id && x.type === "comment") ids.push(x.id);
-    }
-    return ids;
-  };
 
   // A mark's hover/selected/flashed state, group-aware (a two-page mark lights
   // as one). The shared preamble every render func used to recompute inline
@@ -330,11 +308,11 @@ export default function AnnotationLayer({
   // Built from two stacked same-size glyphs (`fill` white behind, `regular`
   // black on top) since no single Phosphor weight is two-tone; the
   // straddle-position + opacity + no-ring are CSS-only
-  // (`.annotation-comment-pin`/`__icon-stack`), so the anchor math here is
-  // unchanged and the comment bubble (which hangs off the SAME anchor point)
-  // is unaffected. The highlight fill (text comments only) is painted by the
-  // highlight group. The bubble mounts only for the EXACTLY-selected
-  // annotation (not group siblings), so a two-page comment shows one bubble.
+  // (`.annotation-comment-pin`/`__icon-stack`). The highlight fill (text
+  // comments only) is painted by the highlight group. The bubble/preview popup
+  // that hangs off this SAME anchor point renders from `AnnotationInteraction`
+  // (it must float free of this page card, past its clipped `.page-surface`
+  // ancestor — see that component's "Comment overlay" section).
   const renderComment = (a: Annotation) => {
     // effAnchor (not a.anchor): a rect-kind pin is a live move-handle (below), so
     // it must track an in-flight drag preview like every other movable mark.
@@ -380,54 +358,6 @@ export default function AnnotationLayer({
             <ChatCircle weight="regular" className="annotation-comment-pin__icon annotation-comment-pin__icon--outline" />
           </span>
         </button>
-        {a.id === selectedId && (
-          <CommentBubble
-            anno={a}
-            pos={anchor}
-            onRetext={(_id, body) => {
-              // Group-aware (Codex HIGH): a two-page comment is grouped siblings;
-              // write the same body to ALL of them so reopening the other page's
-              // pin shows the note, not a stale/empty one (matches recolor/delete).
-              // retextAnnotations batches all group ids in ONE set() (Story 3.2, AC-4).
-              retextAnnotations(commentGroupIds(a), body, new Date().toISOString());
-            }}
-            onRecolor={(color) => {
-              recolorAnnotation(commentGroupIds(a), color, new Date().toISOString());
-              setActiveColor("comment", color);
-            }}
-            onConvertToHighlight={() =>
-              // Reverse (Story 3.7, AC2): drops body -> null unconditionally (even a
-              // non-empty note), group-aware, undoable. CommentBubble only renders the
-              // button for a kind=text comment, so this always targets a text mark.
-              retypeAnnotation(commentGroupIds(a), "highlight", null, new Date().toISOString())
-            }
-            onDelete={() => deleteAnnotation(a.id)}
-            onClearSelection={clearSelection}
-            onTextFocus={startTextEditSession}
-            onTextBlur={commitTextEditSession}
-          />
-        )}
-        {/* Hover compact preview (user feature request): glance + quick text
-            edit without selecting. Only while NOT selected — selecting swaps to
-            the full CommentBubble above (recolor/convert/delete). Mounted
-            unconditionally (not gated on `hovered`) so its own hover-intent
-            debounce can outlive the pin's instant pointerleave; it renders
-            null itself once its grace window elapses. */}
-        {a.id !== selectedId && (
-          <CommentPreview
-            anno={a}
-            pos={anchor}
-            hovered={hovered}
-            onRetext={(_id, body) =>
-              // Group-aware, same as the full bubble's retext (see above).
-              retextAnnotations(commentGroupIds(a), body, new Date().toISOString())
-            }
-            onHoverEnter={() => setHovered(a.id)}
-            onHoverLeave={() => setHovered(null)}
-            onTextFocus={startTextEditSession}
-            onTextBlur={commitTextEditSession}
-          />
-        )}
       </div>
     );
   };
