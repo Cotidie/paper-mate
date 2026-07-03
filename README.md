@@ -1,8 +1,26 @@
-# Paper Mate
+<h1 align="center">Paper Mate</h1>
 
-**A local PDF reader for research papers.**
+<p align="center">
+  <strong>A local PDF reader for research papers.</strong><br/>
+  <em>Read, mark up, and reopen papers with your notes still where you left them.</em>
+</p>
 
-Paper Mate is for reading papers, marking them up, and coming back later with the notes still where you left them.
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-6f8f5f.svg"></a>
+  <a href="https://github.com/Cotidie/paper-mate"><img alt="Repo: Cotidie/paper-mate" src="https://img.shields.io/badge/repo-Cotidie%2Fpaper--mate-6f8f5f?logo=github"></a>
+  <a href="https://github.com/Cotidie/paper-mate/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Cotidie/paper-mate?style=flat&logo=github&color=6f8f5f"></a>
+  <a href="https://github.com/Cotidie/paper-mate/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/Cotidie/paper-mate?style=flat&logo=github&color=6f8f5f"></a>
+</p>
+
+<p align="center">
+  <img alt="React" src="https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white">
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white">
+  <img alt="PDF.js" src="https://img.shields.io/badge/PDF.js-000000?style=flat&logo=mozilla&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white">
+  <img alt="Zustand" src="https://img.shields.io/badge/Zustand-443E38?style=flat">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white">
+</p>
 
 ## Overview
 
@@ -22,15 +40,26 @@ Suggested shot: a paper open in the reader with the tool rail, a few highlights,
 
 ## Features
 
-- Open a PDF from disk in a desktop web reader.
-- Navigate with scrolling, page controls, zoom, pan, and the document table of contents.
-- Add highlights, underlines, pen strokes, text memos, comments, and box selections.
-- Drag over text and choose the annotation type from a quick box.
-- Recolor, move, resize, delete, undo, and redo annotations.
-- Use the Annotation Bank to scan notes and jump back to the page.
-- Hide every annotation for a clean read, then show them again unchanged.
-- Autosave annotations to local disk and restore them when the same PDF opens again.
-- Leave the original PDF untouched. Paper Mate stores annotations beside it in a local library.
+### 📄 Paper reading
+
+- Local PDF opening
+- Smooth scroll, zoom, and pan
+- Page controls and table of contents
+- Stable canvas, no layout shift from annotations
+
+### ✍️ Annotation
+
+- Highlight, underline, pen, memo, comment, and box tools
+- Quick box for choosing tools after text selection
+- Recolor, move, resize, delete, undo, and redo
+- Hide or show all annotations
+
+### 🗂️ Review and storage
+
+- Annotation Bank with click-to-jump
+- Local autosave and restore
+- Original PDF left untouched
+- Local library under `~/.paper-mate`
 
 ## Quick Start
 
