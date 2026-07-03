@@ -55,6 +55,14 @@ The current version is the viewer and annotator. Local AI-assisted reading is pl
 - Original PDF left untouched
 - Local library under `~/.paper-mate`
 
+### 🔭 Planned
+
+- Inline previews for figures, tables, footnotes, and citations
+- Paper metadata and library view
+- Export with annotations
+- Local AI chat through CLI agents
+- Click or drag a paper region into chat context
+
 ## Quick Start
 
 ### Run with Docker
