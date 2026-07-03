@@ -97,12 +97,17 @@ export function useAutosave(): { status: SaveStatus } {
   // Re-arm the baseline whenever the doc changes: whatever is hydrated in for
   // the NEW doc is not a change to save (AC-5). `inFlightRef` is deliberately
   // NOT reset here (continuous single-flight, see the header note) — an
-  // A-PUT genuinely in flight must keep blocking a concurrent B-PUT.
+  // A-PUT genuinely in flight must keep blocking a concurrent B-PUT. The
+  // cleanup (runs on a docId change AND on unmount) clears timers so a
+  // pending debounce/settle from the OLD doc (or from before an unmount)
+  // never fires `flush()` against a component that's gone.
   useEffect(() => {
     mountedRef.current = false;
     dirtyRef.current = false;
     setStatus("idle");
-    clearTimers();
+    return () => {
+      clearTimers();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docId]);
 

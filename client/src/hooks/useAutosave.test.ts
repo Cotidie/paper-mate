@@ -157,6 +157,20 @@ describe("useAutosave (Story 3.4, doc-scoped per Story 5.8)", () => {
     expect(result.current.status).toBe("saved");
   });
 
+  it("unmounting with a pending debounce timer does not fire a stray PUT after unmount (Codex Med)", async () => {
+    const spy = vi.spyOn(api, "putAnnotations").mockResolvedValue(undefined);
+    act(() => openDoc("doc-1", []));
+    const { unmount } = renderHook(() => useAutosave());
+
+    act(() => useAnnotationStore.getState().addAnnotation(mark("a")));
+    // Unmount BEFORE the debounce elapses: the pending timer must be cleared
+    // by the effect cleanup, not survive to call flush() on a dead component.
+    unmount();
+    await tick(DEBOUNCE_MS * 2);
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("switching docs (openDoc) resets the baseline: the first annotations value under the new doc is not dirty", async () => {
     act(() => openDoc("doc-1", [mark("a", "doc-1")]));
     const spy = vi.spyOn(api, "putAnnotations").mockResolvedValue(undefined);
@@ -193,7 +207,7 @@ describe("useAutosave (Story 3.4, doc-scoped per Story 5.8)", () => {
     act(() => useAnnotationStore.getState().addAnnotation(mark("a1", "doc-A")));
     await tick(DEBOUNCE_MS);
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy).toHaveBeenNthCalledWith(1, "doc-A", expect.anything());
+    expect(spy).toHaveBeenNthCalledWith(1, "doc-A", [expect.objectContaining({ id: "a1" })]);
 
     // Switch docs while A's PUT is still unresolved (in flight).
     act(() => openDoc("doc-B", []));
@@ -206,13 +220,16 @@ describe("useAutosave (Story 3.4, doc-scoped per Story 5.8)", () => {
 
     // The stale doc-A PUT resolves now. It must not fire an extra/stray PUT
     // of its own; it only clears the flag, letting the coalesced doc-B change
-    // flush for real as the ONE legitimate follow-up.
+    // flush for real as the ONE legitimate follow-up. Assert the PAYLOAD, not
+    // just the call count/target: a regression that PUTs doc-A's stale
+    // snapshot to doc-B would still satisfy a `toHaveBeenCalledTimes`-only
+    // check, so pin the actual ids — doc-B's own mark only, never doc-A's.
     await act(async () => {
       dA.resolve();
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(spy).toHaveBeenCalledTimes(2);
-    expect(spy).toHaveBeenNthCalledWith(2, "doc-B", expect.anything());
+    expect(spy).toHaveBeenNthCalledWith(2, "doc-B", [expect.objectContaining({ id: "b1" })]);
 
     // A further doc-B change while doc-B's OWN PUT (dB) is genuinely in
     // flight must coalesce, not start an overlapping third PUT (H6).
@@ -221,12 +238,16 @@ describe("useAutosave (Story 3.4, doc-scoped per Story 5.8)", () => {
     expect(spy).toHaveBeenCalledTimes(2);
 
     // Once dB resolves, the coalesced doc-B change flushes for real — exactly
-    // ONE follow-up PUT, not two.
+    // ONE follow-up PUT, not two, carrying BOTH of doc-B's own marks and
+    // NEITHER of doc-A's.
     await act(async () => {
       dB.resolve();
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(spy).toHaveBeenCalledTimes(3);
-    expect(spy).toHaveBeenNthCalledWith(3, "doc-B", expect.anything());
+    expect(spy).toHaveBeenNthCalledWith(3, "doc-B", [
+      expect.objectContaining({ id: "b1" }),
+      expect.objectContaining({ id: "b2" }),
+    ]);
   });
 });

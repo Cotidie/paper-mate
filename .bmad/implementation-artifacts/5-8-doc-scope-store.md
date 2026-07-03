@@ -4,7 +4,7 @@ baseline_commit: 8d431acc632558c5825aef71055279571bfbaef8
 
 # Story 5.8: Doc-scope the annotation store (retire the cross-doc autosave guard)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -155,3 +155,7 @@ Sonnet 5 xHigh (bmad-dev-story).
 ## Change Log
 
 - 2026-07-03: Story implemented end-to-end (Tasks 1-5) via `bmad-dev-story`. Store now owns `(docId, annotations)` atomically via a renamed `openDoc` action + free function (retiring `hydrate`/`hydrateStore`); `useAutosave()` takes no parameter and binds its PUT target to `store.docId` read live at flush time; `generationRef` and its three staleness checks are deleted, replaced by a continuous (app-wide) single-flight scheduler that never resets `inFlightRef` on a doc switch. Client suite green (844/844), backend suite green (72/72), contract byte-identical (no diff), live-smoked at DPR>1 across a doc A -> doc B -> doc A reopen cycle (own dev servers). Status: ready-for-dev -> review.
+- 2026-07-03: Cross-model Codex code review (`bmad-code-review` methodology, via `codex exec` against the `baseline_commit..HEAD` diff). 0 High, 1 Medium, 1 Low, 4 dismissed. Both real findings fixed:
+  - **Medium** (`useAutosave.ts`'s docId-change effect had no returned cleanup): moving the story task's "keep `clearTimers()` in the cleanup" instruction into the effect BODY instead of a returned closure meant `clearTimers()` ran on every docId change (fine) but NOT on a true component unmount (regression) — a debounce/settle timer scheduled just before an unmount could survive it and later call `flush()`/`setStatus` against a dead component. Fixed by moving `clearTimers()` back into a returned cleanup function (mirrors the pre-refactor structure, minus the deleted `generationRef` bump). Verified by temporarily reverting the fix and confirming the new regression test fails without it, then restoring. Regression test added: `useAutosave.test.ts` "unmounting with a pending debounce timer does not fire a stray PUT after unmount".
+  - **Low** (`useAutosave.test.ts`'s AC-4 stale-in-flight test used `expect.anything()` for PUT payloads): call-count/target-doc assertions alone wouldn't catch a regression that PUTs doc-B with doc-A's stale snapshot — the exact "must NOT write A's marks to B" guarantee the test claims to pin. Fixed: payload assertions now check the actual annotation ids (`b1` only on the 2nd call, `b1`+`b2` on the 3rd; never `a1`).
+  - Full suite re-verified green (845/845 frontend — the new regression test adds one —, typecheck clean; backend unaffected, no re-run needed for a client-only fix). Status: review -> done.
