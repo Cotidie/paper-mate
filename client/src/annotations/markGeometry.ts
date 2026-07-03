@@ -54,3 +54,18 @@ export function markBounds(anchor: Annotation["anchor"]): Rect | null {
   if (anchor.rects.length === 0) return null;
   return anchor.rects.reduce(unionRect);
 }
+
+/** The ids a comment recolor/retext/convert touches: the comment + its group
+ *  siblings (a two-page text comment recolors AND retexts together, AR-4).
+ *  Scoped to the SAME doc + `type=comment` (Codex MED): a matching `group_id`
+ *  belonging to a different doc or a differently-typed mark must never be
+ *  touched. Delete does not need this — `deleteAnnotation` already expands
+ *  group siblings internally. */
+export function commentGroupIds(a: Annotation, all: Map<string, Annotation>): string[] {
+  if (!a.group_id) return [a.id];
+  const ids: string[] = [];
+  for (const x of all.values()) {
+    if (x.group_id === a.group_id && x.doc_id === a.doc_id && x.type === "comment") ids.push(x.id);
+  }
+  return ids;
+}

@@ -21,8 +21,10 @@
 // anchor/ + store/ only; render/ stays annotation-free (geometry via `getPages`).
 
 import { Highlighter, TextUnderline, ChatCircle, TextT, Trash } from "@phosphor-icons/react";
-import type { PageCardRef } from "@/anchor";
+import type { PageCardRef, ScreenRect } from "@/anchor";
+import { denormalizeRect } from "@/anchor";
 import { useAnnotationStore } from "@/store";
+import type { Annotation } from "@/api/client";
 import { strokeOutline, svgPathFromOutline } from "./pen";
 import type { AnnotationTool } from "./machine";
 import type { GestureContext } from "./gestures/shared";
@@ -35,9 +37,13 @@ import { useMultiSelectGesture } from "./gestures/useMultiSelectGesture";
 import { useUndoRedo } from "./gestures/useUndoRedo";
 import { useCreateQuickBox } from "./gestures/useCreateQuickBox";
 import { useLiveRef } from "@/hooks/useLiveRef";
+import { useTextEditSession } from "./useTextEditSession";
+import { inActiveGroup, commentGroupIds } from "./markGeometry";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";
+import CommentBubble from "./CommentBubble";
+import CommentPreview from "./CommentPreview";
 import "./Annotations.css";
 
 export default function AnnotationInteraction({
@@ -77,6 +83,28 @@ export default function AnnotationInteraction({
 }) {
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation);
   const select = useAnnotationStore((s) => s.select);
+  // Comment overlay (Story 2.10, relocated here from the per-page AnnotationLayer
+  // as a bug fix, user report 2026-07-03): the bubble/preview float free of the
+  // page, so they must NOT live inside a page's `.page-surface` (`overflow:
+  // hidden`), which silently clipped — and made unreachable — any part of the
+  // popup extending past its own page card's edge (the corner resize handle
+  // most visibly). Rendered here instead, exactly like the CREATE/selection
+  // quick-boxes above, which already escape that clipping the same way.
+  const annotations = useAnnotationStore((s) => s.annotations);
+  const selectedId = useAnnotationStore((s) => s.selectedId);
+  const hoveredId = useAnnotationStore((s) => s.hoveredId);
+  const dragPreview = useAnnotationStore((s) => s.dragPreview);
+  const groupDragPreview = useAnnotationStore((s) => s.groupDragPreview);
+  const setHovered = useAnnotationStore((s) => s.setHovered);
+  const clearSelection = useAnnotationStore((s) => s.clearSelection);
+  const retextAnnotations = useAnnotationStore((s) => s.retextAnnotations);
+  const recolorAnnotation = useAnnotationStore((s) => s.recolorAnnotation);
+  const retypeAnnotation = useAnnotationStore((s) => s.retypeAnnotation);
+  const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
+  const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
+  const resizeCommentAnnotation = useAnnotationStore((s) => s.resizeCommentAnnotation);
+  const { onTextFocus: startCommentTextEditSession, onTextBlur: commitCommentTextEditSession } =
+    useTextEditSession();
   // The active-tool defaults the CREATE paths read (Story 2.6/2.8/2.9/2.13). The
   // selection quick-box reads its own copies inside `useSelection`; these feed the
   // create gestures (via `defaultsRef`) and the live previews. The store keeps the
@@ -180,7 +208,63 @@ export default function AnnotationInteraction({
   // above, so this state is already empty while hidden, but an explicit check
   // documents the invariant directly at the render gate.
   if (hidden) return null;
-  if (!pending && !showSelectionBox && !penPreview && !boxPreview && !multiSelectPreview) return null;
+
+  // Comment overlay (see the "Comment overlay" subscriptions above): the
+  // selected comment's full bubble (recolor/convert/delete/resize — REPLACES
+  // the generic selection quick-box above, Decision 4, so `selectedSpec.usesBubble`
+  // already keeps `showSelectionBox` false for it) + every OTHER comment's hover
+  // preview. `commentPreviewMarks` is NOT filtered by hover state — see its own
+  // comment below for why.
+  const selectedComment = selectedAnno?.type === "comment" ? selectedAnno : null;
+  const commentPreviewMarks = [...annotations.values()].filter(
+    (a) => a.doc_id === docId && a.type === "comment" && a.id !== selectedId,
+  );
+  // While a move/resize drag is in flight, track the dragged pin's transient
+  // preview geometry instead of its committed anchor (Story 3.1), mirroring
+  // AnnotationLayer's own `effAnchor` — a rect-kind comment pin is a live
+  // move-handle, so its open bubble must follow the drag too.
+  const commentDragAnchor = (a: Annotation): Annotation["anchor"] =>
+    dragPreview && dragPreview.id === a.id
+      ? dragPreview.anchor
+      : (groupDragPreview?.find((g) => g.id === a.id)?.anchor ?? a.anchor);
+  // A comment's live VIEWPORT position: denormalize its anchor against its own
+  // page's box + scale (card-local px), then add that page card's LIVE
+  // `getBoundingClientRect()` offset — the same two-step `useSelection.ts`'s
+  // `selectionPoint()` uses for the generic quick-box above. `null` when the
+  // page isn't mounted, or a text anchor has no rects (nothing to point at).
+  const commentScreenPoint = (a: Annotation): ScreenRect | null => {
+    const liveAnchor = commentDragAnchor(a);
+    const page = getPagesRef.current().find((p) => p.pageIndex === liveAnchor.page_index);
+    if (!page) return null;
+    let local: ScreenRect | null = null;
+    if (liveAnchor.kind === "text") {
+      if (liveAnchor.rects.length === 0) return null;
+      local = denormalizeRect(liveAnchor.rects[0], page.box, scaleRef.current);
+    } else if (liveAnchor.kind === "rect") {
+      local = denormalizeRect(liveAnchor.rect, page.box, scaleRef.current);
+    }
+    if (!local) return null;
+    const cardRect = page.cardEl.getBoundingClientRect();
+    return {
+      left: cardRect.left + local.left,
+      top: cardRect.top + local.top,
+      width: local.width,
+      height: local.height,
+    };
+  };
+  const selectedCommentPoint = selectedComment ? commentScreenPoint(selectedComment) : null;
+
+  if (
+    !pending &&
+    !showSelectionBox &&
+    !penPreview &&
+    !boxPreview &&
+    !multiSelectPreview &&
+    !selectedCommentPoint &&
+    commentPreviewMarks.length === 0
+  ) {
+    return null;
+  }
 
   const selInit = showSelectionBox ? selection.selectionPoint() : { x: 0, y: 0 };
 
@@ -377,6 +461,66 @@ export default function AnnotationInteraction({
           </button>
         </div>
       )}
+
+      {/* Comment overlay (Story 2.10, relocated here — see the "Comment overlay"
+          subscriptions above for why): the selected comment's full bubble
+          (recolor/convert/delete/resize) REPLACES the generic selection
+          quick-box above (Decision 4) — comments never show both. */}
+      {selectedComment && selectedCommentPoint && (
+        <CommentBubble
+          key={selectedComment.id}
+          anno={selectedComment}
+          pos={selectedCommentPoint}
+          onRetext={(_id, body) =>
+            // Group-aware (Codex HIGH): a two-page comment is grouped siblings;
+            // write the same body to ALL of them so reopening the other page's
+            // pin shows the note, not a stale/empty one (matches recolor/delete).
+            retextAnnotations(commentGroupIds(selectedComment, annotations), body, new Date().toISOString())
+          }
+          onRecolor={(color) => {
+            recolorAnnotation(commentGroupIds(selectedComment, annotations), color, new Date().toISOString());
+            setActiveColor("comment", color);
+          }}
+          onConvertToHighlight={() =>
+            // Reverse (Story 3.7, AC2): drops body -> null unconditionally (even a
+            // non-empty note), group-aware, undoable. CommentBubble only renders the
+            // button for a kind=text comment, so this always targets a text mark.
+            retypeAnnotation(commentGroupIds(selectedComment, annotations), "highlight", null, new Date().toISOString())
+          }
+          onDelete={() => deleteAnnotation(selectedComment.id)}
+          onClearSelection={clearSelection}
+          onTextFocus={startCommentTextEditSession}
+          onTextBlur={commitCommentTextEditSession}
+          onResize={(size) => resizeCommentAnnotation(selectedComment.id, size, new Date().toISOString())}
+        />
+      )}
+      {/* Hover compact preview (user feature request): glance + quick text edit
+          without selecting. Mounted for EVERY non-selected comment in this doc,
+          unconditionally (NOT gated on hover) — `CommentPreview` owns its own
+          open/close (a grace window after the pointer leaves the pin, so it
+          survives the gap to reach the box itself); filtering this list down to
+          only currently-hovered marks would unmount it the instant hover ends,
+          before that timer could run. */}
+      {commentPreviewMarks.map((a) => {
+        const pos = commentScreenPoint(a);
+        if (!pos) return null;
+        return (
+          <CommentPreview
+            key={a.id}
+            anno={a}
+            pos={pos}
+            hovered={inActiveGroup(a, hoveredId, annotations)}
+            onRetext={(_id, body) =>
+              // Group-aware, same as the full bubble's retext (see above).
+              retextAnnotations(commentGroupIds(a, annotations), body, new Date().toISOString())
+            }
+            onHoverEnter={() => setHovered(a.id)}
+            onHoverLeave={() => setHovered(null)}
+            onTextFocus={startCommentTextEditSession}
+            onTextBlur={commitCommentTextEditSession}
+          />
+        );
+      })}
     </>
   );
 }

@@ -1,18 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import AnnotationLayer from "./AnnotationLayer";
 import { useAnnotationStore } from "@/store";
-import { HOVER_CLOSE_DELAY_MS } from "./CommentPreview";
 import type { Annotation } from "@/api/client";
 import type { PageBox } from "@/anchor";
-
-/** Advance fake timers AND let React flush any state updates that result
- *  (mirrors useAutosave.test.ts's own `tick` helper). */
-async function tick(ms: number) {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-}
 
 const box: PageBox = { width: 600, height: 800 };
 
@@ -428,31 +419,11 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     expect(regionsGroup!.querySelector(`[data-testid="annotation-mark-c2"]`)).not.toBeNull();
   });
 
-  it("clicking the pin selects the comment; selecting renders the bubble with value=body", () => {
+  it("clicking the pin selects the comment (its bubble is rendered by AnnotationInteraction, not this layer — see that component's tests)", () => {
     useAnnotationStore.getState().addAnnotation(rectComment("c3", "a note"));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     fireEvent.click(screen.getByTestId("annotation-comment-pin-c3"));
     expect(useAnnotationStore.getState().selectedId).toBe("c3");
-    const body = screen.getByTestId("comment-body-c3") as HTMLTextAreaElement;
-    expect(body.tagName.toLowerCase()).toBe("textarea");
-    expect(body.value).toBe("a note");
-  });
-
-  it("typing in the bubble writes body through retextAnnotation; recolor + delete fire", () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("c4", "", "annotation-default"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().select("c4"));
-    fireEvent.change(screen.getByTestId("comment-body-c4"), { target: { value: "typed" } });
-    expect(useAnnotationStore.getState().annotations.get("c4")!.body).toBe("typed");
-    // Recolor tints the comment (fill + pin) AND sets the default (last-choice-wins).
-    fireEvent.click(screen.getByTestId("color-swatch-annotation-green"));
-    expect(useAnnotationStore.getState().annotations.get("c4")!.style.color).toBe("annotation-green");
-    // Comment recolor sets ONLY the comment tool's default (per-tool split).
-    expect(useAnnotationStore.getState().activeColors.comment).toBe("annotation-green");
-    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-default");
-    // Delete removes the comment.
-    fireEvent.click(screen.getByTestId("comment-delete-c4"));
-    expect(useAnnotationStore.getState().annotations.has("c4")).toBe(false);
   });
 
   it("the pin re-derives position on zoom (NFR-3)", () => {
@@ -482,7 +453,7 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     expect(pin.className).not.toContain("annotation-comment-pin--movable");
   });
 
-  it("a rect-kind pin (and its open bubble) live-track an in-flight drag preview", () => {
+  it("a rect-kind pin live-tracks an in-flight drag preview (its open bubble, rendered elsewhere now, follows the same anchor — see AnnotationInteraction's tests)", () => {
     useAnnotationStore.getState().addAnnotation(rectComment("c9"));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     act(() => useAnnotationStore.getState().select("c9"));
@@ -494,17 +465,13 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
         anchor: { kind: "rect", page_index: 0, rect: { x0: 0.4, y0: 0.5, x1: 0.4, y1: 0.5 } },
       }),
     );
-    // Preview anchor: x0=0.4,y0=0.5 → left=240, top=400 — both the pin AND the
-    // open bubble (which hangs off the same `anchor` value) must follow.
+    // Preview anchor: x0=0.4,y0=0.5 → left=240, top=400.
     expect(screen.getByTestId("annotation-comment-pin-c9").style.left).toBe("240px");
-    expect(screen.getByTestId("comment-bubble-c9").style.left).toBe("240px");
   });
 
-  it("a non-selected comment renders no bubble; an empty comment is NOT auto-removed by the layer", () => {
+  it("an empty comment is NOT auto-removed by the layer (it only renders; it never deletes)", () => {
     useAnnotationStore.getState().addAnnotation(rectComment("c6", ""));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    expect(screen.queryByTestId("comment-body-c6")).toBeNull();
-    // The layer only renders; it never deletes. The empty comment stays.
     expect(useAnnotationStore.getState().annotations.has("c6")).toBe(true);
   });
 
@@ -512,79 +479,6 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     useAnnotationStore.getState().addAnnotation(textMark("h1", 0));
     const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     expect(container.querySelector(".annotation-comments")).toBeNull();
-  });
-
-  it("editing a grouped (two-page) comment writes the body to ALL siblings (Codex HIGH)", () => {
-    // Two comment slices sharing a group_id (both rendered on page 0 in the test).
-    const c1 = { ...textComment("c1"), group_id: "g1" };
-    const c2 = { ...textComment("c2"), group_id: "g1" };
-    useAnnotationStore.getState().addAnnotation(c1);
-    useAnnotationStore.getState().addAnnotation(c2);
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().select("c1"));
-    fireEvent.change(screen.getByTestId("comment-body-c1"), { target: { value: "shared" } });
-    // BOTH siblings carry the note, so reopening the other page's pin shows it.
-    expect(useAnnotationStore.getState().annotations.get("c1")!.body).toBe("shared");
-    expect(useAnnotationStore.getState().annotations.get("c2")!.body).toBe("shared");
-  });
-
-  it("the bubble's swatch row is labelled 'Comment color' (Codex LOW)", () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("c7"));
-    const { container } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().select("c7"));
-    const row = container.querySelector('.comment-bubble [role="group"]');
-    expect(row!.getAttribute("aria-label")).toBe("Comment color");
-  });
-
-  it("Esc on the bubble container (e.g. a focused swatch) dismisses the comment (Codex MED)", () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("c8", "note"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().select("c8"));
-    // Esc raised from a swatch button inside the bubble (not the textarea) clears.
-    const swatch = screen.getByTestId("color-swatch-annotation-green");
-    fireEvent.keyDown(swatch, { key: "Escape" });
-    expect(useAnnotationStore.getState().selectedId).toBeNull();
-    // The (non-empty) comment survives (Decision 5 keeps it either way).
-    expect(useAnnotationStore.getState().annotations.has("c8")).toBe(true);
-  });
-
-  it("a selected kind=text comment shows 'Turn into highlight' in its bubble (Story 3.7, AC2)", () => {
-    useAnnotationStore.getState().addAnnotation(textComment("c9"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().select("c9"));
-    expect(screen.getByTestId("comment-convert-highlight-c9")).toBeTruthy();
-  });
-
-  it("a kind=rect comment has NO 'Turn into highlight' action (no text counterpart to revert to)", () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("c10"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().select("c10"));
-    expect(screen.queryByTestId("comment-convert-highlight-c10")).toBeNull();
-  });
-
-  it("clicking 'Turn into highlight' flips type -> highlight and drops a non-empty body to null", () => {
-    useAnnotationStore.getState().addAnnotation(textComment("c11", "a note"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().select("c11"));
-    fireEvent.click(screen.getByTestId("comment-convert-highlight-c11"));
-    const c = useAnnotationStore.getState().annotations.get("c11")!;
-    expect(c.type).toBe("highlight");
-    expect(c.body).toBeNull();
-    // Selection is kept (not cleared) so the generic quick-box takes over for it.
-    expect(useAnnotationStore.getState().selectedId).toBe("c11");
-  });
-
-  it("converts a two-page comment group together (both siblings flip in one call)", () => {
-    const c1 = { ...textComment("c1", "note"), group_id: "g1" };
-    const c2 = { ...textComment("c2", "note"), group_id: "g1" };
-    useAnnotationStore.getState().addAnnotation(c1);
-    useAnnotationStore.getState().addAnnotation(c2);
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().select("c1"));
-    fireEvent.click(screen.getByTestId("comment-convert-highlight-c1"));
-    const map = useAnnotationStore.getState().annotations;
-    expect(map.get("c1")!.type).toBe("highlight");
-    expect(map.get("c2")!.type).toBe("highlight");
   });
 
   it("deselecting an empty text comment does NOT auto-revert it to highlight (no auto-revert, Decision 5)", () => {
@@ -595,98 +489,6 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
     const c = useAnnotationStore.getState().annotations.get("c12")!;
     expect(c.type).toBe("comment");
     expect(c.body).toBe("");
-  });
-});
-
-describe("AnnotationLayer comment hover preview (user feature request)", () => {
-  function rectComment(id: string, body = "", color = "annotation-default", groupId: string | null = null): Annotation {
-    return {
-      id,
-      doc_id: "doc-1",
-      type: "comment",
-      group_id: groupId,
-      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.2, y1: 0.3 } },
-      style: { color, stroke_width: null, alpha: null },
-      body,
-      created_at: "2026-06-29T00:00:01+00:00",
-      updated_at: "2026-06-29T00:00:01+00:00",
-    };
-  }
-
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
-  it("hovering the pin (unselected) shows the compact preview with the comment's body", () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("p1", "a quick note"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    expect(screen.queryByTestId("comment-preview-p1")).toBeNull();
-    act(() => useAnnotationStore.getState().setHovered("p1"));
-    const body = screen.getByTestId("comment-preview-body-p1") as HTMLTextAreaElement;
-    expect(body.value).toBe("a quick note");
-  });
-
-  it("does NOT show the compact preview while the comment is selected (the full bubble takes over)", () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("p2", "note"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().select("p2"));
-    act(() => useAnnotationStore.getState().setHovered("p2"));
-    expect(screen.queryByTestId("comment-preview-p2")).toBeNull();
-    expect(screen.getByTestId("comment-body-p2")).toBeTruthy(); // the full bubble, instead
-  });
-
-  it("typing in the compact preview writes body through retextAnnotation, group-aware", () => {
-    const c1 = rectComment("p3a", "", "annotation-default", "g1");
-    const c2 = rectComment("p3b", "", "annotation-default", "g1");
-    useAnnotationStore.getState().addAnnotation(c1);
-    useAnnotationStore.getState().addAnnotation(c2);
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().setHovered("p3a"));
-    fireEvent.change(screen.getByTestId("comment-preview-body-p3a"), { target: { value: "typed" } });
-    // Group-aware, same as the full bubble's retext (Codex HIGH precedent): both
-    // siblings carry the note.
-    expect(useAnnotationStore.getState().annotations.get("p3a")!.body).toBe("typed");
-    expect(useAnnotationStore.getState().annotations.get("p3b")!.body).toBe("typed");
-  });
-
-  it("un-hovering closes the preview after the grace window, not instantly (hover-intent)", async () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("p4", "note"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().setHovered("p4"));
-    expect(screen.getByTestId("comment-preview-p4")).toBeTruthy();
-    act(() => useAnnotationStore.getState().setHovered(null));
-    // Still open immediately after the pointer leaves — the gap-crossing window.
-    expect(screen.getByTestId("comment-preview-p4")).toBeTruthy();
-    await tick(HOVER_CLOSE_DELAY_MS);
-    expect(screen.queryByTestId("comment-preview-p4")).toBeNull();
-  });
-
-  it("re-hovering within the grace window cancels the close (no flicker)", async () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("p5", "note"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().setHovered("p5"));
-    act(() => useAnnotationStore.getState().setHovered(null));
-    await tick(HOVER_CLOSE_DELAY_MS / 2);
-    // Pointer reached the box itself (or re-entered the pin) before the close fired.
-    act(() => useAnnotationStore.getState().setHovered("p5"));
-    await tick(HOVER_CLOSE_DELAY_MS);
-    expect(screen.getByTestId("comment-preview-p5")).toBeTruthy();
-  });
-
-  it("hovering the preview box itself (onPointerEnter) keeps hoveredId alive", () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("p6", "note"));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().setHovered("p6"));
-    fireEvent.pointerEnter(screen.getByTestId("comment-preview-p6"));
-    expect(useAnnotationStore.getState().hoveredId).toBe("p6");
-    fireEvent.pointerLeave(screen.getByTestId("comment-preview-p6"));
-    expect(useAnnotationStore.getState().hoveredId).toBeNull();
-  });
-
-  it("does not render the compact preview for a mark with no comment (sanity: gated on comment marks only)", () => {
-    useAnnotationStore.getState().addAnnotation(textMark("h1", 0));
-    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
-    act(() => useAnnotationStore.getState().setHovered("h1"));
-    expect(screen.queryByTestId("comment-preview-h1")).toBeNull();
   });
 });
 
