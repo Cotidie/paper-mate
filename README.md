@@ -1,7 +1,7 @@
 <h1 align="center">Paper Mate</h1>
 
 <p align="center">
-  <strong>A local PDF reader for research papers.</strong><br/>
+  <strong>A local PDF reader for research and study.</strong><br/>
   <em>Read, mark up, and reopen papers with your notes still where you left them.</em>
 </p>
 
@@ -28,15 +28,9 @@ Paper Mate runs as a local web app. The browser handles the reading and annotati
 
 The current version is the viewer and annotator. Local AI-assisted reading is planned later, but the first job is simpler: keep the paper stable, make annotation fast, and avoid sending private PDFs to a cloud service.
 
-## Screenshot placeholder
+## Screenshot
 
-Add a screenshot here when the public reader view is ready.
-
-Suggested shot: a paper open in the reader with the tool rail, a few highlights, a memo, and the Annotation Bank visible.
-
-```md
-![Paper Mate reader screenshot](docs/images/paper-mate-reader.png)
-```
+![Paper Mate reader with annotations and table of contents](docs/images/01-readme-paper-mate-main.png)
 
 ## Features
 
