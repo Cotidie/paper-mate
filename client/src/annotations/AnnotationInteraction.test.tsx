@@ -349,13 +349,13 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     }
   });
 
-  it("clears the native selection immediately on present (the preview highlight represents it visually from then on)", async () => {
+  it("leaves the native selection alive on present, so Ctrl+C still copies the dragged text (bug fix: the preview highlight is a separate overlay, not a stand-in that requires clearing it)", async () => {
     const { removeAllRanges } = stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
     const pages = [fakeCard(0, 0)];
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     await screen.findByTestId("quick-box");
-    expect(removeAllRanges).toHaveBeenCalled();
+    expect(removeAllRanges).not.toHaveBeenCalled();
   });
 
   it("renders a preview highlight standing in for the (now-cleared) native selection", async () => {
