@@ -1,54 +1,110 @@
-# Paper Mate
+<h1 align="center">Paper Mate</h1>
 
-A web PDF paper-reading companion: annotation plus AI chat, optimized for reading papers.
+<p align="center">
+  <strong>A local PDF reader for research and study.</strong><br/>
+  <em>Read, mark up, and reopen papers with your notes still where you left them.</em>
+</p>
 
-Two processes, one container: `client/` (React 19.2 + Vite 8 + TypeScript SPA) and `server/` (FastAPI + Pydantic v2, uv-managed). In production a single container serves both the API and the built SPA from one origin (no CORS). Localhost, single user, no auth.
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-6f8f5f.svg"></a>
+  <a href="https://github.com/Cotidie/paper-mate"><img alt="Repo: Cotidie/paper-mate" src="https://img.shields.io/badge/repo-Cotidie%2Fpaper--mate-6f8f5f?logo=github"></a>
+  <a href="https://github.com/Cotidie/paper-mate/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Cotidie/paper-mate?style=flat&logo=github&color=6f8f5f"></a>
+  <a href="https://github.com/Cotidie/paper-mate/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/Cotidie/paper-mate?style=flat&logo=github&color=6f8f5f"></a>
+</p>
 
-## Development
+<p align="center">
+  <img alt="React" src="https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white">
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white">
+  <img alt="PDF.js" src="https://img.shields.io/badge/PDF.js-000000?style=flat&logo=mozilla&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white">
+  <img alt="Zustand" src="https://img.shields.io/badge/Zustand-443E38?style=flat">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white">
+</p>
 
-There are two ways to run the app. They serve different purposes; pick by what you are doing.
+## Overview
 
-### 1. Host two-process flow (the canonical dev loop)
+Paper Mate runs as a local web app. The browser handles the reading and annotation UI; a small FastAPI server saves files and annotations to disk.
 
-Use this for day-to-day development. It gives backend auto-reload and frontend HMR.
+The current version is the viewer and annotator. Local AI-assisted reading is planned later, but the first job is simpler: keep the paper stable, make annotation fast, and avoid sending private PDFs to a cloud service.
+
+![Paper Mate reader with annotations and table of contents](docs/images/01-readme-paper-mate-main.png)
+
+## Features
+
+### 📄 Paper reading
+
+- Local PDF opening
+- Smooth scroll, zoom, and pan
+- Page controls and table of contents
+- Stable canvas, no layout shift from annotations
+
+### ✍️ Annotation
+
+- Highlight, underline, pen, memo, comment, and box tools
+- Quick box for choosing tools after text selection
+- Recolor, move, resize, delete, undo, and redo
+- Hide or show all annotations
+
+### 🗂️ Review and storage
+
+- Annotation Bank with click-to-jump
+- Local autosave and restore
+- Original PDF left untouched
+- Local library under `~/.paper-mate`
+
+### 🔭 Planned
+
+- Inline previews for figures, tables, footnotes, and citations
+- Paper metadata and library view
+- Export with annotations
+- Local AI chat through CLI agents
+- Click or drag a paper region into chat context
+
+## Quick Start
+
+### Run with Docker
 
 ```sh
-# shell 1: backend (auto-reloads on edit)
-cd server && uv run uvicorn app.main:app --reload --port 8000
+git clone https://github.com/Cotidie/paper-mate.git
+cd paper-mate
 
-# shell 2: frontend (HMR)
-cd client && npm run dev
-```
-
-Vite serves the SPA and proxies `/api` to FastAPI (override the target with `PAPER_MATE_API_TARGET`).
-
-- Backend tests: `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`
-- Frontend tests: `cd client && npm test` ; typecheck: `npm run typecheck`
-
-### 2. Docker (single-command boot)
-
-Use this to run the whole app from one container. The backend hot-reloads on edits (the compose bind-mounts `./server/app` and runs `uvicorn --reload`); the frontend is the built static SPA from the image (no HMR).
-
-```sh
-# 1. Configure (optional): copy the env file and set your data dir / port / uid.
-cp .env.example .env        # then edit .env if you want non-defaults
-
-# 2. Pre-create the data dir as your host user, using the SAME value as
-#    PAPER_MATE_DATA. This sources .env so it respects a custom location.
+cp .env.example .env
 set -a; [ -f .env ] && . ./.env; set +a
 mkdir -p "${PAPER_MATE_DATA:-$HOME/.paper-mate}"
 
-# 3. Boot.
-docker compose up
+docker compose up --build
 ```
 
-- All configuration is env-driven via `.env` (auto-loaded by Compose); `.env.example` is the canonical list. Data dir: `PAPER_MATE_DATA` (default `~/.paper-mate`, mounted to `/data`). Host port: `PAPER_MATE_PORT` (default 8000).
-- The container runs as the host user (`PAPER_MATE_UID`/`PAPER_MATE_GID`, default 1000:1000) so files written under your data dir are host-owned and you can edit or delete them. Override the uid/gid in `.env` if `id -u` / `id -g` differ on your host.
-- Step 2 matters: the compose mount uses `create_host_path: false`, so if the data dir does not exist `docker compose up` fails with a clear error rather than letting Docker auto-create it as `root:root` (which the non-root container then cannot write). Pre-create it first.
-- If you have a `root:root` data dir from an older run, reclaim it once (use your configured dir/uid): `sudo chown -R "$(id -u)":"$(id -g)" "${PAPER_MATE_DATA:-$HOME/.paper-mate}"`.
-- Backend edits reload automatically. A change to dependencies or the frontend still needs a rebuild: `docker compose up --build`. For live frontend work use the host two-process flow above.
-- Pure prod-style run (baked code, no mounts, no reload) straight from the image: `docker build -t paper-mate . && docker run -p 8000:8000 -v "$HOME/.paper-mate:/data" paper-mate`.
+Open `http://localhost:8000` after the container starts.
 
-## Planning and architecture
+### Develop locally
 
-Canonical planning artifacts live under `.bmad/planning-artifacts/` (PRD, architecture spine, epics and stories, UX). Root `DESIGN.md` and `EXPERIENCE.md` are also inputs.
+Run the backend and frontend in separate shells:
+
+```sh
+cd server && uv run uvicorn app.main:app --reload --port 8000
+```
+
+```sh
+cd client && npm install && npm run dev
+```
+
+Open the Vite URL shown in the terminal, usually `http://localhost:5173`.
+
+## Perfect For
+
+- Researchers who read papers every day.
+- Graduate students marking lecture notes, papers, and drafts.
+- Anyone who wants PDF annotation without uploading papers to a cloud service.
+- Readers who prefer local files, local annotations, and a quiet interface.
+
+## License
+
+Paper Mate is released under the MIT License. See [LICENSE](LICENSE).
+
+## Acknowledgement
+
+Paper Mate uses PDF.js for PDF rendering, React and Vite for the client app, FastAPI for the local backend, Zustand for client state, and perfect-freehand for pen strokes.
+
+The product shape comes from the BMad planning artifacts in this repository, especially the v1 viewer and annotator spec.

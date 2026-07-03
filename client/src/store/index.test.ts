@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { useAnnotationStore, hydrateStore, flashAnnotation, FLASH_MS, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "./index";
+import { useAnnotationStore, openDoc, flashAnnotation, FLASH_MS, DEFAULT_MEMO_SIZE, MEMO_SIZES } from "./index";
 import type { Annotation } from "@/api/client";
 
 function mark(id: string, color: string, createdAt: string, groupId: string | null = null): Annotation {
@@ -18,6 +18,7 @@ function mark(id: string, color: string, createdAt: string, groupId: string | nu
 
 beforeEach(() => {
   useAnnotationStore.setState({
+    docId: null,
     annotations: new Map(),
     selectedId: null,
     multiSelectedIds: [],
@@ -710,24 +711,25 @@ describe("convert highlight <-> comment — retypeAnnotation (Story 3.7)", () =>
   });
 });
 
-describe("hydrate-on-open (Story 3.5)", () => {
+describe("hydrate-on-open, doc-scoped (Story 3.5 + Story 5.8)", () => {
   const t = () => useAnnotationStore.temporal.getState();
 
-  it("hydrate builds the Map keyed by id and clears transient UI state", () => {
+  it("openDoc sets docId + builds the Map keyed by id, atomically, in ONE call, and clears transient UI state", () => {
     const s = useAnnotationStore.getState();
-    // Seed prior transient state that a hydrate must wipe.
+    // Seed prior transient state that an openDoc must wipe.
     s.addAnnotation(mark("old", "annotation-default", "2026-06-29T00:00:01Z"));
     s.select("old");
     s.setHovered("old");
     s.setDragPreview({ id: "old", anchor: { kind: "text", page_index: 0, rects: [], text: "x" } });
     s.setHidden(true);
 
-    useAnnotationStore.getState().hydrate([
+    useAnnotationStore.getState().openDoc("doc-2", [
       mark("a", "annotation-pink", "2026-06-29T00:00:02Z"),
       mark("b", "annotation-blue", "2026-06-29T00:00:03Z"),
     ]);
 
     const st = useAnnotationStore.getState();
+    expect(st.docId).toBe("doc-2");
     expect([...st.annotations.keys()].sort()).toEqual(["a", "b"]);
     expect(st.annotations.get("a")!.style.color).toBe("annotation-pink");
     expect(st.annotations.has("old")).toBe(false);
@@ -737,27 +739,31 @@ describe("hydrate-on-open (Story 3.5)", () => {
     expect(st.hidden).toBe(false);
   });
 
-  it("hydrateStore clears zundo history so undo() cannot remove restored marks (AC-4)", () => {
-    // Prior edits leave undo history that hydrateStore must wipe.
+  it("openDoc clears zundo history so undo() cannot remove restored marks (AC-4), and does NOT revert docId", () => {
+    // Prior edits leave undo history that openDoc must wipe.
     const s = useAnnotationStore.getState();
     s.addAnnotation(mark("x", "annotation-default", "2026-06-29T00:00:01Z"));
     s.addAnnotation(mark("y", "annotation-default", "2026-06-29T00:00:02Z"));
     expect(t().pastStates.length).toBeGreaterThan(0);
 
-    hydrateStore([mark("r", "annotation-green", "2026-06-29T00:00:03Z")]);
+    openDoc("doc-r", [mark("r", "annotation-green", "2026-06-29T00:00:03Z")]);
 
     expect(t().pastStates.length).toBe(0);
     expect(t().futureStates.length).toBe(0);
-    // Undo is a no-op: the restored mark survives (it is the undo floor).
+    // Undo is a no-op: the restored mark survives (it is the undo floor), and
+    // docId is excluded from the zundo partialize so undo can never revert
+    // which doc is open (5.8).
     t().undo();
     expect(useAnnotationStore.getState().annotations.has("r")).toBe(true);
+    expect(useAnnotationStore.getState().docId).toBe("doc-r");
   });
 
-  it("hydrateStore([]) restores an empty set (imported-but-unannotated doc)", () => {
+  it("openDoc(id, []) restores an empty set (imported-but-unannotated doc)", () => {
     const s = useAnnotationStore.getState();
     s.addAnnotation(mark("stale", "annotation-default", "2026-06-29T00:00:01Z"));
-    hydrateStore([]);
+    openDoc("doc-empty", []);
     expect(useAnnotationStore.getState().annotations.size).toBe(0);
+    expect(useAnnotationStore.getState().docId).toBe("doc-empty");
     expect(t().pastStates.length).toBe(0);
   });
 });
@@ -818,10 +824,10 @@ describe("hide-all annotations toggle (Story 5.5, view-only, NOT undoable)", () 
     expect(t().pastStates.length).toBe(0);
   });
 
-  it("hydrate resets hidden to false", () => {
+  it("openDoc resets hidden to false", () => {
     const s = useAnnotationStore.getState();
     s.setHidden(true);
-    s.hydrate([]);
+    s.openDoc("doc-1", []);
     expect(useAnnotationStore.getState().hidden).toBe(false);
   });
 });
@@ -1023,9 +1029,9 @@ describe("transient flash (Story 3.6, Annotation Bank jump)", () => {
     expect(t().pastStates.length).toBe(before);
   });
 
-  it("hydrate clears a stale flashId", () => {
+  it("openDoc clears a stale flashId", () => {
     useAnnotationStore.getState().flash("stale");
-    useAnnotationStore.getState().hydrate([]);
+    useAnnotationStore.getState().openDoc("doc-1", []);
     expect(useAnnotationStore.getState().flashId).toBeNull();
   });
 

@@ -55,7 +55,9 @@ beforeEach(() => {
   useSettingsStore.setState({ keymap: DEFAULT_KEYMAP });
   // Story 5.5: the hide-all flag is a store singleton across tests in this file;
   // reset it so a toggle in one test can't leak "hidden" into the next.
-  useAnnotationStore.setState({ hidden: false, selectedId: null });
+  // Story 5.8: docId is the same kind of singleton leak risk now that the
+  // store owns it, so it resets alongside hidden/selectedId here too.
+  useAnnotationStore.setState({ hidden: false, selectedId: null, docId: null });
 });
 
 const fakeDoc: api.Doc = {
