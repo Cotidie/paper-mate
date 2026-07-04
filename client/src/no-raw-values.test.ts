@@ -28,8 +28,8 @@ const PX = /\b\d+px\b/;
 describe("no raw hex/px in component styles", () => {
   const files = collect(SRC).filter((f) => !EXEMPT(relative(SRC, f)));
 
-  it("scans at least the App component styles", () => {
-    expect(files.some((f) => f.endsWith("App.css"))).toBe(true);
+  it("scans at least the reader component styles", () => {
+    expect(files.some((f) => f.endsWith("ReaderPage.css"))).toBe(true);
   });
 
   for (const file of files) {

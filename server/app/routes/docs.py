@@ -6,8 +6,9 @@ returns the ``Doc`` contract. A bad PDF becomes the single error envelope
 bytes. ``PUT /api/docs/{doc_id}/annotations`` overwrites the full annotation
 set (AR-7, H9: bare list body, disk envelope is storage-internal).
 ``GET /api/docs/{doc_id}/annotations`` reads it back for hydrate-on-open
-(Story 3.5; bare list, ``[]`` when unannotated). Reserved (not built here):
-``GET /api/docs``, ``GET /api/docs/{doc_id}``.
+(Story 3.5; bare list, ``[]`` when unannotated). ``GET /api/docs/{doc_id}``
+returns a document's own metadata (Story 6.1, AD-L6). Reserved (not built
+here): ``GET /api/docs``.
 """
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -32,6 +33,39 @@ async def upload_doc(file: UploadFile = File(...)) -> Doc:
         # Any other storage failure (corrupt/unknown-version metadata, I/O):
         # still answer with the single { detail } envelope, never a bare 500.
         raise HTTPException(status_code=500, detail="Could not store document") from exc
+    return Doc(doc_id=doc_id, **meta.model_dump())
+
+
+@router.get(
+    "/docs/{doc_id}",
+    response_model=Doc,
+    responses={
+        404: {
+            "description": "No document with this id.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+        500: {
+            "description": "The stored document is unreadable.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+    },
+)
+async def get_doc(doc_id: str) -> Doc:
+    """Return a document's own metadata (filename, page_count, ...) (AD-L6).
+
+    Unknown/unresolvable id → 404; a corrupt on-disk record → 500. Both use the
+    single ``{ "detail" }`` envelope (AR-11).
+    """
+    try:
+        meta = storage.read_meta(doc_id)
+    except storage.DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Document not found") from exc
+    except storage.StorageError as exc:
+        raise HTTPException(status_code=500, detail="Could not read document") from exc
     return Doc(doc_id=doc_id, **meta.model_dump())
 
 

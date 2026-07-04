@@ -156,6 +156,20 @@ def test_source_path_corrupt_meta_raises_storage_error(data_root):
         storage.source_path(doc_id)
 
 
+def test_read_meta_round_trips_imported_doc(data_root):
+    raw = make_pdf_bytes(pages=5, title="Read Meta")
+    doc_id, imported = storage.import_pdf(raw, "rm.pdf")
+    meta = storage.read_meta(doc_id)
+    assert meta == imported
+    assert meta.page_count == 5
+    assert meta.title == "Read Meta"
+
+
+def test_read_meta_unknown_doc_raises_not_found(data_root):
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.read_meta("0" * 64)
+
+
 def test_write_annotations_round_trips_envelope(data_root):
     raw = make_pdf_bytes(pages=1)
     doc_id, _ = storage.import_pdf(raw, "w.pdf")

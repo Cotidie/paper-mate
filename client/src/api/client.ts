@@ -52,6 +52,17 @@ export async function uploadDoc(file: File): Promise<Doc> {
 }
 
 /**
+ * Fetch a document's own metadata (`GET /api/docs/{doc_id}`, Story 6.1,
+ * AD-L6). The `/reader/:docId` route has only a hash id, so it loads its
+ * `Doc` (filename/page_count) through this rather than an upload result.
+ */
+export async function getDoc(docId: string): Promise<Doc> {
+  const res = await fetch(`/api/docs/${encodeURIComponent(docId)}`);
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Doc;
+}
+
+/**
  * Overwrite a document's full annotation set (`PUT /api/docs/{doc_id}/annotations`).
  * AR-7/H6: the autosave hook calls this single-flight, debounced, with the
  * FULL current set every time. H9: the body is the bare list; the
@@ -70,7 +81,8 @@ export async function putAnnotations(docId: string, annotations: Annotation[]): 
  * Fetch a document's saved annotation set (`GET /api/docs/{doc_id}/annotations`)
  * for hydrate-on-open (Story 3.5, AD-6). H9: the body is the bare list; an
  * imported-but-unannotated doc returns `[]` (not a 404). The store's
- * `openDoc` consumes this while the doc is still opening (App.handleFile).
+ * `openDoc` consumes this while the doc is still opening (ReaderPage's
+ * param-driven load, Story 6.1).
  */
 export async function getAnnotations(docId: string): Promise<Annotation[]> {
   const res = await fetch(`/api/docs/${encodeURIComponent(docId)}/annotations`);
