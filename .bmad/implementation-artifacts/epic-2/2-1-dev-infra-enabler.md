@@ -92,7 +92,7 @@ Adopt the `deferred-work.md` recommendation: **(a) as the documented default + (
 
 - [Source: .bmad/planning-artifacts/epics.md#Story-2.1-Dev-infra-enabler] — story statement + 3 ACs.
 - [Source: .bmad/implementation-artifacts/deferred-work.md#local-Docker-dev-experience-2026-06-29] — root cause + the proper-fix recommendations (compose `user:`, host-dir pre-create, dev override, (a)+(b) decision).
-- [Source: .bmad/planning-artifacts/sprint-change-proposal-2026-06-29.md] — why 2.1 is the enabler and the anchor foundation moved to 2.2.
+- [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-29.md] — why 2.1 is the enabler and the anchor foundation moved to 2.2.
 - [Source: ARCHITECTURE-SPINE.md#AD-8] — storage layout: host `~/.paper-mate` mounted to `/data`, the only write root.
 - [Source: ARCHITECTURE-SPINE.md#AD-10] — single-container deployment; dev = Vite HMR proxy to FastAPI, prod = FastAPI serves dist.
 - [Source: CLAUDE.md#Commands, #Single-command-boot] — host two-process dev flow + `docker compose up` boot, env vars `PAPER_MATE_PORT` / `PAPER_MATE_DATA`.

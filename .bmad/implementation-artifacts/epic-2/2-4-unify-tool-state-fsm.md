@@ -181,8 +181,8 @@ Today the pointer rail button is a flyout-opener: clicking it opens cursor/hand/
 
 ### References
 
-- [Source: .bmad/planning-artifacts/sprint-change-proposal-2026-06-29-tool-fsm.md §1, §3, §4.1, §4.3] — the issue (two orthogonal states let pan eat the drag), the recommended single-`activeTool` FSM, the AC seed, and the AD-11 text.
-- [Source: .bmad/planning-artifacts/sprint-change-proposal-2026-06-29-select-highlight.md] — the AC4 single-click-switch addition to 2.4 and why 2.5 depends on this model.
+- [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-29-tool-fsm.md §1, §3, §4.1, §4.3] — the issue (two orthogonal states let pan eat the drag), the recommended single-`activeTool` FSM, the AC seed, and the AD-11 text.
+- [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-29-select-highlight.md] — the AC4 single-click-switch addition to 2.4 and why 2.5 depends on this model.
 - [Source: .bmad/planning-artifacts/epics.md#Story-2.4-Unify-tool-state] — story statement + 5 ACs.
 - [Source: ARCHITECTURE-SPINE.md#AD-11] — tool-state model: one `activeTool`, mutually exclusive by construction; pan derives from it; overlay machine driven by the same model; single-click switch.
 - [Source: ARCHITECTURE-SPINE.md#AD-9] — boundary/layer invariants (anchor-only math, generated client, layering).

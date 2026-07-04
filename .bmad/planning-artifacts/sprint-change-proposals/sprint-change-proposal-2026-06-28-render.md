@@ -57,7 +57,7 @@ Insert two render-fix stories as **1.6 / 1.7** and renumber the original pan/ToC
 
 1. **`sprint-status.yaml`** (done): under epic-1, inserted `1-6-pdfjs-decoder-assets: backlog` and `1-7-render-perf-windowing: backlog`, and renumbered the original `1-6-pan-hand-tool` → `1-8-pan-hand-tool` and `1-7-table-of-contents` → `1-9-table-of-contents`.
 2. **`epics.md`** (done): inserted Story 1.6 and Story 1.7 (full ACs) and renumbered the pan/ToC stories to 1.8/1.9, with provenance notes.
-3. **This proposal**: written to `.bmad/planning-artifacts/sprint-change-proposal-2026-06-28-render.md` (the plain-dated name was already taken by the zoom-control proposal).
+3. **This proposal**: written to `.bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-28-render.md` (the plain-dated name was already taken by the zoom-control proposal).
 
 ### Story 1.6: pdf.js decoder & asset wiring
 

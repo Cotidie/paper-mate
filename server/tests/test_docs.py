@@ -80,6 +80,27 @@ def test_corrupt_existing_meta_returns_500_detail(data_root):
     assert isinstance(resp.json()["detail"], str)
 
 
+def test_get_doc_returns_metadata(data_root):
+    """GET /api/docs/{doc_id} returns the same Doc shape as the upload response."""
+    raw = make_pdf_bytes(pages=3, title="Meta")
+    up = client.post("/api/docs", files={"file": ("meta.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+
+    resp = client.get(f"/api/docs/{doc_id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["doc_id"] == doc_id
+    assert body["filename"] == "meta.pdf"
+    assert body["page_count"] == 3
+    assert body["title"] == "Meta"
+
+
+def test_get_doc_unknown_returns_404_detail(data_root):
+    resp = client.get(f"/api/docs/{'0' * 64}")
+    assert resp.status_code == 404
+    assert isinstance(resp.json()["detail"], str)
+
+
 def test_get_file_returns_pdf_bytes(data_root):
     """GET /api/docs/{doc_id}/file streams the exact stored bytes as application/pdf."""
     raw = make_pdf_bytes(pages=2, title="Readable")

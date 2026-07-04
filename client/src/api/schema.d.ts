@@ -44,6 +44,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/docs/{doc_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Doc
+         * @description Return a document's own metadata (filename, page_count, ...) (AD-L6).
+         *
+         *     Unknown/unresolvable id → 404; a corrupt on-disk record → 500. Both use the
+         *     single ``{ "detail" }`` envelope (AR-11).
+         */
+        get: operations["get_doc_api_docs__doc_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/docs/{doc_id}/file": {
         parameters: {
             query?: never;
@@ -333,6 +356,55 @@ export interface operations {
             };
             /** @description Validation Error */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_doc_api_docs__doc_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Doc"];
+                };
+            };
+            /** @description No document with this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The stored document is unreadable. */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

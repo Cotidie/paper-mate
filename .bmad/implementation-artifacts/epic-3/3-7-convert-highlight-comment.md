@@ -143,7 +143,7 @@ No change expected in `create.ts`, `marks.ts`, or any anchor/render/backend file
 ### References
 
 - [Source: .bmad/planning-artifacts/epics.md#Story 3.7 (lines 839-858)] — the three ACs verbatim.
-- [Source: .bmad/planning-artifacts/sprint-change-proposal-2026-06-30.md] — cluster C fold-in; FR-27 routed to Story 3.7.
+- [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-30.md] — cluster C fold-in; FR-27 routed to Story 3.7.
 - [Source: .bmad/planning-artifacts/epics.md#FR-27 (lines 69, 147)] — FR-27 convert highlight ↔ comment.
 - [Source: server/app/models.py:124-132] — `type` union + nullable `body` (no contract change).
 - [Source: client/src/store/index.ts:203-368] — `patchAnnotations`, `recolorAnnotation` template, zundo `temporal` config.

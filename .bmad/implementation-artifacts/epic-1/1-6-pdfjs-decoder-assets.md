@@ -8,7 +8,7 @@ Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
-> Added 2026-06-28 via correct-course (`.bmad/planning-artifacts/sprint-change-proposal-2026-06-28-render.md`). Closes a Story 1.3 render gap: `loadDocument` calls `getDocument({ url })` with none of the pdf.js asset URLs wired, so the bundled WASM image decoders and the CMap/ICC/standard-font data are never referenced. JPEG2000 (and JBIG2) figures fail to decode and the console floods with `JpxError: OpenJPEG failed to initialize` + `Dependent image isn't ready yet` (127 warnings observed on a real paper). The decoders already ship inside `pdfjs-dist 6.0.227` — they are simply unreferenced and never emitted into the build. Sequenced ahead of the original pan/ToC stories (now 1.8/1.9): independent, low-risk, and clears the console first.
+> Added 2026-06-28 via correct-course (`.bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-28-render.md`). Closes a Story 1.3 render gap: `loadDocument` calls `getDocument({ url })` with none of the pdf.js asset URLs wired, so the bundled WASM image decoders and the CMap/ICC/standard-font data are never referenced. JPEG2000 (and JBIG2) figures fail to decode and the console floods with `JpxError: OpenJPEG failed to initialize` + `Dependent image isn't ready yet` (127 warnings observed on a real paper). The decoders already ship inside `pdfjs-dist 6.0.227` — they are simply unreferenced and never emitted into the build. Sequenced ahead of the original pan/ToC stories (now 1.8/1.9): independent, low-risk, and clears the console first.
 
 ## Story
 
@@ -106,7 +106,7 @@ Recent commits are the Epic-1 render path being built up: `9411e04` render pages
 ### References
 
 - [Source: .bmad/planning-artifacts/epics.md#Story-1.6 (lines 278-299)] — story statement + 4 ACs.
-- [Source: .bmad/planning-artifacts/sprint-change-proposal-2026-06-28-render.md §1.B, §4, §5] — root cause, evidence (127 console warnings), success criteria.
+- [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-28-render.md §1.B, §4, §5] — root cause, evidence (127 console warnings), success criteria.
 - [Source: .bmad/planning-artifacts/epics.md AR-2 (line 75), AR-9 (82), AR-10 (83); FR-2 (28)] — referenced requirements.
 - [Source: client/src/render/index.ts:45] — the single `getDocument`/`loadDocument` call site to modify.
 - [Source: client/vite.config.ts] — plugin array to extend.

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { ListBullets, Cards, Eye, EyeSlash } from "@phosphor-icons/react";
-import "@/App.css";
-import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
+import { useNavigate, useParams } from "react-router";
+import { ArrowLeft, ListBullets, Cards, Eye, EyeSlash } from "@phosphor-icons/react";
+import "@/reader/ReaderPage.css";
 import Reader, { type ReaderHandle } from "@/components/Reader/Reader";
 import ToolRail from "@/components/ToolRail/ToolRail";
 import { type ActiveTool, isAnnotationTool } from "@/lib/tools";
@@ -12,7 +12,7 @@ import TocPanel from "@/components/TocPanel/TocPanel";
 import BankPanel from "@/components/BankPanel/BankPanel";
 import type { BankItem } from "@/lib/bank";
 import Toast from "@/components/Toast/Toast";
-import { uploadDoc, getAnnotations, fetchHealth, type Doc } from "@/api/client";
+import { getDoc, getAnnotations, fetchHealth, type Doc } from "@/api/client";
 import type { TocEntry } from "@/render";
 import { useAutosave } from "@/hooks/useAutosave";
 import SaveIndicator from "@/components/SaveIndicator/SaveIndicator";
@@ -22,17 +22,16 @@ import SettingsModal from "@/settings/SettingsModal";
 import { isEditableTarget } from "@/lib/domFocus";
 
 /**
- * App shell. Holds the current-doc state and switches between:
- *  - S0 (no PDF): `{component.empty-dropzone}` to drop/browse a PDF.
- *  - S1 (loaded): the reader frame (top-bar filename + the Reader's pdf-canvas +
- *    collapsed tool-rail). The Reader streams the PDF pages (Story 1.3).
+ * Reader route (`/reader/:docId`, Story 6.1). Loads its document from the URL
+ * param instead of an upload result: the former S0/S1 App split is gone (S0 is
+ * now the Library route); this component IS the former S1 body, unchanged.
  * Lightweight React state only; the Zustand annotation store arrives with
  * annotations (Epic 2/3). Chrome is overlay-laid so it never reflows (NFR-1).
  */
-export default function App() {
+export default function ReaderPage() {
+  const { docId } = useParams<{ docId: string }>();
+  const navigate = useNavigate();
   const [doc, setDoc] = useState<Doc | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   // 1-based page in view, reported by the Reader for the top-bar indicator.
   const [currentPage, setCurrentPage] = useState(1);
   // Live zoom percent, reported by the Reader for the top-bar zoom control.
@@ -43,8 +42,8 @@ export default function App() {
   // exclusion is by construction — setting it disarms the previous, so a still-
   // armed hand can never eat an annotation drag (the Story 2.3 bug, now removed
   // at the cause). `panArmed` and the overlay's `armedTool` are pure derivations
-  // of this (below), never stored siblings. Lives in App state (not the store,
-  // which is the annotation working copy, AD-9). Sticky until V/Esc/another tool.
+  // of this (below), never stored siblings. Lives in ReaderPage state (not the
+  // store, which is the annotation working copy, AD-9). Sticky until V/Esc/another tool.
   const [activeTool, setActiveTool] = useState<ActiveTool>("cursor");
   // Box-highlight is a MODE of the Highlight tool, not its own tool (AD-11 stays
   // intact — one active tool). When true AND Highlight is active, a rectangle drag
@@ -56,21 +55,23 @@ export default function App() {
     if (activeTool !== "highlight") setBoxHighlight(false);
   }, [activeTool]);
   // The active/default annotation color, PER TOOL (Story 2.6, split per-tool by
-  // user request), lives in the annotation store, not App state: it is written
-  // from two unrelated subtrees (the rail's color sub-toolbox AND the overlay's
-  // recolor-a-mark), and the create paths read it. App subscribes only to pass it
-  // (and its setter) to the rail; the overlay reads the store directly. Each tool
-  // remembers its own last-chosen color for the session.
+  // user request), lives in the annotation store, not ReaderPage state: it is
+  // written from two unrelated subtrees (the rail's color sub-toolbox AND the
+  // overlay's recolor-a-mark), and the create paths read it. ReaderPage
+  // subscribes only to pass it (and its setter) to the rail; the overlay reads
+  // the store directly. Each tool remembers its own last-chosen color for the
+  // session.
   const activeColors = useAnnotationStore((s) => s.activeColors);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   // Story 2.8: the active pen stroke width is store-backed for the same reason as
   // activeColors (the rail's stroke-width row + the pen quick-box's restroke both
-  // write it, the create path reads it). App passes it + its setter to the rail.
+  // write it, the create path reads it). ReaderPage passes it + its setter to
+  // the rail.
   const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
   const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
   // Story 2.13: the active pen alpha is store-backed for the same reason as
   // activeColors/activeStrokeWidth (the rail's AlphaRow + the pen quick-box's
-  // realpha both write it, the create path reads it). App threads it down.
+  // realpha both write it, the create path reads it). ReaderPage threads it down.
   const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
   const setActiveAlpha = useAnnotationStore((s) => s.setActiveAlpha);
   // Hide-all toggle (Story 5.5, FR-23): a view-only flag read here only for the
@@ -80,7 +81,7 @@ export default function App() {
   const toggleHidden = useAnnotationStore((s) => s.toggleHidden);
   const select = useAnnotationStore((s) => s.select);
   const [railCollapsed, setRailCollapsed] = useState(false);
-  // Settings modal (Story 5.1): App owns open/closed, same pattern as
+  // Settings modal (Story 5.1): ReaderPage owns open/closed, same pattern as
   // tocOpen/bankOpen. Threaded to ToolRail's Gear trigger and SettingsModal.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const keymap = useSettingsStore((s) => s.keymap);
@@ -113,9 +114,9 @@ export default function App() {
   }, []);
 
   // Autosave (Story 3.4, doc-scoped per Story 5.8): a passive observer of the
-  // annotation store, bound to `store.docId` (not App's own `doc` state).
-  // Always called (hooks must be unconditional); it no-ops while no doc is
-  // open. `saveErrorDismissed` is local UI state ONLY (hides the toast on
+  // annotation store, bound to `store.docId` (not this component's own `doc`
+  // state). Always called (hooks must be unconditional); it no-ops while no doc
+  // is open. `saveErrorDismissed` is local UI state ONLY (hides the toast on
   // dismiss) — it does NOT touch the hook's retry-on-next-change behavior, and
   // resets whenever a NEW failure occurs (status flips back to "error" only
   // after passing through "saving" again).
@@ -124,6 +125,35 @@ export default function App() {
   useEffect(() => {
     if (saveStatus.status === "error") setSaveErrorDismissed(false);
   }, [saveStatus.status]);
+
+  // Param-driven load (Story 6.1, replaces the old upload-driven `handleFile`).
+  // The hydrate-before-mount ordering is load-bearing (Story 3.5 anti-clobber,
+  // AC-4): both awaits run while `store.docId` is still null, so `useAutosave`
+  // is inert; `openDoc` sets `docId` + populates the store atomically + clears
+  // undo history BEFORE `setDoc` flips the reader on, so autosave's baseline
+  // run captures the ALREADY-restored set (restore is never PUT back and is
+  // not undoable). Do NOT move hydration into a Reader child effect (its
+  // baseline would capture the empty set). On failure (bad/unknown `:docId`,
+  // or a `getAnnotations` failure), keep the store empty and navigate back to
+  // the Library rather than clobbering it (AC-5 equivalent).
+  useEffect(() => {
+    if (!docId) return;
+    let live = true;
+    setDoc(null);
+    (async () => {
+      try {
+        const [meta, restored] = await Promise.all([getDoc(docId), getAnnotations(docId)]);
+        if (!live) return;
+        openDoc(docId, restored);
+        setDoc(meta);
+      } catch {
+        if (live) navigate("/", { replace: true });
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [docId, navigate]);
 
   // Document-level tool keys (UX-DR15), unified onto the keymap (Story 5.1,
   // AC-1): ONE effect resolves the pressed key/chord to an action via
@@ -246,57 +276,18 @@ export default function App() {
     select(item.id);
   }
 
-  async function handleFile(file: File) {
-    // Single-flight: ignore a new pick while an upload is in flight, so an
-    // overlapping request can't clobber the result or fire a stale toast.
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      // Hydrate-on-open ordering is load-bearing (Story 3.5, AC-4). Both awaits
-      // run while `store.docId` is still null, so `useAutosave` (bound to
-      // `store.docId`) is inert. openDoc sets `docId` + populates the store
-      // atomically + clears undo history BEFORE `setDoc` flips the reader on,
-      // so autosave's baseline run captures the ALREADY-restored set — restore
-      // is never PUT back and is not undoable. A failure of either await lands
-      // in the catch: `doc` stays null, the store stays empty, and the next
-      // session can't clobber disk (AC-5). Do NOT move hydration into a Reader
-      // effect (baseline would capture the empty set).
-      const opened = await uploadDoc(file);
-      const restored = await getAnnotations(opened.doc_id);
-      openDoc(opened.doc_id, restored);
-      setDoc(opened);
-    } catch {
-      // Any load failure surfaces the same fixed copy; stay in S0 (AC-5).
-      setError("Couldn't open this file.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  // Save-failure toast only (Story 3.4, AC-5): an open FAILURE no longer stays
+  // on this route to show a toast, it redirects to the Library (see the load
+  // effect above), so there is only ever the save-error case to surface here.
+  const toast =
+    saveStatus.status === "error" && !saveErrorDismissed ? (
+      <Toast
+        message="Couldn't save. Changes kept in this session."
+        onDismiss={() => setSaveErrorDismissed(true)}
+      />
+    ) : null;
 
-  // One Toast at a time: load error (S0-only) takes precedence over a save
-  // error (S1-only) — they never actually coexist (load-failure keeps `doc`
-  // null, and autosave can't fire without a `doc_id`), but precedence is
-  // explicit so that invariant isn't load-bearing.
-  const toast = error ? (
-    <Toast message={error} onDismiss={() => setError(null)} />
-  ) : saveStatus.status === "error" && !saveErrorDismissed ? (
-    <Toast
-      message="Couldn't save. Changes kept in this session."
-      onDismiss={() => setSaveErrorDismissed(true)}
-    />
-  ) : null;
-
-  if (!doc) {
-    return (
-      <div className="app">
-        <main className="stage" role="main">
-          <EmptyDropzone onFile={handleFile} disabled={busy} />
-        </main>
-        {toast}
-      </div>
-    );
-  }
+  if (!doc) return null;
 
   return (
     <div className="app">
@@ -305,6 +296,16 @@ export default function App() {
             (right). The lead's title truncates (min-width:0) so a long filename
             can never overlap the centered page nav. */}
         <div className="top-bar__lead">
+          {/* Back-to-Library (Story 6.1, LFR-20): far left of the lead cluster. */}
+          <button
+            type="button"
+            className="pill pill--icon"
+            aria-label="Back to library"
+            title="Back to library"
+            onClick={() => navigate("/")}
+          >
+            <ArrowLeft aria-hidden />
+          </button>
           <span className="top-bar__title">{doc.filename}</span>
           <SaveIndicator status={saveStatus.status} />
         </div>

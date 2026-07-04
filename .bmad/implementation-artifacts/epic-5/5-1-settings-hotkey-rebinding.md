@@ -148,7 +148,7 @@ Reader-owned, NOT rebindable (reserved): `Ctrl +/-/0` zoom, `Space` pan, `PgUp`/
 - [Source: EXPERIENCE.md#Keyboard-map] + [EXPERIENCE.md#Accessibility-Floor] — the default map; "keyboard-operable, Esc-dismissable, focus moves in on open and returns on close" (UX-DR17).
 - [Source: .bmad/planning-artifacts/architecture/.../ARCHITECTURE-SPINE.md#AD-11] — single `activeTool`, mutual exclusion (the keymap dispatches into it). #AD-8 — `~/.paper-mate` is the DOC-scoped annotation store; settings are app-global `localStorage`, a different persistence tier. #AD-9 — layer/boundary invariants. #AD-3 — generated contract never hand-authored (unchanged here).
 - [Source: CLAUDE.md#Engineering-principles] — adopt-stable (native `<dialog>` / zustand `persist`), document-level handlers (AP-1), render mock barrels (AP-2), `no-raw-values` (raw values only in `theme/**`).
-- [Source: CLAUDE.md#Versioning] — PATCH +1 (`0.3.7 → 0.3.8`); [.bmad/planning-artifacts/sprint-change-proposal-2026-07-02.md] — AE3-6 version-match guard (`test_version.py`) requires `pyproject.toml` == `uv.lock`.
+- [Source: CLAUDE.md#Versioning] — PATCH +1 (`0.3.7 → 0.3.8`); [.bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-07-02.md] — AE3-6 version-match guard (`test_version.py`) requires `pyproject.toml` == `uv.lock`.
 
 ## Dev Agent Record
 

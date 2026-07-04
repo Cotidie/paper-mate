@@ -28,6 +28,10 @@
 // mid-flight switch (a doc-B edit coalesces behind an in-flight doc-A PUT
 // rather than racing it), which is unreachable through today's UI anyway
 // (Trap 2: there is no live in-app doc switch yet).
+//
+// Story 6.1: unmount now also means "the user navigated away" (back-to-
+// Library), a real event the pre-6.1 single-page app never had. The cleanup
+// below flushes a pending debounce instead of dropping it (see its comment).
 import { useEffect, useRef, useState } from "react";
 import { useAnnotationStore } from "@/store";
 import { putAnnotations } from "@/api/client";
@@ -97,15 +101,26 @@ export function useAutosave(): { status: SaveStatus } {
   // Re-arm the baseline whenever the doc changes: whatever is hydrated in for
   // the NEW doc is not a change to save (AC-5). `inFlightRef` is deliberately
   // NOT reset here (continuous single-flight, see the header note) — an
-  // A-PUT genuinely in flight must keep blocking a concurrent B-PUT. The
-  // cleanup (runs on a docId change AND on unmount) clears timers so a
-  // pending debounce/settle from the OLD doc (or from before an unmount)
-  // never fires `flush()` against a component that's gone.
+  // A-PUT genuinely in flight must keep blocking a concurrent B-PUT.
+  //
+  // Story 6.1: the cleanup runs on a docId change AND on a real unmount (the
+  // Reader now unmounts for real on back-to-Library navigation, unlike the
+  // pre-6.1 single-page app). A PENDING debounce at that moment is a dirty
+  // edit that hasn't been saved yet — clearing it silently would drop the
+  // edit (Codex-reported HIGH finding), so flush it synchronously instead of
+  // just cancelling it; `flush()` reads its target/snapshot live from the
+  // store and its promise chain runs independent of this component's mount
+  // state, so the save completes even though cleanup has already returned.
   useEffect(() => {
     mountedRef.current = false;
     dirtyRef.current = false;
     setStatus("idle");
     return () => {
+      if (debounceTimer.current !== null) {
+        clearTimeout(debounceTimer.current);
+        debounceTimer.current = null;
+        flush();
+      }
       clearTimers();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

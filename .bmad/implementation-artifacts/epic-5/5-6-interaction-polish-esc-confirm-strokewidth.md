@@ -132,7 +132,7 @@ Why not lift everything into one FSM now: the deferred "unify conditional logic 
 - [Source: client/src/annotations/gestures/useCreateQuickBox.ts#L376-L417] — the empty-memo deselect cleanup + the pending-only `Esc → dismiss` effect that Task 2 moves to capture + `stopImmediatePropagation`; rung 1a.
 - [Source: client/src/annotations/MemoBox.tsx#L132-L143] + [client/src/annotations/CommentBubble.tsx#L141-L152] — the editor Esc handlers (blur + deselect + `stopPropagation`); rung 1b, unchanged; do NOT add a confirm control.
 - [Source: CLAUDE.md#Engineering-principles] — document-level handlers (AP-1), render mock barrels (AP-2, N/A), smallest correct structure, adopt-stable; live-smoke on your own servers.
-- [Source: CLAUDE.md#Versioning] — PATCH +1 (`0.3.13 → 0.3.14`); [.bmad/planning-artifacts/sprint-change-proposal-2026-07-02.md] — AE3-6 version-match guard (`pyproject.toml` == `uv.lock`).
+- [Source: CLAUDE.md#Versioning] — PATCH +1 (`0.3.13 → 0.3.14`); [.bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-07-02.md] — AE3-6 version-match guard (`pyproject.toml` == `uv.lock`).
 
 ## Dev Agent Record
 

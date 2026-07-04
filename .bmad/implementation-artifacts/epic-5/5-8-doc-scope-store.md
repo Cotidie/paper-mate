@@ -109,7 +109,7 @@ The in-flight race (AC-4) is covered by the unit test, not this smoke.
 ### References
 
 - [Source: .bmad/planning-artifacts/epics.md#Story 5.8: Doc-scope the annotation store], story + the three Given/Then ACs.
-- [Source: .bmad/planning-artifacts/sprint-change-proposal-2026-07-02.md], the correct-course that created this story (AE-4 ≡ AE3-3); note it uses the pre-renumber key `5-6-doc-scope-store` (now `5-8`).
+- [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-07-02.md], the correct-course that created this story (AE-4 ≡ AE3-3); note it uses the pre-renumber key `5-6-doc-scope-store` (now `5-8`).
 - [Source: .bmad/planning-artifacts/epics.md#Additional Requirements], AR-6 (ownership: backend is source of truth, client is a hydrated working copy), AR-7 (one command stack → dirty flag → debounced single-flight autosave; backend is a dumb full-overwrite store), AR-12 (store keys by `id`).
 - [Source: client/src/hooks/useAutosave.ts:14-21], the `generationRef` rationale comment enumerating the three vectors this story retires.
 - [Source: client/src/store/index.ts:489,:532], the `hydrate` action and `hydrateStore` free function being generalized to `openDoc`.

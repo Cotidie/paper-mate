@@ -157,14 +157,27 @@ describe("useAutosave (Story 3.4, doc-scoped per Story 5.8)", () => {
     expect(result.current.status).toBe("saved");
   });
 
-  it("unmounting with a pending debounce timer does not fire a stray PUT after unmount (Codex Med)", async () => {
+  it("unmounting with a pending debounce timer flushes it instead of dropping the edit (Story 6.1, Codex High)", async () => {
     const spy = vi.spyOn(api, "putAnnotations").mockResolvedValue(undefined);
     act(() => openDoc("doc-1", []));
     const { unmount } = renderHook(() => useAutosave());
 
     act(() => useAnnotationStore.getState().addAnnotation(mark("a")));
-    // Unmount BEFORE the debounce elapses: the pending timer must be cleared
-    // by the effect cleanup, not survive to call flush() on a dead component.
+    // Unmount BEFORE the debounce elapses (e.g. back-to-Library, Story 6.1's
+    // reader now unmounts for real on navigation): the pending save must
+    // still happen, not be silently discarded by the effect cleanup.
+    unmount();
+    await tick(0);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith("doc-1", [expect.objectContaining({ id: "a" })]);
+  });
+
+  it("unmounting with no pending change fires no PUT (nothing dirty to flush)", async () => {
+    const spy = vi.spyOn(api, "putAnnotations").mockResolvedValue(undefined);
+    act(() => openDoc("doc-1", []));
+    const { unmount } = renderHook(() => useAutosave());
+
     unmount();
     await tick(DEBOUNCE_MS * 2);
 

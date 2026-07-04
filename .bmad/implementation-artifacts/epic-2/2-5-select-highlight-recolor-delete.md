@@ -169,7 +169,7 @@ With interactive marks (Decision A), a pointerdown that STARTS on a highlight is
 - [Source: ARCHITECTURE-SPINE.md#AD-11] — the single `activeTool` model this builds on (select-vs-create fall-through).
 - [Source: ARCHITECTURE-SPINE.md#AD-9] — layer/boundary invariants (coordinate math only in `anchor/`; client reaches backend only via the generated client).
 - [Source: ARCHITECTURE-SPINE.md#AD-4] — page-normalized anchor model + canonical rects (hit-test in normalized space, no y-flip).
-- [Source: .bmad/planning-artifacts/sprint-change-proposal-2026-06-29-select-highlight.md] — the gap (highlights not selectable), the chosen slice (selection seam + lightweight recolor/delete in Epic 2; heavy edits in 3.1), AD-12 text.
+- [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-06-29-select-highlight.md] — the gap (highlights not selectable), the chosen slice (selection seam + lightweight recolor/delete in Epic 2; heavy edits in 3.1), AD-12 text.
 - [Source: .bmad/planning-artifacts/epics.md#Story-2.5] — story statement + 5 ACs + scope guard.
 - [Source: EXPERIENCE.md IP-6] — lightweight click-select + restyle/recolor + delete (2.5) split from heavy drag-handle move/resize + re-edit (3.1).
 - [Source: .bmad/implementation-artifacts/epic-2/2-4-unify-tool-state-fsm.md] — the `activeTool` FSM (done); the create machine + quick-box behaviors to preserve.

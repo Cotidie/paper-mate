@@ -55,12 +55,13 @@ export function loadDocument(docId: string): Promise<PDFDocumentProxy> {
 }
 
 /**
- * Tear down a loaded document (aborts its worker/network). `destroy` exists at
- * runtime but is missing from pdfjs-dist 6's bundled types, so the cast is
- * contained here in the render layer rather than leaking to callers.
+ * Tear down a loaded document (aborts its worker/network). `PDFDocumentProxy`
+ * itself has no `destroy()` in pdfjs-dist 6 (Story 6.1 live-smoke finding: the
+ * old single-page app never unmounted a loaded Reader, so this path was never
+ * exercised); teardown lives on its `loadingTask` instead.
  */
 export function destroyDocument(pdf: PDFDocumentProxy): Promise<void> {
-  return (pdf as unknown as { destroy(): Promise<void> }).destroy();
+  return pdf.loadingTask.destroy();
 }
 
 /**
