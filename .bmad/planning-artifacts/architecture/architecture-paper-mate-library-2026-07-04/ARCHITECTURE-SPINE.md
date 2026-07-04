@@ -72,7 +72,7 @@ graph TD
 ### AD-L2 — Metadata extraction on the backend (opens the domain layer)
 - **Binds:** FR-7, FR-8, FR-9, FR-10, FR-11; NFR-1, NFR-3
 - **Prevents:** foreclosing the backend-only accuracy ceiling (GROBID); browser-CPU contention on bulk upload; a paper lost to a failed parse
-- **Rule:** metadata extraction runs on the **backend** as a bounded, **pure** domain module — the **first tenant** of a `server/app/domain/` layer above storage. Two interfaces: `extract(pdf_bytes) → ExtractedMeta` (rung 1 embedded `/Info`+XMP, then rung 2 font-size heuristic; **GROBID-swappable** later) and `enrich(meta) → meta | "skipped"` (rung 3 external DOI/title lookup; **vendor + key deferred** to discovery; offline/failure returns `"skipped"`, **never blocks the add**, surfaces a non-error notice per FR-9). Both are **best-effort**: a failed parse still enters the paper as filename-title (FR-10), never lost. Extraction is a **background task**, never on the request path (NFR-3). The client learns resolved metadata by **polling** `GET /api/library` (single user; no push channel). Storage stays the **only** writer (AD-9): extraction returns data, storage persists it to `meta.json` and refreshes the `library.json` display cache. **Conflict (surfaced, accepted):** this amends AD-6's "no domain logic" clause — see *Design Paradigm*.
+- **Rule:** metadata extraction runs on the **backend** as a bounded, **pure** domain module — the **first tenant** of a `server/app/domain/` layer above storage. Two interfaces: `extract(pdf_bytes) → ExtractedMeta` (rung 1 embedded `/Info`+XMP, then rung 2 font-size heuristic; **PyMuPDF** in-process this sprint, **GROBID-swappable** at Phase 2) and `enrich(meta) → meta | "skipped"` (rung 3 external lookup, **DOI-first then title/authors fallback**; **Crossref** covers both paths, Semantic Scholar an optional later secondary for no-DOI preprints; offline/failure returns `"skipped"`, **never blocks the add**, surfaces a non-error notice per FR-9). Both are **best-effort**: a failed parse still enters the paper as filename-title (FR-10), never lost. Extraction is a **background task**, never on the request path (NFR-3). The client learns resolved metadata by **polling** `GET /api/library` (single user; no push channel). Storage stays the **only** writer (AD-9): extraction returns data, storage persists it to `meta.json` and refreshes the `library.json` display cache. **Conflict (surfaced, accepted):** this amends AD-6's "no domain logic" clause — see *Design Paradigm*.
 
 ### AD-L3 — Client routing / front-door flip
 - **Binds:** FR-1, FR-14, FR-18, FR-20, FR-22
@@ -136,9 +136,9 @@ Additions to the inherited stack; verify + pin exact patches at scaffold.
 | Name | Version |
 | --- | --- |
 | React Router — **library/data mode** (`createBrowserRouter`) | v7.x — add at Library scaffold, pin exact patch; React 19-compatible. **Not** framework mode (that is a meta-framework, excluded by AD-2). |
-| Backend PDF parse (rungs 1–2) | **deferred choice** — PyMuPDF (AGPL) *or* pdfminer.six (MIT); license call at the extraction story |
-| GROBID (rung 4, optional upgrade) | Apache-2.0 service — `extract()` is GROBID-swappable; not built now |
-| Backend HTTP client (enrich) | current `httpx` (or equivalent) for the external DOI/title lookup |
+| Backend PDF parse (rungs 1–2) | **PyMuPDF (fitz)** — chosen; AGPL-3.0, so the repo relicenses MIT→AGPL (see Deferred) |
+| GROBID (rung 4, Phase-2 upgrade) | Apache-2.0 service — `extract()` GROBID-swappable; **HTTP sidecar** (adds a container, amends AD-10); not built this sprint |
+| Backend HTTP client (enrich) | current `httpx` (or equivalent) — Crossref DOI-first then title/author query |
 
 ## Structural Seed
 
@@ -217,9 +217,9 @@ erDiagram
 ## Deferred
 
 - **Sync (F8, FR-25..29)** — a separate follow-on epic. A switchable-backend interface (WebDAV first, Google Drive later) mirroring the reserved agent abstraction; whole-directory mirror of `~/.paper-mate`; last-write-wins by mtime. Hard problems resolved in that epic's own discovery: trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest. **Not designed here** — the seam is only reserved.
-- **GROBID-class extraction (rung 4)** — `extract()` is GROBID-swappable; the accuracy upgrade is deferred, not built.
-- **External enrich vendor + key** — Crossref vs Semantic Scholar, DOI vs title: the `enrich()` seam is fixed; the vendor is a story/discovery decision.
-- **PyMuPDF (AGPL) vs pdfminer.six (MIT)** license decision — deferred to the extraction story.
+- **GROBID-class extraction (rung 4)** — `extract()` is GROBID-swappable; the accuracy upgrade is a Phase-2 reading-helper concern (references/abstract/affiliations). Adopting it adds a GROBID **sidecar container** → amends AD-10 "single container" (called over HTTP, so Apache-2.0 stays license-clean). Not built this sprint.
+- **Repo relicense MIT → AGPL-3.0** — required to bundle PyMuPDF (AGPL copyleft is viral on distribution). Action at the extraction story / before distributing a bundled build; personal local-only use never triggers it.
+- **Semantic Scholar secondary enrich** — optional later, for no-DOI preprints (arXiv) the Crossref path misses. The `enrich()` seam already accommodates it.
 - **Note identity** — FR-17 reserves a Note file-type (displayed), but `doc_id` = SHA-256 of *PDF bytes* (AD-8) does not define identity for a non-PDF note. Note *authoring* is out of scope this sprint (nothing creates a note), so identity is defined when note authoring lands.
 - **Bulk API endpoints** beyond set-based `move/trash/restore` — added only if per-item calls stall (single-user, small N).
 - **PRD out-of-scope** — global search nav, Chats tab, full-text indexing, viewed/last-opened tracking, in-app note authoring.
