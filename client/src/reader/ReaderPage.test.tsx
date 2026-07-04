@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
-import App from "@/App";
+import { createMemoryRouter, RouterProvider } from "react-router";
+import ReaderPage from "@/reader/ReaderPage";
 import * as api from "@/api/client";
 import type { Annotation } from "@/api/client";
 import * as renderLayer from "@/render";
@@ -9,8 +10,8 @@ import { DEBOUNCE_MS } from "@/hooks/useAutosave";
 import { useSettingsStore } from "@/settings/store";
 import { DEFAULT_KEYMAP } from "@/settings/keymap";
 
-// The S1 Reader pulls in pdf.js, which can't run under jsdom. These App tests
-// only care about the S0↔S1 shell, so stub the render layer; loadDocument stays
+// The Reader pulls in pdf.js, which can't run under jsdom. These tests only
+// care about the reader shell, so stub the render layer; loadDocument stays
 // pending so the Reader sits in its loading phase (the pdf-canvas is present).
 vi.mock("@/render", () => ({
   loadDocument: vi.fn(() => new Promise(() => {})),
@@ -40,13 +41,14 @@ vi.mock("@/render", () => ({
 afterEach(cleanup);
 beforeEach(() => {
   vi.restoreAllMocks();
-  // App fetches the version on mount (GET /api/health). Stub it so tests never
-  // hit the network; individual tests override when they assert the value.
+  // ReaderPage fetches the version on mount (GET /api/health). Stub it so
+  // tests never hit the network; individual tests override when they assert
+  // the value.
   vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9" });
-  // Story 3.5: handleFile now GETs the saved annotations on open. Default to an
-  // empty set so every existing open-a-doc test never fires the real fetch;
-  // individual tests override to assert restore behavior (CLAUDE.md: keep test
-  // scaffolding in sync).
+  // Story 3.5: the load effect GETs the saved annotations on open. Default to
+  // an empty set so every existing open-a-doc test never fires the real
+  // fetch; individual tests override to assert restore behavior (CLAUDE.md:
+  // keep test scaffolding in sync).
   vi.spyOn(api, "getAnnotations").mockResolvedValue([]);
   // Story 5.1: the settings store's `persist` middleware writes localStorage,
   // which leaks across tests (Gotcha #1, story Dev Notes). Reset both so a
@@ -70,41 +72,28 @@ const fakeDoc: api.Doc = {
   schema_version: 1,
 };
 
-function pdfFile() {
-  return new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], "paper.pdf", {
-    type: "application/pdf",
-  });
+/**
+ * Render ReaderPage at `/reader/:docId` inside a data router (Story 6.1): the
+ * open mechanism is now a route param, not "fill the dropzone-input". A stub
+ * `/` route stands in for the Library so redirect-on-failure tests can assert
+ * navigation without pulling in LibraryPage's own dependencies.
+ */
+function renderReaderAt(docId: string) {
+  const router = createMemoryRouter(
+    [
+      { path: "/reader/:docId", element: <ReaderPage /> },
+      { path: "/", element: <div data-testid="library-stub" /> },
+    ],
+    { initialEntries: [`/reader/${docId}`] },
+  );
+  render(<RouterProvider router={router} />);
+  return router;
 }
 
-describe("S0 empty state", () => {
-  it("shows the dropzone copy 'Drop a PDF here' / 'or browse…' (AC-1)", () => {
-    render(<App />);
-    expect(screen.getByTestId("empty-dropzone")).toBeTruthy();
-    expect(screen.getByText("Drop a PDF here")).toBeTruthy();
-    expect(screen.getByText("or browse…")).toBeTruthy();
-  });
-
-  it("does not render the S1 reader frame before a PDF loads", () => {
-    render(<App />);
-    expect(screen.queryByTestId("reader-backdrop")).toBeNull();
-  });
-
-  it("exposes a keyboard-focusable browse control (focus-ring target, AC-1/UX-DR17)", () => {
-    render(<App />);
-    const browse = screen.getByRole("button", { name: "or browse…" });
-    browse.focus();
-    expect(document.activeElement).toBe(browse);
-  });
-});
-
-describe("upload → S1 transition (AC-6)", () => {
-  it("transitions to S1 and shows the filename in the top bar on success", async () => {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
-    render(<App />);
-
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
+describe("loading a document via the route param (Story 6.1, AC-2)", () => {
+  it("loads the doc via GET /api/docs/{id} and shows the filename in the top bar", async () => {
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
 
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
     expect(screen.getByRole("banner")).toBeTruthy();
@@ -112,13 +101,9 @@ describe("upload → S1 transition (AC-6)", () => {
   });
 
   it("shows the app version (from /api/health) in the Settings modal, not the top bar", async () => {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
     vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.0.1" });
-    render(<App />);
-
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
+    renderReaderAt(fakeDoc.doc_id);
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
 
     // The version no longer lives in the top bar...
@@ -131,12 +116,8 @@ describe("upload → S1 transition (AC-6)", () => {
   });
 
   it("shows the page indicator (current in a chip + total) in the top bar (AC-2)", async () => {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
-    render(<App />);
-
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
 
     // Reader (mocked render) reports page 1; total = doc.page_count (3).
     await waitFor(() => expect(screen.getByTestId("page-indicator-current").textContent).toBe("1"));
@@ -144,11 +125,8 @@ describe("upload → S1 transition (AC-6)", () => {
   });
 
   it("shows the zoom control in the top bar, left of ToC, driving the Reader (AC-3)", async () => {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
-    render(<App />);
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
 
     // Zoom control lives in the top bar (banner), before the ToC button.
@@ -168,17 +146,37 @@ describe("upload → S1 transition (AC-6)", () => {
   });
 });
 
+describe("back-to-Library control (Story 6.1, AC-4)", () => {
+  it("navigates to / when clicked", async () => {
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to library" }));
+    await waitFor(() => expect(screen.getByTestId("library-stub")).toBeTruthy());
+  });
+});
+
+describe("unknown/failed document redirects to the Library (Story 6.1, AC-5)", () => {
+  it("a getDoc failure (unknown docId) navigates to / without mounting the reader", async () => {
+    vi.spyOn(api, "getDoc").mockRejectedValue(new Error("not found"));
+    renderReaderAt("0".repeat(64));
+
+    await waitFor(() => expect(screen.getByTestId("library-stub")).toBeTruthy());
+    expect(screen.queryByTestId("reader-backdrop")).toBeNull();
+  });
+});
+
 describe("table of contents (Story 1.9)", () => {
   // Resolve loadDocument (the shell tests leave it pending) so the Reader reaches
-  // its ready phase and reports the outline up via onOutline → App's `toc` state.
+  // its ready phase and reports the outline up via onOutline → ReaderPage's `toc` state.
   async function openedApp(entries: renderLayer.TocEntry[] = []) {
     vi.mocked(renderLayer.loadDocument).mockResolvedValue({
       getPage: vi.fn(async () => ({})),
     } as unknown as Awaited<ReturnType<typeof renderLayer.loadDocument>>);
     vi.mocked(renderLayer.getOutline).mockResolvedValue(entries);
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
-    render(<App />);
-    fireEvent.change(screen.getByTestId("dropzone-input"), { target: { files: [pdfFile()] } });
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
   }
 
@@ -214,48 +212,16 @@ describe("table of contents (Story 1.9)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Table of contents" }));
     const row = await screen.findByTestId("toc-row-0");
     // jsdom has no scrollTo on the canvas; the jump no-ops there, but the panel
-    // must still close (the click reached App's onJump).
+    // must still close (the click reached ReaderPage's onJump).
     fireEvent.click(row);
     await waitFor(() => expect(screen.queryByTestId("toc-panel")).toBeNull());
   });
 });
 
-describe("review hardening", () => {
-  it("clears the file input value after a pick so the same file can re-fire (F6)", () => {
-    vi.spyOn(api, "uploadDoc").mockRejectedValue(new Error("bad"));
-    render(<App />);
-    const input = screen.getByTestId("dropzone-input") as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [pdfFile()] } });
-    expect(input.value).toBe("");
-  });
-
-  it("disables the browse control while an upload is in flight (F5)", async () => {
-    let release!: (doc: api.Doc) => void;
-    vi.spyOn(api, "uploadDoc").mockReturnValue(
-      new Promise<api.Doc>((res) => {
-        release = res;
-      }),
-    );
-    render(<App />);
-    const browse = screen.getByRole("button", { name: "or browse…" });
-
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
-    await waitFor(() => expect((browse as HTMLButtonElement).disabled).toBe(true));
-
-    release(fakeDoc);
-    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
-  });
-});
-
 describe("tool rail + tool keys (Story 1.8)", () => {
   async function openReader() {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
-    render(<App />);
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
   }
 
@@ -411,9 +377,9 @@ describe("tool rail + tool keys (Story 1.8)", () => {
 
     // A mark is selected (seeded directly on the store -- the overlay's own
     // clearSelection is a separate concern, covered by useSelection's Esc
-    // handling and AnnotationInteraction.test.tsx). App's Escape branch must
-    // DEFER, not disarm, so a single press never both clears the selection
-    // AND drops the armed tool (the AC-2 regression this story fixes).
+    // handling and AnnotationInteraction.test.tsx). ReaderPage's Escape branch
+    // must DEFER, not disarm, so a single press never both clears the
+    // selection AND drops the armed tool (the AC-2 regression this story fixes).
     act(() => useAnnotationStore.setState({ selectedId: "a1" }));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(hi().className).toContain("tool-button--armed");
@@ -441,7 +407,7 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(hi().className).not.toContain("tool-button--armed");
   });
 
-  it("Escape still defers correctly even after Settings re-registers App's listener AFTER the overlay's (Codex HIGH, Story 5.6): capture phase, not registration order, makes this safe", async () => {
+  it("Escape still defers correctly even after Settings re-registers ReaderPage's listener AFTER the overlay's (Codex HIGH, Story 5.6): capture phase, not registration order, makes this safe", async () => {
     await openReader();
     const hi = () => screen.getByTestId("tool-highlight-button");
     fireEvent.keyDown(document, { key: "h" });
@@ -453,18 +419,18 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     act(() => useAnnotationStore.getState().select("a1"));
     expect(useAnnotationStore.getState().selectedId).toBe("a1");
 
-    // Open then close Settings: App's own keydown effect unmounts (guard
-    // clause) and re-mounts, re-attaching its listener AFTER the overlay's
-    // still-mounted selection listener — the exact registration-order flip
-    // that broke the old bubble-phase "App reads state" approach (the
-    // overlay would clear the selection FIRST, then App would read the
+    // Open then close Settings: ReaderPage's own keydown effect unmounts
+    // (guard clause) and re-mounts, re-attaching its listener AFTER the
+    // overlay's still-mounted selection listener — the exact registration-
+    // order flip that broke the old bubble-phase "read state" approach (the
+    // overlay would clear the selection FIRST, then ReaderPage would read the
     // now-empty store and disarm on the SAME press).
     fireEvent.click(screen.getByTestId("tool-settings-button"));
     fireEvent.click(screen.getByTestId("settings-close"));
 
     fireEvent.keyDown(document, { key: "Escape" });
-    // Capture phase guarantees App evaluates against the PRE-clear value
-    // regardless of the flipped bubble order: it must still defer (not
+    // Capture phase guarantees ReaderPage evaluates against the PRE-clear
+    // value regardless of the flipped bubble order: it must still defer (not
     // disarm) on this first Escape, while the overlay clears the selection.
     expect(useAnnotationStore.getState().selectedId).toBeNull();
     expect(hi().className).toContain("tool-button--armed");
@@ -587,11 +553,8 @@ describe("tool rail + tool keys (Story 1.8)", () => {
 
 describe("Settings modal + hotkey rebinding (Story 5.1)", () => {
   async function openReader() {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
-    render(<App />);
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
   }
 
@@ -650,23 +613,6 @@ describe("Settings modal + hotkey rebinding (Story 5.1)", () => {
   });
 });
 
-describe("upload failure → toast, stay S0 (AC-5)", () => {
-  it("shows the exact 'Couldn't open this file.' copy and stays in S0", async () => {
-    vi.spyOn(api, "uploadDoc").mockRejectedValue(new Error("bad pdf"));
-    render(<App />);
-
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
-
-    await waitFor(() =>
-      expect(screen.getByText("Couldn't open this file.")).toBeTruthy(),
-    );
-    expect(screen.getByTestId("empty-dropzone")).toBeTruthy();
-    expect(screen.queryByTestId("reader-backdrop")).toBeNull();
-  });
-});
-
 function mark(id: string, docId: string): Annotation {
   return {
     id,
@@ -693,9 +639,8 @@ describe("Annotation Bank (Story 3.6)", () => {
     vi.mocked(renderLayer.loadDocument).mockResolvedValue({
       getPage: vi.fn(async () => ({})),
     } as unknown as Awaited<ReturnType<typeof renderLayer.loadDocument>>);
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
-    render(<App />);
-    fireEvent.change(screen.getByTestId("dropzone-input"), { target: { files: [pdfFile()] } });
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
   }
 
@@ -766,9 +711,8 @@ describe("hide/show all annotations toggle (Story 5.5)", () => {
     vi.mocked(renderLayer.loadDocument).mockResolvedValue({
       getPage: vi.fn(async () => ({})),
     } as unknown as Awaited<ReturnType<typeof renderLayer.loadDocument>>);
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
-    render(<App />);
-    fireEvent.change(screen.getByTestId("dropzone-input"), { target: { files: [pdfFile()] } });
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
   }
 
@@ -778,12 +722,6 @@ describe("hide/show all annotations toggle (Story 5.5)", () => {
     expect(eye.getAttribute("aria-pressed")).toBe("false");
     expect(eye.querySelector("svg")).toBeTruthy();
     expect(eye.textContent).toBe("");
-  });
-
-  it("does not render before a document is open (S0)", () => {
-    render(<App />);
-    expect(screen.queryByRole("button", { name: "Hide annotations" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Show annotations" })).toBeNull();
   });
 
   it("clicking flips aria-pressed and swaps the aria-label (AC-1)", async () => {
@@ -814,7 +752,7 @@ describe("restore-on-open — the anti-clobber baseline (Story 3.5, AC-4)", () =
   });
 
   it("restoring marks on open does NOT dirty autosave (no spurious PUT)", async () => {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
     vi.spyOn(api, "getAnnotations").mockResolvedValue([mark("r1", fakeDoc.doc_id)]);
     const putSpy = vi.spyOn(api, "putAnnotations").mockResolvedValue(undefined);
 
@@ -824,11 +762,8 @@ describe("restore-on-open — the anti-clobber baseline (Story 3.5, AC-4)", () =
     // real-timer PUT would fire after the test and falsely pass (Codex review).
     vi.useFakeTimers();
     try {
-      render(<App />);
-      fireEvent.change(screen.getByTestId("dropzone-input"), {
-        target: { files: [pdfFile()] },
-      });
-      // Flush the open promises (uploadDoc + getAnnotations) AND advance well past
+      renderReaderAt(fakeDoc.doc_id);
+      // Flush the open promises (getDoc + getAnnotations) AND advance well past
       // the debounce in one go — all under fake timers.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(DEBOUNCE_MS * 2);
@@ -850,14 +785,11 @@ describe("restore-on-open — the anti-clobber baseline (Story 3.5, AC-4)", () =
   });
 
   it("a real edit AFTER restore still dirties + PUTs (baseline→dirty works)", async () => {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
     vi.spyOn(api, "getAnnotations").mockResolvedValue([mark("r1", fakeDoc.doc_id)]);
     const putSpy = vi.spyOn(api, "putAnnotations").mockResolvedValue(undefined);
-    render(<App />);
+    renderReaderAt(fakeDoc.doc_id);
 
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
 
     vi.useFakeTimers();
@@ -874,18 +806,14 @@ describe("restore-on-open — the anti-clobber baseline (Story 3.5, AC-4)", () =
     await waitFor(() => expect(putSpy).toHaveBeenCalled());
   });
 
-  it("a GET failure on open keeps the reader closed (no empty-store clobber, AC-5)", async () => {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+  it("a GET annotations failure on open navigates back to the Library (no empty-store clobber, AC-5)", async () => {
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
     vi.spyOn(api, "getAnnotations").mockRejectedValue(new Error("network down"));
-    render(<App />);
+    renderReaderAt(fakeDoc.doc_id);
 
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
-    await waitFor(() => expect(screen.getByText("Couldn't open this file.")).toBeTruthy());
-    // Stayed in S0: the reader never mounted.
+    await waitFor(() => expect(screen.getByTestId("library-stub")).toBeTruthy());
+    // The reader never mounted.
     expect(screen.queryByTestId("reader-backdrop")).toBeNull();
-    expect(screen.getByTestId("empty-dropzone")).toBeTruthy();
   });
 });
 
@@ -896,13 +824,10 @@ describe("autosave save-failure toast (Story 3.4, AC-5)", () => {
   });
 
   it("shows the exact save-failure copy with no em-dash, keeping the change on screen", async () => {
-    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
     vi.spyOn(api, "putAnnotations").mockRejectedValue(new Error("network down"));
-    render(<App />);
+    renderReaderAt(fakeDoc.doc_id);
 
-    fireEvent.change(screen.getByTestId("dropzone-input"), {
-      target: { files: [pdfFile()] },
-    });
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
 
     vi.useFakeTimers();

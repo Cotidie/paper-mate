@@ -201,6 +201,25 @@ def source_path(doc_id: str) -> Path:
     return source
 
 
+def read_meta(doc_id: str) -> DocMeta:
+    """Read a document's own metadata for the ``GET /api/docs/{id}`` route (AD-L6).
+
+    Reuses ``_doc_dir``/``_read_meta`` directly, no PDF re-parse. Same error
+    taxonomy as ``read_annotations``: ``DocumentNotFoundError`` for an id that
+    doesn't resolve or has no valid ``meta.json``; ``StorageError`` subclasses
+    (``UnsupportedSchemaError``/``CorruptMetadataError``) propagate unchanged
+    for a corrupt or unknown-version on-disk record.
+    """
+    try:
+        doc_dir = _doc_dir(doc_id)
+    except StorageError as exc:
+        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
+    meta = _read_meta(doc_dir)
+    if meta is None:
+        raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
+    return meta
+
+
 def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
     """Import a PDF and return ``(doc_id, DocMeta)``.
 

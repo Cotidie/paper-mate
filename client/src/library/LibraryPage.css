@@ -1,0 +1,99 @@
+/* Library shell (Story 6.1). Tokens only, no inline hex/px (CLAUDE.md). */
+
+.library {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.library-top-bar {
+  height: var(--top-bar-height);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 0 var(--space-base);
+  background: var(--color-canvas);
+  border-bottom: var(--top-bar-border) solid var(--color-hairline);
+}
+
+.library-top-bar__brand {
+  font-family: var(--font-sans);
+  font-size: var(--type-title-sm-size);
+  font-weight: var(--type-title-sm-weight);
+  line-height: var(--type-title-sm-leading);
+  color: var(--color-ink);
+}
+
+.library-add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  font-family: var(--font-sans);
+  font-size: var(--type-title-sm-size);
+  color: var(--color-body);
+  background: var(--color-canvas);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-pill);
+  padding: var(--space-xxs) var(--space-sm);
+  cursor: pointer;
+}
+
+.library-add-button svg {
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  display: block;
+}
+
+.library-add-button:hover:not(:disabled) {
+  background: var(--color-surface-strong);
+}
+
+.library-add-button:disabled {
+  cursor: default;
+  opacity: var(--page-indicator-disabled-opacity);
+}
+
+.library-add-input {
+  display: none;
+}
+
+.library-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+/* Folder-panel region: static bounded placeholder in 6.1 (Epic 7 owns CRUD). */
+.library-folder-panel {
+  flex: 0 0 auto;
+  width: var(--toc-panel-width);
+  border-right: var(--hairline-width) solid var(--color-hairline);
+  background: var(--color-surface-card);
+  padding: var(--space-sm);
+}
+
+.library-folder-panel__placeholder {
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  color: var(--color-body);
+}
+
+.library-main {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-reader-backdrop);
+}
+
+.library-empty-copy {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-leading);
+  color: var(--color-muted);
+}

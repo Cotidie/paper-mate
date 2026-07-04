@@ -1,5 +1,5 @@
 # generated: 2026-06-28
-# last_updated: 2026-07-02 (Epic 3 retrospective: epic-3 -> done, 3-8 descoped/blocked, Epic-2 action items closed out, Epic-3 action items AE3-1..AE3-7 added)
+# last_updated: 2026-07-05 (added Library epics 6-8 from epics.md: Epic 6 + 7 decomposed into backlog stories, Epic 8 remote-sync DEFERRED/not decomposed; epics 1-5 preserved terminal, action_items carried over unchanged)
 # project: Paper Mate
 # project_key: NOKEY
 # tracking_system: file-system
@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-03 (epic-5 -> done, all stories terminal (done/blocked); version bumped 0.3.16 -> 0.4.0, MINOR per completed epic, CLAUDE.md#Versioning)"
+last_updated: "2026-07-05 (dev-story 6-1: bmad-code-review via Codex, 1 HIGH fixed, 6-1-router-flip-library-shell -> done)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -172,6 +172,40 @@ development_status:
   # doc-switch DPR>1 live smoke (AE-5). Run bmad-create-story next.
   5-8-doc-scope-store: done
   epic-5-retrospective: optional
+
+  # === Library run (Phase 2) — added 2026-07-05 from epics.md ===
+  # Source: prd-paper-mate-library-2026-07-04 + architecture-paper-mate-library-2026-07-04.
+  # No story files created yet (bmad-create-story not run) -> all backlog.
+
+  # Epic 6: The library becomes home (router flip + metadata-extraction domain
+  # layer + concurrency-safe library.json index; Phase-2 risk gate)
+  epic-6: in-progress
+  6-1-router-flip-library-shell: done
+  6-2-collection-index: backlog
+  6-3-collection-table-view: backlog
+  6-4-bulk-upload-optimistic-rows: backlog
+  6-5-metadata-extraction: backlog
+  6-6-inline-edit-title-authors: backlog
+  6-7-open-paper-in-annotator: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: Organize & curate the collection (folders, batch move, sort/filter,
+  # Trash lens, reserved Note file-type). Builds on Epic 6's table + index.
+  epic-7: backlog
+  7-1-folders-crud-nest: backlog
+  7-2-assign-filter-by-folder: backlog
+  7-3-multi-select-batch-move: backlog
+  7-4-display-sort-filter-controls: backlog
+  7-5-trash-soft-delete-restore-purge: backlog
+  7-6-note-file-type: backlog
+  epic-7-retrospective: optional
+
+  # Epic 8: Remote sync — DEFERRED, not decomposed into stories this sprint.
+  # LFR-25..29 captured in epics.md; runs its own discovery (trigger cadence,
+  # Drive OAuth on localhost/Docker, deletion/Trash propagation, interrupted-push
+  # consistency, credential encryption at rest) before any story is written.
+  epic-8: backlog
+  epic-8-retrospective: optional
 
 action_items:
   - epic: 1
