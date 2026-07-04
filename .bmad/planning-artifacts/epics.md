@@ -1,4 +1,5 @@
 ---
+# Phase-1 run (Epics 1-5) and Library run (Epics 6-8) both completed all four steps.
 stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories, step-04-final-validation]
 inputDocuments:
   - .bmad/planning-artifacts/prds/prd-paper-mate-2026-06-28/prd.md
@@ -8,6 +9,10 @@ inputDocuments:
   - EXPERIENCE.md
   - .bmad/specs/spec-paper-mate/SPEC.md
   - .bmad/planning-artifacts/briefs/brief-paper-mate-2026-06-27/brief.md
+  # Library (Phase 2) run — added 2026-07-05
+  - .bmad/planning-artifacts/prds/prd-paper-mate-library-2026-07-04/prd.md
+  - .bmad/planning-artifacts/prds/prd-paper-mate-library-2026-07-04/addendum.md
+  - .bmad/planning-artifacts/architecture/architecture-paper-mate-library-2026-07-04/ARCHITECTURE-SPINE.md
 ---
 
 # Paper Mate - Epic Breakdown
@@ -1134,3 +1139,535 @@ So that a doc switch swaps both together and autosave can bind to the store's ow
 
 **Given** the refactor
 **Then** it is BEHAVIOR- and CONTRACT-identical: client + server suites stay green, `server/openapi.json` / `client/src/api/schema.d.ts` byte-identical, and it is live-smoked across a doc SWITCH at DPR>1 (open doc A, annotate, open doc B, confirm A's marks never flush onto B and B restores its own) (AE-5, AR-6)
+
+---
+
+# Paper Mate Library (Phase 2)
+
+> Added 2026-07-05 via `bmad-create-epics-and-stories`. Scope = the **Library** epic from `prd-paper-mate-library-2026-07-04` (+ addendum) and `architecture-paper-mate-library-2026-07-04/ARCHITECTURE-SPINE.md`. Phase-1 Epics 1-5 above are unchanged and stay `done`. Library requirements are namespaced (**LFR / LNFR / AL / L-UX-DR**) so they never collide with Phase-1 FR-1..27; each **LFR-n maps 1:1 to the Library PRD's FR-n**. Sync (F8, LFR-25..29) is captured but **deferred to a follow-on epic**, not built this sprint.
+
+## Library Requirements Inventory
+
+### Library Functional Requirements
+
+Namespaced `LFR-n` = Library PRD `FR-n` (1:1).
+
+**F1 · Collection & table view**
+
+- **LFR-1** The Library is the app's default landing view on boot, listing all papers in the collection as a table.
+- **LFR-2** The table shows columns Title, Authors, Added, and File type, and displays the total count ("N files in library").
+- **LFR-3** Rows are multi-selectable via checkboxes for batch actions (move to folder, delete).
+- **LFR-4** A Display control toggles column visibility.
+- **LFR-5** A Sort control orders rows by any column, ascending or descending.
+- **LFR-6** A Filter control narrows visible rows by column value.
+
+**F2 · Add papers (upload + metadata extraction)**
+
+- **LFR-7** The user adds papers by uploading one or more PDF files at once (bulk).
+- **LFR-8** On upload, Title and Authors only are extracted from the PDF locally (embedded metadata + text); Added timestamp and File type are set automatically. Year/journal/abstract are not columns this sprint.
+- **LFR-9** An optional external lookup (Crossref / Semantic Scholar) enriches or corrects metadata. Offline or on failure it never blocks the upload: the paper keeps its locally-parsed fields and a non-error notice reports enrichment was skipped.
+- **LFR-10** If extraction yields nothing, the paper still enters the collection with best-effort or empty fields (filename as title). A paper is never lost to a failed parse.
+- **LFR-11** Title and Authors are editable inline to correct extraction.
+
+**F3 · Folders**
+
+- **LFR-12** The user creates, renames, and deletes custom folders in the left panel; folders nest.
+- **LFR-13** Each paper belongs to at most one folder. Papers with no folder appear in an All / Uncategorized view.
+- **LFR-14** Selecting a folder filters the table to that folder's papers.
+- **LFR-15** The user assigns or moves a paper (or a multi-selection) to a folder.
+- **LFR-16** Deleting a folder deletes its whole subtree and re-homes every paper in that subtree to Uncategorized; it never deletes the papers (ratifies PRD A1, AL-5).
+
+**F4 · Notes**
+
+- **LFR-17** The data model and table support a "Note" file-type distinct from PDF documents, reserved and displayed. In-app note authoring is out of scope this sprint.
+
+**F5 · Open in annotator**
+
+- **LFR-18** Double-clicking a paper row opens it in the annotator; the reader is entered from the Library, not from an ad-hoc disk picker.
+- **LFR-19** Each paper has a stable `doc_id`; opening it restores its existing annotations through the inherited doc-scoped annotation store (Story 5.8 / 3.5 seam). Annotations made in the reader belong to that Library paper.
+- **LFR-20** From the reader, the user returns to the Library.
+
+**F6 · Persistence**
+
+- **LFR-21** The collection, folder structure, per-paper metadata, and folder assignments persist under `~/.paper-mate` and survive restart.
+
+**F7 · Delete / Trash**
+
+- **LFR-22** Deleting a paper (or a multi-selection) moves it to a Trash view (soft delete); its annotations are retained.
+- **LFR-23** A Trash item is restorable to the collection.
+- **LFR-24** Purging a Trash item removes the paper and its annotations permanently.
+
+**F8 · Remote sync: DEFERRED (captured, NOT built this sprint; follow-on epic with its own discovery)**
+
+- **LFR-25** Settings exposes a Sync configuration: pick a backend, enter connection details (WebDAV first; Google Drive later).
+- **LFR-26** When sync is configured, the app pulls the remote library, merges with local, and pushes the result to converge across devices.
+- **LFR-27** Sync mirrors the whole `~/.paper-mate` data directory (PDFs + metadata + folders + annotations) as one unit.
+- **LFR-28** Conflicts resolve last-write-wins by timestamp.
+- **LFR-29** Sync backends sit behind one switchable interface (WebDAV first, Google Drive later), mirroring the reserved agent-abstraction seam.
+
+### Library NonFunctional Requirements
+
+- **LNFR-1 Local-first.** Every Library feature works fully offline. The optional external metadata lookup is the only network call; opt-in, degrades gracefully offline or on failure.
+- **LNFR-2 No auth.** Localhost, single user, no accounts (consistent with the app).
+- **LNFR-3 Non-blocking add.** Uploading a batch of PDFs never freezes the table: extraction runs off the interaction path, rows appear as they resolve, and the user can keep browsing while extraction continues.
+- **LNFR-4 Collection scale.** For a realistic personal collection of hundreds of papers, sort, filter, and scroll act without a visible stall.
+- **LNFR-5 Durable, forward-compatible store.** Library metadata + folder structure persist under `~/.paper-mate` in an additive-tolerant format. A breaking schema change is an AD-8-class persisted-format break and takes a MAJOR version bump.
+- **LNFR-6 Safe copy-in.** Copying an uploaded PDF into the collection never corrupts or loses the original; a failure mid-copy leaves the collection consistent.
+
+### Library Additional Requirements
+
+Technical requirements from the Library architecture spine (`AD-Ln`, surfaced here as `AL-n`) plus the parent invariants it inherits. **No new starter template**: the Library extends the existing greenfield scaffold; Epic 6 Story 1 stands up the router split + backend domain seam.
+
+- **AL-1 (AD-L1) Collection store & authority split**: `~/.paper-mate/library.json` is the authoritative index for cross-doc state (folder tree incl. empty folders, membership paper→≤1 folder, trash state, inclusion + order). Per-doc `meta.json` stays authoritative for a paper's own fields (title, authors, added, page_count, file_type, status). `library.json` MAY carry a non-authoritative title/authors display cache (meta wins, refreshed on write) so the table renders in one read (LNFR-4). Boot reconcile: dir-without-index → add as Uncategorized; index-without-dir → prune. `schema_version`, additive only.
+- **AL-2 (AD-L2) Metadata extraction on the backend**: a bounded, **pure** domain module (`server/app/domain/`, first tenant). `extract(pdf_bytes) → ExtractedMeta` (rung 1 embedded `/Info`+XMP, rung 2 font-size heuristic; **PyMuPDF** in-process, GROBID-swappable later) and `enrich(meta) → meta | "skipped"` (rung 3 external, **Crossref DOI-first then title/authors fallback**; offline/failure → `"skipped"`, never blocks). Both best-effort (failed parse → filename-title, never lost). Runs as a **background task**, never on the request path (LNFR-3); client learns results by **polling `GET /api/library`**. Storage stays the only writer: extraction returns data, storage persists.
+- **AL-3 (AD-L3) Client routing / front-door flip**: **React Router in library/data mode** (`createBrowserRouter`), **not** framework mode (excluded by AD-2). Exactly two routes: `/` (Library home, boot landing) and `/reader/:docId`. Folder selection, sort/filter, and **Trash are view-state inside the Library route, not routes**. Settings stays a modal. Router owns navigation/history only, not collection/domain state.
+- **AL-4 (AD-L4) Bulk-add flow & idempotent upload**: one **`POST /api/docs` per PDF**, client-throttled (concurrency cap ~4); each returns an optimistic row immediately (`doc_id`, title=filename, `status: extracting`). Status `extracting → ready | enrich-skipped | parse-failed`; client polls `GET /api/library` until all settle, then stops. Failure splits: store failure rejects that one file; parse failure enters filename-title, editable, never lost. **Idempotent dedupe by `doc_id`** (AD-8): re-upload creates no duplicate; a re-upload of a **trashed** paper restores it. Existing `annotations.json`/`meta.json` never overwritten. Safe copy-in = atomic temp+rename (LNFR-6).
+- **AL-5 (AD-L5) Trash & folder lifecycle**: soft-delete flips `trashed` in `library.json` (annotations untouched, retains folder membership while trashed); restore clears it (returns to remembered folder, else Uncategorized); purge deletes the whole `{doc_id}/` dir + entry + annotations (manual only, no auto-purge); delete-folder = whole subtree, every paper in it → Uncategorized, never deletes papers; each paper ≤1 folder.
+- **AL-6 (AD-L6) API boundary: document vs organization**: one entity (`doc_id`), two concern-scoped surfaces: **`/api/docs/{doc_id}`** = the document (`GET /api/docs` list, `POST /api/docs` upload/create: keeps the shipped import route, `GET`/`PATCH` own metadata, `DELETE` = **purge**, `GET .../file`, `GET`/`PUT .../annotations`); **`/api/library`** = organization (`GET /api/library` = table via display cache + poll target, `/api/library/folders` CRUD with subtree delete, set-based `POST /api/library/move | trash | restore` taking `{doc_ids}`). Trash is organizational (`/api/library`); purge destroys the document (`DELETE /api/docs/{id}`). All under AD-3 generated types + inherited `{detail}` error envelope.
+- **AL-7 (AD-L7) Collection-index write concurrency**: storage **serializes all `library.json` mutations** (read-modify-write of the whole index under a process-level lock), so a background extraction cache-refresh never interleaves with a user move/trash/restore or a same-batch duplicate create. Per-`doc_id` creation serialized + idempotent (same bytes → one dir). Whole-file atomic write stands. Narrows inherited AD-6 "no concurrency" (still single user, now intra-process background work).
+- **AL-8 Inherited invariants (read-only, from the initiative spine)**: AD-1 client never touches the filesystem, all upload/persistence via the API; AD-3 Pydantic → OpenAPI → generated TS types (all new Library API types generated); AD-6 filesystem is the source of truth (amended by AL-2/AL-7); AD-8 `~/.paper-mate/library/{doc_id}/` = `source.pdf`+`annotations.json`+`meta.json`, `doc_id` = SHA-256 of PDF bytes, idempotent import, `meta.json` extended additively; AD-9 storage is the only code touching `~/.paper-mate`; AD-10 single same-origin container, no CORS, no auth; AD-5/6/7 annotation model + doc-scoped store reused unchanged (a paper's `doc_id` is its annotation-store key).
+- **AL-9 Stack & structural additions**: React Router **v7.x** (library/data mode, React 19-compatible, pin patch at scaffold); **PyMuPDF (fitz)** for backend parse (AGPL-3.0 → **repo relicense MIT→AGPL** at the extraction story, before distributing a bundled build); `httpx` (or equivalent) for the Crossref enrich call. GROBID sidecar (rung 4) deferred. New source dirs: `client/src/routes/` + `client/src/library/`; `server/app/domain/` (extraction); `storage/` extended (library.json read/write + boot-reconcile + display cache, still the only disk writer); `models.py` + `CollectionRow`, `Folder`, `ExtractedMeta`, status enum.
+
+### Library UX Design Requirements
+
+DESIGN.md (line 567) explicitly leaves Phase-2 Library surfaces **not yet styled**. These L-UX-DRs derive the Library UI from DESIGN.md's **existing token scales + generic controls** (`button-primary/secondary`, `text-input`, `badge-pill`, `toast`, `empty-dropzone`, `top-bar`, `toc-panel` width class) and the PRD/spine interaction descriptions. New surfaces (collection table, folder tree, status pills, Trash lens) must be built **within the existing token system** (no inline hex/px; `src/no-raw-values.test.ts` still governs). Inherits Phase-1 UX-DR17 (accessibility floor) and UX-DR18 (Obsidian-quiet voice).
+
+- **L-UX-DR1 Library page layout (route `/`, the boot landing)**: a fixed top bar (48px, hairline bottom, `{component.top-bar}`) carrying app identity + an Add/upload action + the collection count; a left **folder panel** (hairline-bounded `{colors.surface-card}` column, ~280px, `{component.toc-panel}` width class); a main region hosting the collection table on the `{colors.reader-backdrop}` floor. Desktop-only; token-driven; nothing reflows on control open.
+- **L-UX-DR2 Collection table**: columns Title / Authors / Added / File type, header row in `{typography.title-sm}`, rows in `{typography.body-sm}` `{colors.body}`; a leading per-row checkbox for multi-select; row hover → `{colors.surface-strong}`; **double-click a row opens the reader**. Title/Authors truncate with ellipsis; Added shown as a human date; File type as `{component.badge-pill}` (PDF / Note). A count line "N files in library" in `{typography.caption}`.
+- **L-UX-DR3 Display / Sort / Filter controls**: a Display control toggles column visibility; a Sort control orders by any column with a visible asc/desc indicator on the active column; a Filter control narrows rows by column value. Controls sit in the table-header area as `{component.button-secondary}`-styled affordances; opening any of them **never reflows** the table or the page floor.
+- **L-UX-DR4 Folder panel**: a nested folder tree in the left panel with **All** and **Uncategorized** pseudo-entries; create / rename / delete affordances (`{component.text-input}` for rename; delete asks confirm and states it re-homes papers, never deletes them); the selected folder is highlighted (`{colors.surface-strong}`); selecting a folder filters the table (LFR-14); empty folders still render. Assign/move a paper or multi-selection into a folder via a move action (and/or drag).
+- **L-UX-DR5 Bulk upload affordance**: accept **one or more PDFs at once** via a drag-drop zone + a browse button. When the collection is empty, reuse `{component.empty-dropzone}` ("Drop PDFs here" / "or browse…"); when non-empty, a compact Add control in the top bar. Dropping N files streams N optimistic rows into the table immediately.
+- **L-UX-DR6 Upload / extraction status**: every new row shows an extraction status reflecting `extracting → ready | enrich-skipped | parse-failed` (AL-4): `extracting` reads as an in-progress/muted state, `ready` settles to the normal row, `enrich-skipped` surfaces a **non-error** notice, `parse-failed` shows the filename-title and stays editable. Status renders via `{component.badge-pill}` or an inline caption; polling updates rows **in place** without blocking browsing (LNFR-3).
+- **L-UX-DR7 Inline metadata edit**: Title and Authors are editable inline (click/Enter to edit into a `{component.text-input}`, Esc cancels, Enter or blur commits), persisting via `PATCH /api/docs/{id}`; used to correct extraction (LFR-11).
+- **L-UX-DR8 Trash lens**: Trash is a **view-state filter (not a route)** listing soft-deleted papers, each with **Restore** and **Purge** actions; Purge is destructive and asks confirm (states annotations go with it); empty copy "Trash is empty." Restore returns the paper to its remembered folder, else Uncategorized (AL-5).
+- **L-UX-DR9 Notices & toasts**: enrichment-skipped is a **non-error** notice, visually distinct from the error `{component.toast}` (`{colors.surface-dark}`); errors (store failure on upload, purge failure) use the toast. Copy examples: "restored from Trash", "enrichment skipped for N papers", "couldn't add this file." No em-dash in any Library string (folder names UI, toasts, notices, column labels).
+- **L-UX-DR10 Reader ↔ Library navigation**: the reader top bar carries a **back-to-Library** control that navigates to `/` (LFR-20); a table double-click navigates to `/reader/:docId` (LFR-18); browser back/forward and refresh preserve the user's place (AL-3 routes).
+- **L-UX-DR11 Empty & loading states**: an empty collection shows the dropzone + "No papers yet." copy; table load shows skeleton rows that reserve layout (no stall, LNFR-4); the folder panel on an empty collection shows only All / Uncategorized.
+- **L-UX-DR12 Accessibility floor**: every control keyboard-operable; visible 2px `{colors.ink}` focus rings; table rows reachable and openable by keyboard (Enter opens); checkboxes have associated labels; confirms are Esc-dismissable with focus management; respect `prefers-reduced-motion`. (Inherits UX-DR17.)
+- **L-UX-DR13 Voice & microcopy**: Obsidian-quiet: sparse, plain, lowercase-leaning; no exclamation marks, no emoji, no em-dash; errors state the fact then the fallback. (Inherits UX-DR18.)
+
+### Library FR Coverage Map
+
+- **LFR-1** Library is the boot landing table → Epic 6
+- **LFR-2** Table columns + "N files" count → Epic 6
+- **LFR-3** Multi-select checkboxes for batch actions → Epic 7
+- **LFR-4** Display control (column visibility) → Epic 7
+- **LFR-5** Sort by any column asc/desc → Epic 7
+- **LFR-6** Filter rows by column value → Epic 7
+- **LFR-7** Bulk PDF upload → Epic 6
+- **LFR-8** Local Title/Authors extraction → Epic 6
+- **LFR-9** Optional external enrich (Crossref), non-blocking → Epic 6
+- **LFR-10** Best-effort: paper never lost to a failed parse → Epic 6
+- **LFR-11** Inline edit Title/Authors → Epic 6
+- **LFR-12** Create/rename/delete nested folders → Epic 7
+- **LFR-13** Paper ≤1 folder; All/Uncategorized view → Epic 7
+- **LFR-14** Selecting a folder filters the table → Epic 7
+- **LFR-15** Assign/move a paper (or selection) to a folder → Epic 7
+- **LFR-16** Delete folder = subtree; papers → Uncategorized, never deleted → Epic 7
+- **LFR-17** Note file-type reserved + displayed → Epic 7
+- **LFR-18** Double-click a row opens the annotator → Epic 6
+- **LFR-19** Open restores existing annotations via doc-scoped store → Epic 6
+- **LFR-20** Return from reader to Library → Epic 6
+- **LFR-21** Collection/folders/metadata persist across restart → Epic 6
+- **LFR-22** Delete = soft-delete to Trash; annotations retained → Epic 7
+- **LFR-23** Restore a Trash item → Epic 7
+- **LFR-24** Purge a Trash item permanently → Epic 7
+- **LFR-25..29** Remote sync (WebDAV/Google Drive, whole-dir mirror, LWW) → Epic 8 **(DEFERRED, not built this sprint)**
+
+## Library Epic List
+
+### Epic 6: The library becomes home
+On boot the user lands in their collection, not an empty reader. Drop one or more PDFs to add them; the backend extracts Title and Authors (locally via PyMuPDF, optionally enriched via Crossref) off the interaction path while rows stream into the table; double-click any row to open it in the annotator with its existing annotations restored, and return to the Library. Stands up the client router front-door flip (`/` + `/reader/:docId`), the backend metadata-extraction domain layer, and the concurrency-safe `library.json` collection index + display cache. This is the risk gate: it proves the front-door flip and the new backend domain/extraction seam. Standalone: a persistent, add-to-able, readable library on its own.
+**LFRs covered:** LFR-1, LFR-2, LFR-7, LFR-8, LFR-9, LFR-10, LFR-11, LFR-18, LFR-19, LFR-20, LFR-21
+**NFRs:** LNFR-1 (local-first enrich), LNFR-3 (non-blocking add), LNFR-5 (durable additive store), LNFR-6 (safe copy-in)
+**Architecture:** AL-1 (collection store/authority split), AL-2 (backend extraction domain), AL-3 (router front-door flip), AL-4 (bulk/idempotent upload), AL-6 (docs vs library API boundary), AL-7 (index write-concurrency) + inherited AL-8, AL-9
+**Goals:** G1 (persistent workspace) + G2 (one-action add)
+
+### Epic 7: Organize & curate the collection
+Shape the collection into nested custom folders, multi-select and batch-move papers, sort / filter / hide columns to find any paper in seconds, reserve the Note file-type, and delete safely through a Trash lens (restore or permanently purge). Builds on Epic 6's table + collection index; stands alone as the curation layer without Epic 6 depending on it.
+**LFRs covered:** LFR-3, LFR-4, LFR-5, LFR-6, LFR-12, LFR-13, LFR-14, LFR-15, LFR-16, LFR-17, LFR-22, LFR-23, LFR-24
+**NFRs:** LNFR-2 (no auth), LNFR-4 (collection scale: sort/filter/scroll no stall)
+**Architecture:** AL-5 (trash + folder lifecycle), AL-6 (folder + set-based org endpoints)
+**Goals:** G3 (find and open any paper in seconds)
+
+### Epic 8: Remote sync (DEFERRED: captured, NOT built this sprint)
+> A separate follow-on epic requiring its own discovery. A switchable sync-backend interface (WebDAV first, Google Drive a later adapter behind the same seam) that mirrors the whole `~/.paper-mate` directory (PDFs + metadata + folders + annotations) and converges across devices with last-write-wins by timestamp. Deferred per the PRD (F8) and architecture spine. Hard problems resolved in that epic's own discovery: trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest.
+**LFRs covered:** LFR-25, LFR-26, LFR-27, LFR-28, LFR-29: **not decomposed into stories this sprint**
+
+## Epic 6: The library becomes home
+
+On boot the user lands in their collection, not an empty reader. Drop one or more PDFs to add them; the backend extracts Title and Authors off the interaction path while rows stream into the table; double-click any row to open it in the annotator with its existing annotations restored, and return to the Library. Stands up the client router front-door flip, the backend metadata-extraction domain layer, and the concurrency-safe `library.json` collection index. Risk gate for Phase 2.
+
+### Story 6.1: Router front-door flip and Library shell
+
+As a returning reader,
+I want the app to boot into a Library home instead of an empty reader,
+So that my papers have a front door and the reader becomes one route among them.
+
+**Acceptance Criteria:**
+
+**Given** the SPA boots
+**When** it loads
+**Then** it mounts React Router via `createBrowserRouter` in library/data mode (not framework mode, excluded by AD-2) with exactly two routes, `/` (Library home) and `/reader/:docId` (Reader), and `/` is the boot landing (LFR-1, AL-3)
+
+**Given** the existing reader
+**When** it is placed under `/reader/:docId`
+**Then** it reads the `:docId` route param and loads that document via the existing doc-load path (`GET /api/docs/{id}/file`), with no behavioral change to reading or annotating (AL-3, inherited AD-8)
+
+**Given** the Library route at rest with no collection data yet
+**Then** it renders a Library shell from DESIGN.md tokens (no inline hex/px): a 48px hairline-bottom top bar with app identity + an Add affordance, a left folder-panel region, and a main region on `{colors.reader-backdrop}` showing the empty-collection copy "No papers yet." (L-UX-DR1, L-UX-DR11)
+
+**Given** the Reader route
+**When** the user activates the back-to-Library control in the top bar
+**Then** the app navigates to `/` (LFR-20, L-UX-DR10)
+
+**Given** browser back/forward or a refresh on either route
+**Then** the user's place is preserved, the route being the source of navigation truth (AL-3)
+
+**Given** any interactive chrome in the shell
+**When** focused via keyboard
+**Then** a visible 2px `{colors.ink}` focus ring shows (L-UX-DR12)
+
+### Story 6.2: The collection index (papers persist and list)
+
+As a reader,
+I want the app to keep a durable index of every paper I have added,
+So that my collection survives restarts and can be listed in one fast read.
+
+**Acceptance Criteria:**
+
+**Given** the storage module
+**When** the app persists collection state
+**Then** it writes `~/.paper-mate/library.json` as the authoritative index carrying `schema_version`, the folder tree (identity/nesting/names, incl. empty folders), folder membership (paper→≤1 folder), trash state, and paper inclusion + order; per-paper own fields stay in `meta.json` (AL-1)
+
+**Given** `library.json`
+**Then** it also carries a NON-authoritative title/authors display cache rebuildable from `meta.json` (meta wins on conflict, refreshed on every write) so the table renders in one read (AL-1, LNFR-4)
+
+**Given** `GET /api/library`
+**When** called
+**Then** it returns the collection rows (`doc_id`, title, authors, added, file_type, status, folder, trashed, order) from the display cache in a single read; Pydantic models (`CollectionRow`, `Folder`, status enum) generate the TS client types (AL-6, AL-8 / AD-3)
+
+**Given** app boot
+**When** storage reconciles
+**Then** a `{doc_id}/` dir absent from the index is added as Uncategorized, and an index entry whose dir vanished is pruned (AL-1 boot-reconcile)
+
+**Given** any `library.json` mutation
+**Then** it is a whole-index read-modify-write serialized under a process-level lock and committed via atomic temp+rename, so concurrent writers never drop a change; storage is the ONLY code that touches `~/.paper-mate` (AL-7, AL-9)
+
+**Given** a paper imported via the existing `POST /api/docs`, then a restart
+**When** `GET /api/library` is called
+**Then** the paper still lists (LFR-21 persistence proof)
+
+**Given** `library.json` schema evolves
+**Then** changes are additive only; a breaking change is an AD-8-class format break requiring a MAJOR bump (LNFR-5)
+
+### Story 6.3: Collection table view
+
+As a reader,
+I want my collection shown as a table of papers,
+So that I can see everything I have at a glance.
+
+**Acceptance Criteria:**
+
+**Given** a non-empty collection
+**When** the Library route renders
+**Then** the main region shows a table with columns Title, Authors, Added, and File type, populated from `GET /api/library`, plus a count line "N files in library" (LFR-2, L-UX-DR2)
+
+**Given** a table row
+**Then** Title/Authors truncate with ellipsis, Added shows a human-readable date, and File type shows as a `{component.badge-pill}` (PDF / Note); labels use `{typography.title-sm}` and rows `{typography.body-sm}` `{colors.body}` (L-UX-DR2)
+
+**Given** a row
+**When** hovered
+**Then** it shifts to `{colors.surface-strong}` (L-UX-DR2)
+
+**Given** an empty collection
+**Then** the dropzone + "No papers yet." copy shows instead of the table; during load, skeleton rows reserve layout with no stall (L-UX-DR11, LNFR-4)
+
+**Given** a table of hundreds of rows
+**When** scrolled
+**Then** scrolling acts without a visible multi-second stall (LNFR-4)
+
+**Given** every table label and copy string
+**Then** none contains an em-dash (L-UX-DR13, DESIGN.md)
+
+### Story 6.4: Bulk upload with optimistic rows
+
+As a reader,
+I want to drop or browse several PDFs at once and see them appear immediately,
+So that adding papers is one action that never freezes the app.
+
+**Acceptance Criteria:**
+
+**Given** the Library
+**When** I drag-drop or browse one or more PDF files
+**Then** each file is uploaded as its own `POST /api/docs`, client-throttled to a concurrency cap (~4) (LFR-7, AL-4)
+
+**Given** an upload starts
+**Then** an optimistic row appears in the table immediately with `doc_id`, title = filename, and `status: extracting`; rows stream in as requests land, and I can keep browsing the collection meanwhile (AL-4, LNFR-3, L-UX-DR5, L-UX-DR6)
+
+**Given** a re-upload of a PDF whose bytes resolve to an existing `{doc_id}/`
+**Then** no duplicate row is created and the existing paper is returned; its `annotations.json`/`meta.json` are never overwritten (AL-4 idempotent dedupe, inherited AD-8)
+
+**Given** a store failure on one file (not a PDF, or a disk error)
+**Then** that one file is rejected with a per-file notice and the other uploads are unaffected (AL-4 failure split, L-UX-DR9)
+
+**Given** a paper that fails to parse
+**Then** it still enters the collection as a filename-title row and is not lost (full status handling lands in Story 6.5) (LFR-10, AL-4)
+
+**Given** storage writes the copied PDF
+**Then** `source.pdf` is written atomically (temp + rename) so a mid-copy failure leaves the collection consistent and never corrupts the original (LNFR-6, AL-4)
+
+> The trash-restore-on-reupload edge (AL-4 point 4) is deferred to Story 7.5 (Trash does not exist yet).
+
+### Story 6.5: Backend metadata extraction (extract + enrich)
+
+As a reader,
+I want the Title and Authors filled in automatically after I upload,
+So that the table is useful without me typing metadata.
+
+**Acceptance Criteria:**
+
+**Given** extraction
+**Then** it lives in a bounded, pure `server/app/domain/` module (the first tenant of the backend domain layer) exposing `extract(pdf_bytes) → ExtractedMeta` and `enrich(meta) → meta | "skipped"` (AL-2)
+
+**Given** `extract`
+**When** run
+**Then** it resolves Title + Authors via rung 1 (embedded `/Info` + XMP) then rung 2 (font-size heuristic) using PyMuPDF in-process, and the `extract()` seam stays GROBID-swappable (AL-2, LFR-8)
+
+**Given** `enrich`
+**When** online
+**Then** it queries Crossref DOI-first (DOI extracted from the PDF) then falls back to a title/authors query, correcting metadata; when offline or on failure it returns `"skipped"`, never blocks the add, and the client surfaces a NON-error notice that enrichment was skipped (LFR-9, AL-2, LNFR-1, L-UX-DR9)
+
+**Given** a bulk add
+**Then** extraction runs as a background task, never on the request path; the client polls `GET /api/library` until all statuses settle, then stops polling (AL-2, LNFR-3)
+
+**Given** a paper's lifecycle
+**Then** its status transitions `extracting → ready | enrich-skipped | parse-failed`; a parse failure enters the paper as a filename-title row with `status: parse-failed`, editable and never lost (AL-4, LFR-10, L-UX-DR6)
+
+**Given** extraction produces data
+**Then** storage (the only writer, AL-9) persists it to `meta.json` and refreshes the `library.json` display cache; the domain module itself never touches disk (AL-2, AL-1)
+
+**Given** PyMuPDF (AGPL-3.0) is added
+**Then** the repo relicenses MIT→AGPL-3.0 in the same change, before any bundled build is distributed (AL-9, spine Deferred)
+
+### Story 6.6: Inline edit Title and Authors
+
+As a reader,
+I want to fix a wrong Title or Authors right in the table,
+So that I can correct extraction without leaving the Library.
+
+**Acceptance Criteria:**
+
+**Given** a Title or Authors cell
+**When** I click it or focus it and press Enter
+**Then** it becomes an inline `{component.text-input}`; Enter or blur commits, Esc cancels (LFR-11, L-UX-DR7)
+
+**Given** a committed edit
+**Then** it persists via `PATCH /api/docs/{id}` authoritative on `meta.json`, and storage refreshes the `library.json` display cache so the table reflects the new value (AL-6, AL-1)
+
+**Given** a `parse-failed` or `enrich-skipped` row
+**Then** its Title/Authors are editable the same way, correcting a bad parse (LFR-10, LFR-11)
+
+**Given** the inline editor
+**When** focused
+**Then** it shows a 2px `{colors.ink}` focus treatment and is keyboard-operable (L-UX-DR12)
+
+### Story 6.7: Open a paper in the annotator with its annotations
+
+As a reader,
+I want to double-click a paper to read and annotate it, with my past marks intact,
+So that the Library is a real entry point to reading, not just a list.
+
+**Acceptance Criteria:**
+
+**Given** a table row
+**When** I double-click it (or focus it and press Enter)
+**Then** the app navigates to `/reader/:docId` for that paper (LFR-18, AL-3, L-UX-DR10)
+
+**Given** the reader opens a paper
+**Then** it hydrates that paper's PDF (`GET /api/docs/{id}/file`) and its existing annotations through the inherited doc-scoped annotation store (Story 5.8 / 3.5 seam); the paper's `doc_id` IS its annotation-store key (LFR-19, inherited AD-5/6/7/8)
+
+**Given** I annotate the opened paper
+**Then** the new marks belong to that Library paper and autosave to its `annotations.json` (inherited AD-6, AD-7)
+
+**Given** the paper opens
+**Then** `meta.last_opened` updates via storage (AL-1, inherited AD-8)
+
+**Given** I am reading a paper
+**When** I use the back-to-Library control
+**Then** the app returns to `/` and the collection is shown (LFR-20, L-UX-DR10)
+
+**Given** a doc SWITCH (open paper A, annotate, back to Library, open paper B)
+**Then** B restores its own annotations and A's marks never appear on B (inherited Story 5.8 atomic doc-scope; verify live at DPR>1)
+
+## Epic 7: Organize & curate the collection
+
+Shape the collection into nested custom folders, multi-select and batch-move papers, sort / filter / hide columns to find any paper in seconds, reserve the Note file-type, and delete safely through a Trash lens (restore or permanently purge). Builds on Epic 6's table + collection index; stands alone as the curation layer.
+
+### Story 7.1: Folders (create, rename, delete, nest)
+
+As a reader,
+I want nested custom folders in the left panel,
+So that I can group my papers however I think about them.
+
+**Acceptance Criteria:**
+
+**Given** the folder panel
+**When** I create a folder
+**Then** it appears in the left-panel tree with a UUIDv4 id and a mutable name, and can be nested under another folder (LFR-12, AL-5)
+
+**Given** a folder
+**When** I rename it
+**Then** only its name changes; membership is keyed by id so a rename never orphans papers (LFR-12, AL-5)
+
+**Given** a folder with a subtree and papers
+**When** I delete it
+**Then** the whole subtree is deleted and every paper anywhere in that subtree moves to Uncategorized; NO paper is deleted (LFR-16, AL-5, ratifies PRD A1)
+
+**Given** the panel
+**Then** the All and Uncategorized pseudo-entries always render, and empty folders still show (LFR-13, L-UX-DR4)
+
+**Given** folder state
+**Then** it persists in `library.json` through the storage-only serialized write path and survives restart (AL-1, AL-7, LFR-21)
+
+**Given** the folders CRUD
+**Then** it goes through `/api/library/folders` (subtree delete server-side) with generated types (AL-6, AL-8)
+
+**Given** a folder delete
+**When** triggered
+**Then** a confirm states it re-homes papers and never deletes them, and the confirm is Esc-dismissable (L-UX-DR4, L-UX-DR12)
+
+### Story 7.2: Assign and filter by folder
+
+As a reader,
+I want to put a paper in a folder and click a folder to see only its papers,
+So that I can narrow the collection to what I am working on.
+
+**Acceptance Criteria:**
+
+**Given** a folder in the panel
+**When** I select it
+**Then** the table filters to that folder's papers as VIEW-STATE inside the Library route (not a route change) (LFR-14, AL-3)
+
+**Given** All
+**When** selected
+**Then** every non-trashed paper shows; **Given** Uncategorized selected **Then** only papers with no folder show (LFR-13, L-UX-DR4)
+
+**Given** a paper
+**When** I move it to a folder (move action or drag)
+**Then** its membership updates via `POST /api/library/move` and it belongs to at most one folder (a move replaces any prior folder) (LFR-13, LFR-15, AL-5, AL-6)
+
+**Given** the move persists
+**Then** `library.json` membership updates under the serialized write path (AL-7)
+
+**Given** the selected folder
+**Then** it is highlighted `{colors.surface-strong}` in the panel (L-UX-DR4)
+
+### Story 7.3: Multi-select and batch move
+
+As a reader,
+I want to select several papers at once and move them together,
+So that I can organize in bulk instead of one by one.
+
+**Acceptance Criteria:**
+
+**Given** the table
+**When** I use per-row checkboxes (and a select-all)
+**Then** multiple rows enter a selection state (LFR-3, L-UX-DR2)
+
+**Given** a multi-selection
+**When** I move it to a folder
+**Then** all selected papers move in one set-based `POST /api/library/move` taking `{doc_ids}` (LFR-3, LFR-15, AL-6)
+
+**Given** the batch op
+**Then** it is applied through the serialized `library.json` write path so a concurrent background extraction refresh cannot drop it (AL-7)
+
+**Given** a selection
+**When** I clear it or a batch action completes
+**Then** the selection state resets (L-UX-DR2)
+
+**Given** every selectable control
+**Then** it is keyboard-operable with visible focus rings (L-UX-DR12)
+
+> Batch delete reuses this multi-select and lands in Story 7.5.
+
+### Story 7.4: Display, Sort, and Filter controls
+
+As a reader,
+I want to hide columns, sort by any column, and filter rows,
+So that I can find a paper in a large collection in seconds.
+
+**Acceptance Criteria:**
+
+**Given** the table header area
+**When** I open the Display control
+**Then** I can toggle the visibility of any column, and hidden columns are omitted with no reflow of the surrounding frame (LFR-4, L-UX-DR3)
+
+**Given** the Sort control
+**When** I choose a column and direction
+**Then** rows order by that column ascending or descending, with a visible indicator on the active column; sort is client view-state, not persisted (LFR-5, AL-3, L-UX-DR3)
+
+**Given** the Filter control
+**When** I set a column value
+**Then** only matching rows show (LFR-6, L-UX-DR3)
+
+**Given** hundreds of papers
+**When** I sort or filter
+**Then** the result appears without a visible multi-second stall (LNFR-4)
+
+**Given** the controls
+**Then** they are `{component.button-secondary}`-styled, token-driven, keyboard-operable, and never reflow the canvas floor (L-UX-DR3, L-UX-DR12)
+
+### Story 7.5: Trash (soft-delete, restore, purge)
+
+As a reader,
+I want deletes to go to a Trash I can restore from, and a permanent purge when I mean it,
+So that I never lose a paper or its annotations by accident.
+
+**Acceptance Criteria:**
+
+**Given** a paper or a multi-selection
+**When** I delete it
+**Then** it soft-deletes: `trashed` flips in `library.json`, its annotations are untouched, it leaves normal and folder views and shows only in the Trash lens, and it retains its folder membership while trashed (LFR-22, AL-5)
+
+**Given** the Trash lens
+**Then** it is a view-state filter (not a route) listing trashed papers, each with Restore and Purge actions; empty copy reads "Trash is empty." (AL-3, L-UX-DR8)
+
+**Given** a trashed paper
+**When** I restore it
+**Then** `trashed` clears and it returns to its remembered folder, or to Uncategorized if that folder no longer exists, with a "restored from Trash" notice (LFR-23, AL-5, L-UX-DR9)
+
+**Given** a trashed paper
+**When** I purge it
+**Then** a confirm (stating annotations go with it, Esc-dismissable) precedes a `DELETE /api/docs/{id}` that removes the whole `{doc_id}/` dir and its `library.json` entry permanently; purge is manual only, no auto-purge (LFR-24, AL-5, AL-6, L-UX-DR8, L-UX-DR12)
+
+**Given** a re-upload of a PDF that is currently trashed
+**Then** the upload restores the existing paper ("restored from Trash") rather than creating a duplicate (AL-4 point 4, the edge deferred from Story 6.4)
+
+**Given** batch delete
+**Then** it reuses Story 7.3 multi-select and trashes all selected via the set-based org path (LFR-3, LFR-22, AL-6, AL-7)
+
+**Given** any Trash label or notice copy
+**Then** no string contains an em-dash (L-UX-DR9, L-UX-DR13)
+
+### Story 7.6: Note file-type (reserved and displayed)
+
+As a reader,
+I want the collection to recognize a Note file-type distinct from a PDF,
+So that the model and table are ready for notes even before authoring exists.
+
+**Acceptance Criteria:**
+
+**Given** the data model
+**Then** `meta.json` `file_type` and the `CollectionRow` model support a "Note" value distinct from "PDF" (LFR-17, AL-1)
+
+**Given** a Note-type entry
+**When** the table renders
+**Then** File type shows a "Note" `{component.badge-pill}` visually distinct from "PDF" (LFR-17, L-UX-DR2)
+
+**Given** this sprint
+**Then** nothing in the app CREATES a note (authoring is out of scope); the type is reserved and displayed only (LFR-17, spine Deferred: note identity)
+
+## Epic 8: Remote sync (DEFERRED)
+
+Not decomposed into stories this sprint. See the Library Epic List entry and the architecture spine's Deferred section. LFR-25..29 remain captured; the sync epic runs its own discovery (trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest) before any story is written.
