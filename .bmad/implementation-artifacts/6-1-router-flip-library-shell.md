@@ -4,7 +4,7 @@ baseline_commit: 66e247a2a6848895eb43f56fc8a38f33faee6cfe
 
 # Story 6.1: Router front-door flip and Library shell
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
