@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the Library table's click-to-open row gesture with a hover-revealed Open button in the Title cell, decoupling opening a paper from the row arm/select click and from Story 6.6's Title/Authors click-to-edit.
+**Goal:** Replace the Library table's click-to-open row gesture with a hover-revealed Open button in the Title cell, decoupling opening a paper from the row arm/select click; and gate Story 6.6's Title/Authors click-to-edit on the row already being armed, so a single click never ambiguously means both "select" and "edit".
 
-**Architecture:** `CollectionTable.tsx`'s row click handler drops its open-on-second-click branch (arm/select becomes a pure toggle); the Title cell's static render gains a sibling `<button>` (own `stopPropagation`'d `onClick` calling `onOpenRow`), revealed via CSS `tr:hover`/`:focus-visible` only, no new component or prop. A companion edit updates `epics.md` Story 6.7's AC text to match, since this change delivers that AC's gesture ahead of 6.7's own formal planning.
+**Architecture:** `CollectionTable.tsx`'s row click handler drops its open-on-second-click branch (arm/select becomes a pure toggle); `EditableCell` gains an `armed`/`onArm` pair so its click/Enter only edits when the row is already armed, otherwise arms it (mouse: bubbles to the row's own click; keyboard: an explicit `onArm` call); the Title cell's static render gains a sibling `<button>` (own `stopPropagation`'d `onClick` calling `onOpenRow`, unaffected by arm state), revealed via CSS `tr:hover`/`:focus-visible` only. A companion edit updates `epics.md` Story 6.7's AC text to match, since this change delivers that AC's gesture ahead of 6.7's own formal planning.
 
 **Tech Stack:** React 19.2 + TypeScript 6.0, Vitest + `@testing-library/react`, plain CSS with design tokens (`client/src/theme/`).
 
@@ -26,8 +26,8 @@
 - Test: `client/src/library/CollectionTable.test.tsx`
 
 **Interfaces:**
-- Consumes: existing `CollectionTableProps` (`rows`, `onOpenRow: (docId: string) => void`, `pendingRows`, `onEditField`), unchanged. Existing `EditableCell`/`InlineEditor`/`seedFieldValue`/`currentFieldValue`/`stripPdfExtension`/`statusLabel`/`rowStatusClass`, unchanged, reused as-is.
-- Produces: no new exported symbols. `handleRowClick(docId: string)` becomes a pure arm/select toggle (no longer calls `onOpenRow`). The Title cell renders an additional `<button className="collection-table__open-button">Open</button>` sibling to its text.
+- Consumes: existing `CollectionTableProps` (`rows`, `onOpenRow: (docId: string) => void`, `pendingRows`, `onEditField`), unchanged. Existing `InlineEditor`/`seedFieldValue`/`currentFieldValue`/`stripPdfExtension`/`statusLabel`/`rowStatusClass`, unchanged, reused as-is.
+- Produces: no new exported symbols. `handleRowClick(docId: string)` becomes a pure arm/select toggle (no longer calls `onOpenRow`). `EditableCell` gains two new props: `armed: boolean` and `onArm: () => void`. The Title cell renders an additional `<button className="collection-table__open-button">Open</button>` sibling to its text.
 
 - [ ] **Step 1: Rewrite the three tests whose assertions assume "second click opens", and add three new Open-button tests (still failing, code not touched yet)**
 
@@ -120,12 +120,155 @@ describe("CollectionTable Open button", () => {
 });
 ```
 
-- [ ] **Step 2: Run the suite and confirm exactly the expected tests fail**
+- [ ] **Step 2: Rewrite the entire `"CollectionTable inline edit (Story 6.6)"` describe block for the arm-then-edit gate (fix request: a single click on Title/Authors was entering edit immediately, which conflicted with using that same click to just select the row)**
+
+Replace the whole `describe("CollectionTable inline edit (Story 6.6)", () => { ... })` block (currently lines 222-327) with:
+
+```tsx
+describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
+  it("click on an UNARMED row's Title cell only arms it (does not enter edit)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const cell = screen.getByText("Attention Is All You Need");
+    const row = cell.closest("tr")!;
+    fireEvent.click(cell);
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("click on an armed row's Title cell enters edit seeded with the current text", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // armed: edit
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    expect(input).toBeTruthy();
+  });
+
+  it("Enter commits the new title via onEditField", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Corrected Title" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onEditField).toHaveBeenCalledWith(rows[0].doc_id, "title", "Corrected Title");
+    expect(screen.queryByDisplayValue("Corrected Title")).toBeNull(); // editor closed
+  });
+
+  it("Esc cancels without committing and the static cell returns", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Discarded" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onEditField).not.toHaveBeenCalled();
+    expect(screen.getByText("Attention Is All You Need")).toBeTruthy();
+  });
+
+  it("blur commits the edit", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Blurred Title" } });
+    fireEvent.blur(input);
+    expect(onEditField).toHaveBeenCalledWith(rows[0].doc_id, "title", "Blurred Title");
+  });
+
+  it("Esc-then-blur does not double-commit (unmount blur is guarded)", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Discarded" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.blur(input); // simulate the teardown blur after unmount-triggering Esc
+    expect(onEditField).not.toHaveBeenCalled();
+  });
+
+  it("clicking a Title cell (armed or not) never calls onOpenRow; opening is Open-button only", () => {
+    const onOpenRow = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={onOpenRow} onEditField={noop} />);
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell); // unarmed: arms (bubbles to row)
+    fireEvent.click(cell); // armed: edits
+    expect(onOpenRow).not.toHaveBeenCalled();
+  });
+
+  it("Enter on a focused Title cell arms it; Enter again enters edit", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const cell = screen.getByText("Attention Is All You Need");
+    const row = cell.closest("tr")!;
+    fireEvent.keyDown(cell, { key: "Enter" });
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.keyDown(cell, { key: "Enter" });
+    expect(screen.getByDisplayValue("Attention Is All You Need")).toBeTruthy();
+  });
+
+  it("edits an Authors cell the same way (arm then edit)", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("Vaswani et al.");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Vaswani et al.") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "New Authors" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onEditField).toHaveBeenCalledWith(rows[0].doc_id, "authors", "New Authors");
+  });
+
+  it("an extracting row is not editable regardless of arm state (click leaves no input)", () => {
+    function rowWith(status: CollectionRow["status"]): CollectionRow {
+      return {
+        doc_id: "e".repeat(64),
+        title: "Extracting Row",
+        authors: null,
+        added: "2026-07-05T12:00:00+00:00",
+        file_type: "pdf",
+        status,
+        folder_id: null,
+        trashed: false,
+        order: 0,
+      };
+    }
+    render(
+      <CollectionTable rows={[rowWith("extracting")]} onOpenRow={noop} onEditField={noop} />,
+    );
+    const cell = screen.getByText("Extracting Row");
+    fireEvent.click(cell); // arms the row (bubbles; cell itself isn't editable, no intercept)
+    fireEvent.click(cell); // disarms; still no interception at any point
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("a no-op commit (unchanged value) does not call onEditField", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onEditField).not.toHaveBeenCalled();
+  });
+});
+```
+
+- [ ] **Step 3: Run the suite and confirm exactly the expected tests fail**
 
 Run: `cd client && npx vitest run src/library/CollectionTable.test.tsx`
-Expected: FAIL. The three rewritten tests fail because `handleRowClick` still opens on a second click (old behavior contradicts the new assertions). The three new Open-button tests fail with `Unable to find role="button" and name "Open"` (the button doesn't exist yet).
+Expected: FAIL. The three Open-button-decoupling rewrites fail because `handleRowClick` still opens on a second click. The rewritten arm-gate describe block fails because `EditableCell` still edits on the very first click/Enter (no `armed` gate yet). The three new Open-button tests fail with `Unable to find role="button" and name "Open"` (the button doesn't exist yet).
 
-- [ ] **Step 3: Simplify `handleRowClick` (drop the open-on-second-click branch)**
+- [ ] **Step 4: Simplify `handleRowClick` (drop the open-on-second-click branch)**
 
 In `client/src/library/CollectionTable.tsx`, replace:
 
@@ -148,9 +291,148 @@ with:
   }
 ```
 
-- [ ] **Step 4: Add the Open button as a sibling to the title text inside the Title `EditableCell`**
+- [ ] **Step 5: Add `armed`/`onArm` to `EditableCell` and gate its click/Enter handlers on arm state (fix request: single click on Title/Authors was entering edit immediately, conflicting with using that click to select the row)**
 
-In the same file, inside the `rows.map` block, replace the Title `<EditableCell>` call:
+In `client/src/library/CollectionTable.tsx`, replace the `EditableCell` function:
+
+```tsx
+function EditableCell({
+  className,
+  title,
+  field,
+  editable,
+  isEditing,
+  seedValue,
+  children,
+  onStartEdit,
+  onCommit,
+  onCancel,
+}: {
+  className: string;
+  title?: string;
+  field: EditableField;
+  editable: boolean;
+  isEditing: boolean;
+  seedValue: string;
+  children: React.ReactNode;
+  onStartEdit: () => void;
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+}) {
+  if (isEditing) {
+    return (
+      <td className={className}>
+        <InlineEditor initialValue={seedValue} onCommit={onCommit} onCancel={onCancel} />
+      </td>
+    );
+  }
+  if (!editable) {
+    return (
+      <td className={className} title={title}>
+        {children}
+      </td>
+    );
+  }
+  return (
+    <td
+      className={className}
+      title={title}
+      tabIndex={0}
+      aria-label={field === "title" ? "Edit title" : "Edit authors"}
+      onClick={(e) => {
+        e.stopPropagation();
+        onStartEdit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.stopPropagation();
+          onStartEdit();
+        }
+      }}
+    >
+      {children}
+    </td>
+  );
+}
+```
+
+with:
+
+```tsx
+function EditableCell({
+  className,
+  title,
+  field,
+  editable,
+  armed,
+  isEditing,
+  seedValue,
+  children,
+  onStartEdit,
+  onArm,
+  onCommit,
+  onCancel,
+}: {
+  className: string;
+  title?: string;
+  field: EditableField;
+  editable: boolean;
+  armed: boolean;
+  isEditing: boolean;
+  seedValue: string;
+  children: React.ReactNode;
+  onStartEdit: () => void;
+  onArm: () => void;
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+}) {
+  if (isEditing) {
+    return (
+      <td className={className}>
+        <InlineEditor initialValue={seedValue} onCommit={onCommit} onCancel={onCancel} />
+      </td>
+    );
+  }
+  if (!editable) {
+    return (
+      <td className={className} title={title}>
+        {children}
+      </td>
+    );
+  }
+  return (
+    <td
+      className={className}
+      title={title}
+      tabIndex={0}
+      aria-label={field === "title" ? "Edit title" : "Edit authors"}
+      onClick={(e) => {
+        if (armed) {
+          e.stopPropagation();
+          onStartEdit();
+        }
+        // else: not intercepted; the click bubbles to the <tr>'s own
+        // onClick, which arms the row exactly like any other cell.
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        e.stopPropagation();
+        if (armed) {
+          onStartEdit();
+        } else {
+          onArm();
+        }
+      }}
+    >
+      {children}
+    </td>
+  );
+}
+```
+
+- [ ] **Step 6: Wire `armed`/`onArm` into both `EditableCell` call sites, and add the Open button as a sibling to the title text**
+
+In the same file, inside the `rows.map` block, replace both `<EditableCell>` calls:
 
 ```tsx
                 <EditableCell
@@ -166,6 +448,19 @@ In the same file, inside the `rows.map` block, replace the Title `<EditableCell>
                 >
                   {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
                 </EditableCell>
+                <EditableCell
+                  className="collection-table__authors"
+                  title={row.authors ?? undefined}
+                  field="authors"
+                  editable={editable}
+                  isEditing={isEditingAuthors}
+                  seedValue={seedFieldValue(row, "authors")}
+                  onStartEdit={() => setEditing({ docId: row.doc_id, field: "authors" })}
+                  onCommit={(value) => commitEdit(row, "authors", value)}
+                  onCancel={() => setEditing(null)}
+                >
+                  {row.authors ?? ""}
+                </EditableCell>
 ```
 
 with:
@@ -176,9 +471,11 @@ with:
                   title={displayTitle ?? undefined}
                   field="title"
                   editable={editable}
+                  armed={selectedId === row.doc_id}
                   isEditing={isEditingTitle}
                   seedValue={seedFieldValue(row, "title")}
                   onStartEdit={() => setEditing({ docId: row.doc_id, field: "title" })}
+                  onArm={() => setSelectedId(row.doc_id)}
                   onCommit={(value) => commitEdit(row, "title", value)}
                   onCancel={() => setEditing(null)}
                 >
@@ -196,11 +493,26 @@ with:
                     Open
                   </button>
                 </EditableCell>
+                <EditableCell
+                  className="collection-table__authors"
+                  title={row.authors ?? undefined}
+                  field="authors"
+                  editable={editable}
+                  armed={selectedId === row.doc_id}
+                  isEditing={isEditingAuthors}
+                  seedValue={seedFieldValue(row, "authors")}
+                  onStartEdit={() => setEditing({ docId: row.doc_id, field: "authors" })}
+                  onArm={() => setSelectedId(row.doc_id)}
+                  onCommit={(value) => commitEdit(row, "authors", value)}
+                  onCancel={() => setEditing(null)}
+                >
+                  {row.authors ?? ""}
+                </EditableCell>
 ```
 
-Note: `EditableCell` itself is untouched (no prop changes). It renders whatever is passed as `children` in both its `editable` and `!editable` branches, so the button appears for `extracting` rows too (not editable, still openable), matching the spec's edge case. The Open button is scoped to the Title field only (the Authors `<EditableCell>` call is untouched).
+Note: `EditableCell`'s `!editable` branch (used for `extracting` rows) still renders bare `children` with no click handling at all, so the Open button appears there too (not editable, still openable), matching the spec's edge case. The Open button itself is scoped to the Title field only (the Authors `<EditableCell>` call has no button, just the arm/edit gating).
 
-- [ ] **Step 5: Update `CollectionTable.css`: flex layout for the Title cell, the new title-text class, and the Open button + its hover/focus reveal**
+- [ ] **Step 7: Update `CollectionTable.css`: flex layout for the Title cell, the new title-text class, and the Open button + its hover/focus reveal**
 
 Replace:
 
@@ -266,26 +578,29 @@ Then, immediately after the existing `.collection-table__edit-input:focus { ... 
 }
 ```
 
-- [ ] **Step 6: Run the suite and confirm all `CollectionTable.test.tsx` tests pass**
+- [ ] **Step 8: Run the suite and confirm all `CollectionTable.test.tsx` tests pass**
 
 Run: `cd client && npx vitest run src/library/CollectionTable.test.tsx`
-Expected: PASS, all tests (the 3 rewritten + 3 new + every pre-existing case untouched by this change).
+Expected: PASS, all tests (the 3 Open-decoupling rewrites + the 11-test arm-gated inline-edit block + 3 new Open-button tests + every pre-existing case untouched by this change).
 
-- [ ] **Step 7: Run the no-raw-values guard on the touched CSS file**
+- [ ] **Step 9: Run the no-raw-values guard on the touched CSS file**
 
 Run: `cd client && npx vitest run src/no-raw-values.test.ts -t "CollectionTable.css"`
 Expected: PASS (every new value is a `var(--...)` token reference; no literal hex/px introduced).
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 cd client
 git add src/library/CollectionTable.tsx src/library/CollectionTable.css src/library/CollectionTable.test.tsx
-git commit -m "Replace click-to-open with a hover-revealed Open button in the Library table
+git commit -m "Replace click-to-open with a hover Open button; gate Title/Authors edit on arm state
 
 Row click no longer opens on a second click; opening decouples entirely
 into a Title-cell Open button, revealed on row hover or its own keyboard
-focus. Resolves the Story 6.6 edit-vs-open interim workaround."
+focus. Title/Authors click-to-edit now requires the row already armed
+(selected) first, so a single click never ambiguously means both select
+and edit. Resolves the Story 6.6 edit-vs-open interim workaround plus a
+follow-up fix request on the edit gesture itself."
 ```
 
 ---
@@ -476,13 +791,13 @@ Open `http://127.0.0.1:5193/` in a browser, hover a row: confirm the Open button
 
 Click the Open button: confirm the app navigates to `/reader/:docId` for that paper.
 
-- [ ] **Step 5: Verify click-to-edit still works and is not confused with Open**
+- [ ] **Step 5: Verify the Title/Authors arm-then-edit gate**
 
-Click the title TEXT (not the button) on a row: confirm it still enters inline edit (Story 6.6 behavior), not open.
+Click the title TEXT (not the button) on an unarmed row: confirm it only highlights the row (arms it), no editor appears. Click the title text again: confirm it NOW enters inline edit (Story 6.6 mechanics: seeded text, Enter/blur commit, Esc cancels, unaffected by this change). Repeat for an Authors cell.
 
-- [ ] **Step 6: Verify keyboard access**
+- [ ] **Step 6: Verify keyboard access, including the arm-gate**
 
-Tab through the page until the Open button receives focus (it should fade in on focus even without hovering); press Enter: confirm it opens the reader.
+Tab to a Title cell and press Enter: confirm it only arms the row (no editor). Press Enter again: confirm it now enters edit. Separately, Tab to the Open button (fades in on focus even without hovering) and press Enter: confirm it opens the reader, regardless of arm state.
 
 - [ ] **Step 7: Verify row arm/select still works, decoupled from opening**
 
@@ -500,6 +815,6 @@ kill %1 %2  # or: pkill -f "uvicorn app.main:app --port 8020"; pkill -f "vite.*5
 
 ## Self-Review Notes
 
-- **Spec coverage:** Row-click-no-longer-opens (Task 1 Steps 3, 6), Open button in Title cell only revealed on hover/focus (Task 1 Steps 4-5), click isolation via `stopPropagation` (Task 1 Step 4), works on `extracting` rows (Task 1 Step 1's rewritten test + Task 4 Step 8), keyboard operability via native button semantics (Task 1 Step 1's new test + Task 4 Step 6), `epics.md` companion update (Task 3), live verification of hover/focus CSS jsdom cannot see (Task 4). All spec sections have a corresponding task/step.
+- **Spec coverage:** Row-click-no-longer-opens (Task 1 Steps 4, 8), Open button in Title cell only revealed on hover/focus (Task 1 Steps 6-7), click isolation via `stopPropagation` (Task 1 Step 6), works on `extracting` rows (Task 1 Step 1's rewritten test + Task 4 Step 8), keyboard operability via native button semantics (Task 1 Step 1's new test + Task 4 Step 6), Title/Authors edit gated on arm state for both click and Enter (Task 1 Steps 2, 5-6 + Task 4 Steps 5-6), `epics.md` companion update (Task 3), live verification of hover/focus/arm-gate CSS and interaction jsdom cannot see (Task 4). All spec sections (including the addendum) have a corresponding task/step.
 - **Placeholder scan:** no TBD/TODO; every step has literal code or an exact command with expected output.
-- **Type consistency:** `onOpenRow: (docId: string) => void` used identically in Task 1 (button's `onClick`) and Task 2 (unchanged `LibraryPage.tsx` wiring), no signature drift. `EditableCell`'s `children: React.ReactNode` prop already accepts the new multi-element children (span + button) with no type change needed.
+- **Type consistency:** `onOpenRow: (docId: string) => void` used identically in Task 1 (button's `onClick`) and Task 2 (unchanged `LibraryPage.tsx` wiring), no signature drift. `EditableCell`'s new `armed: boolean`/`onArm: () => void` props are defined in Task 1 Step 5 and consumed identically at both call sites in Task 1 Step 6 (`armed={selectedId === row.doc_id}`, `onArm={() => setSelectedId(row.doc_id)}`). `children: React.ReactNode` already accepts the Title cell's new multi-element children (span + button) with no type change needed.
