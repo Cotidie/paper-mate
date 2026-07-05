@@ -214,6 +214,12 @@ Claude Sonnet 5 (claude-sonnet-5)
 - Updated `CollectionTable.test.tsx` (filename-without-extension fallback, select-without-opening, open-on-second-click, selection-moves-to-newly-clicked-row) and `LibraryPage.test.tsx` (click-select-then-click-open navigates to `/reader/:docId`); removed the now-superseded double-click tests.
 - Full suites green after both rounds: 97 backend tests, 879 client tests (44 files), typecheck clean. Live-smoked against fresh scratch servers with real imported PDFs: title shows without `.pdf`, first click selects (no navigation), second click on the selected row opens the reader with the correct file.
 
+**`bmad-code-review` via Codex (against `baseline_commit..HEAD` at round-1 completion, i.e. the story implementation + round-1 fix requests):** 0 decision-needed, 2 patch, 0 defer. Both patch findings addressed in this same session (before round 2's fixes above were committed, so the diff scope differs slightly from what Codex reviewed):
+- **Skeleton didn't reserve the count-line's space (AC-4 layout-jump violation):** `TableSkeleton` rendered a bare `<table>` while the loaded state wraps `<p className="collection-table__count">` + `<table>` in `.collection-table-wrap` — the count line's height only appeared once data landed. Fixed: `TableSkeleton` now renders the same `.collection-table-wrap` with an `aria-hidden` placeholder `<p className="collection-table__count">` containing a `.collection-table__count-skeleton` pulse bar sized to `calc(var(--type-caption-size) * var(--type-caption-leading))` (the real line's box height, not just its font-size). Verified 0px diff by measuring both variants' `getBoundingClientRect().height` in a live browser.
+- **`docs/API.md` didn't document the new `CollectionRow.filename` field:** added it to the `GET /api/library` example JSON, the field-provenance callout, and a new changelog entry (project rule: update `docs/API.md` in the same change as any `/api` contract edit).
+- Codex's "Reviewed, No Finding" notes (informational, no action): `reconcile_library`'s cache refresh preserves `folder_id`/`trashed`/`order` and `_upsert_paper_entry` stays idempotent; `onOpenRow`'s required-when-not-loading prop typing is correct; the row-click gesture is fine for now but future row-level features (inline edit, text selection) should mind click-handler conflicts — noted here for whoever builds those (Story 6.6/7.3), no action needed today since round 2 already replaced double-click with single-click-to-select anyway.
+- Full suites re-verified green after both doc/skeleton fixes: typecheck clean, 879/879 client tests (one unrelated `Reader.test.tsx` wheel-zoom flake reproduced only in the full-suite run, passed in isolation and on a full-suite rerun — not touched by this diff).
+
 ### File List
 
 - `client/src/api/client.ts` (modified: added `getLibrary()`)
@@ -231,3 +237,4 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `client/src/theme/components.css` (modified: `caption-uppercase` typography, `badge-pill`/`collection-table` dims)
 - `server/pyproject.toml` (modified: version `0.4.2 → 0.4.3`)
 - `server/uv.lock` (modified: re-locked after version bump)
+- `docs/API.md` (modified: documented `CollectionRow.filename`, Codex review finding)

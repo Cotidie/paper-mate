@@ -103,6 +103,13 @@
   animation: collection-table-pulse 1.4s ease-in-out infinite;
 }
 
+.collection-table__count-skeleton {
+  width: var(--collection-table-file-type-width);
+  /* Match the real count line's box height (font-size * line-height), not
+     just its font-size, so the skeleton->loaded swap has no jump. */
+  height: calc(var(--type-caption-size) * var(--type-caption-leading));
+}
+
 @media (prefers-reduced-motion: reduce) {
   .collection-table__skeleton-cell {
     animation: none;

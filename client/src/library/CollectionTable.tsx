@@ -44,21 +44,26 @@ function TableHead() {
 
 function TableSkeleton() {
   return (
-    <table className="collection-table" aria-busy="true">
-      <ColumnGroup />
-      <TableHead />
-      <tbody>
-        {Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
-          <tr key={i} className="collection-table__skeleton-row">
-            {COLUMNS.map((label) => (
-              <td key={label}>
-                <span className="collection-table__skeleton-cell" />
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="collection-table-wrap">
+      <p className="collection-table__count" aria-hidden="true">
+        <span className="collection-table__skeleton-cell collection-table__count-skeleton" />
+      </p>
+      <table className="collection-table" aria-busy="true">
+        <ColumnGroup />
+        <TableHead />
+        <tbody>
+          {Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
+            <tr key={i} className="collection-table__skeleton-row">
+              {COLUMNS.map((label) => (
+                <td key={label}>
+                  <span className="collection-table__skeleton-cell" />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
