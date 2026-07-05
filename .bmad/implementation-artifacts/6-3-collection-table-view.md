@@ -4,7 +4,7 @@ baseline_commit: 0288e545b57ffa5cf02a76439d50d0a942d0b71e
 
 # Story 6.3: Collection table view
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -220,11 +220,13 @@ Claude Sonnet 5 (claude-sonnet-5)
 - Codex's "Reviewed, No Finding" notes (informational, no action): `reconcile_library`'s cache refresh preserves `folder_id`/`trashed`/`order` and `_upsert_paper_entry` stays idempotent; `onOpenRow`'s required-when-not-loading prop typing is correct; the row-click gesture is fine for now but future row-level features (inline edit, text selection) should mind click-handler conflicts — noted here for whoever builds those (Story 6.6/7.3), no action needed today since round 2 already replaced double-click with single-click-to-select anyway.
 - Full suites re-verified green after both doc/skeleton fixes: typecheck clean, 879/879 client tests (one unrelated `Reader.test.tsx` wheel-zoom flake reproduced only in the full-suite run, passed in isolation and on a full-suite rerun — not touched by this diff).
 
+*Round 3 (fix request):* Double-clicking a Title/Authors cell triggered the browser's native word-selection (visible highlight) before the row's two click handlers ran select-then-open, so a double-click flashed a text selection en route to opening the reader. This is exactly the future risk Codex's round-2 review flagged. Fixed: `.collection-table tbody tr { user-select: none; }` (rows are click-to-select/click-to-open, not selectable text). Verified live: a real double-click (`dblclick`, not synthetic `fireEvent`) on the title cell navigates straight to `/reader/:docId` with `window.getSelection().toString() === ""` throughout. Typecheck clean, 879/879 client tests green (existing tests use synthetic `fireEvent.click`, unaffected by the CSS-only change).
+
 ### File List
 
 - `client/src/api/client.ts` (modified: added `getLibrary()`)
 - `client/src/library/CollectionTable.tsx` (new; later modified for `onOpenRow` + filename fallback)
-- `client/src/library/CollectionTable.css` (new; later modified: pointer cursor on row hover)
+- `client/src/library/CollectionTable.css` (new; later modified: pointer cursor on row hover, selected-row accent, count-line skeleton, `user-select: none` on rows)
 - `client/src/library/CollectionTable.test.tsx` (new; later modified: filename-fallback + double-click cases)
 - `server/app/models.py` (modified: `CollectionRow.filename`)
 - `server/app/storage/__init__.py` (modified: `_cache_from_meta` + `reconcile_library` backfill)
