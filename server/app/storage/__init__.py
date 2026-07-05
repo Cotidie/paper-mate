@@ -260,6 +260,7 @@ def _cache_from_meta(meta: DocMeta) -> dict:
         "added": meta.added,
         "file_type": meta.file_type,
         "status": meta.status,
+        "filename": meta.filename,
     }
 
 
@@ -312,8 +313,11 @@ def reconcile_library() -> None:
 
     A ``library/{doc_id}/`` dir absent from the index is added as
     Uncategorized (its cache built from its ``meta.json``); an index entry
-    whose dir has vanished is pruned. Best-effort: a dir whose ``meta.json``
-    is missing or corrupt is skipped, never fatal. Idempotent.
+    whose dir has vanished is pruned. A dir already indexed has its display
+    cache refreshed from its current ``meta.json`` (honors the "refreshed on
+    every index write" invariant for entries cached before a cache field
+    existed, e.g. `filename`). Best-effort: a dir whose ``meta.json`` is
+    missing or corrupt is skipped, never fatal. Idempotent.
     """
 
     def _reconcile(index: dict) -> dict:
@@ -325,6 +329,15 @@ def reconcile_library() -> None:
             on_disk_ids = {child.name for child in library_dir.iterdir() if child.is_dir()}
 
         papers[:] = [entry for entry in papers if entry["doc_id"] in on_disk_ids]
+
+        for entry in papers:
+            try:
+                meta = _read_meta(library_dir / entry["doc_id"])
+            except StorageError:
+                continue  # missing/corrupt meta.json — best-effort skip
+            if meta is None:
+                continue
+            entry.update(_cache_from_meta(meta))
 
         for doc_id in sorted(on_disk_ids - indexed_ids):
             try:

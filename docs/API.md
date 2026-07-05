@@ -137,7 +137,8 @@ null`) and untrashed until then.
         "status": "ready",
         "folder_id": null,
         "trashed": false,
-        "order": 0
+        "order": 0,
+        "filename": "a-paper.pdf"
       }
     ],
     "folders": []
@@ -148,7 +149,7 @@ null`) and untrashed until then.
 
 > `library.json` is the authoritative index for **cross-doc** state: the
 > folder tree, membership (paper → ≤1 folder), trash, and paper order. A
-> paper's **own** fields (title/authors/added/file_type/status) stay
+> paper's **own** fields (title/authors/added/file_type/status/filename) stay
 > authoritative in its `meta.json`; `CollectionRow`'s display fields are a
 > non-authoritative cache of that projection, refreshed from `meta.json` on
 > every index write, so this endpoint never opens N `meta.json` files
@@ -156,7 +157,9 @@ null`) and untrashed until then.
 > `library/{doc_id}/` dirs on disk (adds an unindexed dir as Uncategorized,
 > prunes an index entry whose dir vanished, best-effort skip on a
 > missing/corrupt `meta.json`) so papers imported before Story 6.2 (or
-> out-of-band) still show up here.
+> out-of-band) still show up here. `filename` (Story 6.3 fix) is optional
+> (`null` on a pre-existing row cached before the field existed) and backfills
+> on the next reconcile; the client falls back to it when `title` is null.
 
 ## Reserved (not yet built)
 
@@ -171,6 +174,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-05 (Story 6.3 fix, user fix request):** `CollectionRow` gains `filename: str | null` (additive, default `null`; `GET /api/library`'s `Library` response). Populated from `meta.json` on every index write; `reconcile_library()` now also refreshes already-indexed entries (not just newly-discovered dirs), so a `library.json` row cached before this field existed backfills it on the next server start. The client falls back to this (extension stripped) when `title` is null.
 - **2026-07-05 (Story 6.2):** added `GET /api/library` (the collection index in one read: `Library = { papers: CollectionRow[], folders: Folder[] }`; 500 on a corrupt/unknown-version `library.json`). `DocMeta`/`Doc` gain `authors: str | null`, `file_type: "pdf" | "note"`, `status: "extracting" | "ready" | "enrich-skipped" | "parse-failed"` (additive, no `schema_version` bump). `POST /api/docs` now also indexes the import into `library.json`; boot reconcile aligns the index with on-disk `library/{doc_id}/` dirs. `GET /api/docs` list stays reserved (the collection list is `GET /api/library`, not a docs scan).
 - **2026-07-05 (Story 6.1):** added `GET /api/docs/{doc_id}` (own metadata; 404 unknown doc, 500 corrupt/unknown-version disk record). `GET /api/docs` stays reserved (Story 6.2).
 - **2026-07-03 (comment bubble resize, user feature request):** `Style` gains `bubble_width: float | null` + `bubble_height: float | null` (comment-only; `null` = default CSS size; additive, no format break, AD-8). No endpoints added.

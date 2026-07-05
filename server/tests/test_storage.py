@@ -361,6 +361,7 @@ def test_import_indexes_paper_as_uncategorized(data_root):
     assert row.added == meta.added
     assert row.file_type == meta.file_type == "pdf"
     assert row.status == meta.status == "ready"
+    assert row.filename == meta.filename == "indexed.pdf"
 
 
 def test_reimport_refreshes_cache_without_duplicate_or_disturbing_order(data_root):
@@ -391,6 +392,24 @@ def test_reconcile_adds_dir_missing_from_index(data_root):
     assert library.papers[0].doc_id == doc_id
     assert library.papers[0].folder_id is None
     assert library.papers[0].trashed is False
+
+
+def test_reconcile_backfills_filename_for_pre_existing_entry(data_root):
+    """Fix: a library.json entry cached before `filename` existed on
+    CollectionRow (e.g. one written by an earlier server version) must gain it
+    on the next reconcile, without waiting for a re-import."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "backfill-me.pdf")
+
+    library_path = data_root / "library.json"
+    payload = json.loads(library_path.read_text())
+    del payload["papers"][0]["filename"]
+    library_path.write_text(json.dumps(payload))
+
+    storage.reconcile_library()
+
+    library = storage.read_library()
+    assert library.papers[0].filename == "backfill-me.pdf"
 
 
 def test_reconcile_prunes_entry_whose_dir_vanished(data_root):
