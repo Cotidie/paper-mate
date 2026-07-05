@@ -95,10 +95,10 @@ function renderLibrary() {
 }
 
 describe("Library shell (Story 6.1, AC-3)", () => {
-  it("renders the empty-collection dropzone, app identity, and folder panel", async () => {
+  it("renders the empty-collection dropzone and folder panel, with no app-name top bar", async () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Drop PDFs here")).toBeTruthy());
-    expect(screen.getByText("Paper Mate")).toBeTruthy();
+    expect(screen.queryByText("Paper Mate")).toBeNull();
     expect(screen.getByLabelText("Folders")).toBeTruthy();
   });
 
@@ -107,6 +107,27 @@ describe("Library shell (Story 6.1, AC-3)", () => {
     const add = screen.getByRole("button", { name: /add/i });
     add.focus();
     expect(document.activeElement).toBe(add);
+  });
+
+  it("shows the count and an Add control in one row once the library has papers", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("1 files in library")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /add/i })).toBeTruthy();
+  });
+
+  it("shows a count skeleton (not the real count) while the library is still loading", async () => {
+    let resolveFetch: (lib: api.Library) => void = () => {};
+    vi.spyOn(api, "getLibrary").mockReturnValue(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+    renderLibrary();
+    expect(document.querySelector(".library-toolbar__count-skeleton")).toBeTruthy();
+    expect(screen.queryByText(/files in library/)).toBeNull();
+    resolveFetch({ papers: [], folders: [] });
+    await waitFor(() => expect(screen.getByText("Drop PDFs here")).toBeTruthy());
   });
 });
 

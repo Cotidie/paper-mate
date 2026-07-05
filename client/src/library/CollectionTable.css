@@ -7,15 +7,6 @@
   min-width: 0;
 }
 
-.collection-table__count {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--type-caption-size);
-  font-weight: var(--type-caption-weight);
-  line-height: var(--type-caption-leading);
-  color: var(--color-muted);
-}
-
 .collection-table {
   width: 100%;
   table-layout: fixed;
@@ -119,13 +110,6 @@
   border-radius: var(--radius-xs);
   background: var(--color-surface-strong);
   animation: collection-table-pulse 1.4s ease-in-out infinite;
-}
-
-.collection-table__count-skeleton {
-  width: var(--collection-table-file-type-width);
-  /* Match the real count line's box height (font-size * line-height), not
-     just its font-size, so the skeleton->loaded swap has no jump. */
-  height: calc(var(--type-caption-size) * var(--type-caption-leading));
 }
 
 @media (prefers-reduced-motion: reduce) {

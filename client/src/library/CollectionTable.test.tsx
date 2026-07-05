@@ -46,12 +46,16 @@ const rows: CollectionRow[] = [
 function noop() {}
 
 describe("CollectionTable (Story 6.3)", () => {
-  it("renders the four column headers and the count line", () => {
+  it("renders the four column headers", () => {
     render(<CollectionTable rows={rows} onOpenRow={noop} />);
     for (const label of ["Title", "Authors", "Added", "File type"]) {
       expect(screen.getByRole("columnheader", { name: label })).toBeTruthy();
     }
-    expect(screen.getByText("3 files in library")).toBeTruthy();
+  });
+
+  it("never renders a count line itself (Library layout redesign: LibraryPage owns it)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} />);
+    expect(screen.queryByText(/files in library/)).toBeNull();
   });
 
   it("renders a human date, not the raw ISO string", () => {
@@ -138,17 +142,6 @@ describe("CollectionTable pending rows (Story 6.4)", () => {
 
     const allRows = document.querySelectorAll("tbody tr");
     expect(allRows[0]).toBe(pendingRow);
-  });
-
-  it("does not count pending rows in the count line", () => {
-    render(
-      <CollectionTable
-        rows={rows}
-        onOpenRow={noop}
-        pendingRows={[{ tempId: "t1", filename: "brand-new.pdf" }]}
-      />,
-    );
-    expect(screen.getByText("3 files in library")).toBeTruthy();
   });
 
   it("never opens or selects a pending row on click", () => {

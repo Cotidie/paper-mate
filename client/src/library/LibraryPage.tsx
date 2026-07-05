@@ -145,29 +145,7 @@ export default function LibraryPage() {
 
   return (
     <div className="library">
-      <header className="library-top-bar" role="banner">
-        <span className="library-top-bar__brand">Paper Mate</span>
-        <button type="button" className="library-add-button" onClick={() => inputRef.current?.click()}>
-          <Plus aria-hidden />
-          Add
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf"
-          multiple
-          className="library-add-input"
-          data-testid="library-add-input"
-          onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            // Reset so re-picking the same file(s) after a failure refires change.
-            e.target.value = "";
-            if (files.length > 0) uploadFiles(files);
-          }}
-        />
-      </header>
       <div className="library-body">
-        {/* Static bounded placeholder (folder CRUD + All/Uncategorized are Epic 7). */}
         <aside className="library-folder-panel" aria-label="Folders">
           <span className="library-folder-panel__label">Library</span>
           <span className="library-folder-panel__item library-folder-panel__item--active">All</span>
@@ -192,6 +170,40 @@ export default function LibraryPage() {
             if (files.length > 0) uploadFiles(files);
           }}
         >
+          {isTableLayout && (
+            <div className="library-toolbar">
+              {loading && papers.length === 0 && pending.length === 0 ? (
+                <span
+                  className="collection-table__skeleton-cell library-toolbar__count-skeleton"
+                  aria-hidden="true"
+                />
+              ) : (
+                <p className="library-toolbar__count">{papers.length} files in library</p>
+              )}
+              <button
+                type="button"
+                className="library-add-button"
+                onClick={() => inputRef.current?.click()}
+              >
+                <Plus aria-hidden />
+                Add
+              </button>
+            </div>
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf"
+            multiple
+            className="library-add-input"
+            data-testid="library-add-input"
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              // Reset so re-picking the same file(s) after a failure refires change.
+              e.target.value = "";
+              if (files.length > 0) uploadFiles(files);
+            }}
+          />
           {loading && papers.length === 0 && pending.length === 0 ? (
             <CollectionTable loading />
           ) : papers.length > 0 || pending.length > 0 ? (

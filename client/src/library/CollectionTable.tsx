@@ -63,9 +63,6 @@ function TableHead() {
 function TableSkeleton() {
   return (
     <div className="collection-table-wrap">
-      <p className="collection-table__count" aria-hidden="true">
-        <span className="collection-table__skeleton-cell collection-table__count-skeleton" />
-      </p>
       <table className="collection-table" aria-busy="true">
         <ColumnGroup />
         <TableHead />
@@ -121,7 +118,6 @@ export default function CollectionTable(props: CollectionTableProps) {
 
   return (
     <div className="collection-table-wrap">
-      <p className="collection-table__count">{rows.length} files in library</p>
       <table className="collection-table">
         <ColumnGroup />
         <TableHead />
