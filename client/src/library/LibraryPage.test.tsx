@@ -16,6 +16,8 @@ const fakeDoc: api.Doc = {
   page_count: 1,
   added: "2026-07-05T00:00:00+00:00",
   last_opened: "2026-07-05T00:00:00+00:00",
+  file_type: "pdf",
+  status: "ready",
   schema_version: 1,
 };
 

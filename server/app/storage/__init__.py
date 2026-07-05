@@ -14,6 +14,8 @@ import hashlib
 import json
 import os
 import tempfile
+import threading
+from collections.abc import Callable
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -21,13 +23,16 @@ from pathlib import Path
 from pydantic import ValidationError
 from pypdf import PdfReader
 
-from app.models import Annotation, DocMeta
+from app.models import Annotation, CollectionRow, DocMeta, Folder, Library
 
 #: Current ``meta.json`` schema version. Unknown versions are rejected, not guessed.
 META_SCHEMA_VERSION = 1
 
 #: Current ``annotations.json`` schema version (H9: disk envelope, API body is bare).
 ANNOTATIONS_SCHEMA_VERSION = 1
+
+#: Current ``library.json`` schema version (AD-L1). Additive-only evolution.
+LIBRARY_SCHEMA_VERSION = 1
 
 
 class StorageError(Exception):
@@ -59,6 +64,10 @@ class DocumentNotFoundError(StorageError):
     """No imported document (or its ``source.pdf``) exists for the given ``doc_id``."""
 
 
+class CorruptLibraryError(StorageError):
+    """An on-disk ``library.json`` is unreadable or has an invalid shape."""
+
+
 def _data_root() -> Path:
     """Resolve the storage root: ``PAPER_MATE_DATA`` env, default ``~/.paper-mate``.
 
@@ -79,6 +88,12 @@ def _doc_dir(doc_id: str) -> Path:
     if not candidate.is_relative_to(library):
         raise StorageError("resolved document path escapes the library root")
     return candidate
+
+
+def _library_path() -> Path:
+    """Resolve ``~/.paper-mate/library.json`` — a sibling of ``library/``, not
+    inside it (the collection index is not a per-doc artifact)."""
+    return _data_root() / "library.json"
 
 
 def _now_iso() -> str:
@@ -177,6 +192,161 @@ def _write_meta(doc_dir: Path, meta: DocMeta) -> None:
     _atomic_write(doc_dir / "meta.json", meta.model_dump_json(indent=2).encode("utf-8"))
 
 
+# --- Collection index: library.json (AD-L1/AD-L7, Story 6.2) ---------------
+#
+# ``library.json`` is the authoritative cross-doc index (folder tree,
+# membership, trash, order) plus a non-authoritative meta-derived display
+# cache, refreshed on every write. Every mutation is a serialized
+# read-modify-write under one process-level lock (AD-L7); reads are
+# lock-free — the atomic temp+rename write means a reader always sees a
+# complete old-or-new file, never a torn one.
+
+_index_lock = threading.Lock()
+
+
+def _default_index() -> dict:
+    return {"schema_version": LIBRARY_SCHEMA_VERSION, "folders": [], "papers": []}
+
+
+def _read_index_unlocked() -> dict:
+    path = _library_path()
+    if not path.is_file():
+        return _default_index()
+    try:
+        payload = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise CorruptLibraryError(f"unreadable library.json: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise CorruptLibraryError("library.json is not an object")
+    version = payload.get("schema_version")
+    if version != LIBRARY_SCHEMA_VERSION:
+        raise CorruptLibraryError(f"unknown library schema_version: {version!r}")
+    if not isinstance(payload.get("folders"), list) or not isinstance(payload.get("papers"), list):
+        raise CorruptLibraryError("library.json has an invalid shape")
+    # Every mutator below does raw dict access on these two org-authoritative
+    # keys (doc_id/order) before a row ever reaches read_library's Pydantic
+    # validation; check them here so a hand-corrupted file surfaces as
+    # CorruptLibraryError, never a raw KeyError escaping the StorageError
+    # taxonomy (AR-11 single envelope, AC-4 reconcile must never crash boot).
+    for entry in payload["papers"]:
+        if not isinstance(entry, dict) or "doc_id" not in entry or "order" not in entry:
+            raise CorruptLibraryError("library.json has a malformed paper entry")
+    return payload
+
+
+def _write_index(index: dict) -> None:
+    _atomic_write(_library_path(), json.dumps(index, indent=2).encode("utf-8"))
+
+
+def _mutate_index(mutator: Callable[[dict], dict]) -> dict:
+    """Serialize one read-modify-write of the whole index (AL-7).
+
+    Every ``library.json`` write goes through this single path: acquire the
+    process-level lock, read the current index (or a fresh default), let
+    ``mutator`` update it in place, then commit atomically.
+    """
+    with _index_lock:
+        index = mutator(_read_index_unlocked())
+        _write_index(index)
+        return index
+
+
+def _cache_from_meta(meta: DocMeta) -> dict:
+    """Project a ``DocMeta`` to the display-cache fields cached in a paper's
+    ``library.json`` entry (meta always wins on conflict, AC-2)."""
+    return {
+        "title": meta.title,
+        "authors": meta.authors,
+        "added": meta.added,
+        "file_type": meta.file_type,
+        "status": meta.status,
+    }
+
+
+def _next_order(papers: list[dict]) -> int:
+    return max((p["order"] for p in papers), default=-1) + 1
+
+
+def _upsert_paper_entry(index: dict, doc_id: str, meta: DocMeta) -> dict:
+    """Insert or refresh a paper's ``library.json`` entry from its meta.
+
+    A new import appends an Uncategorized/untrashed entry at the next order.
+    An idempotent re-import only refreshes the cache, leaving an existing
+    ``folder_id``/``trashed``/``order`` untouched.
+    """
+    papers = index["papers"]
+    for entry in papers:
+        if entry["doc_id"] == doc_id:
+            entry.update(_cache_from_meta(meta))
+            return index
+    papers.append(
+        {
+            "doc_id": doc_id,
+            "folder_id": None,
+            "trashed": False,
+            "order": _next_order(papers),
+            **_cache_from_meta(meta),
+        }
+    )
+    return index
+
+
+def read_library() -> Library:
+    """Read the collection in one lock-free read (AC-3).
+
+    Projects straight from ``library.json``'s stored display cache — no
+    ``meta.json`` fan-out (that is the whole point of the cache, LNFR-4).
+    An absent file is an empty collection, not an error.
+    """
+    index = _read_index_unlocked()
+    try:
+        papers = [CollectionRow.model_validate(p) for p in index["papers"]]
+        folders = [Folder.model_validate(f) for f in index["folders"]]
+    except (ValidationError, TypeError, KeyError) as exc:
+        raise CorruptLibraryError(f"invalid library.json shape: {exc}") from exc
+    return Library(papers=papers, folders=folders)
+
+
+def reconcile_library() -> None:
+    """Align ``library.json`` with what is actually on disk (AC-4).
+
+    A ``library/{doc_id}/`` dir absent from the index is added as
+    Uncategorized (its cache built from its ``meta.json``); an index entry
+    whose dir has vanished is pruned. Best-effort: a dir whose ``meta.json``
+    is missing or corrupt is skipped, never fatal. Idempotent.
+    """
+
+    def _reconcile(index: dict) -> dict:
+        papers = index["papers"]
+        indexed_ids = {entry["doc_id"] for entry in papers}
+        library_dir = _data_root() / "library"
+        on_disk_ids: set[str] = set()
+        if library_dir.is_dir():
+            on_disk_ids = {child.name for child in library_dir.iterdir() if child.is_dir()}
+
+        papers[:] = [entry for entry in papers if entry["doc_id"] in on_disk_ids]
+
+        for doc_id in sorted(on_disk_ids - indexed_ids):
+            try:
+                meta = _read_meta(library_dir / doc_id)
+            except StorageError:
+                continue  # missing/corrupt meta.json — best-effort skip
+            if meta is None:
+                continue
+            papers.append(
+                {
+                    "doc_id": doc_id,
+                    "folder_id": None,
+                    "trashed": False,
+                    "order": _next_order(papers),
+                    **_cache_from_meta(meta),
+                }
+            )
+        return index
+
+    _mutate_index(_reconcile)
+
+
 def source_path(doc_id: str) -> Path:
     """Resolve a document's stored ``source.pdf`` path (AD-9: storage owns the root).
 
@@ -240,6 +410,7 @@ def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
             _atomic_write(source, raw_bytes)
         updated = existing.model_copy(update={"last_opened": now})
         _write_meta(doc_dir, updated)
+        _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, updated))
         return doc_id, updated
 
     # New document.
@@ -253,6 +424,7 @@ def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
         schema_version=META_SCHEMA_VERSION,
     )
     _write_meta(doc_dir, meta)
+    _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, meta))
     return doc_id, meta
 
 

@@ -7,6 +7,12 @@ import type { components } from "./schema";
 export type HealthStatus = components["schemas"]["HealthStatus"];
 export type Doc = components["schemas"]["Doc"];
 
+// Collection index (AD-L1, Story 6.2). No fetch function yet: Story 6.3's
+// collection table is the first consumer and adds `getLibrary()` alongside it.
+export type CollectionRow = components["schemas"]["CollectionRow"];
+export type Folder = components["schemas"]["Folder"];
+export type Library = components["schemas"]["Library"];
+
 // Annotation entity (AD-5), generated from the Pydantic model — the store and
 // overlay import the shape from here, never hand-author it (AD-3). `Anchor` is
 // the discriminated union (`anchor.kind`); the Annotated union has no named

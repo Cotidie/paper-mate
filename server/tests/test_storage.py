@@ -6,6 +6,8 @@ pin that contract.
 """
 
 import json
+import shutil
+import threading
 
 import pytest
 
@@ -44,19 +46,26 @@ def test_import_writes_source_and_meta(data_root):
     assert (doc_dir / "source.pdf").read_bytes() == raw
 
     on_disk = json.loads((doc_dir / "meta.json").read_text())
-    # Exactly the 6-field storage schema, no doc_id inside meta.json (AD-8).
+    # Exactly the 9-field storage schema (Story 6.2 adds authors/file_type/
+    # status), no doc_id inside meta.json (AD-8).
     assert set(on_disk) == {
         "filename",
         "title",
         "page_count",
         "added",
         "last_opened",
+        "authors",
+        "file_type",
+        "status",
         "schema_version",
     }
     assert on_disk["filename"] == "a-paper.pdf"
     assert on_disk["title"] == "A Paper"
     assert on_disk["page_count"] == 3
     assert on_disk["schema_version"] == 1
+    assert on_disk["authors"] is None
+    assert on_disk["file_type"] == "pdf"
+    assert on_disk["status"] == "ready"
     assert meta.page_count == 3
 
 
@@ -324,3 +333,150 @@ def test_read_annotations_foreign_doc_id_raises_corrupt(data_root):
     )
     with pytest.raises(storage.CorruptAnnotationsError):
         storage.read_annotations(doc_id)
+
+
+# --- library.json: collection index (Story 6.2, AC 1/2/4/5/7) --------------
+
+
+def test_read_library_on_fresh_root_returns_empty(data_root):
+    library = storage.read_library()
+    assert library.papers == []
+    assert library.folders == []
+
+
+def test_import_indexes_paper_as_uncategorized(data_root):
+    raw = make_pdf_bytes(pages=2, title="Indexed")
+    doc_id, meta = storage.import_pdf(raw, "indexed.pdf")
+
+    library = storage.read_library()
+    assert len(library.papers) == 1
+    row = library.papers[0]
+    assert row.doc_id == doc_id
+    assert row.folder_id is None
+    assert row.trashed is False
+    assert row.order == 0
+    # Cache matches meta (AC-2).
+    assert row.title == meta.title == "Indexed"
+    assert row.authors == meta.authors
+    assert row.added == meta.added
+    assert row.file_type == meta.file_type == "pdf"
+    assert row.status == meta.status == "ready"
+
+
+def test_reimport_refreshes_cache_without_duplicate_or_disturbing_order(data_root):
+    raw1 = make_pdf_bytes(pages=1, title="First")
+    doc_id1, _ = storage.import_pdf(raw1, "first.pdf")
+    raw2 = make_pdf_bytes(pages=1, title="Second")
+    doc_id2, _ = storage.import_pdf(raw2, "second.pdf")
+
+    # Re-import the first doc's bytes; its meta title is stable (idempotent
+    # import doesn't change title), but the entry must not duplicate or move.
+    storage.import_pdf(raw1, "renamed-first.pdf")
+
+    library = storage.read_library()
+    assert [p.doc_id for p in library.papers] == [doc_id1, doc_id2]
+    assert [p.order for p in library.papers] == [0, 1]
+
+
+def test_reconcile_adds_dir_missing_from_index(data_root):
+    raw = make_pdf_bytes(pages=1, title="Pre-existing")
+    doc_id, _ = storage.import_pdf(raw, "pre.pdf")
+    # Simulate a pre-6.2 import: strip its library.json entry.
+    (data_root / "library.json").unlink()
+
+    storage.reconcile_library()
+
+    library = storage.read_library()
+    assert len(library.papers) == 1
+    assert library.papers[0].doc_id == doc_id
+    assert library.papers[0].folder_id is None
+    assert library.papers[0].trashed is False
+
+
+def test_reconcile_prunes_entry_whose_dir_vanished(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "gone.pdf")
+
+    shutil.rmtree(data_root / "library" / doc_id)
+
+    storage.reconcile_library()
+
+    library = storage.read_library()
+    assert library.papers == []
+
+
+def test_reconcile_skips_dir_with_missing_or_corrupt_meta(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "corrupt.pdf")
+    (data_root / "library.json").unlink()
+    (data_root / "library" / doc_id / "meta.json").write_text("{ not json")
+
+    storage.reconcile_library()  # must not raise
+
+    library = storage.read_library()
+    assert library.papers == []
+
+
+def test_reconcile_is_idempotent(data_root):
+    raw = make_pdf_bytes(pages=1)
+    storage.import_pdf(raw, "idem.pdf")
+
+    storage.reconcile_library()
+    first = storage.read_library()
+    storage.reconcile_library()
+    second = storage.read_library()
+
+    assert [p.model_dump() for p in first.papers] == [p.model_dump() for p in second.papers]
+
+
+def test_malformed_paper_row_raises_corrupt_not_keyerror(data_root):
+    """Codex review: a hand-corrupted row missing doc_id/order must surface as
+    CorruptLibraryError (AR-11 envelope, AC-4 never-crash-boot), not a raw
+    KeyError from _upsert_paper_entry/_reconcile/_next_order's bracket access."""
+    raw = make_pdf_bytes(pages=1)
+    storage.import_pdf(raw, "v.pdf")
+    library_path = data_root / "library.json"
+    payload = json.loads(library_path.read_text())
+    payload["papers"][0].pop("order")
+    library_path.write_text(json.dumps(payload))
+
+    with pytest.raises(storage.CorruptLibraryError):
+        storage.read_library()
+
+    raw2 = make_pdf_bytes(pages=1, title="Other")
+    with pytest.raises(storage.CorruptLibraryError):
+        storage.import_pdf(raw2, "other.pdf")
+
+    with pytest.raises(storage.CorruptLibraryError):
+        storage.reconcile_library()
+
+
+def test_read_library_unknown_schema_version_raises_corrupt(data_root):
+    raw = make_pdf_bytes(pages=1)
+    storage.import_pdf(raw, "v.pdf")
+    library_path = data_root / "library.json"
+    payload = json.loads(library_path.read_text())
+    payload["schema_version"] = 99
+    library_path.write_text(json.dumps(payload))
+
+    with pytest.raises(storage.CorruptLibraryError):
+        storage.read_library()
+
+
+def test_concurrent_imports_serialize_without_lost_updates(data_root):
+    """AL-7: fire concurrent imports from threads; the lock must prevent a
+    lost update to the index (every doc ends up indexed exactly once)."""
+    raws = [make_pdf_bytes(pages=1, title=f"Doc {i}") for i in range(8)]
+    expected_ids = {sha256_hex(r) for r in raws}
+
+    threads = [threading.Thread(target=storage.import_pdf, args=(r, f"{i}.pdf")) for i, r in enumerate(raws)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    library = storage.read_library()
+    assert {p.doc_id for p in library.papers} == expected_ids
+    assert len(library.papers) == len(expected_ids)
+    # Orders are unique (no lost/overwritten append).
+    assert sorted(p.order for p in library.papers) == list(range(len(expected_ids)))

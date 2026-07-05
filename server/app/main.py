@@ -10,7 +10,10 @@ never shadows ``/api/*`` — the API router is registered first and the catch-al
 explicitly rejects ``api`` paths.
 """
 
+import logging
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -20,10 +23,28 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app import storage
 from app.routes import api_router
 from app.version import get_version
 
-app = FastAPI(title="Paper Mate", version=get_version())
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Boot reconcile (AC-4/AC-6): align ``library.json`` with what is on disk
+    before serving. The data root resolves lazily inside ``reconcile_library``
+    so the test ``data_root`` fixture is honored. Best-effort: a reconcile
+    failure logs and never aborts boot (a corrupt single doc must not brick
+    the app)."""
+    try:
+        storage.reconcile_library()
+    except storage.StorageError:
+        logger.exception("library reconcile failed at startup; continuing")
+    yield
+
+
+app = FastAPI(title="Paper Mate", version=get_version(), lifespan=_lifespan)
 
 # API first so /api/* always wins over the SPA catch-all.
 app.include_router(api_router)
