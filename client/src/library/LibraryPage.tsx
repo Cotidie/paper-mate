@@ -1,33 +1,74 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Plus } from "@phosphor-icons/react";
 import "@/library/LibraryPage.css";
 import Toast from "@/components/Toast/Toast";
 import CollectionTable from "@/library/CollectionTable";
-import { getLibrary, uploadDoc, type Library } from "@/api/client";
+import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
+import { useBulkUpload } from "@/library/useBulkUpload";
+import { getLibrary, type CollectionRow, type Doc, type Library } from "@/api/client";
+
+/** Project an upload's `Doc` into the display-cache `CollectionRow` shape
+ *  (Story 6.4): a freshly stored paper is never in a folder or trashed, and
+ *  sorts after every row currently known — matching the backend's own
+ *  append-at-`max(order)+1` semantics (`_upsert_paper_entry`), so the row's
+ *  position is stable across the AC-7 post-batch refetch rather than
+ *  settling at the top only to jump to the bottom once the authoritative
+ *  reconcile lands (client-side re-sort, e.g. newest-first, is Story 7.4's
+ *  "display sort/filter controls" — out of scope here). */
+function docToRow(doc: Doc, papers: CollectionRow[]): CollectionRow {
+  const maxOrder = papers.reduce((max, p) => Math.max(max, p.order), -1);
+  return {
+    doc_id: doc.doc_id,
+    title: doc.title ?? null,
+    authors: doc.authors ?? null,
+    added: doc.added,
+    file_type: doc.file_type,
+    status: doc.status,
+    folder_id: null,
+    trashed: false,
+    order: maxOrder + 1,
+    filename: doc.filename,
+  };
+}
 
 /**
- * Library route (`/`, Story 6.1 shell + Story 6.3 table): the app's front
- * door. Fetches the collection on mount and renders it as a read-only table
- * (loading skeleton / empty copy / error toast per fetch state). The Add
- * affordance is a temporary single-file bridge (uploadDoc → navigate to the
- * reader) that keeps the app usable end-to-end until Story 6.4 lands bulk
- * optimistic upload + a real dropzone.
+ * Library route (`/`, Story 6.1 shell + Story 6.3 table + Story 6.4 bulk
+ * upload): the app's front door. Fetches the collection on mount and renders
+ * it as a read-only table (loading skeleton / dropzone-empty / error toast
+ * per fetch state), with the bulk-upload machine (`useBulkUpload`) streaming
+ * optimistic rows in as files upload.
  */
 export default function LibraryPage() {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [library, setLibrary] = useState<Library | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const mountedRef = useRef(true);
+  // Monotonic sequence: only the most-recently-issued `getLibrary()` may
+  // apply its result, so a slow initial fetch can't land after (and clobber)
+  // a faster post-batch reconcile, or vice versa.
+  const fetchSeqRef = useRef(0);
+
+  useEffect(() => {
+    // StrictMode dev double-invokes effects (mount, cleanup, re-mount); reset
+    // to true on setup, or the fake cleanup permanently latches this false
+    // and the post-batch reconcile silently no-ops (see useBulkUpload).
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+    const seq = ++fetchSeqRef.current;
     getLibrary()
       .then((lib) => {
-        if (!cancelled) setLibrary(lib);
+        if (!cancelled && seq === fetchSeqRef.current) setLibrary(lib);
       })
       .catch(() => {
         if (!cancelled) {
@@ -43,33 +84,57 @@ export default function LibraryPage() {
     };
   }, []);
 
-  const papers = library?.papers ?? [];
-  const isTableLayout = loading || papers.length > 0;
+  const handleResolved = useCallback((doc: Doc) => {
+    setLibrary((prev) => {
+      const papers = prev?.papers ?? [];
+      const row = docToRow(doc, papers);
+      const existingIndex = papers.findIndex((p) => p.doc_id === doc.doc_id);
+      const nextPapers =
+        existingIndex >= 0 ? papers.map((p, i) => (i === existingIndex ? row : p)) : [...papers, row];
+      return { papers: nextPapers, folders: prev?.folders ?? [] };
+    });
+  }, []);
 
-  async function handleAdd(file: File) {
-    if (busy) return; // single-flight, mirrors the old dropzone's guard
-    setBusy(true);
-    setToast(null);
-    try {
-      const doc = await uploadDoc(file);
-      navigate(`/reader/${doc.doc_id}`);
-    } catch {
-      setToast("Couldn't add this file.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const handleBatchSettled = useCallback(() => {
+    // One authoritative reconcile after the batch (AC-7) — not a poll.
+    const seq = ++fetchSeqRef.current;
+    getLibrary()
+      .then((lib) => {
+        if (mountedRef.current && seq === fetchSeqRef.current) {
+          setLibrary(lib);
+          setLoadFailed(false);
+        }
+      })
+      .catch(() => {
+        // Best-effort: each resolved upload already landed via handleResolved.
+      });
+  }, []);
+
+  const handleFailed = useCallback((count: number) => {
+    setToast(count === 1 ? "Couldn't add this file." : `Couldn't add ${count} files.`);
+  }, []);
+
+  const { pending, uploadFiles } = useBulkUpload({
+    onResolved: handleResolved,
+    onBatchSettled: handleBatchSettled,
+    onFailed: handleFailed,
+  });
+
+  const papers = library?.papers ?? [];
+  const isTableLayout = loading || papers.length > 0 || pending.length > 0;
+  const mainClassName = [
+    "library-main",
+    isTableLayout && "library-main--table",
+    dragOver && "library-main--drag-over",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="library">
       <header className="library-top-bar" role="banner">
         <span className="library-top-bar__brand">Paper Mate</span>
-        <button
-          type="button"
-          className="library-add-button"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-        >
+        <button type="button" className="library-add-button" onClick={() => inputRef.current?.click()}>
           <Plus aria-hidden />
           Add
         </button>
@@ -77,13 +142,14 @@ export default function LibraryPage() {
           ref={inputRef}
           type="file"
           accept="application/pdf"
+          multiple
           className="library-add-input"
           data-testid="library-add-input"
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            // Reset so re-picking the same file after a failure refires change.
+            const files = Array.from(e.target.files ?? []);
+            // Reset so re-picking the same file(s) after a failure refires change.
             e.target.value = "";
-            if (file) void handleAdd(file);
+            if (files.length > 0) uploadFiles(files);
           }}
         />
       </header>
@@ -92,13 +158,31 @@ export default function LibraryPage() {
         <aside className="library-folder-panel" aria-label="Folders">
           <span className="library-folder-panel__placeholder">All</span>
         </aside>
-        <main className={isTableLayout ? "library-main library-main--table" : "library-main"} role="main">
-          {loading ? (
+        <main
+          className={mainClassName}
+          role="main"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) uploadFiles(files);
+          }}
+        >
+          {loading && papers.length === 0 && pending.length === 0 ? (
             <CollectionTable loading />
-          ) : papers.length > 0 ? (
-            <CollectionTable rows={papers} onOpenRow={(docId) => navigate(`/reader/${docId}`)} />
+          ) : papers.length > 0 || pending.length > 0 ? (
+            <CollectionTable
+              rows={papers}
+              pendingRows={pending}
+              onOpenRow={(docId) => navigate(`/reader/${docId}`)}
+            />
           ) : loadFailed ? null : (
-            <p className="library-empty-copy">No papers yet.</p>
+            <EmptyDropzone onFiles={uploadFiles} />
           )}
         </main>
       </div>

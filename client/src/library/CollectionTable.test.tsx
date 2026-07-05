@@ -121,6 +121,53 @@ describe("CollectionTable (Story 6.3)", () => {
   });
 });
 
+describe("CollectionTable pending rows (Story 6.4)", () => {
+  it("renders pending rows above real rows with the muted extracting treatment", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        pendingRows={[{ tempId: "t1", filename: "brand-new.pdf" }]}
+      />,
+    );
+    expect(screen.getByText("brand-new")).toBeTruthy();
+    expect(screen.getByText("Extracting")).toBeTruthy();
+    const pendingRow = screen.getByText("brand-new").closest("tr")!;
+    expect(pendingRow.className).toContain("collection-table__row--extracting");
+    expect(pendingRow.getAttribute("aria-disabled")).toBe("true");
+
+    const allRows = document.querySelectorAll("tbody tr");
+    expect(allRows[0]).toBe(pendingRow);
+  });
+
+  it("does not count pending rows in the count line", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        pendingRows={[{ tempId: "t1", filename: "brand-new.pdf" }]}
+      />,
+    );
+    expect(screen.getByText("3 files in library")).toBeTruthy();
+  });
+
+  it("never opens or selects a pending row on click", () => {
+    const onOpenRow = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={onOpenRow}
+        pendingRows={[{ tempId: "t1", filename: "brand-new.pdf" }]}
+      />,
+    );
+    const pendingRow = screen.getByText("brand-new").closest("tr")!;
+    fireEvent.click(pendingRow);
+    fireEvent.click(pendingRow);
+    expect(onOpenRow).not.toHaveBeenCalled();
+    expect(pendingRow.getAttribute("aria-selected")).toBeNull();
+  });
+});
+
 describe("formatAdded", () => {
   it("returns the raw string for an unparseable date", () => {
     expect(formatAdded("not-a-date")).toBe("not-a-date");

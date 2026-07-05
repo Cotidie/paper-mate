@@ -87,6 +87,18 @@
   color: var(--color-muted);
 }
 
+/* Status-driven row treatment (Story 6.4 introduces the seam for optimistic
+   rows; Story 6.5 reuses it for real settled `extracting` rows). Muted,
+   non-interactive: no pointer cursor, no hover highlight. */
+.collection-table__row--extracting {
+  color: var(--color-muted);
+}
+
+.collection-table__row--extracting:hover {
+  background: none;
+  cursor: default;
+}
+
 .badge-pill {
   display: inline-block;
   background: var(--color-surface-strong);

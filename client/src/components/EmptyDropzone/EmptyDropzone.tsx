@@ -2,23 +2,23 @@ import { useRef, useState } from "react";
 import "./EmptyDropzone.css";
 
 /**
- * S0 empty state. `{component.empty-dropzone}`: drag-drop a PDF or browse.
- * Keyboard-reachable via the browse button (it triggers a hidden file input).
- * Picks the first PDF and hands it up; the parent owns upload + state.
+ * Library empty state. `{component.empty-dropzone}`: drag-drop one or more
+ * PDFs, or browse. Keyboard-reachable via the browse button (it triggers a
+ * hidden file input). Hands every dropped/picked file up; the parent owns
+ * upload + state (Story 6.4: the bulk-upload machine).
  */
 export default function EmptyDropzone({
-  onFile,
+  onFiles,
   disabled = false,
 }: {
-  onFile: (file: File) => void;
+  onFiles: (files: File[]) => void;
   disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
 
   function pick(files: FileList | null) {
-    const file = files?.[0];
-    if (file) onFile(file);
+    if (files && files.length > 0) onFiles(Array.from(files));
   }
 
   return (
@@ -27,16 +27,21 @@ export default function EmptyDropzone({
       data-testid="empty-dropzone"
       onDragOver={(e) => {
         e.preventDefault();
+        e.stopPropagation(); // this component owns its own drop surface
         if (!disabled) setOver(true);
       }}
-      onDragLeave={() => setOver(false)}
+      onDragLeave={(e) => {
+        e.stopPropagation();
+        setOver(false);
+      }}
       onDrop={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         setOver(false);
         if (!disabled) pick(e.dataTransfer.files);
       }}
     >
-      <p className="dropzone__primary">Drop a PDF here</p>
+      <p className="dropzone__primary">Drop PDFs here</p>
       <button
         type="button"
         className="dropzone__browse"
@@ -49,11 +54,12 @@ export default function EmptyDropzone({
         ref={inputRef}
         type="file"
         accept="application/pdf"
+        multiple
         className="dropzone__input"
         data-testid="dropzone-input"
         onChange={(e) => {
           pick(e.target.files);
-          // Reset so re-selecting the same file after a failure refires change.
+          // Reset so re-picking the same file(s) after a failure refires change.
           e.target.value = "";
         }}
       />
