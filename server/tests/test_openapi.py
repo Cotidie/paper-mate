@@ -57,3 +57,14 @@ def test_openapi_contains_doc_patch_model_and_path() -> None:
     assert "title" in patch["properties"]
     assert "authors" in patch["properties"]
     assert "patch" in schema["paths"]["/api/docs/{doc_id}"]
+
+
+def test_openapi_contains_open_path_no_new_schema() -> None:
+    """Story 6.7: POST /api/docs/{doc_id}/open is generated and its response
+    is the existing Doc schema (no new schema added for this endpoint)."""
+    schema = app.openapi()
+    path = schema["paths"]["/api/docs/{doc_id}/open"]
+    assert "post" in path
+    resp200 = path["post"]["responses"]["200"]
+    ref = resp200["content"]["application/json"]["schema"]["$ref"]
+    assert ref.endswith("/Doc")

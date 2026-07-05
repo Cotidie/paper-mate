@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { getAnnotations } from "./client";
+import { getAnnotations, markDocOpened } from "./client";
 import type { Annotation } from "./client";
 
 function mark(id: string): Annotation {
@@ -47,5 +47,32 @@ describe("getAnnotations (Story 3.5)", () => {
       .mockResolvedValue(new Response("[]", { status: 200 }));
     await getAnnotations("a/b");
     expect(fetchSpy).toHaveBeenCalledWith("/api/docs/a%2Fb/annotations");
+  });
+});
+
+describe("markDocOpened (Story 6.7)", () => {
+  it("POSTs to the open route and returns the updated Doc", async () => {
+    const doc = { doc_id: "doc-1", last_opened: "2026-07-05T00:00:01Z" };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(doc), { status: 200 }),
+    );
+    const got = await markDocOpened("doc-1");
+    expect(fetchSpy).toHaveBeenCalledWith("/api/docs/doc-1/open", { method: "POST" });
+    expect(got).toEqual(doc);
+  });
+
+  it("throws the { detail } envelope error on a non-ok response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Could not update document" }), { status: 500 }),
+    );
+    await expect(markDocOpened("doc-1")).rejects.toThrow("Could not update document");
+  });
+
+  it("encodes the doc id in the path", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+    await markDocOpened("a/b");
+    expect(fetchSpy).toHaveBeenCalledWith("/api/docs/a%2Fb/open", { method: "POST" });
   });
 });

@@ -211,7 +211,7 @@ def _write_meta(doc_dir: Path, meta: DocMeta, *, create_parents: bool = True) ->
 # lock-free — the atomic temp+rename write means a reader always sees a
 # complete old-or-new file, never a torn one.
 
-_index_lock = threading.Lock()
+_index_lock = threading.RLock()
 
 
 def _default_index() -> dict:
@@ -464,32 +464,37 @@ def _update_meta_and_reindex(doc_id: str, updates: dict) -> DocMeta:
     same re-read/guard/write/reindex dance with a different update dict, so
     it lives in one place (CLAUDE.md: don't duplicate a pattern).
 
-    Re-reads the current ``meta.json`` first (so a stale in-flight snapshot
-    can't clobber a concurrent write), applies ``updates``, writes it back,
-    and refreshes the ``library.json`` display cache through the serialized
-    index-write path (``_mutate_index`` under ``_index_lock``, AD-L7).
+    The whole re-read -> write -> reindex sequence runs under ``_index_lock``
+    (``RLock``, so the nested ``_mutate_index`` call doesn't self-deadlock):
+    without it, two concurrent callers (e.g. a background extraction settling
+    while the user's next open fires `touch_last_opened`) could each read the
+    same pre-update snapshot and the second writer's read-then-write would
+    silently discard the first writer's update (a lost-update race) — the
+    re-read alone only protects against a STALE snapshot the caller fetched
+    earlier, not against another concurrent call to this function.
 
     A doc purged mid-flight (its dir/``meta.json`` gone) raises
     ``DocumentNotFoundError``; callers decide whether that is fatal or a
     best-effort no-op.
     """
-    try:
-        doc_dir = _doc_dir(doc_id)
-    except StorageError as exc:
-        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
-    current = _read_meta(doc_dir)
-    if current is None:
-        raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
-    updated = current.model_copy(update=updates)
-    # Guard the TOCTOU window: a purge between the read above and the write
-    # below must NOT recreate the dir (create_parents=False) and re-index a
-    # meta-only ghost row. Re-check first so the common purge is a clean
-    # DocumentNotFoundError, then only refresh the cache if the write landed.
-    if not doc_dir.is_dir():
-        raise DocumentNotFoundError(f"document dir gone for doc_id {doc_id!r}")
-    _write_meta(doc_dir, updated, create_parents=False)
-    _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, updated))
-    return updated
+    with _index_lock:
+        try:
+            doc_dir = _doc_dir(doc_id)
+        except StorageError as exc:
+            raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
+        current = _read_meta(doc_dir)
+        if current is None:
+            raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
+        updated = current.model_copy(update=updates)
+        # Guard the TOCTOU window: a purge between the read above and the write
+        # below must NOT recreate the dir (create_parents=False) and re-index a
+        # meta-only ghost row. Re-check first so the common purge is a clean
+        # DocumentNotFoundError, then only refresh the cache if the write landed.
+        if not doc_dir.is_dir():
+            raise DocumentNotFoundError(f"document dir gone for doc_id {doc_id!r}")
+        _write_meta(doc_dir, updated, create_parents=False)
+        _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, updated))
+        return updated
 
 
 def apply_extraction(
@@ -519,6 +524,23 @@ def update_doc_meta(doc_id: str, updates: dict[str, str | None]) -> DocMeta:
     unresolvable id, a missing ``meta.json``, or a dir purged mid-write.
     """
     return _update_meta_and_reindex(doc_id, updates)
+
+
+def touch_last_opened(doc_id: str) -> DocMeta:
+    """Advance ``meta.last_opened`` when a paper is opened from the Library (Story 6.7, AC-4).
+
+    Only ``last_opened`` changes; every other field is preserved. Reuses the
+    shared ``_update_meta_and_reindex`` core (Story 6.6), so it inherits the
+    same re-read/TOCTOU-guard/write/reindex behavior: raises
+    ``DocumentNotFoundError`` for an unknown or purged doc_id, and never
+    resurrects a dir purged mid-write (``create_parents=False`` + the
+    ``doc_dir.is_dir()`` re-check).
+
+    ``import_pdf``'s idempotent re-import already bumps ``last_opened`` too,
+    but opening from the Library navigates rather than re-imports, so the
+    open path needs its own touch — this is that touch.
+    """
+    return _update_meta_and_reindex(doc_id, {"last_opened": _now_iso()})
 
 
 def write_annotations(doc_id: str, annotations: list[Annotation]) -> None:

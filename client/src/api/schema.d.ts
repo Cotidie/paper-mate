@@ -83,6 +83,32 @@ export interface paths {
         patch: operations["patch_doc_api_docs__doc_id__patch"];
         trace?: never;
     };
+    "/api/docs/{doc_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Doc Opened
+         * @description Advance ``meta.last_opened`` when a paper is opened from the Library (Story 6.7, AC-4/AC-9).
+         *
+         *     A mutation, so ``POST`` rather than a side-effecting ``GET`` — ``GET
+         *     /docs/{doc_id}`` stays a pure, side-effect-free read. Unknown id -> 404;
+         *     a storage failure -> 500. Both use the single ``{ "detail" }`` envelope
+         *     (AR-11). The client fires this as a best-effort side effect (AC-8); a
+         *     failure here must never gate the reader opening the paper.
+         */
+        post: operations["mark_doc_opened_api_docs__doc_id__open_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/docs/{doc_id}/file": {
         parameters: {
             query?: never;
@@ -577,6 +603,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description No document with this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The document could not be updated. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    mark_doc_opened_api_docs__doc_id__open_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Doc"];
                 };
             };
             /** @description No document with this id. */

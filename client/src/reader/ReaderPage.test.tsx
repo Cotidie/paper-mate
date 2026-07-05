@@ -50,6 +50,11 @@ beforeEach(() => {
   // fetch; individual tests override to assert restore behavior (CLAUDE.md:
   // keep test scaffolding in sync).
   vi.spyOn(api, "getAnnotations").mockResolvedValue([]);
+  // Story 6.7: the load effect fires markDocOpened as a best-effort side
+  // effect after hydrate succeeds. Default to resolving so every existing
+  // open-a-doc test never hits the real fetch; individual tests override to
+  // assert the call + its best-effort (swallowed-rejection) behavior.
+  vi.spyOn(api, "markDocOpened").mockResolvedValue(fakeDoc);
   // Story 5.1: the settings store's `persist` middleware writes localStorage,
   // which leaks across tests (Gotcha #1, story Dev Notes). Reset both so a
   // rebind in one test can't poison the next.
@@ -816,6 +821,77 @@ describe("restore-on-open — the anti-clobber baseline (Story 3.5, AC-4)", () =
     await waitFor(() => expect(screen.getByTestId("library-stub")).toBeTruthy());
     // The reader never mounted.
     expect(screen.queryByTestId("reader-backdrop")).toBeNull();
+  });
+});
+
+describe("open-touch: markDocOpened on hydrate (Story 6.7, AC-4/AC-8)", () => {
+  afterEach(() => {
+    useAnnotationStore.setState({ annotations: new Map(), docId: null });
+    useAnnotationStore.temporal.getState().clear();
+  });
+
+  it("fires markDocOpened(docId) once after hydrate succeeds", async () => {
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    const openSpy = vi.spyOn(api, "markDocOpened").mockResolvedValue(fakeDoc);
+    renderReaderAt(fakeDoc.doc_id);
+
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+    await waitFor(() => expect(openSpy).toHaveBeenCalledTimes(1));
+    expect(openSpy).toHaveBeenCalledWith(fakeDoc.doc_id);
+  });
+
+  it("a markDocOpened rejection is swallowed: no redirect, reader still renders (AC-8)", async () => {
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    vi.spyOn(api, "markDocOpened").mockRejectedValue(new Error("storage hiccup"));
+    renderReaderAt(fakeDoc.doc_id);
+
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+    // Give the rejected, swallowed promise a tick to settle before asserting.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId("library-stub")).toBeNull();
+    expect(screen.getByTestId("reader-backdrop")).toBeTruthy();
+  });
+});
+
+describe("doc-switch annotation isolation (Story 6.7, AC-6)", () => {
+  afterEach(() => {
+    useAnnotationStore.setState({ annotations: new Map(), docId: null });
+    useAnnotationStore.temporal.getState().clear();
+  });
+
+  it("navigating from paper A to paper B swaps the store atomically; A's marks never appear on B", async () => {
+    const docA: api.Doc = { ...fakeDoc, doc_id: "a".repeat(64) };
+    const docB: api.Doc = { ...fakeDoc, doc_id: "b".repeat(64), filename: "other.pdf" };
+    vi.spyOn(api, "getDoc").mockImplementation(async (docId: string) =>
+      docId === docA.doc_id ? docA : docB,
+    );
+    vi.spyOn(api, "getAnnotations").mockImplementation(async (docId: string) =>
+      docId === docA.doc_id ? [mark("a1", docA.doc_id)] : [mark("b1", docB.doc_id)],
+    );
+
+    const router = createMemoryRouter(
+      [
+        { path: "/reader/:docId", element: <ReaderPage /> },
+        { path: "/", element: <div data-testid="library-stub" /> },
+      ],
+      { initialEntries: [`/reader/${docA.doc_id}`] },
+    );
+    render(<RouterProvider router={router} />);
+
+    await waitFor(() => expect(useAnnotationStore.getState().annotations.has("a1")).toBe(true));
+    expect(useAnnotationStore.getState().docId).toBe(docA.doc_id);
+
+    await act(async () => {
+      await router.navigate(`/reader/${docB.doc_id}`);
+    });
+
+    await waitFor(() => expect(useAnnotationStore.getState().docId).toBe(docB.doc_id));
+    const annotations = useAnnotationStore.getState().annotations;
+    expect(annotations.has("b1")).toBe(true);
+    expect(annotations.has("a1")).toBe(false);
+    expect(useAnnotationStore.temporal.getState().pastStates.length).toBe(0);
   });
 });
 

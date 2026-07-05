@@ -12,8 +12,8 @@ import TocPanel from "@/components/TocPanel/TocPanel";
 import BankPanel from "@/components/BankPanel/BankPanel";
 import type { BankItem } from "@/lib/bank";
 import Toast from "@/components/Toast/Toast";
-import { getDoc, getAnnotations, fetchHealth, type Doc } from "@/api/client";
-import type { TocEntry } from "@/render";
+import { getDoc, getAnnotations, markDocOpened, fetchHealth, type Doc } from "@/api/client";
+import { pageNavTarget, type TocEntry } from "@/render";
 import { useAutosave } from "@/hooks/useAutosave";
 import SaveIndicator from "@/components/SaveIndicator/SaveIndicator";
 import { matchAction } from "@/settings/keymap";
@@ -34,6 +34,20 @@ export default function ReaderPage() {
   const [doc, setDoc] = useState<Doc | null>(null);
   // 1-based page in view, reported by the Reader for the top-bar indicator.
   const [currentPage, setCurrentPage] = useState(1);
+  // The page last REQUESTED via Prev/Next, tracked separately from the
+  // observed `currentPage` above. `currentPage` only advances once the
+  // Reader's smooth-scroll animation has visibly crossed a page boundary
+  // (IntersectionObserver + rAF), which lags a fast click. Deriving the next
+  // target from `currentPage` meant a second Prev/Next click fired mid-animation
+  // recomputed the SAME target the first click already requested (the scroll
+  // was already animating there, so the repeat call was a no-op) — clicking
+  // twice during the animation silently only advanced one page. Kept in sync
+  // with `currentPage` below for jumps that don't originate from these
+  // buttons (manual scroll, ToC, Bank).
+  const pendingPageRef = useRef(1);
+  useEffect(() => {
+    pendingPageRef.current = currentPage;
+  }, [currentPage]);
   // Live zoom percent, reported by the Reader for the top-bar zoom control.
   const [zoomPercent, setZoomPercent] = useState(100);
   // The single active tool (AD-11): ONE field that is the source of truth across
@@ -146,6 +160,9 @@ export default function ReaderPage() {
         if (!live) return;
         openDoc(docId, restored);
         setDoc(meta);
+        // Best-effort last_opened touch (Story 6.7, AC-4/AC-8): fire-and-forget,
+        // never gates the reader or reaches the redirect-on-hydrate-failure catch.
+        if (live) markDocOpened(docId).catch(() => {});
       } catch {
         if (live) navigate("/", { replace: true });
       }
@@ -314,8 +331,16 @@ export default function ReaderPage() {
         <PageIndicator
           currentPage={currentPage}
           pageCount={doc.page_count}
-          onPrev={() => readerRef.current?.jumpToPage(Math.max(1, currentPage - 1))}
-          onNext={() => readerRef.current?.jumpToPage(Math.min(doc.page_count, currentPage + 1))}
+          onPrev={() => {
+            const target = pageNavTarget(pendingPageRef.current, -1, doc.page_count);
+            pendingPageRef.current = target;
+            readerRef.current?.jumpToPage(target);
+          }}
+          onNext={() => {
+            const target = pageNavTarget(pendingPageRef.current, 1, doc.page_count);
+            pendingPageRef.current = target;
+            readerRef.current?.jumpToPage(target);
+          }}
         />
         <div className="top-bar__actions">
           {/* Zoom control sits left of ToC (UX-DR10 revised 2026-06-28). */}

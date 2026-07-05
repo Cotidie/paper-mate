@@ -309,6 +309,58 @@ def test_patch_doc_does_not_change_other_fields(data_root):
     assert body["added"] == before["added"]
 
 
+def test_mark_doc_opened_advances_last_opened(data_root):
+    """AC-4/7/9: POST .../open -> 200 Doc with last_opened advanced; every
+    other meta field (status/added/title/authors/page_count) is unchanged."""
+    raw = make_pdf_bytes(pages=6, title="Opened")
+    doc_id = client.post("/api/docs", files={"file": ("g.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    before = client.get(f"/api/docs/{doc_id}").json()
+
+    resp = client.post(f"/api/docs/{doc_id}/open")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["last_opened"] >= before["last_opened"]
+    assert body["status"] == before["status"]
+    assert body["added"] == before["added"]
+    assert body["title"] == before["title"]
+    assert body["authors"] == before["authors"]
+    assert body["page_count"] == before["page_count"] == 6
+
+
+def test_mark_doc_opened_unknown_returns_404_detail(data_root):
+    resp = client.post(f"/api/docs/{'0' * 64}/open")
+    assert resp.status_code == 404
+    assert isinstance(resp.json()["detail"], str)
+
+
+def test_mark_doc_opened_no_body_required(data_root):
+    """AC-9: the open-touch endpoint accepts no request body."""
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("h.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    resp = client.post(f"/api/docs/{doc_id}/open")
+    assert resp.status_code == 200
+
+
+def test_mark_doc_opened_disk_failure_returns_500_envelope(data_root, monkeypatch):
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("i.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("app.storage.os.replace", boom)
+
+    resp = client.post(f"/api/docs/{doc_id}/open")
+    assert resp.status_code == 500
+    assert isinstance(resp.json()["detail"], str)
+
+
 def test_get_file_returns_pdf_bytes(data_root):
     """GET /api/docs/{doc_id}/file streams the exact stored bytes as application/pdf."""
     raw = make_pdf_bytes(pages=2, title="Readable")
