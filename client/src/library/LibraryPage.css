@@ -6,26 +6,6 @@
   flex-direction: column;
 }
 
-.library-top-bar {
-  height: var(--top-bar-height);
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  padding: 0 var(--space-base);
-  background: var(--color-canvas);
-  border-bottom: var(--top-bar-border) solid var(--color-hairline);
-}
-
-.library-top-bar__brand {
-  font-family: var(--font-sans);
-  font-size: var(--type-title-sm-size);
-  font-weight: var(--type-title-sm-weight);
-  line-height: var(--type-title-sm-leading);
-  color: var(--color-ink);
-}
-
 .library-add-button {
   display: inline-flex;
   align-items: center;
@@ -46,17 +26,34 @@
   display: block;
 }
 
-.library-add-button:hover:not(:disabled) {
+.library-add-button:hover {
   background: var(--color-surface-strong);
-}
-
-.library-add-button:disabled {
-  cursor: default;
-  opacity: var(--page-indicator-disabled-opacity);
 }
 
 .library-add-input {
   display: none;
+}
+
+.library-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.library-toolbar__count {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+  color: var(--color-muted);
+}
+
+.library-toolbar__count-skeleton {
+  width: var(--collection-table-file-type-width);
+  height: calc(var(--type-caption-size) * var(--type-caption-leading));
 }
 
 .library-body {
@@ -65,21 +62,56 @@
   min-height: 0;
 }
 
-/* Folder-panel region: static bounded placeholder in 6.1 (Epic 7 owns CRUD). */
+/* Folder-panel region: static bounded placeholder in 6.1 (Epic 7 owns real
+   folder CRUD). Restyled (quiet refresh): a caption label, "All" as a
+   selected-nav-item pill, the app version pinned to the bottom via the
+   column flex layout + margin-top: auto. */
 .library-folder-panel {
   flex: 0 0 auto;
   width: var(--toc-panel-width);
   border-right: var(--hairline-width) solid var(--color-hairline);
   background: var(--color-surface-card);
   padding: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
 }
 
-.library-folder-panel__placeholder {
+.library-folder-panel__label {
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-uppercase-size);
+  font-weight: var(--type-caption-uppercase-weight);
+  line-height: var(--type-caption-uppercase-leading);
+  letter-spacing: var(--type-caption-uppercase-letter-spacing);
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: var(--space-xxs);
+}
+
+.library-folder-panel__item {
   font-family: var(--font-sans);
   font-size: var(--type-body-sm-size);
   font-weight: var(--type-body-sm-weight);
   line-height: var(--type-body-sm-leading);
   color: var(--color-body);
+  padding: var(--space-xxs) var(--space-xs);
+  border-radius: var(--radius-pill);
+}
+
+.library-folder-panel__item--active {
+  background: var(--color-ink);
+  color: var(--color-canvas);
+}
+
+.library-folder-panel__version {
+  margin-top: auto;
+  padding-top: var(--space-xs);
+  border-top: var(--hairline-width) solid var(--color-hairline);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+  color: var(--color-muted);
 }
 
 .library-main {
@@ -90,19 +122,21 @@
   background: var(--color-reader-backdrop);
 }
 
-/* The table case top-aligns and scrolls vertically within this region;
-   only the empty/loading-empty case keeps centered copy (base rule above). */
+/* The table case stacks the toolbar row above the table and scrolls
+   vertically within this region; only the empty/loading-empty case keeps
+   centered copy in a row container (base rule above). */
 .library-main--table {
+  flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
   overflow-y: auto;
   padding: var(--space-base);
 }
 
-.library-empty-copy {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--type-body-sm-size);
-  line-height: var(--type-body-sm-leading);
-  color: var(--color-muted);
+/* Whole-main drop target (Story 6.4, AC-1): a drop lands here even over the
+   table, not only the empty-state dropzone. Subtle affordance, reuses the
+   focus-ring width token rather than inventing a new border dim. */
+.library-main--drag-over {
+  outline: var(--focus-ring-width) dashed var(--color-ink);
+  outline-offset: calc(-1 * var(--focus-ring-width));
 }

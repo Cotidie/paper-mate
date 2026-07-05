@@ -22,3 +22,6 @@ server/openapi.json
 
 # Playwright MCP scratch (screenshots/traces from browser-driven testing)
 .playwright-mcp/
+
+# Superpowers brainstorming visual-companion scratch (mockups/session state)
+.superpowers/

@@ -46,12 +46,16 @@ const rows: CollectionRow[] = [
 function noop() {}
 
 describe("CollectionTable (Story 6.3)", () => {
-  it("renders the four column headers and the count line", () => {
+  it("renders the four column headers", () => {
     render(<CollectionTable rows={rows} onOpenRow={noop} />);
     for (const label of ["Title", "Authors", "Added", "File type"]) {
       expect(screen.getByRole("columnheader", { name: label })).toBeTruthy();
     }
-    expect(screen.getByText("3 files in library")).toBeTruthy();
+  });
+
+  it("never renders a count line itself (Library layout redesign: LibraryPage owns it)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} />);
+    expect(screen.queryByText(/files in library/)).toBeNull();
   });
 
   it("renders a human date, not the raw ISO string", () => {
@@ -118,6 +122,42 @@ describe("CollectionTable (Story 6.3)", () => {
     expect(document.querySelectorAll(".collection-table__skeleton-row").length).toBeGreaterThan(0);
     expect(screen.queryByText("Attention Is All You Need")).toBeNull();
     expect(screen.queryByText(/files in library/)).toBeNull();
+  });
+});
+
+describe("CollectionTable pending rows (Story 6.4)", () => {
+  it("renders pending rows above real rows with the muted extracting treatment", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        pendingRows={[{ tempId: "t1", filename: "brand-new.pdf" }]}
+      />,
+    );
+    expect(screen.getByText("brand-new")).toBeTruthy();
+    expect(screen.getByText("Extracting")).toBeTruthy();
+    const pendingRow = screen.getByText("brand-new").closest("tr")!;
+    expect(pendingRow.className).toContain("collection-table__row--extracting");
+    expect(pendingRow.getAttribute("aria-disabled")).toBe("true");
+
+    const allRows = document.querySelectorAll("tbody tr");
+    expect(allRows[0]).toBe(pendingRow);
+  });
+
+  it("never opens or selects a pending row on click", () => {
+    const onOpenRow = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={onOpenRow}
+        pendingRows={[{ tempId: "t1", filename: "brand-new.pdf" }]}
+      />,
+    );
+    const pendingRow = screen.getByText("brand-new").closest("tr")!;
+    fireEvent.click(pendingRow);
+    fireEvent.click(pendingRow);
+    expect(onOpenRow).not.toHaveBeenCalled();
+    expect(pendingRow.getAttribute("aria-selected")).toBeNull();
   });
 });
 
