@@ -106,7 +106,10 @@ function TableSkeleton() {
  * and autofocus/select-all on mount; a `committedRef` guards the classic
  * inline-edit double-fire (Enter/Esc unmount the input, which fires `onBlur`
  * during teardown — without the guard a naive `onBlur=commit` would silently
- * re-commit after an Esc cancel).
+ * re-commit after an Esc cancel). `onCommit`'s second argument distinguishes
+ * an explicit Enter from an auto-commit-on-blur: only the latter is caused by
+ * a click landing elsewhere, which the caller must not also treat as a fresh
+ * arm/edit/open gesture (see `suppressClickRef` in `CollectionTable`).
  */
 function InlineEditor({
   initialValue,
@@ -114,7 +117,7 @@ function InlineEditor({
   onCancel,
 }: {
   initialValue: string;
-  onCommit: (value: string) => void;
+  onCommit: (value: string, viaBlur: boolean) => void;
   onCancel: () => void;
 }) {
   const [value, setValue] = useState(initialValue);
@@ -137,7 +140,7 @@ function InlineEditor({
         if (e.key === "Enter") {
           e.stopPropagation();
           committedRef.current = true;
-          onCommit(value);
+          onCommit(value, false);
         } else if (e.key === "Escape") {
           e.stopPropagation();
           committedRef.current = true;
@@ -147,7 +150,7 @@ function InlineEditor({
       onBlur={() => {
         if (!committedRef.current) {
           committedRef.current = true;
-          onCommit(value);
+          onCommit(value, true);
         }
       }}
     />
@@ -157,9 +160,11 @@ function InlineEditor({
 /**
  * A Title/Authors `<td>`: the static ellipsis cell, or (when this
  * `{docId, field}` is the one being edited) the `InlineEditor`. Editable only
- * for settled rows (AC-8); click or Enter on the static cell enters edit,
- * both `stopPropagation()` so the row's select/open handler (Story 6.3) never
- * fires from an edit gesture.
+ * for settled rows (AC-8); a click or Enter on the cell enters edit ONLY once
+ * the row is already armed (`armed` prop) — an unarmed cell's click/Enter
+ * instead arms the row (bubbling to the `<tr>`'s own click, or calling
+ * `onArm` for the keyboard path), matching every other cell's first-click
+ * behavior rather than editing immediately.
  */
 function EditableCell({
   className,
@@ -185,7 +190,7 @@ function EditableCell({
   children: React.ReactNode;
   onStartEdit: () => void;
   onArm: () => void;
-  onCommit: (value: string) => void;
+  onCommit: (value: string, viaBlur: boolean) => void;
   onCancel: () => void;
 }) {
   if (isEditing) {
@@ -247,13 +252,15 @@ type CollectionTableProps =
  * (client sort is Story 7.4), with optimistic `pendingRows` (Story 6.4) above
  * them, newest batch first. A pending row is not yet a stored paper: no
  * `doc_id`, so it is not selectable, openable, or editable. A real row click
- * selects it (arms it); clicking the already-selected row opens it via
- * `onOpenRow` (LibraryPage owns navigation, this component only reports the
- * gesture). Story 6.6 adds inline editing on the Title/Authors cells of
- * settled rows: the table reports `onEditField`, `LibraryPage` owns the
- * `PATCH` + optimistic state (the same split as `onOpenRow`). Selection and
- * the editing cursor are local UI state, not lifted, since nothing outside
- * the table needs them.
+ * arms/selects it (purely visual, `aria-selected`); opening a paper is a
+ * dedicated Open button revealed on row hover/focus in the Title cell (it
+ * calls `onOpenRow` directly, independent of arm state — LibraryPage owns
+ * navigation, this component only reports the gesture). Inline editing on
+ * the Title/Authors cells of settled rows requires the row already armed
+ * (see `EditableCell`): the table reports `onEditField`, `LibraryPage` owns
+ * the `PATCH` + optimistic state (the same split as `onOpenRow`). Selection
+ * and the editing cursor are local UI state, not lifted, since nothing
+ * outside the table needs them.
  */
 export default function CollectionTable(props: CollectionTableProps) {
   if (props.loading) return <TableSkeleton />;
@@ -261,13 +268,18 @@ export default function CollectionTable(props: CollectionTableProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ docId: string; field: EditableField } | null>(null);
   // A click that lands elsewhere while a cell is being edited blurs the
-  // InlineEditor (committing it) BEFORE the click event itself is
-  // dispatched, so by the time a click handler runs, `editing` already
-  // reads null and the row is still armed — without this guard, the same
-  // click that closes one field's edit would immediately open another
-  // (fix request: clicking away should only finish editing, not chain into
-  // a new action). Set fresh on every mousedown (before the browser's
-  // blur-on-focus-change fires), consumed by the click handlers below.
+  // InlineEditor (auto-committing it) BEFORE the click event itself is
+  // dispatched — without a guard, the SAME click that closes one field's
+  // edit would immediately arm/edit/open whatever it landed on (fix
+  // request: clicking away should only finish editing, not chain into a
+  // new action). Set true only inside the actual blur-commit path
+  // (`commitEdit(..., viaBlur=true)`) — never on a bare mousedown, which
+  // would also fire for an unrelated mousedown *inside* the still-focused
+  // input (e.g. repositioning the caret) and could then wrongly swallow a
+  // later, unrelated keyboard-triggered action (no mousedown precedes a
+  // keyboard Enter/Space activation, so a mousedown-based guard could go
+  // stale and eat it). Consumed (checked-and-reset) by the click handlers
+  // below.
   const suppressClickRef = useRef(false);
 
   function handleRowClick(docId: string) {
@@ -278,8 +290,9 @@ export default function CollectionTable(props: CollectionTableProps) {
     setSelectedId((prev) => (prev === docId ? null : docId));
   }
 
-  function commitEdit(row: CollectionRow, field: EditableField, value: string) {
+  function commitEdit(row: CollectionRow, field: EditableField, value: string, viaBlur: boolean) {
     setEditing(null);
+    if (viaBlur) suppressClickRef.current = true;
     const trimmed = value.trim();
     if (trimmed === currentFieldValue(row, field)) return; // AC-6: no-op guard
     onEditField(row.doc_id, field, trimmed || null); // AC-7: empty -> null
@@ -287,12 +300,7 @@ export default function CollectionTable(props: CollectionTableProps) {
 
   return (
     <div className="collection-table-wrap">
-      <table
-        className="collection-table"
-        onMouseDown={() => {
-          suppressClickRef.current = editing !== null;
-        }}
-      >
+      <table className="collection-table">
         <ColumnGroup />
         <TableHead />
         <tbody>
@@ -341,7 +349,7 @@ export default function CollectionTable(props: CollectionTableProps) {
                     setEditing({ docId: row.doc_id, field: "title" });
                   }}
                   onArm={() => setSelectedId(row.doc_id)}
-                  onCommit={(value) => commitEdit(row, "title", value)}
+                  onCommit={(value, viaBlur) => commitEdit(row, "title", value, viaBlur)}
                   onCancel={() => setEditing(null)}
                 >
                   <span className="collection-table__title-text">
@@ -379,7 +387,7 @@ export default function CollectionTable(props: CollectionTableProps) {
                     setEditing({ docId: row.doc_id, field: "authors" });
                   }}
                   onArm={() => setSelectedId(row.doc_id)}
-                  onCommit={(value) => commitEdit(row, "authors", value)}
+                  onCommit={(value, viaBlur) => commitEdit(row, "authors", value, viaBlur)}
                   onCancel={() => setEditing(null)}
                 >
                   {row.authors ?? ""}

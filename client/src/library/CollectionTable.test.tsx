@@ -363,9 +363,9 @@ describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
     const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
 
     const authorsCell = screen.getByText("Vaswani et al.");
-    // Real browser order for a click that moves focus elsewhere: mousedown
-    // (focus starts to move) -> blur (commits the open edit) -> click.
-    fireEvent.mouseDown(authorsCell);
+    // The blur that auto-commits Title fires before the click that caused
+    // it reaches React; the guard is set inside that commit, not on any
+    // mousedown, so a bare blur+click reproduces the real sequence.
     fireEvent.blur(input);
     fireEvent.click(authorsCell);
 
@@ -383,7 +383,6 @@ describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
     const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
 
     const addedCell = row.querySelector(".collection-table__added")!;
-    fireEvent.mouseDown(addedCell);
     fireEvent.blur(input);
     fireEvent.click(addedCell);
 
@@ -391,6 +390,32 @@ describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
     // The click is consumed by the suppression guard, not treated as a
     // fresh arm-toggle click, so the row's prior armed state is unchanged.
     expect(row.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("a mousedown inside the still-focused input (e.g. repositioning the caret) does not poison a later, unrelated keyboard Open activation (Codex review: stale suppressClickRef)", () => {
+    const onOpenRow = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={onOpenRow} onEditField={noop} />);
+    const titleCell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(titleCell.closest("tr")!); // arm
+    fireEvent.click(titleCell); // edit
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+
+    // Click INSIDE the input itself (repositioning the caret) — no blur,
+    // no commit, editing stays open. This must not set the suppression
+    // guard (it previously did, via a mousedown-based ref).
+    fireEvent.mouseDown(input);
+    fireEvent.click(input);
+    expect(screen.getByDisplayValue("Attention Is All You Need")).toBeTruthy();
+
+    // Commit via Enter (a deliberate keyboard action, not a click-away).
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.queryByRole("textbox")).toBeNull();
+
+    // A later, independent keyboard activation of the Open button (e.g.
+    // after Tab) must not be swallowed by a stale guard.
+    const openButton = screen.getAllByRole("button", { name: "Open" })[0];
+    fireEvent.click(openButton); // simulates the browser's Enter/Space -> click translation
+    expect(onOpenRow).toHaveBeenCalledWith(rows[0].doc_id);
   });
 });
 
