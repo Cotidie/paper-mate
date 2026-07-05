@@ -17,7 +17,11 @@ def enrich(meta: ExtractedMeta, enricher: Enricher | None = None) -> EnrichResul
     """Correct ``meta`` against the enricher, or degrade to ``"skipped"``.
 
     Uses the default ``CrossrefEnricher`` unless an ``enricher`` is injected
-    (a test passes a fake to avoid HTTP). Never raises, never blocks — the port
-    contract holds for every implementation.
+    (a test passes a fake to avoid HTTP). Never raises, never blocks: the facade
+    enforces the port's degrade-to-``"skipped"`` contract even if a misbehaving
+    injected enricher throws, so a raise can never leak into the add path.
     """
-    return (enricher or _default_enricher).enrich(meta)
+    try:
+        return (enricher or _default_enricher).enrich(meta)
+    except Exception:
+        return "skipped"

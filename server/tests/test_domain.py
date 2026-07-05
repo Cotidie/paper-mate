@@ -325,6 +325,31 @@ def test_enrich_falls_back_to_title_when_doi_misses(fake_httpx):
     assert len(_FakeClient.calls) == 2
 
 
+_FORBIDDEN_IMPORTS = {"os", "pathlib", "app.storage"}
+
+
+def _import_leaks(source: str) -> set[str]:
+    """Names a module imports that violate AD-L2 (storage/filesystem access).
+
+    Records both the bare module and the fully-qualified ``module.name`` for
+    ``from X import Y`` so ``from app import storage`` (which records only
+    ``app`` for ``node.module``) is caught via ``app.storage``, not just the
+    ``import app.storage`` / ``from app.storage import ...`` forms.
+    """
+    import ast
+
+    imported: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            imported.add(module)
+            for alias in node.names:
+                imported.add(f"{module}.{alias.name}" if module else alias.name)
+    return {name for name in imported if name in _FORBIDDEN_IMPORTS or name.startswith("app.storage")}
+
+
 def test_domain_modules_are_pure():
     """AD-L2: NO domain module imports storage or filesystem access.
 
@@ -334,28 +359,29 @@ def test_domain_modules_are_pure():
     just one file. (``crossref`` legitimately imports ``httpx``: enrichment is
     the one allowed network hop; the filesystem/storage ban is what we assert.)
     """
-    import ast
     import pathlib
 
     from app import domain
 
-    forbidden = {"os", "pathlib", "app.storage"}
     domain_dir = pathlib.Path(domain.__file__).parent
-    leaks: dict[str, set[str]] = {}
-    for module_file in sorted(domain_dir.glob("*.py")):
-        tree = ast.parse(module_file.read_text())
-        imported: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                imported.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom):
-                imported.add(node.module or "")
-        module_leaks = {
-            name for name in imported if name in forbidden or name.startswith("app.storage")
-        }
-        if module_leaks:
-            leaks[module_file.name] = module_leaks
+    leaks = {
+        module_file.name: found
+        for module_file in sorted(domain_dir.glob("*.py"))
+        if (found := _import_leaks(module_file.read_text()))
+    }
     assert not leaks, f"domain must stay pure: found imports {leaks}"
+
+
+def test_purity_check_catches_every_storage_import_form():
+    """The guard must catch all three storage-import spellings, including the
+    `from app import storage` facade form (which records only `app` as the
+    module) — otherwise the AD-L2 landmine would false-green."""
+    assert _import_leaks("from app import storage") == {"app.storage"}
+    assert _import_leaks("import app.storage") == {"app.storage"}
+    assert _import_leaks("from app.storage import documents") >= {"app.storage"}
+    assert _import_leaks("import os\nimport pathlib") == {"os", "pathlib"}
+    # A legitimate domain import is not a leak.
+    assert _import_leaks("from app.models import ExtractedMeta") == set()
 
 
 def test_enrich_delegates_to_injected_enricher():
@@ -377,6 +403,17 @@ def test_enrich_delegates_to_injected_enricher():
     assert result != "skipped"
     assert result.title == "Injected"
     assert fake.seen == [meta]  # the injected port, not the default, was called
+
+
+def test_enrich_degrades_to_skipped_when_injected_enricher_raises():
+    """The facade enforces the port's never-raises contract: a misbehaving
+    injected enricher degrades to "skipped" rather than leaking into the add."""
+
+    class _BoomEnricher:
+        def enrich(self, meta: ExtractedMeta):
+            raise RuntimeError("boom")
+
+    assert enrich(ExtractedMeta(title="x"), enricher=_BoomEnricher()) == "skipped"
 
 
 def test_default_enricher_is_a_crossref_enricher():
