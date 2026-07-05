@@ -1475,14 +1475,14 @@ So that I can correct extraction without leaving the Library.
 ### Story 6.7: Open a paper in the annotator with its annotations
 
 As a reader,
-I want to double-click a paper to read and annotate it, with my past marks intact,
+I want to open a paper from the Library to read and annotate it, with my past marks intact,
 So that the Library is a real entry point to reading, not just a list.
 
 **Acceptance Criteria:**
 
 **Given** a table row
-**When** I double-click it (or focus it and press Enter)
-**Then** the app navigates to `/reader/:docId` for that paper (LFR-18, AL-3, L-UX-DR10)
+**When** I hover it and click the Open button it reveals (or Tab to the button and press Enter/Space)
+**Then** the app navigates to `/reader/:docId` for that paper (LFR-18, AL-3, L-UX-DR10). Delivered ahead of this story's formal planning by the 2026-07-05 "Library hover Open button" fix (`docs/superpowers/specs/2026-07-05-library-hover-open-button-design.md`); this AC now describes existing, shipped behavior in `CollectionTable.tsx`.
 
 **Given** the reader opens a paper
 **Then** it hydrates that paper's PDF (`GET /api/docs/{id}/file`) and its existing annotations through the inherited doc-scoped annotation store (Story 5.8 / 3.5 seam); the paper's `doc_id` IS its annotation-store key (LFR-19, inherited AD-5/6/7/8)
