@@ -83,6 +83,24 @@ the router's `/reader/:docId`, Story 6.1, AD-L6) can resolve `filename`/
 - **500** → `{ "detail": "Could not read document" }` — a corrupt or
   unknown-version on-disk record.
 
+### `PATCH /api/docs/{doc_id}` — partially update title/authors
+
+Correct a wrong `title` or `authors` in place (Story 6.6, AD-L6). `meta.json`
+is authoritative; the write also refreshes the `library.json` display cache
+(`GET /api/library` reflects the change with no separate read path). Editing
+never changes `status`, `page_count`, `added`, or `last_opened`.
+
+- **Request body:** `DocPatch` — `{ "title"?: string | null, "authors"?: string | null }`.
+  Only fields present in the body change (`exclude_unset` partial semantics);
+  a present empty/whitespace string normalizes to `null` (Title falls back to
+  the filename display fallback; Authors renders empty). `extra="forbid"`: a
+  non-editable field (e.g. `status`) is rejected, not silently dropped.
+- **200** → `Doc` (the full updated document, same shape as `GET /api/docs/{doc_id}`).
+- **400** → `{ "detail": "No fields to update" }` — empty body.
+- **404** → `{ "detail": "Document not found" }` — no `meta.json` for `doc_id`.
+- **422** → `{ "detail": string }` — a malformed or forbidden field (AR-11 envelope).
+- **500** → `{ "detail": "Could not update document" }` — a storage failure.
+
 ### `GET /api/docs/{doc_id}/file` — stream the stored PDF
 
 Return the raw bytes of a document's stored `source.pdf`. The render layer
@@ -184,6 +202,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-05 (Story 6.6):** added `PATCH /api/docs/{doc_id}` — partial `title`/`authors` edit (new `DocPatch` request model, `extra="forbid"`, `exclude_unset` semantics; 200 `Doc`, 400 empty body, 404 unknown doc, 422 malformed/forbidden field, 500 storage failure). `meta.json`-authoritative; refreshes the `library.json` display cache through the same write-and-reindex core `apply_extraction` uses (`storage.update_doc_meta`). Editing never changes `status`/`page_count`/`added`/`last_opened`. Contract shape change: new path + `DocPatch` schema.
 - **2026-07-05 (Story 6.5):** `POST /api/docs` now imports asynchronously. A new import returns at `status: "extracting"` and runs `extract` + `enrich` (Title/Authors/DOI via PyMuPDF, then optional Crossref correction) as a **background task** off the request path; storage settles the row to `ready | enrich-skipped | parse-failed`; the client polls `GET /api/library` until statuses settle. An idempotent re-import does not re-extract. **No contract shape change** (the `status` enum has carried all four values since 6.2; the only generated-file change is the `POST /api/docs` description text). New internal backend: a pure `app/domain/` layer (`extract`/`enrich`, AD-L2) and a storage `apply_extraction` writer. PyMuPDF (AGPL-3.0) added and httpx promoted to a runtime dependency; the repo is relicensed MIT to AGPL-3.0 in the same change.
 - **2026-07-05 (Story 6.3 fix, user fix request):** `CollectionRow` gains `filename: str | null` (additive, default `null`; `GET /api/library`'s `Library` response). Populated from `meta.json` on every index write; `reconcile_library()` now also refreshes already-indexed entries (not just newly-discovered dirs), so a `library.json` row cached before this field existed backfills it on the next server start. The client falls back to this (extension stripped) when `title` is null.
 - **2026-07-05 (Story 6.2):** added `GET /api/library` (the collection index in one read: `Library = { papers: CollectionRow[], folders: Folder[] }`; 500 on a corrupt/unknown-version `library.json`). `DocMeta`/`Doc` gain `authors: str | null`, `file_type: "pdf" | "note"`, `status: "extracting" | "ready" | "enrich-skipped" | "parse-failed"` (additive, no `schema_version` bump). `POST /api/docs` now also indexes the import into `library.json`; boot reconcile aligns the index with on-disk `library/{doc_id}/` dirs. `GET /api/docs` list stays reserved (the collection list is `GET /api/library`, not a docs scan).

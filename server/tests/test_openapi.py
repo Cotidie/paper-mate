@@ -47,3 +47,13 @@ def test_openapi_contains_library_models_and_path() -> None:
     assert "folder_id" in schemas["CollectionRow"]["properties"]
     assert "/api/library" in schema["paths"]
     assert "get" in schema["paths"]["/api/library"]
+
+
+def test_openapi_contains_doc_patch_model_and_path() -> None:
+    """Story 6.6: DocPatch and the PATCH /api/docs/{doc_id} path are generated."""
+    schema = app.openapi()
+    assert "DocPatch" in schema["components"]["schemas"]
+    patch = schema["components"]["schemas"]["DocPatch"]
+    assert "title" in patch["properties"]
+    assert "authors" in patch["properties"]
+    assert "patch" in schema["paths"]["/api/docs/{doc_id}"]

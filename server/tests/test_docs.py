@@ -224,6 +224,91 @@ def test_get_doc_unknown_returns_404_detail(data_root):
     assert isinstance(resp.json()["detail"], str)
 
 
+def test_patch_doc_updates_title(data_root):
+    """AC-2/9: PATCH title -> 200 Doc with the new title; meta + library cache both reflect it."""
+    raw = make_pdf_bytes(pages=1, title="Original")
+    doc_id = client.post("/api/docs", files={"file": ("a.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"title": "Corrected"})
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "Corrected"
+    assert storage.read_meta(doc_id).title == "Corrected"
+    row = storage.read_library().papers[0]
+    assert row.title == "Corrected"
+
+
+def test_patch_doc_authors_only_leaves_title_untouched(data_root):
+    """AC-9: partial semantics — an authors-only PATCH must not touch title."""
+    raw = make_pdf_bytes(pages=1, title="Keep Me")
+    doc_id = client.post("/api/docs", files={"file": ("b.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"authors": "Ada Lovelace"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["authors"] == "Ada Lovelace"
+    assert body["title"] == "Keep Me"
+
+
+def test_patch_doc_blank_title_clears_to_null(data_root):
+    """AC-7: a whitespace-only commit normalizes to None (client falls back to filename)."""
+    raw = make_pdf_bytes(pages=1, title="Something")
+    doc_id = client.post("/api/docs", files={"file": ("c.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"title": "   "})
+    assert resp.status_code == 200
+    assert resp.json()["title"] is None
+
+
+def test_patch_doc_unknown_returns_404_detail(data_root):
+    resp = client.patch(f"/api/docs/{'0' * 64}", json={"title": "X"})
+    assert resp.status_code == 404
+    assert isinstance(resp.json()["detail"], str)
+
+
+def test_patch_doc_empty_body_returns_400_detail(data_root):
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("d.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={})
+    assert resp.status_code == 400
+    assert isinstance(resp.json()["detail"], str)
+
+
+def test_patch_doc_forbidden_field_returns_422(data_root):
+    """AC-9: a non-editable field (e.g. status) is a loud 422, not a silent no-op."""
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("e.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"status": "ready"})
+    assert resp.status_code == 422
+    assert "detail" in resp.json()
+
+
+def test_patch_doc_does_not_change_other_fields(data_root):
+    """AC-9: editing title/authors leaves status/page_count/added untouched."""
+    raw = make_pdf_bytes(pages=5, title="X")
+    client.post("/api/docs", files={"file": ("f.pdf", raw, "application/pdf")})
+    doc_id = sha256_hex(raw)
+    before = client.get(f"/api/docs/{doc_id}").json()  # settled, post background task
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"title": "New Title"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == before["status"]
+    assert body["page_count"] == before["page_count"] == 5
+    assert body["added"] == before["added"]
+
+
 def test_get_file_returns_pdf_bytes(data_root):
     """GET /api/docs/{doc_id}/file streams the exact stored bytes as application/pdf."""
     raw = make_pdf_bytes(pages=2, title="Readable")

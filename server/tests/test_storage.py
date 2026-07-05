@@ -580,6 +580,66 @@ def test_apply_extraction_does_not_resurrect_dir_purged_after_read(data_root, mo
     assert all(r.title != "Ghost" and r.status != "ready" for r in rows)
 
 
+# --- update_doc_meta (Story 6.6, shares apply_extraction's core) -----------
+
+
+def test_update_doc_meta_refreshes_library_cache(data_root):
+    raw = make_pdf_bytes(pages=1, title="Rough")
+    doc_id, _ = storage.import_pdf(raw, "rough.pdf")
+
+    updated = storage.update_doc_meta(doc_id, {"title": "Fixed Title"})
+
+    assert updated.title == "Fixed Title"
+    meta = storage.read_meta(doc_id)
+    assert meta.title == "Fixed Title"
+    row = storage.read_library().papers[0]
+    assert row.title == "Fixed Title"
+
+
+def test_update_doc_meta_partial_leaves_authors_untouched(data_root):
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id, _ = storage.import_pdf(raw, "x.pdf")
+    storage.apply_extraction(doc_id, title="X", authors="Original Author", status="ready")
+
+    storage.update_doc_meta(doc_id, {"title": "New Title"})
+
+    meta = storage.read_meta(doc_id)
+    assert meta.title == "New Title"
+    assert meta.authors == "Original Author"
+
+
+def test_update_doc_meta_missing_doc_raises_not_found(data_root):
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.update_doc_meta("0" * 64, {"title": "T"})
+
+
+def test_update_doc_meta_purged_dir_raises_not_found_no_ghost_row(data_root, monkeypatch):
+    """Mirrors test_apply_extraction_does_not_resurrect_dir_purged_after_read:
+    a purge racing between the read and the write must not recreate the dir
+    or leave a ghost cache entry."""
+    raw = make_pdf_bytes(pages=1, title="Racy")
+    doc_id, _ = storage.import_pdf(raw, "racy.pdf")
+    doc_dir = data_root / "library" / doc_id
+
+    real_read_meta = storage._read_meta
+
+    def read_then_purge(path):
+        result = real_read_meta(path)
+        if result is not None and path == doc_dir:
+            shutil.rmtree(doc_dir)
+        return result
+
+    monkeypatch.setattr(storage, "_read_meta", read_then_purge)
+
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.update_doc_meta(doc_id, {"title": "Ghost"})
+
+    assert not doc_dir.exists()
+    monkeypatch.setattr(storage, "_read_meta", real_read_meta)
+    rows = storage.read_library().papers
+    assert all(r.title != "Ghost" for r in rows)
+
+
 def test_read_library_unknown_schema_version_raises_corrupt(data_root):
     raw = make_pdf_bytes(pages=1)
     storage.import_pdf(raw, "v.pdf")

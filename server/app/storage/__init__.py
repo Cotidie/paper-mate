@@ -455,6 +455,43 @@ def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
     return doc_id, meta
 
 
+def _update_meta_and_reindex(doc_id: str, updates: dict) -> DocMeta:
+    """Shared core: re-read ``meta.json`` -> apply ``updates`` -> guard the
+    purge TOCTOU -> write -> refresh the ``library.json`` display cache.
+
+    Used by both ``apply_extraction`` (background pipeline result) and
+    ``update_doc_meta`` (user-driven title/authors edit, Story 6.6) — the
+    same re-read/guard/write/reindex dance with a different update dict, so
+    it lives in one place (CLAUDE.md: don't duplicate a pattern).
+
+    Re-reads the current ``meta.json`` first (so a stale in-flight snapshot
+    can't clobber a concurrent write), applies ``updates``, writes it back,
+    and refreshes the ``library.json`` display cache through the serialized
+    index-write path (``_mutate_index`` under ``_index_lock``, AD-L7).
+
+    A doc purged mid-flight (its dir/``meta.json`` gone) raises
+    ``DocumentNotFoundError``; callers decide whether that is fatal or a
+    best-effort no-op.
+    """
+    try:
+        doc_dir = _doc_dir(doc_id)
+    except StorageError as exc:
+        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
+    current = _read_meta(doc_dir)
+    if current is None:
+        raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
+    updated = current.model_copy(update=updates)
+    # Guard the TOCTOU window: a purge between the read above and the write
+    # below must NOT recreate the dir (create_parents=False) and re-index a
+    # meta-only ghost row. Re-check first so the common purge is a clean
+    # DocumentNotFoundError, then only refresh the cache if the write landed.
+    if not doc_dir.is_dir():
+        raise DocumentNotFoundError(f"document dir gone for doc_id {doc_id!r}")
+    _write_meta(doc_dir, updated, create_parents=False)
+    _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, updated))
+    return updated
+
+
 def apply_extraction(
     doc_id: str,
     *,
@@ -464,33 +501,24 @@ def apply_extraction(
 ) -> None:
     """Persist a background extraction's result — the ONLY writer of it (AD-L2).
 
-    Re-reads the current ``meta.json`` first (so a stale in-flight snapshot
-    can't clobber a concurrent ``last_opened`` write), applies the resolved
-    ``title``/``authors``/``status``, writes it back, and refreshes the
-    ``library.json`` display cache through the serialized index-write path
-    (``_mutate_index`` under ``_index_lock``, AD-L7). ``authors`` is the
-    display string (storage owns the domain ``list[str]`` -> ``str`` join).
-
-    A doc purged mid-extraction (its dir/``meta.json`` gone) raises
-    ``DocumentNotFoundError``; the orchestrator swallows it (best-effort, never
-    a crash). Storage imports nothing from ``domain``.
+    ``authors`` is the display string (storage owns the domain ``list[str]``
+    -> ``str`` join). A doc purged mid-extraction raises
+    ``DocumentNotFoundError``; the orchestrator swallows it (best-effort,
+    never a crash). Storage imports nothing from ``domain``.
     """
-    try:
-        doc_dir = _doc_dir(doc_id)
-    except StorageError as exc:
-        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
-    current = _read_meta(doc_dir)
-    if current is None:
-        raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
-    updated = current.model_copy(update={"title": title, "authors": authors, "status": status})
-    # Guard the TOCTOU window: a purge between the read above and the write
-    # below must NOT recreate the dir (create_parents=False) and re-index a
-    # meta-only ghost row. Re-check first so the common purge is a clean
-    # DocumentNotFoundError, then only refresh the cache if the write landed.
-    if not doc_dir.is_dir():
-        raise DocumentNotFoundError(f"document dir gone for doc_id {doc_id!r}")
-    _write_meta(doc_dir, updated, create_parents=False)
-    _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, updated))
+    _update_meta_and_reindex(doc_id, {"title": title, "authors": authors, "status": status})
+
+
+def update_doc_meta(doc_id: str, updates: dict[str, str | None]) -> DocMeta:
+    """Persist a user-driven title/authors edit (Story 6.6, AC-2/AC-8/AC-9).
+
+    ``updates`` keys are ⊆ ``{"title", "authors"}`` and already normalized
+    (``.strip()``, empty -> ``None``) by the route. Reuses the same
+    re-read/TOCTOU-guard/write/reindex core as ``apply_extraction`` — never a
+    second copy of that dance. Raises ``DocumentNotFoundError`` for an
+    unresolvable id, a missing ``meta.json``, or a dir purged mid-write.
+    """
+    return _update_meta_and_reindex(doc_id, updates)
 
 
 def write_annotations(doc_id: str, annotations: list[Annotation]) -> None:

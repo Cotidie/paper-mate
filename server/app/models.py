@@ -12,7 +12,7 @@ client consumes a generated type for its in-memory store.
 
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 #: The document extraction lifecycle (AD-L4, Story 6.5): a new import lands
 #: ``extracting``; the background pipeline settles it to ``ready`` (Crossref
@@ -74,6 +74,24 @@ class Doc(DocMeta):
     """API representation of an imported document = ``doc_id`` + its metadata."""
 
     doc_id: str
+
+
+class DocPatch(BaseModel):
+    """Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6): a partial
+    title/authors edit. Request-only (no route returns it) — surfaced into
+    OpenAPI by the route's body parameter, not by a model injection.
+
+    Both fields default unset so ``model_dump(exclude_unset=True)`` yields
+    only what the client actually sent (true PATCH semantics: a title-only
+    edit leaves authors untouched). ``extra="forbid"`` turns an attempt to
+    patch a non-editable field (e.g. ``status``) into a loud 422 instead of a
+    silently-ignored no-op.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+    authors: str | None = None
 
 
 # --- Library / collection index (AD-L1, Story 6.2) --------------------------
