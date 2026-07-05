@@ -123,12 +123,15 @@ describe("Collection table (Story 6.3)", () => {
     expect(screen.queryByText("No papers yet.")).toBeNull();
   });
 
-  it("navigates to /reader/:docId on row double-click", async () => {
+  it("navigates to /reader/:docId when a selected row is clicked again", async () => {
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
     renderLibrary();
 
     await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
-    fireEvent.doubleClick(screen.getByText("Attention Is All You Need").closest("tr")!);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.click(row); // select
+    expect(screen.queryByTestId("reader-stub")).toBeNull();
+    fireEvent.click(row); // open
 
     await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
   });

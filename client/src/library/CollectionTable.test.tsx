@@ -72,9 +72,10 @@ describe("CollectionTable (Story 6.3)", () => {
     expect(titleCell.className).toContain("collection-table__title");
   });
 
-  it("falls back to the filename for a null title", () => {
+  it("falls back to the filename, minus the .pdf extension, for a null title", () => {
     render(<CollectionTable rows={rows} onOpenRow={noop} />);
-    expect(screen.getByText("no-title-paper.pdf")).toBeTruthy();
+    expect(screen.getByText("no-title-paper")).toBeTruthy();
+    expect(screen.queryByText("no-title-paper.pdf")).toBeNull();
   });
 
   it("falls back to Untitled when neither title nor filename is known", () => {
@@ -82,11 +83,34 @@ describe("CollectionTable (Story 6.3)", () => {
     expect(screen.getByText("Untitled")).toBeTruthy();
   });
 
-  it("calls onOpenRow with the doc_id on row double-click", () => {
+  it("selects a row on first click without opening it", () => {
     const onOpenRow = vi.fn();
     render(<CollectionTable rows={rows} onOpenRow={onOpenRow} />);
-    fireEvent.doubleClick(screen.getByText("Attention Is All You Need").closest("tr")!);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.click(row);
+    expect(onOpenRow).not.toHaveBeenCalled();
+    expect(row.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("opens a row on a second click while it is selected", () => {
+    const onOpenRow = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={onOpenRow} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.click(row);
+    fireEvent.click(row);
     expect(onOpenRow).toHaveBeenCalledWith(rows[0].doc_id);
+  });
+
+  it("moves selection to a newly clicked row instead of opening it", () => {
+    const onOpenRow = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={onOpenRow} />);
+    const first = screen.getByText("Attention Is All You Need").closest("tr")!;
+    const second = screen.getByText("no-title-paper").closest("tr")!;
+    fireEvent.click(first);
+    fireEvent.click(second);
+    expect(onOpenRow).not.toHaveBeenCalled();
+    expect(first.getAttribute("aria-selected")).toBe("false");
+    expect(second.getAttribute("aria-selected")).toBe("true");
   });
 
   it("shows skeleton rows and no real data while loading", () => {

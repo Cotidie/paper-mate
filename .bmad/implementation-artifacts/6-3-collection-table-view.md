@@ -75,6 +75,11 @@ This is the **first UI consumer** of the `GET /api/library` endpoint that Story 
 - [x] **Task 7, Version bump (at merge)** [`server/pyproject.toml`]
   - [x] PATCH +1 at PR-merge (CLAUDE.md versioning). Read `[project].version` first (it is `0.4.2` as of this writing) and bump `0.4.2 → 0.4.3`. Single source is `server/pyproject.toml`; never hard-code a version elsewhere. Re-run `uv lock` after the bump and confirm `server/tests/test_version.py` (pyproject vs `uv.lock`) stays green.
 
+### Review Findings
+
+- [ ] [Review][Patch] Loading skeleton does not reserve the loaded table count line [`client/src/library/CollectionTable.tsx`:39]
+- [ ] [Review][Patch] `GET /api/library` docs omit the new `CollectionRow.filename` response field [`docs/API.md`:130]
+
 ## Dev Notes
 
 ### The shape of this change (read first)
@@ -196,11 +201,18 @@ Claude Sonnet 5 (claude-sonnet-5)
 - Fixed the Story 6.1 regression: every `LibraryPage.test.tsx` case now mocks `getLibrary` and awaits the fetch settling before asserting on empty/loaded/error state. Added `CollectionTable.test.tsx` (headers, count line, human date, badges, ellipsis class, `Untitled` fallback, skeleton) and new `LibraryPage.test.tsx` cases (loaded table, load-error toast, skeleton-before-resolve, Add bridge still works after a load failure).
 - Bumped `server/pyproject.toml` version `0.4.2 → 0.4.3` (PATCH, this story) and re-ran `uv lock`; `test_version.py` stays green.
 
-**Post-review fix requests (same session):**
-- **Double-click to open:** added `onOpenRow(docId)` to `CollectionTable` (required when not `loading`); a row's `onDoubleClick` calls it. `LibraryPage` supplies `navigate(\`/reader/${docId}\`)`, keeping `CollectionTable` presentational (AD-9: it reports the gesture, not navigate itself). Row hover now shows a pointer cursor as an affordance hint.
-- **Filename fallback for null title:** `CollectionRow` gained an additive, optional `filename: str | None = None` field (backend `models.py`), populated by `_cache_from_meta`. Regenerated `server/openapi.json` + `client/src/api/schema.d.ts`. `reconcile_library()` now also refreshes the display cache for already-indexed entries (previously only newly-discovered dirs got a fresh cache), so existing pre-fix `library.json` rows backfill `filename` on the next server start without a re-import. Frontend: `CollectionTable` title fallback is now `row.title ?? row.filename ?? "Untitled"` (muted `Untitled` only when neither is known).
-- Added backend test `test_reconcile_backfills_filename_for_pre_existing_entry`; extended `test_import_indexes_paper_as_uncategorized` to assert `filename`. Added `CollectionTable.test.tsx` cases (filename fallback, genuine-Untitled fallback, double-click calls `onOpenRow`) and a `LibraryPage.test.tsx` case (double-click navigates to `/reader/:docId`).
-- Full suites green after the fix: 97 backend tests, 877 client tests (44 files), typecheck clean. Live-smoked both fixes against a fresh scratch server/data-dir with a real imported PDF: double-click opened the reader with the correct file, and a null-title row showed its filename instead of "Untitled".
+**Post-review fix requests (same session, two rounds):**
+
+*Round 1:*
+- **Open a row (initially double-click):** added `onOpenRow(docId)` to `CollectionTable` (required when not `loading`). `LibraryPage` supplies `navigate(\`/reader/${docId}\`)`, keeping `CollectionTable` presentational (AD-9: it reports the gesture, not navigate itself).
+- **Filename fallback for null title:** `CollectionRow` gained an additive, optional `filename: str | None = None` field (backend `models.py`), populated by `_cache_from_meta`. Regenerated `server/openapi.json` + `client/src/api/schema.d.ts`. `reconcile_library()` now also refreshes the display cache for already-indexed entries (previously only newly-discovered dirs got a fresh cache), so existing pre-fix `library.json` rows backfill `filename` on the next server start without a re-import.
+- Added backend test `test_reconcile_backfills_filename_for_pre_existing_entry`; extended `test_import_indexes_paper_as_uncategorized` to assert `filename`.
+
+*Round 2 (superseded round 1's open gesture and refined the fallback):*
+- **Click-to-select, click-again-to-open:** replaced the double-click with a single-click interaction: a row click selects it (`aria-selected`, a `--color-ink` inset left accent via `box-shadow`, kept local `useState` in `CollectionTable` since nothing outside the table needs the selection); clicking the already-selected row calls `onOpenRow`; clicking a different row moves the selection instead of opening it.
+- **Strip the `.pdf` extension from the filename fallback:** added `stripPdfExtension()` so the fallback title reads e.g. `no-outline` instead of `no-outline.pdf`. Title fallback chain is now `row.title ?? (row.filename ? stripPdfExtension(row.filename) : null) ?? "Untitled"` (muted `Untitled` only when neither is known).
+- Updated `CollectionTable.test.tsx` (filename-without-extension fallback, select-without-opening, open-on-second-click, selection-moves-to-newly-clicked-row) and `LibraryPage.test.tsx` (click-select-then-click-open navigates to `/reader/:docId`); removed the now-superseded double-click tests.
+- Full suites green after both rounds: 97 backend tests, 879 client tests (44 files), typecheck clean. Live-smoked against fresh scratch servers with real imported PDFs: title shows without `.pdf`, first click selects (no navigation), second click on the selected row opens the reader with the correct file.
 
 ### File List
 

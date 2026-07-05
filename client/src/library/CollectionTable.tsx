@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { CollectionRow } from "@/api/client";
 import "@/library/CollectionTable.css";
 
@@ -9,6 +10,11 @@ export function formatAdded(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+/** Strip a trailing `.pdf` extension so a filename reads as a title. */
+function stripPdfExtension(filename: string): string {
+  return filename.replace(/\.pdf$/i, "");
 }
 
 function ColumnGroup() {
@@ -63,13 +69,24 @@ type CollectionTableProps =
 /**
  * Read-only Library collection table: rows in, DOM out. Owns no fetch (AD-9:
  * `LibraryPage` fetches, this renders). Rendered in the response's `order`
- * (client sort is Story 7.4). A row double-click opens it in the reader via
- * `onOpenRow` (LibraryPage owns navigation, this component only reports the
- * gesture).
+ * (client sort is Story 7.4). A row click selects it (arms it); clicking the
+ * already-selected row opens it via `onOpenRow` (LibraryPage owns navigation,
+ * this component only reports the gesture). Selection is local UI state, not
+ * lifted, since nothing outside the table needs it.
  */
 export default function CollectionTable(props: CollectionTableProps) {
   if (props.loading) return <TableSkeleton />;
   const { rows, onOpenRow } = props;
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  function handleRowClick(docId: string) {
+    if (selectedId === docId) {
+      onOpenRow(docId);
+      setSelectedId(null);
+    } else {
+      setSelectedId(docId);
+    }
+  }
 
   return (
     <div className="collection-table-wrap">
@@ -79,11 +96,16 @@ export default function CollectionTable(props: CollectionTableProps) {
         <TableHead />
         <tbody>
           {rows.map((row) => {
-            // A null title falls back to the filename (still recognizable);
-            // `Untitled` is the last resort when neither is known.
-            const displayTitle = row.title ?? row.filename ?? null;
+            // A null title falls back to the filename, extension stripped
+            // (still recognizable); `Untitled` is the last resort when
+            // neither is known.
+            const displayTitle = row.title ?? (row.filename ? stripPdfExtension(row.filename) : null);
             return (
-              <tr key={row.doc_id} onDoubleClick={() => onOpenRow(row.doc_id)}>
+              <tr
+                key={row.doc_id}
+                aria-selected={selectedId === row.doc_id}
+                onClick={() => handleRowClick(row.doc_id)}
+              >
                 <td className="collection-table__title" title={displayTitle ?? undefined}>
                   {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
                 </td>

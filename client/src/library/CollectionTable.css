@@ -65,6 +65,11 @@
   cursor: pointer;
 }
 
+.collection-table tbody tr[aria-selected="true"] {
+  background: var(--color-surface-strong);
+  box-shadow: inset var(--focus-ring-width) 0 0 0 var(--color-ink);
+}
+
 .collection-table__title,
 .collection-table__authors {
   overflow: hidden;
