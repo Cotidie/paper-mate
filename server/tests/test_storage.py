@@ -640,6 +640,74 @@ def test_update_doc_meta_purged_dir_raises_not_found_no_ghost_row(data_root, mon
     assert all(r.title != "Ghost" for r in rows)
 
 
+# --- touch_last_opened (Story 6.7, shares apply_extraction's core) --------
+
+
+def test_touch_last_opened_advances_field_only(data_root):
+    raw = make_pdf_bytes(pages=4, title="Original")
+    doc_id, before = storage.import_pdf(raw, "orig.pdf")
+    storage.apply_extraction(doc_id, title="Original", authors="Ada Lovelace", status="ready")
+    settled = storage.read_meta(doc_id)
+
+    updated = storage.touch_last_opened(doc_id)
+
+    assert updated.last_opened >= settled.last_opened
+    assert updated.title == settled.title
+    assert updated.authors == settled.authors
+    assert updated.status == settled.status
+    assert updated.page_count == settled.page_count == before.page_count
+    assert updated.added == settled.added
+    assert updated.filename == settled.filename
+    meta = storage.read_meta(doc_id)
+    assert meta.last_opened == updated.last_opened
+
+
+def test_touch_last_opened_refreshes_library_cache_unchanged(data_root):
+    """AC-7: library.json carries no last_opened, so the displayed row is
+    byte-identical (title/authors/status) after the touch."""
+    raw = make_pdf_bytes(pages=1, title="Cached")
+    doc_id, _ = storage.import_pdf(raw, "cached.pdf")
+    before_row = storage.read_library().papers[0]
+
+    storage.touch_last_opened(doc_id)
+
+    after_row = storage.read_library().papers[0]
+    assert after_row.title == before_row.title
+    assert after_row.authors == before_row.authors
+    assert after_row.status == before_row.status
+
+
+def test_touch_last_opened_missing_doc_raises_not_found(data_root):
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.touch_last_opened("0" * 64)
+
+
+def test_touch_last_opened_purged_dir_raises_not_found_no_ghost_row(data_root, monkeypatch):
+    """Mirrors test_apply_extraction_does_not_resurrect_dir_purged_after_read:
+    a purge racing between the read and the write must not recreate the dir
+    or leave a ghost cache entry."""
+    raw = make_pdf_bytes(pages=1, title="Racy")
+    doc_id, _ = storage.import_pdf(raw, "racy.pdf")
+    doc_dir = data_root / "library" / doc_id
+
+    real_read_meta = storage._read_meta
+
+    def read_then_purge(path):
+        result = real_read_meta(path)
+        if result is not None and path == doc_dir:
+            shutil.rmtree(doc_dir)
+        return result
+
+    monkeypatch.setattr(storage, "_read_meta", read_then_purge)
+
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.touch_last_opened(doc_id)
+
+    # The dir was NOT recreated (create_parents=False) — no meta-only ghost
+    # written back for a doc purged mid-write.
+    assert not doc_dir.exists()
+
+
 def test_read_library_unknown_schema_version_raises_corrupt(data_root):
     raw = make_pdf_bytes(pages=1)
     storage.import_pdf(raw, "v.pdf")

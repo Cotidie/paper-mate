@@ -83,6 +83,24 @@ the router's `/reader/:docId`, Story 6.1, AD-L6) can resolve `filename`/
 - **500** → `{ "detail": "Could not read document" }` — a corrupt or
   unknown-version on-disk record.
 
+### `POST /api/docs/{doc_id}/open` — mark a document opened
+
+Advance `meta.last_opened` when a paper opens from the Library (Story 6.7,
+AC-4). A mutation, so `POST` rather than a side-effecting `GET`: `GET
+/api/docs/{doc_id}` above stays a pure, side-effect-free read of a document's
+own metadata; opening uses this endpoint instead. `meta.json` is authoritative
+for `last_opened`; the write also refreshes the `library.json` display cache
+through the same write-and-reindex core `PATCH` uses, but that cache carries
+no `last_opened`, so the rendered collection row is unchanged (no v1 UI
+surfaces this field). The client's `ReaderPage` fires this as a best-effort,
+error-swallowed side effect after hydrate succeeds; a failure here never
+aborts an otherwise-readable open.
+
+- **Request body:** none.
+- **200** → `Doc` (the full updated document, same shape as `GET /api/docs/{doc_id}`).
+- **404** → `{ "detail": "Document not found" }` — no `meta.json` for `doc_id`.
+- **500** → `{ "detail": "Could not update document" }` — a storage failure.
+
 ### `PATCH /api/docs/{doc_id}` — partially update title/authors
 
 Correct a wrong `title` or `authors` in place (Story 6.6, AD-L6). `meta.json`
@@ -202,6 +220,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-05 (Story 6.7):** added `POST /api/docs/{doc_id}/open` — advances `meta.last_opened` when a paper opens (200 `Doc`, 404 unknown doc, 500 storage failure). A mutation, not the pure `GET /api/docs/{doc_id}` read; reuses the existing `Doc` response model (no new schema). `ReaderPage` fires it as a best-effort, error-swallowed side effect on open; a failure never gates the reader rendering the paper. No UI surfaces `last_opened` (out-of-scope last-opened *tracking* feature, not built). Ratifies the already-shipped open path (hover Open button → `/reader/:docId`, doc-scoped hydrate/autosave/back-to-Library, atomic doc-switch isolation) with test coverage; no other endpoint changed.
 - **2026-07-05 (Story 6.6):** added `PATCH /api/docs/{doc_id}` — partial `title`/`authors` edit (new `DocPatch` request model, `extra="forbid"`, `exclude_unset` semantics; 200 `Doc`, 400 empty body, 404 unknown doc, 422 malformed/forbidden field, 500 storage failure). `meta.json`-authoritative; refreshes the `library.json` display cache through the same write-and-reindex core `apply_extraction` uses (`storage.update_doc_meta`). Editing never changes `status`/`page_count`/`added`/`last_opened`. Contract shape change: new path + `DocPatch` schema.
 - **2026-07-05 (Story 6.5):** `POST /api/docs` now imports asynchronously. A new import returns at `status: "extracting"` and runs `extract` + `enrich` (Title/Authors/DOI via PyMuPDF, then optional Crossref correction) as a **background task** off the request path; storage settles the row to `ready | enrich-skipped | parse-failed`; the client polls `GET /api/library` until statuses settle. An idempotent re-import does not re-extract. **No contract shape change** (the `status` enum has carried all four values since 6.2; the only generated-file change is the `POST /api/docs` description text). New internal backend: a pure `app/domain/` layer (`extract`/`enrich`, AD-L2) and a storage `apply_extraction` writer. PyMuPDF (AGPL-3.0) added and httpx promoted to a runtime dependency; the repo is relicensed MIT to AGPL-3.0 in the same change.
 - **2026-07-05 (Story 6.3 fix, user fix request):** `CollectionRow` gains `filename: str | null` (additive, default `null`; `GET /api/library`'s `Library` response). Populated from `meta.json` on every index write; `reconcile_library()` now also refreshes already-indexed entries (not just newly-discovered dirs), so a `library.json` row cached before this field existed backfills it on the next server start. The client falls back to this (extension stripped) when `title` is null.

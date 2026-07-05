@@ -84,6 +84,18 @@ export async function patchDoc(docId: string, patch: DocPatch): Promise<Doc> {
 }
 
 /**
+ * Advance a document's `last_opened` (`POST /api/docs/{doc_id}/open`, Story
+ * 6.7, AC-4). A mutation, not the pure `getDoc` read. `ReaderPage` fires this
+ * as a best-effort, error-swallowed side effect on open (AC-8) - a failure
+ * here never gates the reader rendering the paper.
+ */
+export async function markDocOpened(docId: string): Promise<Doc> {
+  const res = await fetch(`/api/docs/${encodeURIComponent(docId)}/open`, { method: "POST" });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Doc;
+}
+
+/**
  * Overwrite a document's full annotation set (`PUT /api/docs/{doc_id}/annotations`).
  * AR-7/H6: the autosave hook calls this single-flight, debounced, with the
  * FULL current set every time. H9: the body is the bare list; the

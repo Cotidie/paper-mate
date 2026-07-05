@@ -521,6 +521,23 @@ def update_doc_meta(doc_id: str, updates: dict[str, str | None]) -> DocMeta:
     return _update_meta_and_reindex(doc_id, updates)
 
 
+def touch_last_opened(doc_id: str) -> DocMeta:
+    """Advance ``meta.last_opened`` when a paper is opened from the Library (Story 6.7, AC-4).
+
+    Only ``last_opened`` changes; every other field is preserved. Reuses the
+    shared ``_update_meta_and_reindex`` core (Story 6.6), so it inherits the
+    same re-read/TOCTOU-guard/write/reindex behavior: raises
+    ``DocumentNotFoundError`` for an unknown or purged doc_id, and never
+    resurrects a dir purged mid-write (``create_parents=False`` + the
+    ``doc_dir.is_dir()`` re-check).
+
+    ``import_pdf``'s idempotent re-import already bumps ``last_opened`` too,
+    but opening from the Library navigates rather than re-imports, so the
+    open path needs its own touch — this is that touch.
+    """
+    return _update_meta_and_reindex(doc_id, {"last_opened": _now_iso()})
+
+
 def write_annotations(doc_id: str, annotations: list[Annotation]) -> None:
     """Overwrite ``library/{doc_id}/annotations.json`` with the full given set.
 

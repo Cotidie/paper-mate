@@ -12,7 +12,7 @@ import TocPanel from "@/components/TocPanel/TocPanel";
 import BankPanel from "@/components/BankPanel/BankPanel";
 import type { BankItem } from "@/lib/bank";
 import Toast from "@/components/Toast/Toast";
-import { getDoc, getAnnotations, fetchHealth, type Doc } from "@/api/client";
+import { getDoc, getAnnotations, markDocOpened, fetchHealth, type Doc } from "@/api/client";
 import type { TocEntry } from "@/render";
 import { useAutosave } from "@/hooks/useAutosave";
 import SaveIndicator from "@/components/SaveIndicator/SaveIndicator";
@@ -146,6 +146,9 @@ export default function ReaderPage() {
         if (!live) return;
         openDoc(docId, restored);
         setDoc(meta);
+        // Best-effort last_opened touch (Story 6.7, AC-4/AC-8): fire-and-forget,
+        // never gates the reader or reaches the redirect-on-hydrate-failure catch.
+        if (live) markDocOpened(docId).catch(() => {});
       } catch {
         if (live) navigate("/", { replace: true });
       }

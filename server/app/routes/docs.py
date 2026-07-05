@@ -9,7 +9,9 @@ set (AR-7, H9: bare list body, disk envelope is storage-internal).
 (Story 3.5; bare list, ``[]`` when unannotated). ``GET /api/docs/{doc_id}``
 returns a document's own metadata (Story 6.1, AD-L6). ``PATCH
 /api/docs/{doc_id}`` partially updates ``title``/``authors`` (Story 6.6,
-AD-L6). Reserved (not built here): ``GET /api/docs``.
+AD-L6). ``POST /api/docs/{doc_id}/open`` advances ``meta.last_opened`` when
+a paper opens (Story 6.7) - the only mutation alongside the otherwise-pure
+meta ``GET``. Reserved (not built here): ``GET /api/docs``.
 """
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
@@ -155,6 +157,42 @@ async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
             updates[field] = updates[field].strip() or None
     try:
         meta = storage.update_doc_meta(doc_id, updates)
+    except storage.DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Document not found") from exc
+    except storage.StorageError as exc:
+        raise HTTPException(status_code=500, detail="Could not update document") from exc
+    return Doc(doc_id=doc_id, **meta.model_dump())
+
+
+@router.post(
+    "/docs/{doc_id}/open",
+    response_model=Doc,
+    responses={
+        404: {
+            "description": "No document with this id.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+        500: {
+            "description": "The document could not be updated.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+    },
+)
+async def mark_doc_opened(doc_id: str) -> Doc:
+    """Advance ``meta.last_opened`` when a paper is opened from the Library (Story 6.7, AC-4/AC-9).
+
+    A mutation, so ``POST`` rather than a side-effecting ``GET`` — ``GET
+    /docs/{doc_id}`` stays a pure, side-effect-free read. Unknown id -> 404;
+    a storage failure -> 500. Both use the single ``{ "detail" }`` envelope
+    (AR-11). The client fires this as a best-effort side effect (AC-8); a
+    failure here must never gate the reader opening the paper.
+    """
+    try:
+        meta = storage.touch_last_opened(doc_id)
     except storage.DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Document not found") from exc
     except storage.StorageError as exc:
