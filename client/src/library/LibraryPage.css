@@ -60,21 +60,56 @@
   min-height: 0;
 }
 
-/* Folder-panel region: static bounded placeholder in 6.1 (Epic 7 owns CRUD). */
+/* Folder-panel region: static bounded placeholder in 6.1 (Epic 7 owns real
+   folder CRUD). Restyled (quiet refresh): a caption label, "All" as a
+   selected-nav-item pill, the app version pinned to the bottom via the
+   column flex layout + margin-top: auto. */
 .library-folder-panel {
   flex: 0 0 auto;
   width: var(--toc-panel-width);
   border-right: var(--hairline-width) solid var(--color-hairline);
   background: var(--color-surface-card);
   padding: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
 }
 
-.library-folder-panel__placeholder {
+.library-folder-panel__label {
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-uppercase-size);
+  font-weight: var(--type-caption-uppercase-weight);
+  line-height: var(--type-caption-uppercase-leading);
+  letter-spacing: var(--type-caption-uppercase-letter-spacing);
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: var(--space-xxs);
+}
+
+.library-folder-panel__item {
   font-family: var(--font-sans);
   font-size: var(--type-body-sm-size);
   font-weight: var(--type-body-sm-weight);
   line-height: var(--type-body-sm-leading);
   color: var(--color-body);
+  padding: var(--space-xxs) var(--space-xs);
+  border-radius: var(--radius-pill);
+}
+
+.library-folder-panel__item--active {
+  background: var(--color-ink);
+  color: var(--color-canvas);
+}
+
+.library-folder-panel__version {
+  margin-top: auto;
+  padding-top: var(--space-xs);
+  border-top: var(--hairline-width) solid var(--color-hairline);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+  color: var(--color-muted);
 }
 
 .library-main {

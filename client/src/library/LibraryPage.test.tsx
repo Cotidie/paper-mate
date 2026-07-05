@@ -8,6 +8,10 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [], folders: [] });
+  // The Library fetches the version on mount (GET /api/health), same as
+  // ReaderPage. Stub it so tests never hit the network; individual tests
+  // override to assert the rendered value.
+  vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9" });
 });
 
 function pdfFile(name: string) {
@@ -373,5 +377,26 @@ describe("Code review fixes (Story 6.4)", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(screen.getByText("Fast Settle")).toBeTruthy();
+  });
+});
+
+describe("Left pane (version display)", () => {
+  it("shows the app version once fetchHealth resolves", async () => {
+    vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.4.4" });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByTestId("library-version").textContent).toBe("v0.4.4"));
+  });
+
+  it("renders no version label if fetchHealth fails", async () => {
+    vi.spyOn(api, "fetchHealth").mockRejectedValue(new Error("boom"));
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Drop PDFs here")).toBeTruthy());
+    expect(screen.queryByTestId("library-version")).toBeNull();
+  });
+
+  it("still exposes the Folders landmark and an active All item", () => {
+    renderLibrary();
+    expect(screen.getByLabelText("Folders")).toBeTruthy();
+    expect(screen.getByText("All")).toBeTruthy();
   });
 });

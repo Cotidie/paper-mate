@@ -6,7 +6,7 @@ import Toast from "@/components/Toast/Toast";
 import CollectionTable from "@/library/CollectionTable";
 import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
 import { useBulkUpload } from "@/library/useBulkUpload";
-import { getLibrary, type CollectionRow, type Doc, type Library } from "@/api/client";
+import { getLibrary, fetchHealth, type CollectionRow, type Doc, type Library } from "@/api/client";
 
 /** Project an upload's `Doc` into the display-cache `CollectionRow` shape
  *  (Story 6.4): a freshly stored paper is never in a folder or trashed, and
@@ -47,6 +47,7 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [version, setVersion] = useState<string | null>(null);
   const mountedRef = useRef(true);
   // Monotonic sequence: only the most-recently-issued `getLibrary()` may
   // apply its result, so a slow initial fetch can't land after (and clobber)
@@ -60,6 +61,18 @@ export default function LibraryPage() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    fetchHealth()
+      .then((h) => {
+        if (live) setVersion(h.version);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
     };
   }, []);
 
@@ -156,7 +169,13 @@ export default function LibraryPage() {
       <div className="library-body">
         {/* Static bounded placeholder (folder CRUD + All/Uncategorized are Epic 7). */}
         <aside className="library-folder-panel" aria-label="Folders">
-          <span className="library-folder-panel__placeholder">All</span>
+          <span className="library-folder-panel__label">Library</span>
+          <span className="library-folder-panel__item library-folder-panel__item--active">All</span>
+          {version && (
+            <span className="library-folder-panel__version" data-testid="library-version">
+              v{version}
+            </span>
+          )}
         </aside>
         <main
           className={mainClassName}
