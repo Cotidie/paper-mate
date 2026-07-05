@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-6f8f5f.svg"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/License-AGPL--3.0-6f8f5f.svg"></a>
   <a href="https://github.com/Cotidie/paper-mate"><img alt="Repo: Cotidie/paper-mate" src="https://img.shields.io/badge/repo-Cotidie%2Fpaper--mate-6f8f5f?logo=github"></a>
   <a href="https://github.com/Cotidie/paper-mate/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Cotidie/paper-mate?style=flat&logo=github&color=6f8f5f"></a>
   <a href="https://github.com/Cotidie/paper-mate/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/Cotidie/paper-mate?style=flat&logo=github&color=6f8f5f"></a>
@@ -104,7 +104,7 @@ Open the Vite URL shown in the terminal, usually `http://localhost:5173`.
 
 ## License
 
-Paper Mate is released under the MIT License. See [LICENSE](LICENSE).
+Paper Mate is released under the GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE). It bundles PyMuPDF for metadata extraction, which is AGPL-3.0; the combined distributed work is therefore AGPL-3.0. Running Paper Mate locally for personal use never triggers the license's distribution obligations.
 
 ## Acknowledgement
 

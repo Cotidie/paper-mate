@@ -35,7 +35,12 @@ export interface paths {
         put?: never;
         /**
          * Upload Doc
-         * @description Import an uploaded PDF; return its ``doc_id`` + metadata.
+         * @description Import an uploaded PDF; return its ``doc_id`` + metadata immediately.
+         *
+         *     A **new** import lands at ``status="extracting"`` and returns at once; the
+         *     ``extract`` -> ``enrich`` -> persist pipeline runs off the request path as a
+         *     background task (NFR-3). An idempotent re-import keeps its settled status
+         *     and does not re-extract.
          */
         post: operations["upload_doc_api_docs_post"];
         delete?: never;

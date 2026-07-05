@@ -1,10 +1,14 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import LibraryPage from "@/library/LibraryPage";
 import * as api from "@/api/client";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // A fake-timer test must never leak into the next (would hang every waitFor).
+  vi.useRealTimers();
+});
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [], folders: [] });
@@ -398,6 +402,147 @@ describe("Code review fixes (Story 6.4)", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(screen.getByText("Fast Settle")).toBeTruthy();
+  });
+});
+
+describe("Metadata extraction settle-polling (Story 6.5)", () => {
+  function docStatus(
+    doc_id: string,
+    filename: string,
+    status: api.Doc["status"],
+    title: string | null = null,
+  ): api.Doc {
+    return { ...fakeDoc(doc_id, filename, title), status };
+  }
+
+  function libRow(
+    doc_id: string,
+    status: api.CollectionRow["status"],
+    title: string | null,
+    filename: string,
+  ): api.CollectionRow {
+    return {
+      doc_id,
+      title,
+      authors: null,
+      added: "2026-07-05T00:00:00+00:00",
+      file_type: "pdf",
+      status,
+      folder_id: null,
+      trashed: false,
+      order: 0,
+      filename,
+    };
+  }
+
+  it("polls getLibrary until an extracting row settles, updates it in place, notices the skip, and stops", async () => {
+    vi.useFakeTimers();
+    const id = "x".repeat(64);
+    let call = 0;
+    vi.spyOn(api, "getLibrary").mockImplementation(async () => {
+      call++;
+      if (call <= 1) return { papers: [], folders: [] }; // mount
+      if (call <= 3) return { papers: [libRow(id, "extracting", null, "P.pdf")], folders: [] };
+      return { papers: [libRow(id, "enrich-skipped", "Local Title", "P.pdf")], folders: [] };
+    });
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(docStatus(id, "P.pdf", "extracting"));
+
+    renderLibrary();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0))); // mount fetch
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile("P.pdf")] },
+    });
+    // Upload resolves + batch reconcile (call 2, extracting) -> poll starts.
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(screen.getByText("Extracting")).toBeTruthy();
+
+    // Poll tick 1 (call 3, still extracting).
+    await act(async () => void (await vi.advanceTimersByTimeAsync(1200)));
+    expect(screen.getByText("Extracting")).toBeTruthy();
+
+    // Poll tick 2 (call 4, settled): row updates in place, info notice shown.
+    await act(async () => void (await vi.advanceTimersByTimeAsync(1200)));
+    expect(screen.getByText("Local Title")).toBeTruthy();
+    expect(screen.queryByText("Extracting")).toBeNull();
+    expect(screen.getByText("Enrichment skipped.")).toBeTruthy();
+
+    // Polling has stopped: no further getLibrary calls however long we wait.
+    const settledCalls = vi.mocked(api.getLibrary).mock.calls.length;
+    await act(async () => void (await vi.advanceTimersByTimeAsync(6000)));
+    expect(vi.mocked(api.getLibrary).mock.calls.length).toBe(settledCalls);
+
+    vi.useRealTimers();
+  });
+
+  it("does not poll when the batch settles with no extracting rows (6.4 ready path unchanged)", async () => {
+    // uploadDoc resolves to a `ready` doc and the reconcile shows no extracting
+    // row, so the poll loop is never entered.
+    const id = "y".repeat(64);
+    const backend = mockBackend();
+    vi.spyOn(api, "uploadDoc").mockImplementation(async () =>
+      backend.store(docStatus(id, "R.pdf", "ready", "Ready Paper")),
+    );
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Drop PDFs here")).toBeTruthy());
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile("R.pdf")] },
+    });
+    await waitFor(() => expect(screen.getByText("Ready Paper")).toBeTruthy());
+
+    // Exactly the mount fetch + the one post-batch reconcile — no poll.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(vi.mocked(api.getLibrary).mock.calls.length).toBe(2);
+    expect(screen.queryByText(/Enrichment skipped/)).toBeNull();
+  });
+
+  it("still raises the enrich-skipped notice when polling caps on a permanently-stuck row", async () => {
+    vi.useFakeTimers();
+    const batchId = "b".repeat(64);
+    const stuckId = "s".repeat(64); // a pre-existing row that never settles
+    // After the batch settles, the library always has the batch row as
+    // enrich-skipped PLUS a stuck extracting row, so polling never settles and
+    // eventually hits the cap. onMaxPolls must still resolve the batch notice.
+    vi.spyOn(api, "getLibrary").mockImplementation(async () => ({
+      papers: [
+        libRow(batchId, "enrich-skipped", "Batch Local Title", "batch.pdf"),
+        libRow(stuckId, "extracting", null, "stuck.pdf"),
+      ],
+      folders: [],
+    }));
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(docStatus(batchId, "batch.pdf", "extracting"));
+
+    renderLibrary();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile("batch.pdf")] },
+    });
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+
+    // Run out the whole poll budget (60 * 1200ms) plus a buffer.
+    await act(async () => void (await vi.advanceTimersByTimeAsync(60 * 1200 + 2000)));
+
+    // The batch's enrich-skipped row is noticed even though the loop capped.
+    expect(screen.getByText("Enrichment skipped.")).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it("renders a parse-failed row with its filename and lets it open (interactive)", async () => {
+    const id = "z".repeat(64);
+    vi.spyOn(api, "getLibrary").mockResolvedValue({
+      papers: [libRow(id, "parse-failed", null, "poor-paper.pdf")],
+      folders: [],
+    });
+    renderLibrary();
+
+    await waitFor(() => expect(screen.getByText("poor-paper")).toBeTruthy());
+    expect(screen.getByText("No metadata")).toBeTruthy();
+    const row = screen.getByText("poor-paper").closest("tr")!;
+    fireEvent.click(row); // select
+    fireEvent.click(row); // open
+    await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
   });
 });
 

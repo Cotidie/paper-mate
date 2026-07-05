@@ -14,6 +14,14 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
 
+#: The document extraction lifecycle (AD-L4, Story 6.5): a new import lands
+#: ``extracting``; the background pipeline settles it to ``ready`` (Crossref
+#: enriched), ``enrich-skipped`` (local fields kept, no external correction),
+#: or ``parse-failed`` (no title/authors found — a never-lost filename row).
+#: Shared by ``DocMeta`` (own field) and ``CollectionRow`` (display cache) so
+#: the two can never drift.
+DocStatus = Literal["extracting", "ready", "enrich-skipped", "parse-failed"]
+
 
 class HealthStatus(BaseModel):
     """Liveness response for ``GET /api/health``. Also carries the app version
@@ -21,6 +29,21 @@ class HealthStatus(BaseModel):
 
     status: Literal["ok"] = "ok"
     version: str
+
+
+class ExtractedMeta(BaseModel):
+    """Result of the pure domain extraction pipeline (AD-L2, Story 6.5).
+
+    Internal to the backend: ``extract()`` returns it, ``enrich()`` corrects
+    it, and the route projects it onto storage — no route references it, so it
+    stays OUT of the OpenAPI schema and needs no generated client type.
+    ``authors`` is the domain's honest ``list[str]`` shape; storage joins it to
+    the single ``DocMeta.authors`` display string.
+    """
+
+    title: str | None = None
+    authors: list[str] = []
+    doi: str | None = None
 
 
 class DocMeta(BaseModel):
@@ -43,7 +66,7 @@ class DocMeta(BaseModel):
     last_opened: str  # ISO-8601 UTC
     authors: str | None = None
     file_type: Literal["pdf", "note"] = "pdf"
-    status: Literal["extracting", "ready", "enrich-skipped", "parse-failed"] = "ready"
+    status: DocStatus = "ready"
     schema_version: int = 1
 
 
@@ -84,7 +107,7 @@ class CollectionRow(BaseModel):
     authors: str | None
     added: str  # ISO-8601 UTC
     file_type: Literal["pdf", "note"]
-    status: Literal["extracting", "ready", "enrich-skipped", "parse-failed"]
+    status: DocStatus
     folder_id: str | None
     trashed: bool
     order: int

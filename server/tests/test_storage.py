@@ -65,7 +65,9 @@ def test_import_writes_source_and_meta(data_root):
     assert on_disk["schema_version"] == 1
     assert on_disk["authors"] is None
     assert on_disk["file_type"] == "pdf"
-    assert on_disk["status"] == "ready"
+    # A fresh import lands at "extracting"; the route's background job settles
+    # it (Story 6.5). Inline import no longer runs extraction.
+    assert on_disk["status"] == "extracting"
     assert meta.page_count == 3
 
 
@@ -360,7 +362,8 @@ def test_import_indexes_paper_as_uncategorized(data_root):
     assert row.authors == meta.authors
     assert row.added == meta.added
     assert row.file_type == meta.file_type == "pdf"
-    assert row.status == meta.status == "ready"
+    # Fresh import is "extracting" until the background job settles it (6.5).
+    assert row.status == meta.status == "extracting"
     assert row.filename == meta.filename == "indexed.pdf"
 
 
@@ -468,6 +471,113 @@ def test_malformed_paper_row_raises_corrupt_not_keyerror(data_root):
 
     with pytest.raises(storage.CorruptLibraryError):
         storage.reconcile_library()
+
+
+# --- apply_extraction (Story 6.5, the sole extraction-result writer) --------
+
+
+def test_apply_extraction_persists_meta_and_refreshes_cache(data_root):
+    raw = make_pdf_bytes(pages=1, title="Rough")
+    doc_id, _ = storage.import_pdf(raw, "rough.pdf")
+
+    storage.apply_extraction(
+        doc_id, title="Corrected Title", authors="Ada Lovelace, Alan Turing", status="ready"
+    )
+
+    # meta.json updated.
+    meta = storage.read_meta(doc_id)
+    assert meta.title == "Corrected Title"
+    assert meta.authors == "Ada Lovelace, Alan Turing"
+    assert meta.status == "ready"
+    # Display cache refreshed through the AD-L7 index path.
+    row = storage.read_library().papers[0]
+    assert row.title == "Corrected Title"
+    assert row.authors == "Ada Lovelace, Alan Turing"
+    assert row.status == "ready"
+
+
+def test_apply_extraction_parse_failed_keeps_null_title(data_root):
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "poor.pdf")
+
+    storage.apply_extraction(doc_id, title=None, authors=None, status="parse-failed")
+
+    meta = storage.read_meta(doc_id)
+    assert meta.title is None
+    assert meta.status == "parse-failed"
+    # filename (the client's fallback) is preserved — the row is never lost.
+    assert meta.filename == "poor.pdf"
+
+
+def test_apply_extraction_preserves_identity_fields(data_root):
+    raw = make_pdf_bytes(pages=3, title="Orig")
+    doc_id, before = storage.import_pdf(raw, "orig.pdf")
+
+    storage.apply_extraction(doc_id, title="New", authors=None, status="enrich-skipped")
+
+    meta = storage.read_meta(doc_id)
+    # Only title/authors/status change; page_count/added/filename are untouched.
+    assert meta.page_count == before.page_count == 3
+    assert meta.added == before.added
+    assert meta.filename == "orig.pdf"
+
+
+def test_apply_extraction_is_idempotent(data_root):
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id, _ = storage.import_pdf(raw, "x.pdf")
+
+    storage.apply_extraction(doc_id, title="Once", authors=None, status="ready")
+    storage.apply_extraction(doc_id, title="Once", authors=None, status="ready")
+
+    library = storage.read_library()
+    assert len(library.papers) == 1  # no duplicate entry
+    assert library.papers[0].title == "Once"
+
+
+def test_apply_extraction_missing_doc_raises_not_found(data_root):
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.apply_extraction("0" * 64, title="T", authors=None, status="ready")
+
+
+def test_apply_extraction_purged_mid_flight_raises_not_found(data_root):
+    raw = make_pdf_bytes(pages=1, title="Purge")
+    doc_id, _ = storage.import_pdf(raw, "purge.pdf")
+    shutil.rmtree(data_root / "library" / doc_id)  # purged while extracting
+
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.apply_extraction(doc_id, title="T", authors=None, status="ready")
+
+
+def test_apply_extraction_does_not_resurrect_dir_purged_after_read(data_root, monkeypatch):
+    """Codex review (Med): a purge racing AFTER apply_extraction reads meta but
+    BEFORE it writes must NOT recreate the dir (create_parents=False) and leave
+    a meta-only ghost row in library.json."""
+    raw = make_pdf_bytes(pages=1, title="Racy")
+    doc_id, meta = storage.import_pdf(raw, "racy.pdf")
+    doc_dir = data_root / "library" / doc_id
+
+    real_read_meta = storage._read_meta
+
+    def read_then_purge(path):
+        result = real_read_meta(path)
+        # Simulate the doc being purged right after the read, before the write.
+        if result is not None and path == doc_dir:
+            shutil.rmtree(doc_dir)
+        return result
+
+    monkeypatch.setattr(storage, "_read_meta", read_then_purge)
+
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.apply_extraction(doc_id, title="Ghost", authors=None, status="ready")
+
+    # The dir was NOT recreated (no meta-only ghost written back) and the index
+    # was NOT refreshed with the ghost values — apply_extraction wrote nothing.
+    # (The stale index row is the ORIGINAL import entry; boot reconcile prunes
+    # it. What matters: it never took the "Ghost"/"ready" update.)
+    assert not doc_dir.exists()
+    monkeypatch.setattr(storage, "_read_meta", real_read_meta)
+    rows = storage.read_library().papers
+    assert all(r.title != "Ghost" and r.status != "ready" for r in rows)
 
 
 def test_read_library_unknown_schema_version_raises_corrupt(data_root):
