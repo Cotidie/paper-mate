@@ -44,15 +44,18 @@ describe("useSettlePolling", () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
-  it("stops after maxPolls even if never settled", async () => {
-    const fetch = vi.fn(async () => ({ ok: false }));
+  it("stops after maxPolls even if never settled, firing onMaxPolls not onSettled", async () => {
+    const last = { ok: false, tag: "last" };
+    const fetch = vi.fn(async () => last);
     const onSettled = vi.fn();
+    const onMaxPolls = vi.fn();
     const { result } = renderHook(() =>
       useSettlePolling({
         fetch,
         isSettled: () => false,
         onResult: vi.fn(),
         onSettled,
+        onMaxPolls,
         intervalMs: 1000,
         maxPolls: 3,
       }),
@@ -63,6 +66,32 @@ describe("useSettlePolling", () => {
 
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(onSettled).not.toHaveBeenCalled(); // cap is not a settle
+    expect(onMaxPolls).toHaveBeenCalledTimes(1);
+    expect(onMaxPolls).toHaveBeenLastCalledWith(last); // hands over the last result
+  });
+
+  it("fires onMaxPolls(null) when the cap is reached via a failing fetch", async () => {
+    const fetch = vi.fn(async () => {
+      throw new Error("boom");
+    });
+    const onMaxPolls = vi.fn();
+    const { result } = renderHook(() =>
+      useSettlePolling({
+        fetch,
+        isSettled: () => false,
+        onResult: vi.fn(),
+        onMaxPolls,
+        intervalMs: 1000,
+        maxPolls: 2,
+      }),
+    );
+
+    act(() => result.current.start());
+    await act(async () => void (await vi.advanceTimersByTimeAsync(10000)));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(onMaxPolls).toHaveBeenCalledTimes(1);
+    expect(onMaxPolls).toHaveBeenLastCalledWith(null); // no result on a failed fetch
   });
 
   it("stop() halts further polling", async () => {

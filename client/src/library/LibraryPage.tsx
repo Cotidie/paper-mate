@@ -173,6 +173,12 @@ export default function LibraryPage() {
     isSettled: (lib) => !anyExtracting(lib),
     onResult: applyLibrary,
     onSettled: settleNotices,
+    // Capped without settling (a stuck row): still resolve the batch notice
+    // from the last library seen so its IDs don't leak into a later batch.
+    onMaxPolls: (lib) => {
+      if (lib) settleNotices(lib);
+      else noticeBatchIdsRef.current.clear();
+    },
     intervalMs: SETTLE_POLL_INTERVAL_MS,
     maxPolls: SETTLE_POLL_MAX,
   });

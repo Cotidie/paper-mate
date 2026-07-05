@@ -9,6 +9,10 @@ export interface UseSettlePollingOptions<T> {
   onResult: (latest: T) => void;
   /** Fires once when polling stops because the result settled (not on cap). */
   onSettled?: (latest: T) => void;
+  /** Fires once when polling stops at the `maxPolls` cap without settling, with
+   *  the last result seen (or `null` if none). Lets the caller resolve/clear
+   *  any per-run state it was holding for the settle that never came. */
+  onMaxPolls?: (latest: T | null) => void;
   intervalMs: number;
   /** Safety cap: stop after this many polls even if never settled (a stuck
    *  status must not spin forever). */
@@ -50,16 +54,21 @@ export function useSettlePolling<T>(options: UseSettlePollingOptions<T>) {
     timerRef.current = setTimeout(async () => {
       timerRef.current = null;
       if (!runningRef.current || !mountedRef.current) return;
-      const { fetch, isSettled, onResult, onSettled, maxPolls } = optionsRef.current;
+      const { fetch, isSettled, onResult, onSettled, onMaxPolls, maxPolls } = optionsRef.current;
       pollsRef.current += 1;
       const atCap = pollsRef.current >= maxPolls;
       let latest: T;
       try {
         latest = await fetch();
       } catch {
-        // A transient fetch failure keeps the loop alive until the cap.
-        if (runningRef.current && mountedRef.current && !atCap) scheduleRef.current();
-        else runningRef.current = false;
+        // A transient fetch failure keeps the loop alive until the cap; at the
+        // cap, stop and let the caller resolve whatever it held for the settle.
+        if (runningRef.current && mountedRef.current && !atCap) {
+          scheduleRef.current();
+        } else if (runningRef.current) {
+          runningRef.current = false;
+          onMaxPolls?.(null);
+        }
         return;
       }
       if (!runningRef.current || !mountedRef.current) return;
@@ -70,7 +79,10 @@ export function useSettlePolling<T>(options: UseSettlePollingOptions<T>) {
         return;
       }
       if (atCap) {
+        // Capped without settling: don't leave the caller's per-run state
+        // dangling — hand it the last result so it can clear/resolve.
         runningRef.current = false;
+        onMaxPolls?.(latest);
         return;
       }
       scheduleRef.current();

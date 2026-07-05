@@ -279,6 +279,13 @@ claude-opus-4-8 (Opus 4.8), Claude Code bmad-dev-story. (Story record recommends
 - **Live smoke (own fresh servers, ports 8100/8101 backend + 5199 vite, scratch data; torn down after).** Backend, real PyMuPDF + real Crossref: **ready** (real DOI -> full corrected COCO title + 8 authors), **enrich-skipped** (COCO online, no plausible match -> local title kept), **enrich-skipped** (offline via dead proxy -> local title kept), **parse-failed** (blank PDF -> null title). End-to-end through the Vite proxy: POST returned `extracting`, then `GET /api/library` (the client's poll target) settled to `ready` with correct metadata. The **browser visual** pass (Network-panel poll observation) was blocked by the Chrome extension not connecting; the poll/notice/visual behavior is instead covered by the vitest fake-timer + DOM tests and the HTTP-level proxy smoke.
 - **Scope fences honored:** no inline edit (6.6), no GROBID / Semantic Scholar, no folders/sort/trash (Epic 7), no authors font-heuristic, no contract shape change.
 
+**Codex code-review (bmad-code-review, GPT-5 via `codex exec`) — 0 High, 3 Medium, 1 Low; all resolved:**
+- **[Med] `apply_extraction` could resurrect a purged doc.** `_atomic_write`'s `mkdir(parents=True)` would recreate a dir purged in the read→write TOCTOU window, writing a meta-only ghost + re-indexing it. Fixed: added `create_parents` to `_atomic_write`/`_write_meta`; `apply_extraction` re-checks `doc_dir.is_dir()` then writes with `create_parents=False` (a purge is a clean `DocumentNotFoundError`, no resurrection). New test `test_apply_extraction_does_not_resurrect_dir_purged_after_read`.
+- **[Med] Font heuristic took the global max font before the top filter.** A larger lower-page banner made a legitimate top title return `None`. Fixed: restrict to top-of-page spans first, then take the max size among those. New test `test_extract_font_heuristic_ignores_larger_lower_banner`.
+- **[Med] Poll cap left batch-notice state uncleared.** A permanently-stuck `extracting` row capped without firing `onSettled`, leaking `noticeBatchIdsRef`. Fixed: `useSettlePolling` gained an `onMaxPolls(latest|null)` callback; `LibraryPage` resolves the batch notice (or clears IDs) on cap. New hook tests + a page-level cap test.
+- **[Low] `enrich` treated a blank title/doi as queryable.** Fixed: `_clean()` both at entry, so whitespace-only metadata is "nothing to query" (zero HTTP calls). New test `test_enrich_treats_blank_title_and_doi_as_nothing_to_query`.
+- Post-fix: backend **132 passed**, client **938 passed** + typecheck clean. Codex ran `npm run typecheck` + targeted Vitest (51 pass) itself; it verified backend findings by reading (sandbox pytest note).
+
 ### File List
 
 **New (backend):**

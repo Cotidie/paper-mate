@@ -106,15 +106,17 @@ def _title_from_fonts(page: pymupdf.Page) -> str | None:
                     continue
                 y_top = span.get("bbox", (0, 0, 0, 0))[1]
                 spans.append((round(span.get("size", 0.0), 1), y_top, text))
-    if not spans:
+    # Restrict to the top of the page FIRST, then take the largest font among
+    # those candidates. (Taking the global max first would miss a legitimate
+    # top-of-page title whenever a lower-page banner/heading uses a bigger font.)
+    top_spans = [(size, y, text) for size, y, text in spans if y <= cutoff]
+    if not top_spans:
         return None
-    max_size = max(size for size, _, _ in spans)
+    max_size = max(size for size, _, _ in top_spans)
     title_spans = sorted(
-        ((y, text) for size, y, text in spans if size == max_size and y <= cutoff),
+        ((y, text) for size, y, text in top_spans if size == max_size),
         key=lambda item: item[0],
     )
-    if not title_spans:
-        return None
     joined = " ".join(text for _, text in title_spans)
     return re.sub(r"\s+", " ", joined).strip() or None
 
@@ -222,28 +224,32 @@ def enrich(meta: ExtractedMeta) -> ExtractedMeta | Literal["skipped"]:
     returns the literal ``"skipped"``. It NEVER raises and NEVER blocks the add
     (LFR-9, NFR-1), and makes no more than the two bounded Crossref calls.
     """
-    if meta.doi is None and meta.title is None:
+    # Normalize first: a whitespace-only title/doi is nothing to query, and a
+    # blank bibliographic query would otherwise hit Crossref for no reason.
+    doi = _clean(meta.doi)
+    title = _clean(meta.title)
+    if doi is None and title is None:
         return "skipped"  # nothing to query — no network call
     try:
         with httpx.Client(timeout=_TIMEOUT, headers={"User-Agent": _user_agent()}) as client:
-            if meta.doi:
-                resp = client.get(f"{_CROSSREF}/works/{quote(meta.doi, safe='/')}")
+            if doi:
+                resp = client.get(f"{_CROSSREF}/works/{quote(doi, safe='/')}")
                 if resp.status_code == 200:
-                    corrected = _meta_from_work(resp.json().get("message", {}), meta.doi)
+                    corrected = _meta_from_work(resp.json().get("message", {}), doi)
                     if corrected is not None:
                         return corrected
-            if meta.title:
-                params = {"query.bibliographic": meta.title, "rows": "1"}
+            if title:
+                params = {"query.bibliographic": title, "rows": "1"}
                 if meta.authors:
                     params["query.author"] = " ".join(meta.authors)
                 resp = client.get(f"{_CROSSREF}/works", params=params)
                 if resp.status_code == 200:
                     items = resp.json().get("message", {}).get("items", [])
                     if items:
-                        corrected = _meta_from_work(items[0], meta.doi)
+                        corrected = _meta_from_work(items[0], doi)
                         # Only trust a title-query hit that actually resembles
                         # the query (Crossref always returns a top result).
-                        if corrected is not None and _titles_match(meta.title, corrected.title or ""):
+                        if corrected is not None and _titles_match(title, corrected.title or ""):
                             return corrected
     except Exception:
         return "skipped"

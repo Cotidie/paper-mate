@@ -87,6 +87,19 @@ def test_extract_font_heuristic_title_when_info_empty():
     assert meta.title == "The Big Title"
 
 
+def test_extract_font_heuristic_ignores_larger_lower_banner():
+    # A legitimate top title (24pt) with an even-larger lower-page banner (40pt):
+    # the heuristic must pick the top title, not return None because the global
+    # max font sits below the top-of-page cutoff (Codex review, Med).
+    d = pymupdf.open()
+    p = d.new_page()
+    p.insert_text((72, 72), "Real Top Title", fontsize=24)  # top of page
+    p.insert_text((72, 700), "HUGE FOOTER BANNER", fontsize=40)  # bottom, bigger
+    data = d.tobytes()
+    d.close()
+    assert extract(data).title == "Real Top Title"
+
+
 def test_extract_pulls_doi_from_page_text():
     meta = extract(_pdf(title="Has DOI", body="Available at https://doi.org/10.1234/abcd.5678."))
     # Trailing sentence period is stripped from the greedy suffix.
@@ -163,6 +176,17 @@ def test_enrich_skips_without_doi_or_title_and_makes_no_call(fake_httpx):
 
     fake_httpx(handler)
     assert enrich(ExtractedMeta()) == "skipped"
+    assert _FakeClient.calls == []
+
+
+def test_enrich_treats_blank_title_and_doi_as_nothing_to_query(fake_httpx):
+    # A whitespace-only title/doi must not fire a blank Crossref query
+    # (Codex review, Low): normalized to absent, so zero HTTP calls.
+    def handler(url, params):  # pragma: no cover - must never run
+        raise AssertionError("enrich must not query with whitespace-only metadata")
+
+    fake_httpx(handler)
+    assert enrich(ExtractedMeta(title="   ", doi="  ")) == "skipped"
     assert _FakeClient.calls == []
 
 

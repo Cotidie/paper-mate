@@ -548,6 +548,38 @@ def test_apply_extraction_purged_mid_flight_raises_not_found(data_root):
         storage.apply_extraction(doc_id, title="T", authors=None, status="ready")
 
 
+def test_apply_extraction_does_not_resurrect_dir_purged_after_read(data_root, monkeypatch):
+    """Codex review (Med): a purge racing AFTER apply_extraction reads meta but
+    BEFORE it writes must NOT recreate the dir (create_parents=False) and leave
+    a meta-only ghost row in library.json."""
+    raw = make_pdf_bytes(pages=1, title="Racy")
+    doc_id, meta = storage.import_pdf(raw, "racy.pdf")
+    doc_dir = data_root / "library" / doc_id
+
+    real_read_meta = storage._read_meta
+
+    def read_then_purge(path):
+        result = real_read_meta(path)
+        # Simulate the doc being purged right after the read, before the write.
+        if result is not None and path == doc_dir:
+            shutil.rmtree(doc_dir)
+        return result
+
+    monkeypatch.setattr(storage, "_read_meta", read_then_purge)
+
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.apply_extraction(doc_id, title="Ghost", authors=None, status="ready")
+
+    # The dir was NOT recreated (no meta-only ghost written back) and the index
+    # was NOT refreshed with the ghost values — apply_extraction wrote nothing.
+    # (The stale index row is the ORIGINAL import entry; boot reconcile prunes
+    # it. What matters: it never took the "Ghost"/"ready" update.)
+    assert not doc_dir.exists()
+    monkeypatch.setattr(storage, "_read_meta", real_read_meta)
+    rows = storage.read_library().papers
+    assert all(r.title != "Ghost" and r.status != "ready" for r in rows)
+
+
 def test_read_library_unknown_schema_version_raises_corrupt(data_root):
     raw = make_pdf_bytes(pages=1)
     storage.import_pdf(raw, "v.pdf")

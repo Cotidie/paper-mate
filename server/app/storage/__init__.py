@@ -117,16 +117,22 @@ def _fsync_dir(directory: Path) -> None:
         os.close(dir_fd)
 
 
-def _atomic_write(path: Path, data: bytes) -> None:
+def _atomic_write(path: Path, data: bytes, *, create_parents: bool = True) -> None:
     """Write ``data`` to ``path`` atomically (temp in same dir + rename).
 
     Filesystem failures (disk full, permissions, ...) are wrapped as
     ``StorageError`` so every caller's existing ``except StorageError``
     mapping (the API's single ``{ detail }`` envelope, AR-11) catches them
     instead of letting a raw ``OSError`` bypass it.
+
+    ``create_parents=False`` refuses to (re)create the parent directory — an
+    update path (e.g. ``apply_extraction``) uses it so a doc purged mid-write
+    is NOT resurrected as a meta-only ghost; a missing parent then surfaces as
+    ``StorageError`` rather than silently recreating the dir.
     """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        if create_parents:
+            path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=path.suffix)
     except OSError as exc:
         raise StorageError(f"could not prepare write to {path}: {exc}") from exc
@@ -188,8 +194,12 @@ def _read_meta(doc_dir: Path) -> DocMeta | None:
         raise CorruptMetadataError(f"invalid meta.json shape: {exc}") from exc
 
 
-def _write_meta(doc_dir: Path, meta: DocMeta) -> None:
-    _atomic_write(doc_dir / "meta.json", meta.model_dump_json(indent=2).encode("utf-8"))
+def _write_meta(doc_dir: Path, meta: DocMeta, *, create_parents: bool = True) -> None:
+    _atomic_write(
+        doc_dir / "meta.json",
+        meta.model_dump_json(indent=2).encode("utf-8"),
+        create_parents=create_parents,
+    )
 
 
 # --- Collection index: library.json (AD-L1/AD-L7, Story 6.2) ---------------
@@ -473,7 +483,13 @@ def apply_extraction(
     if current is None:
         raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
     updated = current.model_copy(update={"title": title, "authors": authors, "status": status})
-    _write_meta(doc_dir, updated)
+    # Guard the TOCTOU window: a purge between the read above and the write
+    # below must NOT recreate the dir (create_parents=False) and re-index a
+    # meta-only ghost row. Re-check first so the common purge is a clean
+    # DocumentNotFoundError, then only refresh the cache if the write landed.
+    if not doc_dir.is_dir():
+        raise DocumentNotFoundError(f"document dir gone for doc_id {doc_id!r}")
+    _write_meta(doc_dir, updated, create_parents=False)
     _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, updated))
 
 

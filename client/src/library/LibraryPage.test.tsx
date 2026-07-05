@@ -497,6 +497,38 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
     expect(screen.queryByText(/Enrichment skipped/)).toBeNull();
   });
 
+  it("still raises the enrich-skipped notice when polling caps on a permanently-stuck row", async () => {
+    vi.useFakeTimers();
+    const batchId = "b".repeat(64);
+    const stuckId = "s".repeat(64); // a pre-existing row that never settles
+    // After the batch settles, the library always has the batch row as
+    // enrich-skipped PLUS a stuck extracting row, so polling never settles and
+    // eventually hits the cap. onMaxPolls must still resolve the batch notice.
+    vi.spyOn(api, "getLibrary").mockImplementation(async () => ({
+      papers: [
+        libRow(batchId, "enrich-skipped", "Batch Local Title", "batch.pdf"),
+        libRow(stuckId, "extracting", null, "stuck.pdf"),
+      ],
+      folders: [],
+    }));
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(docStatus(batchId, "batch.pdf", "extracting"));
+
+    renderLibrary();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile("batch.pdf")] },
+    });
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+
+    // Run out the whole poll budget (60 * 1200ms) plus a buffer.
+    await act(async () => void (await vi.advanceTimersByTimeAsync(60 * 1200 + 2000)));
+
+    // The batch's enrich-skipped row is noticed even though the loop capped.
+    expect(screen.getByText("Enrichment skipped.")).toBeTruthy();
+    vi.useRealTimers();
+  });
+
   it("renders a parse-failed row with its filename and lets it open (interactive)", async () => {
     const id = "z".repeat(64);
     vi.spyOn(api, "getLibrary").mockResolvedValue({
