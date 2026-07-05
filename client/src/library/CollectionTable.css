@@ -68,14 +68,11 @@
 }
 
 .collection-table__title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xxs);
+  position: relative;
 }
 
 .collection-table__title-text {
-  min-width: 0;
-  flex: 1 1 auto;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -116,9 +113,15 @@
 
 /* Hover/focus-revealed Open button (replaces click-to-open on the row). A
    real <button>, so Tab reaches it and Enter/Space activates it natively;
-   the reveal itself is CSS-only, no JS hover-state tracking. */
+   the reveal itself is CSS-only, no JS hover-state tracking. Absolutely
+   positioned (not a flex sibling) so it reserves NO layout space: the title
+   text uses the full cell width while unhovered, and the button overlays
+   its trailing edge only once revealed. */
 .collection-table__open-button {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 50%;
+  right: var(--space-xs);
+  transform: translateY(-50%);
   opacity: 0;
   pointer-events: none;
   background: var(--color-surface-card);
