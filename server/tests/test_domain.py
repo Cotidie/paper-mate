@@ -1,15 +1,18 @@
 """Pure domain layer tests (AD-L2, Story 6.5).
 
 ``extract`` is exercised against PDFs built in-code with PyMuPDF (no committed
-binaries); ``enrich`` is exercised with a fake ``httpx.Client`` — these tests
-NEVER hit the real network.
+binaries); ``enrich`` is exercised with a fake ``httpx.Client`` (patched on the
+``crossref`` module) and with an injected fake enricher — these tests NEVER hit
+the real network.
 """
 
 import pymupdf
 import pytest
 
-from app.domain import extraction
-from app.domain.extraction import enrich, extract
+from app.domain import crossref
+from app.domain.crossref import CrossrefEnricher
+from app.domain.enrich import enrich
+from app.domain.extract import extract
 from app.models import ExtractedMeta
 
 # --- PDF builders (in-code, deterministic) ---------------------------------
@@ -172,13 +175,14 @@ class _FakeClient:
 
 @pytest.fixture
 def fake_httpx(monkeypatch):
-    """Install a fake ``httpx.Client`` in the extraction module; return a setter
-    that takes a ``handler(url, params) -> _FakeResponse`` (or raises)."""
+    """Install a fake ``httpx.Client`` on the ``crossref`` module (where the
+    enricher constructs it); return a setter that takes a
+    ``handler(url, params) -> _FakeResponse`` (or raises)."""
     _FakeClient.calls = []
 
     def install(handler):
         monkeypatch.setattr(
-            extraction.httpx, "Client", lambda *a, **k: _FakeClient(handler)
+            crossref.httpx, "Client", lambda *a, **k: _FakeClient(handler)
         )
 
     return install
@@ -246,7 +250,7 @@ def test_enrich_title_fallback_success(fake_httpx):
 
 def test_enrich_offline_returns_skipped(fake_httpx):
     def handler(url, params):
-        raise extraction.httpx.ConnectError("offline")
+        raise crossref.httpx.ConnectError("offline")
 
     fake_httpx(handler)
     assert enrich(ExtractedMeta(title="Some Paper")) == "skipped"
@@ -321,22 +325,99 @@ def test_enrich_falls_back_to_title_when_doi_misses(fake_httpx):
     assert len(_FakeClient.calls) == 2
 
 
-def test_domain_module_is_pure():
-    """AD-L2: the extraction module imports no storage/filesystem access.
+_FORBIDDEN_IMPORTS = {"os", "pathlib", "app.storage"}
 
-    Parse the actual imports (not the docstring) so a prose mention of
-    ``app.storage`` in the module header can't trip the guard.
+
+def _import_leaks(source: str) -> set[str]:
+    """Names a module imports that violate AD-L2 (storage/filesystem access).
+
+    Records both the bare module and the fully-qualified ``module.name`` for
+    ``from X import Y`` so ``from app import storage`` (which records only
+    ``app`` for ``node.module``) is caught via ``app.storage``, not just the
+    ``import app.storage`` / ``from app.storage import ...`` forms.
     """
     import ast
-    import pathlib
 
-    tree = ast.parse(pathlib.Path(extraction.__file__).read_text())
-    forbidden = {"os", "pathlib", "app.storage"}
     imported: set[str] = set()
-    for node in ast.walk(tree):
+    for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
             imported.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
-            imported.add(node.module or "")
-    leaks = {name for name in imported if name in forbidden or name.startswith("app.storage")}
+            module = node.module or ""
+            imported.add(module)
+            for alias in node.names:
+                imported.add(f"{module}.{alias.name}" if module else alias.name)
+    return {name for name in imported if name in _FORBIDDEN_IMPORTS or name.startswith("app.storage")}
+
+
+def test_domain_modules_are_pure():
+    """AD-L2: NO domain module imports storage or filesystem access.
+
+    Parse the actual imports (not the docstring) of every ``app/domain/*.py``
+    module so a prose mention of ``app.storage`` in a module header can't trip
+    the guard — and so the split into extract/enrich/crossref is covered, not
+    just one file. (``crossref`` legitimately imports ``httpx``: enrichment is
+    the one allowed network hop; the filesystem/storage ban is what we assert.)
+    """
+    import pathlib
+
+    from app import domain
+
+    domain_dir = pathlib.Path(domain.__file__).parent
+    leaks = {
+        module_file.name: found
+        for module_file in sorted(domain_dir.glob("*.py"))
+        if (found := _import_leaks(module_file.read_text()))
+    }
     assert not leaks, f"domain must stay pure: found imports {leaks}"
+
+
+def test_purity_check_catches_every_storage_import_form():
+    """The guard must catch all three storage-import spellings, including the
+    `from app import storage` facade form (which records only `app` as the
+    module) — otherwise the AD-L2 landmine would false-green."""
+    assert _import_leaks("from app import storage") == {"app.storage"}
+    assert _import_leaks("import app.storage") == {"app.storage"}
+    assert _import_leaks("from app.storage import documents") >= {"app.storage"}
+    assert _import_leaks("import os\nimport pathlib") == {"os", "pathlib"}
+    # A legitimate domain import is not a leak.
+    assert _import_leaks("from app.models import ExtractedMeta") == set()
+
+
+def test_enrich_delegates_to_injected_enricher():
+    """AD-L2 port: ``enrich`` uses an injected ``Enricher`` (no HTTP, no default
+    CrossrefEnricher) — the seam that makes enrichment swappable/testable."""
+
+    class _FakeEnricher:
+        def __init__(self):
+            self.seen: list[ExtractedMeta] = []
+
+        def enrich(self, meta: ExtractedMeta):
+            self.seen.append(meta)
+            return ExtractedMeta(title="Injected", authors=["Fake Author"])
+
+    fake = _FakeEnricher()
+    meta = ExtractedMeta(title="local", doi="10.1/x")
+    result = enrich(meta, enricher=fake)
+
+    assert result != "skipped"
+    assert result.title == "Injected"
+    assert fake.seen == [meta]  # the injected port, not the default, was called
+
+
+def test_enrich_degrades_to_skipped_when_injected_enricher_raises():
+    """The facade enforces the port's never-raises contract: a misbehaving
+    injected enricher degrades to "skipped" rather than leaking into the add."""
+
+    class _BoomEnricher:
+        def enrich(self, meta: ExtractedMeta):
+            raise RuntimeError("boom")
+
+    assert enrich(ExtractedMeta(title="x"), enricher=_BoomEnricher()) == "skipped"
+
+
+def test_default_enricher_is_a_crossref_enricher():
+    """The production default behind the ``enrich`` facade is CrossrefEnricher."""
+    from app.domain.enrich import _default_enricher
+
+    assert isinstance(_default_enricher, CrossrefEnricher)

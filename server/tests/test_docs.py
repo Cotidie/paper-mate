@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from app import domain, storage
 from app.main import app
 from app.models import ExtractedMeta
-from app.routes.docs import run_extraction
+from app.routes.extraction import run_extraction
 from tests.conftest import make_pdf_bytes, sha256_hex
 
 client = TestClient(app)
@@ -354,7 +354,7 @@ def test_mark_doc_opened_disk_failure_returns_500_envelope(data_root, monkeypatc
     def boom(*args, **kwargs):
         raise OSError("disk full")
 
-    monkeypatch.setattr("app.storage.os.replace", boom)
+    monkeypatch.setattr("app.storage.atomic.os.replace", boom)
 
     resp = client.post(f"/api/docs/{doc_id}/open")
     assert resp.status_code == 500
@@ -512,7 +512,7 @@ def test_put_annotations_disk_failure_returns_500_envelope(data_root, monkeypatc
     def boom(*args, **kwargs):
         raise OSError("disk full")
 
-    monkeypatch.setattr("app.storage.os.replace", boom)
+    monkeypatch.setattr("app.storage.atomic.os.replace", boom)
 
     resp = client.put(f"/api/docs/{doc_id}/annotations", json=[])
     assert resp.status_code == 500

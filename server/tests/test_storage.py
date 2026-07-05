@@ -13,6 +13,7 @@ import pytest
 
 from app import storage
 from app.models import Annotation
+from app.storage import meta_store
 from tests.conftest import make_pdf_bytes, sha256_hex
 
 
@@ -556,7 +557,7 @@ def test_apply_extraction_does_not_resurrect_dir_purged_after_read(data_root, mo
     doc_id, meta = storage.import_pdf(raw, "racy.pdf")
     doc_dir = data_root / "library" / doc_id
 
-    real_read_meta = storage._read_meta
+    real_read_meta = meta_store.read
 
     def read_then_purge(path):
         result = real_read_meta(path)
@@ -565,7 +566,7 @@ def test_apply_extraction_does_not_resurrect_dir_purged_after_read(data_root, mo
             shutil.rmtree(doc_dir)
         return result
 
-    monkeypatch.setattr(storage, "_read_meta", read_then_purge)
+    monkeypatch.setattr(meta_store, "read", read_then_purge)
 
     with pytest.raises(storage.DocumentNotFoundError):
         storage.apply_extraction(doc_id, title="Ghost", authors=None, status="ready")
@@ -575,7 +576,7 @@ def test_apply_extraction_does_not_resurrect_dir_purged_after_read(data_root, mo
     # (The stale index row is the ORIGINAL import entry; boot reconcile prunes
     # it. What matters: it never took the "Ghost"/"ready" update.)
     assert not doc_dir.exists()
-    monkeypatch.setattr(storage, "_read_meta", real_read_meta)
+    monkeypatch.setattr(meta_store, "read", real_read_meta)
     rows = storage.read_library().papers
     assert all(r.title != "Ghost" and r.status != "ready" for r in rows)
 
@@ -621,7 +622,7 @@ def test_update_doc_meta_purged_dir_raises_not_found_no_ghost_row(data_root, mon
     doc_id, _ = storage.import_pdf(raw, "racy.pdf")
     doc_dir = data_root / "library" / doc_id
 
-    real_read_meta = storage._read_meta
+    real_read_meta = meta_store.read
 
     def read_then_purge(path):
         result = real_read_meta(path)
@@ -629,13 +630,13 @@ def test_update_doc_meta_purged_dir_raises_not_found_no_ghost_row(data_root, mon
             shutil.rmtree(doc_dir)
         return result
 
-    monkeypatch.setattr(storage, "_read_meta", read_then_purge)
+    monkeypatch.setattr(meta_store, "read", read_then_purge)
 
     with pytest.raises(storage.DocumentNotFoundError):
         storage.update_doc_meta(doc_id, {"title": "Ghost"})
 
     assert not doc_dir.exists()
-    monkeypatch.setattr(storage, "_read_meta", real_read_meta)
+    monkeypatch.setattr(meta_store, "read", real_read_meta)
     rows = storage.read_library().papers
     assert all(r.title != "Ghost" for r in rows)
 
@@ -690,7 +691,7 @@ def test_touch_last_opened_purged_dir_raises_not_found_no_ghost_row(data_root, m
     doc_id, _ = storage.import_pdf(raw, "racy.pdf")
     doc_dir = data_root / "library" / doc_id
 
-    real_read_meta = storage._read_meta
+    real_read_meta = meta_store.read
 
     def read_then_purge(path):
         result = real_read_meta(path)
@@ -698,7 +699,7 @@ def test_touch_last_opened_purged_dir_raises_not_found_no_ghost_row(data_root, m
             shutil.rmtree(doc_dir)
         return result
 
-    monkeypatch.setattr(storage, "_read_meta", read_then_purge)
+    monkeypatch.setattr(meta_store, "read", read_then_purge)
 
     with pytest.raises(storage.DocumentNotFoundError):
         storage.touch_last_opened(doc_id)

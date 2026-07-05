@@ -1,26 +1,18 @@
-"""Pure metadata extraction + enrichment (AD-L2, Story 6.5).
-
-The first tenant of the backend **domain layer**: bytes/data in, data out. This
-module NEVER touches the filesystem and NEVER imports ``app.storage`` — the
-route composes it with storage, which is the only writer. ``enrich`` is the
-only code in the whole backend that makes a network call.
+"""Pure PyMuPDF metadata extraction (AD-L2, Story 6.5).
 
 ``extract`` is **total** (any PyMuPDF failure yields an empty ``ExtractedMeta``,
 never a raise) and the seam is **GROBID-swappable** (its signature is
-``bytes -> ExtractedMeta`` with no side effects). ``enrich`` **never raises**:
-offline, on any HTTP failure, or with nothing to query it degrades to the
-literal ``"skipped"``.
+``bytes -> ExtractedMeta`` with no side effects). This module NEVER touches the
+filesystem, NEVER imports ``app.storage``, and NEVER makes a network call — the
+Crossref hop lives in ``enrich``/``crossref``.
 """
 
 import re
-from typing import Literal
-from urllib.parse import quote
 
-import httpx
 import pymupdf
 
+from app.domain._text import clean
 from app.models import ExtractedMeta
-from app.version import get_version
 
 #: A DOI: ``10.<registrant>/<suffix>`` (Crossref's own recommended pattern).
 _DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+", re.IGNORECASE)
@@ -28,29 +20,9 @@ _DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+", re.IGNORECASE)
 #: Trailing punctuation the greedy DOI suffix charset over-captures from prose.
 _DOI_TRAILING = ".,;)"
 
-#: Crossref REST base + a short, polite timeout (single-user, best-effort).
-_CROSSREF = "https://api.crossref.org"
-_TIMEOUT = 5.0
-
 #: A title is only trusted from the font heuristic if it sits in the top of the
 #: page (titles do; a large mid-page section header does not).
 _TITLE_TOP_FRACTION = 0.5
-
-#: Minimum token-set Jaccard similarity for a Crossref *title-query* hit to be
-#: trusted. Crossref's `rows=1` always returns its best match even when the
-#: query has none, so a bare `items[0]` accepts keyword-spam papers that merely
-#: mention the query terms. Requiring real overlap keeps the local title
-#: instead of "correcting" it to an unrelated work. (The DOI path is exact and
-#: needs no such guard.)
-_TITLE_MATCH_MIN_JACCARD = 0.5
-
-
-def _clean(value: object) -> str | None:
-    """Normalize a metadata value: blank/whitespace-only is *absent*, not ``""``."""
-    if not isinstance(value, str):
-        return None
-    stripped = value.strip()
-    return stripped or None
 
 
 def _rdf_items(block: str) -> list[str]:
@@ -58,7 +30,7 @@ def _rdf_items(block: str) -> list[str]:
     return [
         cleaned
         for raw in re.findall(r"<rdf:li[^>]*>(.*?)</rdf:li>", block, re.DOTALL)
-        if (cleaned := _clean(raw))
+        if (cleaned := clean(raw))
     ]
 
 
@@ -73,7 +45,7 @@ def _parse_xmp(xmp: str) -> tuple[str | None, list[str]]:
     title_match = re.search(r"<dc:title>(.*?)</dc:title>", xmp, re.DOTALL)
     if title_match:
         items = _rdf_items(title_match.group(1))
-        title = items[0] if items else _clean(title_match.group(1))
+        title = items[0] if items else clean(title_match.group(1))
     authors: list[str] = []
     creator_match = re.search(r"<dc:creator>(.*?)</dc:creator>", xmp, re.DOTALL)
     if creator_match:
@@ -119,7 +91,7 @@ def _title_from_fonts(page: pymupdf.Page) -> str | None:
             if not _is_horizontal(line.get("dir")):
                 continue  # skip rotated margin stamps / watermarks
             for span in line.get("spans", []):
-                text = _clean(span.get("text"))
+                text = clean(span.get("text"))
                 if text is None:
                     continue
                 y_top = span.get("bbox", (0, 0, 0, 0))[1]
@@ -165,8 +137,8 @@ def extract(pdf_bytes: bytes) -> ExtractedMeta:
         return ExtractedMeta()
     try:
         info = doc.metadata or {}
-        title = _clean(info.get("title"))
-        author = _clean(info.get("author"))
+        title = clean(info.get("title"))
+        author = clean(info.get("author"))
         authors = [author] if author else []
 
         try:
@@ -194,81 +166,3 @@ def extract(pdf_bytes: bytes) -> ExtractedMeta:
         return ExtractedMeta()
     finally:
         doc.close()
-
-
-def _user_agent() -> str:
-    """Crossref polite-pool etiquette: identify the app + a contact address."""
-    return f"PaperMate/{get_version()} (mailto:paper-mate@localhost)"
-
-
-def _authors_from_crossref(work: dict) -> list[str]:
-    names: list[str] = []
-    for author in work.get("author", []) or []:
-        given = (author.get("given") or "").strip()
-        family = (author.get("family") or "").strip()
-        full = f"{given} {family}".strip()
-        if full:
-            names.append(full)
-    return names
-
-
-def _meta_from_work(work: dict, doi: str | None) -> ExtractedMeta | None:
-    """Project a Crossref ``message`` work into ``ExtractedMeta`` (``None`` if
-    it carries no title — an empty result is a skip, not a correction)."""
-    titles = work.get("title") or []
-    title = _clean(titles[0]) if titles else None
-    if title is None:
-        return None
-    return ExtractedMeta(title=title, authors=_authors_from_crossref(work), doi=doi)
-
-
-def _titles_match(query_title: str, result_title: str) -> bool:
-    """Token-set Jaccard >= threshold — a plausibility gate for title-query
-    hits so an unrelated top result can't overwrite a correct local title."""
-    query_tokens = set(re.findall(r"[a-z0-9]+", query_title.lower()))
-    result_tokens = set(re.findall(r"[a-z0-9]+", result_title.lower()))
-    if not query_tokens or not result_tokens:
-        return False
-    jaccard = len(query_tokens & result_tokens) / len(query_tokens | result_tokens)
-    return jaccard >= _TITLE_MATCH_MIN_JACCARD
-
-
-def enrich(meta: ExtractedMeta) -> ExtractedMeta | Literal["skipped"]:
-    """Correct ``meta`` against Crossref, DOI-first, or degrade to ``"skipped"``.
-
-    DOI-first (``/works/{doi}``) then a bibliographic title fallback
-    (``/works?query.bibliographic=...&rows=1``). Offline, on any timeout /
-    non-200 / no-match, OR when there is neither a DOI nor a title to query, it
-    returns the literal ``"skipped"``. It NEVER raises and NEVER blocks the add
-    (LFR-9, NFR-1), and makes no more than the two bounded Crossref calls.
-    """
-    # Normalize first: a whitespace-only title/doi is nothing to query, and a
-    # blank bibliographic query would otherwise hit Crossref for no reason.
-    doi = _clean(meta.doi)
-    title = _clean(meta.title)
-    if doi is None and title is None:
-        return "skipped"  # nothing to query — no network call
-    try:
-        with httpx.Client(timeout=_TIMEOUT, headers={"User-Agent": _user_agent()}) as client:
-            if doi:
-                resp = client.get(f"{_CROSSREF}/works/{quote(doi, safe='/')}")
-                if resp.status_code == 200:
-                    corrected = _meta_from_work(resp.json().get("message", {}), doi)
-                    if corrected is not None:
-                        return corrected
-            if title:
-                params = {"query.bibliographic": title, "rows": "1"}
-                if meta.authors:
-                    params["query.author"] = " ".join(meta.authors)
-                resp = client.get(f"{_CROSSREF}/works", params=params)
-                if resp.status_code == 200:
-                    items = resp.json().get("message", {}).get("items", [])
-                    if items:
-                        corrected = _meta_from_work(items[0], doi)
-                        # Only trust a title-query hit that actually resembles
-                        # the query (Crossref always returns a top result).
-                        if corrected is not None and _titles_match(title, corrected.title or ""):
-                            return corrected
-    except Exception:
-        return "skipped"
-    return "skipped"

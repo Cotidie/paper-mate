@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import CollectionTable, { formatAdded } from "@/library/CollectionTable";
+import CollectionTable from "./CollectionTable";
+import { formatAdded } from "@/library/row";
 import type { CollectionRow } from "@/api/client";
 
 afterEach(cleanup);
