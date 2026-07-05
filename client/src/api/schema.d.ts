@@ -216,6 +216,8 @@ export interface components {
             trashed: boolean;
             /** Order */
             order: number;
+            /** Filename */
+            filename?: string | null;
         };
         /**
          * Doc

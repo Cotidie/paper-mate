@@ -96,7 +96,7 @@ export default function LibraryPage() {
           {loading ? (
             <CollectionTable loading />
           ) : papers.length > 0 ? (
-            <CollectionTable rows={papers} />
+            <CollectionTable rows={papers} onOpenRow={(docId) => navigate(`/reader/${docId}`)} />
           ) : loadFailed ? null : (
             <p className="library-empty-copy">No papers yet.</p>
           )}

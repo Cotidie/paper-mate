@@ -88,6 +88,10 @@ class CollectionRow(BaseModel):
     folder_id: str | None
     trashed: bool
     order: int
+    # Additive (fix, no schema_version bump): the client falls back to this
+    # when `title` is null. Optional so a pre-existing library.json entry
+    # cached before this field existed still validates; reconcile backfills it.
+    filename: str | None = None
 
 
 class Library(BaseModel):

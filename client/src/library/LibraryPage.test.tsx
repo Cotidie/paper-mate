@@ -123,6 +123,16 @@ describe("Collection table (Story 6.3)", () => {
     expect(screen.queryByText("No papers yet.")).toBeNull();
   });
 
+  it("navigates to /reader/:docId on row double-click", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    renderLibrary();
+
+    await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
+    fireEvent.doubleClick(screen.getByText("Attention Is All You Need").closest("tr")!);
+
+    await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
+  });
+
   it("shows an error toast and no table when the library fetch fails", async () => {
     vi.spyOn(api, "getLibrary").mockRejectedValue(new Error("boom"));
     renderLibrary();

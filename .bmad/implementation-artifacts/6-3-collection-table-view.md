@@ -195,14 +195,24 @@ Claude Sonnet 5 (claude-sonnet-5)
 - Added `--type-caption-uppercase-*` (including the `0.88px` letter-spacing DESIGN.md specifies for this scale, which the story's own dev note incorrectly said to omit) and `--badge-pill-*` / `--collection-table-*` dimension vars to `client/src/theme/components.css` (token layer, px-exempt).
 - Fixed the Story 6.1 regression: every `LibraryPage.test.tsx` case now mocks `getLibrary` and awaits the fetch settling before asserting on empty/loaded/error state. Added `CollectionTable.test.tsx` (headers, count line, human date, badges, ellipsis class, `Untitled` fallback, skeleton) and new `LibraryPage.test.tsx` cases (loaded table, load-error toast, skeleton-before-resolve, Add bridge still works after a load failure).
 - Bumped `server/pyproject.toml` version `0.4.2 → 0.4.3` (PATCH, this story) and re-ran `uv lock`; `test_version.py` stays green.
-- No backend code changed (no contract regen); router/ReaderPage/storage untouched.
+
+**Post-review fix requests (same session):**
+- **Double-click to open:** added `onOpenRow(docId)` to `CollectionTable` (required when not `loading`); a row's `onDoubleClick` calls it. `LibraryPage` supplies `navigate(\`/reader/${docId}\`)`, keeping `CollectionTable` presentational (AD-9: it reports the gesture, not navigate itself). Row hover now shows a pointer cursor as an affordance hint.
+- **Filename fallback for null title:** `CollectionRow` gained an additive, optional `filename: str | None = None` field (backend `models.py`), populated by `_cache_from_meta`. Regenerated `server/openapi.json` + `client/src/api/schema.d.ts`. `reconcile_library()` now also refreshes the display cache for already-indexed entries (previously only newly-discovered dirs got a fresh cache), so existing pre-fix `library.json` rows backfill `filename` on the next server start without a re-import. Frontend: `CollectionTable` title fallback is now `row.title ?? row.filename ?? "Untitled"` (muted `Untitled` only when neither is known).
+- Added backend test `test_reconcile_backfills_filename_for_pre_existing_entry`; extended `test_import_indexes_paper_as_uncategorized` to assert `filename`. Added `CollectionTable.test.tsx` cases (filename fallback, genuine-Untitled fallback, double-click calls `onOpenRow`) and a `LibraryPage.test.tsx` case (double-click navigates to `/reader/:docId`).
+- Full suites green after the fix: 97 backend tests, 877 client tests (44 files), typecheck clean. Live-smoked both fixes against a fresh scratch server/data-dir with a real imported PDF: double-click opened the reader with the correct file, and a null-title row showed its filename instead of "Untitled".
 
 ### File List
 
 - `client/src/api/client.ts` (modified: added `getLibrary()`)
-- `client/src/library/CollectionTable.tsx` (new)
-- `client/src/library/CollectionTable.css` (new)
-- `client/src/library/CollectionTable.test.tsx` (new)
+- `client/src/library/CollectionTable.tsx` (new; later modified for `onOpenRow` + filename fallback)
+- `client/src/library/CollectionTable.css` (new; later modified: pointer cursor on row hover)
+- `client/src/library/CollectionTable.test.tsx` (new; later modified: filename-fallback + double-click cases)
+- `server/app/models.py` (modified: `CollectionRow.filename`)
+- `server/app/storage/__init__.py` (modified: `_cache_from_meta` + `reconcile_library` backfill)
+- `server/tests/test_storage.py` (modified: filename assertions + backfill test)
+- `server/openapi.json` (regenerated)
+- `client/src/api/schema.d.ts` (regenerated)
 - `client/src/library/LibraryPage.tsx` (modified: fetch-on-mount, loading/error/empty/data switch)
 - `client/src/library/LibraryPage.css` (modified: `.library-main--table` scrollable layout)
 - `client/src/library/LibraryPage.test.tsx` (modified: mock `getLibrary` everywhere, new table/error/skeleton cases)

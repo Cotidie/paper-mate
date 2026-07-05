@@ -62,6 +62,7 @@
 
 .collection-table tbody tr:hover {
   background: var(--color-surface-strong);
+  cursor: pointer;
 }
 
 .collection-table__title,

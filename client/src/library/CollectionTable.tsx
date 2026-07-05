@@ -57,17 +57,19 @@ function TableSkeleton() {
 }
 
 type CollectionTableProps =
-  | { loading: true; rows?: never }
-  | { loading?: false; rows: CollectionRow[] };
+  | { loading: true; rows?: never; onOpenRow?: never }
+  | { loading?: false; rows: CollectionRow[]; onOpenRow: (docId: string) => void };
 
 /**
- * Read-only Library collection table (Story 6.3): rows in, DOM out. Owns no
- * fetch (AD-9: `LibraryPage` fetches, this renders). Rendered in the
- * response's `order` (client sort is Story 7.4).
+ * Read-only Library collection table: rows in, DOM out. Owns no fetch (AD-9:
+ * `LibraryPage` fetches, this renders). Rendered in the response's `order`
+ * (client sort is Story 7.4). A row double-click opens it in the reader via
+ * `onOpenRow` (LibraryPage owns navigation, this component only reports the
+ * gesture).
  */
 export default function CollectionTable(props: CollectionTableProps) {
   if (props.loading) return <TableSkeleton />;
-  const { rows } = props;
+  const { rows, onOpenRow } = props;
 
   return (
     <div className="collection-table-wrap">
@@ -76,20 +78,25 @@ export default function CollectionTable(props: CollectionTableProps) {
         <ColumnGroup />
         <TableHead />
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.doc_id}>
-              <td className="collection-table__title" title={row.title ?? undefined}>
-                {row.title ?? <span className="collection-table__untitled">Untitled</span>}
-              </td>
-              <td className="collection-table__authors" title={row.authors ?? undefined}>
-                {row.authors ?? ""}
-              </td>
-              <td className="collection-table__added">{formatAdded(row.added)}</td>
-              <td>
-                <span className="badge-pill">{row.file_type === "note" ? "Note" : "PDF"}</span>
-              </td>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            // A null title falls back to the filename (still recognizable);
+            // `Untitled` is the last resort when neither is known.
+            const displayTitle = row.title ?? row.filename ?? null;
+            return (
+              <tr key={row.doc_id} onDoubleClick={() => onOpenRow(row.doc_id)}>
+                <td className="collection-table__title" title={displayTitle ?? undefined}>
+                  {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
+                </td>
+                <td className="collection-table__authors" title={row.authors ?? undefined}>
+                  {row.authors ?? ""}
+                </td>
+                <td className="collection-table__added">{formatAdded(row.added)}</td>
+                <td>
+                  <span className="badge-pill">{row.file_type === "note" ? "Note" : "PDF"}</span>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

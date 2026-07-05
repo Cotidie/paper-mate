@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import CollectionTable, { formatAdded } from "@/library/CollectionTable";
 import type { CollectionRow } from "@/api/client";
 
@@ -27,39 +27,66 @@ const rows: CollectionRow[] = [
     folder_id: null,
     trashed: false,
     order: 1,
+    filename: "no-title-paper.pdf",
+  },
+  {
+    doc_id: "c".repeat(64),
+    title: null,
+    authors: null,
+    added: "2026-07-01T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    order: 2,
+    filename: null,
   },
 ];
 
+function noop() {}
+
 describe("CollectionTable (Story 6.3)", () => {
   it("renders the four column headers and the count line", () => {
-    render(<CollectionTable rows={rows} />);
+    render(<CollectionTable rows={rows} onOpenRow={noop} />);
     for (const label of ["Title", "Authors", "Added", "File type"]) {
       expect(screen.getByRole("columnheader", { name: label })).toBeTruthy();
     }
-    expect(screen.getByText("2 files in library")).toBeTruthy();
+    expect(screen.getByText("3 files in library")).toBeTruthy();
   });
 
   it("renders a human date, not the raw ISO string", () => {
-    render(<CollectionTable rows={rows} />);
+    render(<CollectionTable rows={rows} onOpenRow={noop} />);
     expect(screen.getByText(formatAdded(rows[0].added))).toBeTruthy();
     expect(screen.queryByText(rows[0].added)).toBeNull();
   });
 
   it("renders the PDF and Note badge labels", () => {
-    render(<CollectionTable rows={rows} />);
-    expect(screen.getByText("PDF")).toBeTruthy();
+    render(<CollectionTable rows={rows} onOpenRow={noop} />);
+    expect(screen.getAllByText("PDF").length).toBe(2);
     expect(screen.getByText("Note")).toBeTruthy();
   });
 
   it("truncates Title/Authors cells with ellipsis styling", () => {
-    render(<CollectionTable rows={rows} />);
+    render(<CollectionTable rows={rows} onOpenRow={noop} />);
     const titleCell = screen.getByText("Attention Is All You Need");
     expect(titleCell.className).toContain("collection-table__title");
   });
 
-  it("falls back to Untitled for a null title", () => {
-    render(<CollectionTable rows={rows} />);
+  it("falls back to the filename for a null title", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} />);
+    expect(screen.getByText("no-title-paper.pdf")).toBeTruthy();
+  });
+
+  it("falls back to Untitled when neither title nor filename is known", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} />);
     expect(screen.getByText("Untitled")).toBeTruthy();
+  });
+
+  it("calls onOpenRow with the doc_id on row double-click", () => {
+    const onOpenRow = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={onOpenRow} />);
+    fireEvent.doubleClick(screen.getByText("Attention Is All You Need").closest("tr")!);
+    expect(onOpenRow).toHaveBeenCalledWith(rows[0].doc_id);
   });
 
   it("shows skeleton rows and no real data while loading", () => {
