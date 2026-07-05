@@ -4,7 +4,7 @@ baseline_commit: e85dfb3a279a8ea3b251d7792c206951bd33cb7a
 
 # Story 6.5: Backend metadata extraction (extract + enrich)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
