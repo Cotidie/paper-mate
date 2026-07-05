@@ -40,17 +40,24 @@ def error_response(description: str) -> dict:
 
 
 @contextmanager
-def storage_errors(server_error: str) -> Iterator[None]:
+def storage_errors(
+    server_error: str,
+    *,
+    not_found: type[storage.StorageError] = storage.DocumentNotFoundError,
+    not_found_detail: str = _NOT_FOUND_DETAIL,
+) -> Iterator[None]:
     """Map storage faults to the ``{ detail }`` envelope inside a handler body.
 
-    ``DocumentNotFoundError`` -> 404 ``"Document not found"`` (the constant 404
+    ``not_found`` -> 404 ``not_found_detail`` (defaults to
+    ``DocumentNotFoundError`` -> ``"Document not found"``, the constant 404
     detail across every doc route); any other ``StorageError`` -> 500 with the
-    route-specific ``server_error`` message. Wrapping a call in this context
-    manager replaces the per-handler try/except with a single seam.
+    route-specific ``server_error`` message. A route whose "not found" fault is
+    a different taxonomy member (e.g. ``FolderNotFoundError`` -> ``"Folder not
+    found"``) passes both kwargs rather than duplicating this try/except.
     """
     try:
         yield
-    except storage.DocumentNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=_NOT_FOUND_DETAIL) from exc
+    except not_found as exc:
+        raise HTTPException(status_code=404, detail=not_found_detail) from exc
     except storage.StorageError as exc:
         raise HTTPException(status_code=500, detail=server_error) from exc

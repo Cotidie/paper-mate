@@ -38,3 +38,8 @@ class DocumentNotFoundError(StorageError):
 
 class CorruptLibraryError(StorageError):
     """An on-disk ``library.json`` is unreadable or has an invalid shape."""
+
+
+class FolderNotFoundError(StorageError):
+    """No folder exists for the given ``folder_id`` (create's ``parent_id``,
+    or rename/delete's target)."""

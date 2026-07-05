@@ -41,14 +41,18 @@ from app.storage.errors import (
     CorruptLibraryError,
     CorruptMetadataError,
     DocumentNotFoundError,
+    FolderNotFoundError,
     InvalidPDFError,
     StorageError,
     UnsupportedSchemaError,
 )
 from app.storage.library_index import (
     LIBRARY_SCHEMA_VERSION,
+    create_folder,
+    delete_folder,
     read_library,
     reconcile_library,
+    rename_folder,
 )
 from app.storage.meta_store import META_SCHEMA_VERSION
 
@@ -65,9 +69,13 @@ __all__ = [
     "CorruptAnnotationsError",
     "DocumentNotFoundError",
     "CorruptLibraryError",
+    "FolderNotFoundError",
     # Collection index.
     "read_library",
     "reconcile_library",
+    "create_folder",
+    "rename_folder",
+    "delete_folder",
     # Per-document operations.
     "source_path",
     "read_meta",

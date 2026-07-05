@@ -227,4 +227,17 @@
 
   /* add-menu (Library toolbar Add dropdown): File upload / Folder upload. */
   --add-menu-width: 180px;
+
+  /* confirm-dialog (Story 7.1): a minimal, reusable Esc-dismissable confirm
+     (folder delete now; Trash purge, Story 7.5, later). Mirrors
+     settings-modal's centered-over-scrim shape at a smaller width. */
+  --confirm-dialog-width: 320px;
+
+  /* folder-panel (Story 7.1; DESIGN.md components.toc-panel width idiom): the
+     folder tree replacing the static Library aside. Row height/icon size
+     mirror bank-list-item's density; indent-step mirrors toc-panel's. */
+  --folder-panel-row-height: 32px;
+  --folder-panel-icon-size: 16px;
+  --folder-panel-indent-step: 16px;
+  --folder-panel-action-size: 22px;
 }
