@@ -76,10 +76,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* Reserve room for the Open button so revealing it never covers the
-     title's last visible characters (Codex review: the button is
-     absolutely positioned and would otherwise overlay truncated text). */
-  padding-right: var(--collection-table-open-button-reserve);
 }
 
 .collection-table__authors {
@@ -118,9 +114,10 @@
 /* Hover/focus-revealed Open button (replaces click-to-open on the row). A
    real <button>, so Tab reaches it and Enter/Space activates it natively;
    the reveal itself is CSS-only, no JS hover-state tracking. Absolutely
-   positioned (not a flex sibling) so it never widens the row/shifts layout;
-   `.collection-table__title-text`'s reserved padding-right (above) keeps its
-   truncated text clear of the button's overlay zone at every width. */
+   positioned (not a flex sibling), overlaying the title text rather than
+   reserving space for it (user fix request 2026-07-06): the title keeps its
+   full column width when idle, at the cost of the button's own opaque chip
+   covering whatever text sits under it while hovered. */
 .collection-table__open-button {
   position: absolute;
   top: 50%;

@@ -8,12 +8,13 @@ pin that contract.
 import json
 import shutil
 import threading
+import uuid
 
 import pytest
 
 from app import storage
 from app.models import Annotation
-from app.storage import meta_store
+from app.storage import library_index, meta_store
 from tests.conftest import make_pdf_bytes, sha256_hex
 
 
@@ -721,6 +722,21 @@ def test_read_library_unknown_schema_version_raises_corrupt(data_root):
         storage.read_library()
 
 
+def test_read_library_malformed_folder_entry_raises_corrupt(data_root):
+    """A hand-corrupted folder entry (missing `id`/`parent_id`) must surface
+    as CorruptLibraryError, never a raw KeyError escaping the StorageError
+    taxonomy (Codex review; the same class of leak already guarded for
+    paper entries above)."""
+    storage.create_folder("Fine", None)
+    library_path = data_root / "library.json"
+    payload = json.loads(library_path.read_text())
+    payload["folders"].append({})
+    library_path.write_text(json.dumps(payload))
+
+    with pytest.raises(storage.CorruptLibraryError):
+        storage.read_library()
+
+
 def test_concurrent_imports_serialize_without_lost_updates(data_root):
     """AL-7: fire concurrent imports from threads; the lock must prevent a
     lost update to the index (every doc ends up indexed exactly once)."""
@@ -738,3 +754,148 @@ def test_concurrent_imports_serialize_without_lost_updates(data_root):
     assert len(library.papers) == len(expected_ids)
     # Orders are unique (no lost/overwritten append).
     assert sorted(p.order for p in library.papers) == list(range(len(expected_ids)))
+
+
+# --- Folder CRUD (Story 7.1, AL-5/AL-7) -------------------------------------
+
+
+def test_create_folder_appends_with_uuid_name_and_parent(data_root):
+    folder = storage.create_folder("Papers", None)
+    assert folder.parent_id is None
+    assert folder.name == "Papers"
+    uuid.UUID(folder.id)  # a real UUIDv4-shaped id, raises if not
+
+    library = storage.read_library()
+    assert [f.id for f in library.folders] == [folder.id]
+
+
+def test_create_folder_under_parent_nests(data_root):
+    parent = storage.create_folder("Parent", None)
+    child = storage.create_folder("Child", parent.id)
+    assert child.parent_id == parent.id
+
+
+def test_create_folder_under_missing_parent_raises(data_root):
+    with pytest.raises(storage.FolderNotFoundError):
+        storage.create_folder("Orphan", "does-not-exist")
+
+
+def test_create_folder_blank_name_raises_at_storage_boundary(data_root):
+    """A direct storage caller (not just the route's Pydantic model) must
+    never be able to persist a blank/whitespace folder name (Codex review)."""
+    with pytest.raises(storage.StorageError):
+        storage.create_folder("   ", None)
+    assert storage.read_library().folders == []
+
+
+def test_rename_folder_changes_only_name(data_root):
+    folder = storage.create_folder("Original", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "p.pdf")
+    library_index.mutate_index(lambda index: _set_folder(index, doc_id, folder.id))
+
+    renamed = storage.rename_folder(folder.id, "Renamed")
+    assert renamed.id == folder.id
+    assert renamed.name == "Renamed"
+    assert renamed.parent_id is None
+
+    library = storage.read_library()
+    paper = next(p for p in library.papers if p.doc_id == doc_id)
+    assert paper.folder_id == folder.id  # membership untouched by the rename
+
+
+def test_rename_missing_folder_raises(data_root):
+    with pytest.raises(storage.FolderNotFoundError):
+        storage.rename_folder("does-not-exist", "New Name")
+
+
+def test_rename_folder_blank_name_raises_at_storage_boundary(data_root):
+    folder = storage.create_folder("Original", None)
+    with pytest.raises(storage.StorageError):
+        storage.rename_folder(folder.id, "   ")
+    assert storage.read_library().folders[0].name == "Original"
+
+
+def _set_folder(index: dict, doc_id: str, folder_id: str | None) -> dict:
+    for paper in index["papers"]:
+        if paper["doc_id"] == doc_id:
+            paper["folder_id"] = folder_id
+    return index
+
+
+def test_delete_folder_removes_subtree_and_rehomes_all_papers(data_root):
+    """A nested subtree with papers at multiple depths: delete the root and
+    every folder in the subtree is gone, every paper anywhere in it re-homes
+    to Uncategorized, and NO paper is deleted (AL-5, ratifies PRD A1)."""
+    root = storage.create_folder("Root", None)
+    child = storage.create_folder("Child", root.id)
+    grandchild = storage.create_folder("Grandchild", child.id)
+    sibling = storage.create_folder("Sibling", None)  # outside the subtree
+
+    doc_root, _ = storage.import_pdf(make_pdf_bytes(pages=1, title="At root"), "a.pdf")
+    doc_child, _ = storage.import_pdf(make_pdf_bytes(pages=1, title="At child"), "b.pdf")
+    doc_grandchild, _ = storage.import_pdf(make_pdf_bytes(pages=1, title="At grandchild"), "c.pdf")
+    doc_sibling, _ = storage.import_pdf(make_pdf_bytes(pages=1, title="At sibling"), "d.pdf")
+    library_index.mutate_index(
+        lambda index: _set_folder(_set_folder(_set_folder(_set_folder(
+            index, doc_root, root.id), doc_child, child.id), doc_grandchild, grandchild.id),
+            doc_sibling, sibling.id)
+    )
+
+    library = storage.delete_folder(root.id)
+
+    remaining_ids = {f.id for f in library.folders}
+    assert remaining_ids == {sibling.id}
+    assert {p.doc_id for p in library.papers} == {doc_root, doc_child, doc_grandchild, doc_sibling}
+    by_id = {p.doc_id: p for p in library.papers}
+    assert by_id[doc_root].folder_id is None
+    assert by_id[doc_child].folder_id is None
+    assert by_id[doc_grandchild].folder_id is None
+    assert by_id[doc_sibling].folder_id == sibling.id  # untouched, outside the subtree
+
+
+def test_delete_missing_folder_raises(data_root):
+    with pytest.raises(storage.FolderNotFoundError):
+        storage.delete_folder("does-not-exist")
+
+
+def test_folders_survive_read_library_round_trip(data_root):
+    folder = storage.create_folder("Persisted", None)
+    library = storage.read_library()
+    assert [f.model_dump() for f in library.folders] == [folder.model_dump()]
+
+
+def test_reconcile_library_leaves_folders_intact(data_root):
+    folder = storage.create_folder("Untouched", None)
+    raw = make_pdf_bytes(pages=1)
+    storage.import_pdf(raw, "r.pdf")
+
+    storage.reconcile_library()
+
+    library = storage.read_library()
+    assert [f.model_dump() for f in library.folders] == [folder.model_dump()]
+
+
+def test_concurrent_create_and_delete_serialize_without_lost_folder(data_root):
+    """AL-7: a folder create racing a delete of an unrelated folder must not
+    lose either mutation (the lock serializes the whole read-modify-write)."""
+    survivor = storage.create_folder("Will be deleted", None)
+
+    created_ids: list[str] = []
+    created_lock = threading.Lock()
+
+    def create_one(name: str) -> None:
+        folder = storage.create_folder(name, None)
+        with created_lock:
+            created_ids.append(folder.id)
+
+    threads = [threading.Thread(target=create_one, args=(f"Folder {i}",)) for i in range(8)]
+    threads.append(threading.Thread(target=storage.delete_folder, args=(survivor.id,)))
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    library = storage.read_library()
+    assert survivor.id not in {f.id for f in library.folders}
+    assert set(created_ids) == {f.id for f in library.folders}
+    assert len(created_ids) == 8

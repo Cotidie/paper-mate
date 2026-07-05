@@ -12,7 +12,7 @@ client consumes a generated type for its in-memory store.
 
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 #: The document extraction lifecycle (AD-L4, Story 6.5): a new import lands
 #: ``extracting``; the background pipeline settles it to ``ready`` (Crossref
@@ -113,6 +113,43 @@ class Folder(BaseModel):
     id: str  # UUIDv4
     name: str
     parent_id: str | None = None
+
+
+class FolderCreate(BaseModel):
+    """Request body for ``POST /api/library/folders`` (Story 7.1). A blank/
+    whitespace ``name`` is rejected here (422) so it can never persist;
+    ``parent_id`` nests the new folder (storage validates it exists)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    parent_id: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("Folder name required")
+        return stripped
+
+
+class FolderRename(BaseModel):
+    """Request body for ``PATCH /api/library/folders/{folder_id}`` (Story 7.1):
+    a name-only rename. Membership (``parent_id``, paper ``folder_id``) is
+    untouched: renaming never orphans a paper."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("Folder name required")
+        return stripped
 
 
 class CollectionRow(BaseModel):

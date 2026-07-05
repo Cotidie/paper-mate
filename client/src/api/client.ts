@@ -12,6 +12,8 @@ export type DocPatch = components["schemas"]["DocPatch"];
 export type CollectionRow = components["schemas"]["CollectionRow"];
 export type Folder = components["schemas"]["Folder"];
 export type Library = components["schemas"]["Library"];
+export type FolderCreate = components["schemas"]["FolderCreate"];
+export type FolderRename = components["schemas"]["FolderRename"];
 
 // Annotation entity (AD-5), generated from the Pydantic model — the store and
 // overlay import the shape from here, never hand-author it (AD-3). `Anchor` is
@@ -130,6 +132,49 @@ export async function getAnnotations(docId: string): Promise<Annotation[]> {
  */
 export async function getLibrary(): Promise<Library> {
   const res = await fetch("/api/library");
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Library;
+}
+
+/**
+ * Create a folder (`POST /api/library/folders`, Story 7.1), optionally
+ * nested under `parentId`. `FolderPanel`'s `useFolders` inserts the returned
+ * `Folder` into `library.folders` optimistically-reconciled.
+ */
+export async function createFolder(name: string, parentId: string | null): Promise<Folder> {
+  const body: FolderCreate = { name, parent_id: parentId };
+  const res = await fetch("/api/library/folders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Folder;
+}
+
+/**
+ * Rename a folder (`PATCH /api/library/folders/{folder_id}`, Story 7.1).
+ * Membership is keyed by id, so this never orphans a paper.
+ */
+export async function renameFolder(id: string, name: string): Promise<Folder> {
+  const body: FolderRename = { name };
+  const res = await fetch(`/api/library/folders/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Folder;
+}
+
+/**
+ * Delete a folder and its whole subtree (`DELETE /api/library/folders/{folder_id}`,
+ * Story 7.1). The response is the whole updated `Library` (re-homed papers +
+ * surviving folders) so the caller reconciles both from one round-trip; no
+ * paper is ever deleted.
+ */
+export async function deleteFolder(id: string): Promise<Library> {
+  const res = await fetch(`/api/library/folders/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) throw await envelopeError(res);
   return (await res.json()) as Library;
 }

@@ -1,0 +1,96 @@
+/* confirm-dialog (Story 7.1): a minimal, reusable Esc-dismissable confirm.
+   Mirrors settings-modal's scrim + centered panel shape. Tokens only. */
+
+.confirm-dialog__scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--color-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+
+.confirm-dialog {
+  width: var(--confirm-dialog-width);
+  max-width: calc(100% - var(--space-base) * 2);
+  background: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .confirm-dialog__scrim {
+    animation: confirm-dialog-fade-in 0.12s ease-out;
+  }
+}
+
+@keyframes confirm-dialog-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.confirm-dialog__title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-title-sm-size);
+  font-weight: var(--type-title-sm-weight);
+  line-height: var(--type-title-sm-leading);
+  color: var(--color-ink);
+}
+
+.confirm-dialog__message {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  color: var(--color-body);
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  margin-top: var(--space-xxs);
+}
+
+.confirm-dialog__cancel,
+.confirm-dialog__confirm {
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  padding: var(--space-xxs) var(--space-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.confirm-dialog__cancel {
+  background: transparent;
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  color: var(--color-ink);
+}
+
+.confirm-dialog__cancel:hover {
+  background: var(--color-surface-strong);
+}
+
+.confirm-dialog__confirm {
+  background: var(--color-ink);
+  border: none;
+  color: var(--color-canvas);
+}
+
+.confirm-dialog__confirm:hover {
+  background: var(--color-semantic-error);
+}

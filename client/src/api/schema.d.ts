@@ -189,6 +189,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Folder
+         * @description Create a folder, optionally nested under ``parent_id`` (AC-1).
+         *
+         *     A missing ``parent_id`` -> 404 ``"Folder not found"``; a blank/whitespace
+         *     ``name`` is already rejected by ``FolderCreate`` as a 422 (AR-11).
+         */
+        post: operations["create_folder_api_library_folders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/folders/{folder_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Folder
+         * @description Delete a folder and its whole subtree, re-homing every paper in it to
+         *     Uncategorized; NO paper is ever deleted (AC-3, ratifies PRD A1). Returns
+         *     the updated ``Library`` (re-homed papers + surviving folders) in one
+         *     round-trip. Missing id -> 404 ``"Folder not found"``.
+         */
+        delete: operations["delete_folder_api_library_folders__folder_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename Folder
+         * @description Rename a folder; membership is keyed by id, so this never orphans a
+         *     paper (AC-2). Missing id -> 404 ``"Folder not found"``.
+         */
+        patch: operations["rename_folder_api_library_folders__folder_id__patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -330,6 +381,28 @@ export interface components {
             name: string;
             /** Parent Id */
             parent_id?: string | null;
+        };
+        /**
+         * FolderCreate
+         * @description Request body for ``POST /api/library/folders`` (Story 7.1). A blank/
+         *     whitespace ``name`` is rejected here (422) so it can never persist;
+         *     ``parent_id`` nests the new folder (storage validates it exists).
+         */
+        FolderCreate: {
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
+        };
+        /**
+         * FolderRename
+         * @description Request body for ``PATCH /api/library/folders/{folder_id}`` (Story 7.1):
+         *     a name-only rename. Membership (``parent_id``, paper ``folder_id``) is
+         *     untouched — renaming never orphans a paper.
+         */
+        FolderRename: {
+            /** Name */
+            name: string;
         };
         /**
          * HealthStatus
@@ -853,6 +926,159 @@ export interface operations {
                 };
             };
             /** @description The stored collection index is unreadable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_folder_api_library_folders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Folder"];
+                };
+            };
+            /** @description No folder with this id (bad parent_id). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Folder name required. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Could not update folders. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    delete_folder_api_library_folders__folder_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                folder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description No folder with this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Could not update folders. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    rename_folder_api_library_folders__folder_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                folder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderRename"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Folder"];
+                };
+            };
+            /** @description No folder with this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Folder name required. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Could not update folders. */
             500: {
                 headers: {
                     [name: string]: unknown;

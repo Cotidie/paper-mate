@@ -1,0 +1,209 @@
+/* Folder panel (Story 7.1): the Library's left aside, replacing the 6.1
+   static placeholder. Two areas separated by a divider: a fixed Library
+   section (All/Recent/Uncategorized/Trash, icon-led) and a Folder section
+   (header + create button, then the nested custom-folder tree). The app
+   version stays pinned to the bottom via the column flex layout + margin-top:
+   auto. Tokens only (CLAUDE.md). */
+
+.library-folder-panel {
+  flex: 0 0 auto;
+  width: var(--toc-panel-width);
+  border-right: var(--hairline-width) solid var(--color-hairline);
+  background: var(--color-surface-card);
+  padding: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+}
+
+.folder-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xxs);
+}
+
+.library-folder-panel__label,
+.folder-panel__header-label {
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-uppercase-size);
+  font-weight: var(--type-caption-uppercase-weight);
+  line-height: var(--type-caption-uppercase-leading);
+  letter-spacing: var(--type-caption-uppercase-letter-spacing);
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.folder-panel__divider {
+  border: none;
+  border-top: var(--hairline-width) solid var(--color-hairline);
+  margin: var(--space-xxs) 0;
+}
+
+.folder-panel__new-root {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--folder-panel-action-size);
+  height: var(--folder-panel-action-size);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.folder-panel__new-root:hover {
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+}
+
+.folder-panel__new-root svg {
+  width: var(--folder-panel-icon-size);
+  height: var(--folder-panel-icon-size);
+  display: block;
+}
+
+.folder-panel__pseudo-list,
+.folder-panel__tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.library-folder-panel__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  color: var(--color-body);
+  padding: var(--space-xxs) var(--space-xs);
+  border-radius: var(--radius-pill);
+}
+
+.library-folder-panel__item svg {
+  flex: 0 0 auto;
+  width: var(--folder-panel-icon-size);
+  height: var(--folder-panel-icon-size);
+  color: var(--color-muted);
+}
+
+.library-folder-panel__item--active {
+  background: var(--color-ink);
+  color: var(--color-canvas);
+}
+
+.library-folder-panel__item--active svg {
+  color: var(--color-canvas);
+}
+
+.folder-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xxs);
+  min-height: var(--folder-panel-row-height);
+  border-radius: var(--radius-sm);
+}
+
+.folder-panel__row:hover {
+  background: var(--color-surface-strong);
+}
+
+.folder-panel__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  color: var(--color-body);
+}
+
+.folder-panel__name svg {
+  flex: 0 0 auto;
+  width: var(--folder-panel-icon-size);
+  height: var(--folder-panel-icon-size);
+  color: var(--color-muted);
+}
+
+/* Hover/focus-revealed row actions (mirrors CollectionTable's Open-button
+   reveal): opacity-only, no layout shift, so the idle tree stays quiet. */
+.folder-panel__row-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--space-xxs);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease-out;
+}
+
+.folder-panel__row:hover .folder-panel__row-actions,
+.folder-panel__row-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.folder-panel__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--folder-panel-action-size);
+  height: var(--folder-panel-action-size);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.folder-panel__action:hover {
+  background: var(--color-hairline-strong);
+  color: var(--color-ink);
+}
+
+.folder-panel__action svg {
+  width: var(--folder-panel-icon-size);
+  height: var(--folder-panel-icon-size);
+  display: block;
+}
+
+.folder-panel__name-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-surface-card);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) var(--space-xs);
+}
+
+.folder-panel__name-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--color-ink);
+  border-color: var(--color-ink);
+}
+
+.library-folder-panel__version {
+  margin-top: auto;
+  padding-top: var(--space-xs);
+  border-top: var(--hairline-width) solid var(--color-hairline);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-leading);
+  color: var(--color-muted);
+}

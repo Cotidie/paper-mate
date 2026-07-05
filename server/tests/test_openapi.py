@@ -68,3 +68,20 @@ def test_openapi_contains_open_path_no_new_schema() -> None:
     resp200 = path["post"]["responses"]["200"]
     ref = resp200["content"]["application/json"]["schema"]["$ref"]
     assert ref.endswith("/Doc")
+
+
+def test_openapi_contains_folder_models_and_paths() -> None:
+    """Story 7.1: FolderCreate/FolderRename are generated, and the three
+    /api/library/folders paths are registered with the right verbs."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    assert "FolderCreate" in schemas
+    assert "name" in schemas["FolderCreate"]["properties"]
+    assert "parent_id" in schemas["FolderCreate"]["properties"]
+    assert "FolderRename" in schemas
+    assert "name" in schemas["FolderRename"]["properties"]
+
+    assert "post" in schema["paths"]["/api/library/folders"]
+    folder_path = schema["paths"]["/api/library/folders/{folder_id}"]
+    assert "patch" in folder_path
+    assert "delete" in folder_path

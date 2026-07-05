@@ -657,6 +657,19 @@ describe("Left pane (version display)", () => {
   });
 });
 
+describe("Folder panel wiring (Story 7.1)", () => {
+  it("renders folders returned by getLibrary through the real FolderPanel", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({
+      papers: [],
+      folders: [{ id: "f1", name: "My Folder", parent_id: null }],
+    });
+    renderLibrary();
+
+    await waitFor(() => expect(screen.getByText("My Folder")).toBeTruthy());
+    expect(screen.getByText("Uncategorized")).toBeTruthy();
+  });
+});
+
 describe("Add dropdown (File upload / Folder upload)", () => {
   it("opens the Add menu and uploads via the File upload item", async () => {
     // The Add control lives in the toolbar row, which only shows once the

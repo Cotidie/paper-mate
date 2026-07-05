@@ -166,9 +166,10 @@ The disk envelope is stripped inside storage — the API body is the bare list (
 
 The organization layer (AD-L6): the collection table + folder tree in **one
 read** from `{data_root}/library.json`, no per-doc `meta.json` fan-out. This is
-the collection list (`GET /api/docs` list stays Reserved). `folders` is empty
-until Epic 7 builds folder CRUD; every paper is Uncategorized (`folder_id:
-null`) and untrashed until then.
+the collection list (`GET /api/docs` list stays Reserved). `folders` reflects
+whatever the folder CRUD below (`/api/library/folders`, Story 7.1) has
+created; a paper is Uncategorized (`folder_id: null`) until assigned to one
+(assignment is Story 7.2) and untrashed until Story 7.5.
 
 - **200** → `Library`
   ```json
@@ -207,6 +208,49 @@ null`) and untrashed until then.
 > (`null` on a pre-existing row cached before the field existed) and backfills
 > on the next reconcile; the client falls back to it when `title` is null.
 
+### `POST /api/library/folders` — create a folder
+
+Appends a folder to the organizing tree (AL-5/AL-6, Story 7.1), optionally
+nested under an existing folder.
+
+- **Body** → `FolderCreate`
+  ```json
+  { "name": "Reading list", "parent_id": null }
+  ```
+- **200** → `Folder`
+  ```json
+  { "id": "c3b2b7b0-…-9e2a", "name": "Reading list", "parent_id": null }
+  ```
+- **404** → `{ "detail": "Folder not found" }` — `parent_id` does not
+  reference an existing folder.
+- **422** → a blank/whitespace `name` (rejected before it can ever persist)
+  or an extra/forbidden field.
+- **500** → `{ "detail": "Could not update folders" }` — an unreadable or
+  wrong-shape `library.json`.
+
+### `PATCH /api/library/folders/{folder_id}` — rename a folder
+
+Changes only a folder's `name`; membership is keyed by `id`, so a rename
+never orphans a paper (AC-2, Story 7.1).
+
+- **Body** → `FolderRename` (`{ "name": "..." }`)
+- **200** → `Folder` (the renamed folder)
+- **404** → `{ "detail": "Folder not found" }` — unknown `folder_id`.
+- **422** → a blank/whitespace `name`.
+- **500** → `{ "detail": "Could not update folders" }`.
+
+### `DELETE /api/library/folders/{folder_id}` — delete a folder (subtree)
+
+Deletes the folder **and its whole subtree** (every descendant folder), and
+re-homes every paper anywhere in that subtree to Uncategorized (`folder_id:
+null`). **No paper is ever deleted** (ratifies PRD A1, Story 7.1).
+
+- **200** → `Library` (the same shape as `GET /api/library`: the re-homed
+  papers + the surviving folders), so the client reconciles both from one
+  response.
+- **404** → `{ "detail": "Folder not found" }` — unknown `folder_id`.
+- **500** → `{ "detail": "Could not update folders" }`.
+
 ## Reserved (not yet built)
 
 Declared by the architecture (AR-11), implemented in later stories. Do not
@@ -220,6 +264,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-06 (Story 7.1):** added `/api/library/folders` folder CRUD — `POST` (create, optional `parent_id` nesting), `PATCH /{folder_id}` (rename, name-only), `DELETE /{folder_id}` (subtree delete: removes the folder and every descendant, re-homes every paper in the subtree to Uncategorized, returns the updated `Library` in one round-trip; never deletes a paper). New request models `FolderCreate`/`FolderRename` (`extra="forbid"`; a blank/whitespace `name` is a 422). A missing folder is 404 `"Folder not found"`, distinct from the doc-specific `"Document not found"` literal. Contract shape change: three new paths + two new schemas.
 - **2026-07-05 (Story 6.7):** added `POST /api/docs/{doc_id}/open` — advances `meta.last_opened` when a paper opens (200 `Doc`, 404 unknown doc, 500 storage failure). A mutation, not the pure `GET /api/docs/{doc_id}` read; reuses the existing `Doc` response model (no new schema). `ReaderPage` fires it as a best-effort, error-swallowed side effect on open; a failure never gates the reader rendering the paper. No UI surfaces `last_opened` (out-of-scope last-opened *tracking* feature, not built). Ratifies the already-shipped open path (hover Open button → `/reader/:docId`, doc-scoped hydrate/autosave/back-to-Library, atomic doc-switch isolation) with test coverage; no other endpoint changed.
 - **2026-07-05 (Story 6.6):** added `PATCH /api/docs/{doc_id}` — partial `title`/`authors` edit (new `DocPatch` request model, `extra="forbid"`, `exclude_unset` semantics; 200 `Doc`, 400 empty body, 404 unknown doc, 422 malformed/forbidden field, 500 storage failure). `meta.json`-authoritative; refreshes the `library.json` display cache through the same write-and-reindex core `apply_extraction` uses (`storage.update_doc_meta`). Editing never changes `status`/`page_count`/`added`/`last_opened`. Contract shape change: new path + `DocPatch` schema.
 - **2026-07-05 (Story 6.5):** `POST /api/docs` now imports asynchronously. A new import returns at `status: "extracting"` and runs `extract` + `enrich` (Title/Authors/DOI via PyMuPDF, then optional Crossref correction) as a **background task** off the request path; storage settles the row to `ready | enrich-skipped | parse-failed`; the client polls `GET /api/library` until statuses settle. An idempotent re-import does not re-extract. **No contract shape change** (the `status` enum has carried all four values since 6.2; the only generated-file change is the `POST /api/docs` description text). New internal backend: a pure `app/domain/` layer (`extract`/`enrich`, AD-L2) and a storage `apply_extraction` writer. PyMuPDF (AGPL-3.0) added and httpx promoted to a runtime dependency; the repo is relicensed MIT to AGPL-3.0 in the same change.

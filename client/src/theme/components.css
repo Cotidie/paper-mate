@@ -219,12 +219,20 @@
   --collection-table-authors-width: 220px;
   --collection-table-added-width: 120px;
   --collection-table-file-type-width: 96px;
-  /* Reserved trailing space in the Title cell so its ellipsis-truncated
-     text never sits under the hover/focus-revealed Open button (a fixed
-     CSS padding, not a layout-shifting flex sibling — it costs no visible
-     space itself, just an earlier truncation point). */
-  --collection-table-open-button-reserve: 64px;
 
   /* add-menu (Library toolbar Add dropdown): File upload / Folder upload. */
   --add-menu-width: 180px;
+
+  /* confirm-dialog (Story 7.1): a minimal, reusable Esc-dismissable confirm
+     (folder delete now; Trash purge, Story 7.5, later). Mirrors
+     settings-modal's centered-over-scrim shape at a smaller width. */
+  --confirm-dialog-width: 320px;
+
+  /* folder-panel (Story 7.1; DESIGN.md components.toc-panel width idiom): the
+     folder tree replacing the static Library aside. Row height/icon size
+     mirror bank-list-item's density; indent-step mirrors toc-panel's. */
+  --folder-panel-row-height: 32px;
+  --folder-panel-icon-size: 16px;
+  --folder-panel-indent-step: 16px;
+  --folder-panel-action-size: 22px;
 }

@@ -5,6 +5,7 @@ import Toast from "@/components/Toast/Toast";
 import CollectionTable from "@/library/CollectionTable/CollectionTable";
 import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
 import AddMenu from "@/library/AddMenu/AddMenu";
+import FolderPanel from "@/library/FolderPanel/FolderPanel";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { fetchHealth } from "@/api/client";
@@ -23,11 +24,12 @@ function isPdfFile(file: File): boolean {
 
 /**
  * Library route (`/`, Story 6.1 shell + Story 6.3 table + Story 6.4 bulk
- * upload): the app's front door. Composition only — `useCollection` owns the
- * fetch / optimistic-row / settle-poll / bulk-upload lifecycle, `useInlineEdit`
- * owns the title/authors optimistic-PATCH lifecycle, and this component wires
- * them to the toolbar, the drop target, and the table (loading skeleton /
- * dropzone-empty / error toast per fetch state).
+ * upload + Story 7.1 folder tree): the app's front door. Composition only —
+ * `useCollection` owns the fetch / optimistic-row / settle-poll / bulk-upload
+ * lifecycle, `useInlineEdit` owns the title/authors optimistic-PATCH
+ * lifecycle, `FolderPanel` owns the folder CRUD lifecycle, and this component
+ * wires them to the toolbar, the drop target, and the table (loading skeleton
+ * / dropzone-empty / error toast per fetch state).
  */
 export default function LibraryPage() {
   const navigate = useNavigate();
@@ -77,15 +79,12 @@ export default function LibraryPage() {
   return (
     <div className="library">
       <div className="library-body">
-        <aside className="library-folder-panel" aria-label="Folders">
-          <span className="library-folder-panel__label">Library</span>
-          <span className="library-folder-panel__item library-folder-panel__item--active">All</span>
-          {version && (
-            <span className="library-folder-panel__version" data-testid="library-version">
-              v{version}
-            </span>
-          )}
-        </aside>
+        <FolderPanel
+          folders={library?.folders ?? []}
+          setLibrary={setLibrary}
+          onToast={onToast}
+          version={version}
+        />
         <main
           className={mainClassName}
           role="main"
