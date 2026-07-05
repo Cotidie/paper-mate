@@ -248,15 +248,13 @@ describe("Collection table (Story 6.3)", () => {
     expect(screen.queryByText("Drop PDFs here")).toBeNull();
   });
 
-  it("navigates to /reader/:docId when a selected row is clicked again", async () => {
+  it("navigates to /reader/:docId when the row's Open button is clicked", async () => {
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
     renderLibrary();
 
     await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
-    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
-    fireEvent.click(row); // select
     expect(screen.queryByTestId("reader-stub")).toBeNull();
-    fireEvent.click(row); // open
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
     await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
   });
@@ -329,14 +327,14 @@ describe("Code review fixes (Story 6.4)", () => {
     });
 
     await waitFor(() => expect(screen.getByText("Freshly Added")).toBeTruthy());
-    const titlesAfterResolve = Array.from(document.querySelectorAll(".collection-table__title")).map(
+    const titlesAfterResolve = Array.from(document.querySelectorAll(".collection-table__title-text")).map(
       (el) => el.textContent,
     );
 
     // Let the post-batch `getLibrary()` reconcile (AC-7) land too.
     await waitFor(() => expect(api.getLibrary).toHaveBeenCalledTimes(2));
     await Promise.resolve();
-    const titlesAfterReconcile = Array.from(document.querySelectorAll(".collection-table__title")).map(
+    const titlesAfterReconcile = Array.from(document.querySelectorAll(".collection-table__title-text")).map(
       (el) => el.textContent,
     );
 
@@ -539,9 +537,7 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
 
     await waitFor(() => expect(screen.getByText("poor-paper")).toBeTruthy());
     expect(screen.getByText("No metadata")).toBeTruthy();
-    const row = screen.getByText("poor-paper").closest("tr")!;
-    fireEvent.click(row); // select
-    fireEvent.click(row); // open
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
     await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
   });
 });
@@ -556,7 +552,9 @@ describe("Inline edit Title/Authors (Story 6.6)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Attention Is All You Need"));
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
     const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Corrected Title" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -574,7 +572,9 @@ describe("Inline edit Title/Authors (Story 6.6)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Attention Is All You Need"));
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
     const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Will Fail" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -598,14 +598,18 @@ describe("Inline edit Title/Authors (Story 6.6)", () => {
     await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
 
     // First edit commits "First Edit"; its PATCH (#1) is left unresolved.
-    fireEvent.click(screen.getByText("Attention Is All You Need"));
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
     fireEvent.change(screen.getByDisplayValue("Attention Is All You Need"), {
       target: { value: "First Edit" },
     });
     fireEvent.keyDown(screen.getByDisplayValue("First Edit"), { key: "Enter" });
     expect(screen.getByText("First Edit")).toBeTruthy();
 
-    // A second edit to the SAME field lands before PATCH #1 resolves.
+    // A second edit to the SAME field lands before PATCH #1 resolves. The
+    // row is still armed from the first cycle (commit doesn't change arm
+    // state), so a single click re-enters edit directly.
     fireEvent.click(screen.getByText("First Edit"));
     fireEvent.change(screen.getByDisplayValue("First Edit"), { target: { value: "Second Edit" } });
     fireEvent.keyDown(screen.getByDisplayValue("Second Edit"), { key: "Enter" });
