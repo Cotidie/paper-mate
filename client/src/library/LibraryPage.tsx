@@ -7,7 +7,15 @@ import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
 import AddMenu from "@/library/AddMenu";
 import { useBulkUpload } from "@/library/useBulkUpload";
 import { useSettlePolling } from "@/library/useSettlePolling";
-import { getLibrary, fetchHealth, type CollectionRow, type Doc, type Library } from "@/api/client";
+import {
+  getLibrary,
+  fetchHealth,
+  patchDoc,
+  type CollectionRow,
+  type Doc,
+  type DocPatch,
+  type Library,
+} from "@/api/client";
 
 const PDF_EXTENSION = /\.pdf$/i;
 
@@ -81,6 +89,11 @@ export default function LibraryPage() {
   // The current in-flight batch's resolved doc_ids awaiting an enrich-skipped
   // notice; scoped so a later batch never re-warns about older rows.
   const noticeBatchIdsRef = useRef<Set<string>>(new Set());
+  // Per-field monotonic sequence (keyed "docId:field"): a PATCH's success or
+  // failure only reconciles/reverts the row if no NEWER edit to that same
+  // field was issued after it (Codex review, Story 6.6 follow-up) — otherwise
+  // a slow-to-settle older request could clobber a faster newer one's result.
+  const editSeqRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     // StrictMode dev double-invokes effects (mount, cleanup, re-mount); reset
@@ -207,6 +220,58 @@ export default function LibraryPage() {
     [settlePoll.start, settleNotices],
   );
 
+  // Optimistic edit + revert-on-failure (Story 6.6, AC-5): the table reports
+  // the committed gesture, this page owns the PATCH and the row's state. A
+  // functional setLibrary keeps this safe alongside fetchSeqRef/settle-poll
+  // (idle for settled rows, so no concurrent writer touches this field).
+  // `editSeqRef` additionally guards against two overlapping edits to the
+  // SAME field: only the most-recently-issued request may reconcile/revert.
+  const handleEditField = useCallback(
+    (docId: string, field: "title" | "authors", value: string | null) => {
+      const seqKey = `${docId}:${field}`;
+      const seq = (editSeqRef.current.get(seqKey) ?? 0) + 1;
+      editSeqRef.current.set(seqKey, seq);
+      const isLatest = () => editSeqRef.current.get(seqKey) === seq;
+
+      const prior = library?.papers.find((p) => p.doc_id === docId)?.[field] ?? null;
+      const withField = (row: CollectionRow, next: string | null): CollectionRow =>
+        field === "title" ? { ...row, title: next } : { ...row, authors: next };
+      setLibrary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          papers: prev.papers.map((p) => (p.doc_id === docId ? withField(p, value) : p)),
+        };
+      });
+      const patch: DocPatch = field === "title" ? { title: value } : { authors: value };
+      patchDoc(docId, patch)
+        .then((doc: Doc) => {
+          if (!isLatest()) return; // a newer edit to this field superseded this request
+          setLibrary((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              papers: prev.papers.map((p) =>
+                p.doc_id === docId ? withField(p, doc[field] ?? null) : p,
+              ),
+            };
+          });
+        })
+        .catch(() => {
+          if (!isLatest()) return; // a newer edit already superseded this failed request
+          setLibrary((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              papers: prev.papers.map((p) => (p.doc_id === docId ? withField(p, prior) : p)),
+            };
+          });
+          setToast({ variant: "error", message: "Couldn't save that change." });
+        });
+    },
+    [library],
+  );
+
   const handleFailed = useCallback((count: number) => {
     setToast({
       variant: "error",
@@ -306,6 +371,7 @@ export default function LibraryPage() {
               rows={papers}
               pendingRows={pending}
               onOpenRow={(docId) => navigate(`/reader/${docId}`)}
+              onEditField={handleEditField}
             />
           ) : loadFailed ? null : (
             <EmptyDropzone onFiles={uploadFiles} />

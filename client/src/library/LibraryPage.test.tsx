@@ -248,15 +248,13 @@ describe("Collection table (Story 6.3)", () => {
     expect(screen.queryByText("Drop PDFs here")).toBeNull();
   });
 
-  it("navigates to /reader/:docId when a selected row is clicked again", async () => {
+  it("navigates to /reader/:docId when the row's Open button is clicked", async () => {
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
     renderLibrary();
 
     await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
-    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
-    fireEvent.click(row); // select
     expect(screen.queryByTestId("reader-stub")).toBeNull();
-    fireEvent.click(row); // open
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
     await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
   });
@@ -329,14 +327,14 @@ describe("Code review fixes (Story 6.4)", () => {
     });
 
     await waitFor(() => expect(screen.getByText("Freshly Added")).toBeTruthy());
-    const titlesAfterResolve = Array.from(document.querySelectorAll(".collection-table__title")).map(
+    const titlesAfterResolve = Array.from(document.querySelectorAll(".collection-table__title-text")).map(
       (el) => el.textContent,
     );
 
     // Let the post-batch `getLibrary()` reconcile (AC-7) land too.
     await waitFor(() => expect(api.getLibrary).toHaveBeenCalledTimes(2));
     await Promise.resolve();
-    const titlesAfterReconcile = Array.from(document.querySelectorAll(".collection-table__title")).map(
+    const titlesAfterReconcile = Array.from(document.querySelectorAll(".collection-table__title-text")).map(
       (el) => el.textContent,
     );
 
@@ -539,10 +537,102 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
 
     await waitFor(() => expect(screen.getByText("poor-paper")).toBeTruthy());
     expect(screen.getByText("No metadata")).toBeTruthy();
-    const row = screen.getByText("poor-paper").closest("tr")!;
-    fireEvent.click(row); // select
-    fireEvent.click(row); // open
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
     await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
+  });
+});
+
+describe("Inline edit Title/Authors (Story 6.6)", () => {
+  it("commits an edit optimistically and calls patchDoc with just that field", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    const patchDoc = vi.spyOn(api, "patchDoc").mockResolvedValue({
+      ...fakeDoc(fakeRow.doc_id, "attention.pdf", "Corrected Title"),
+      authors: fakeRow.authors,
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
+
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Corrected Title" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Optimistic update lands immediately, before patchDoc resolves.
+    expect(screen.getByText("Corrected Title")).toBeTruthy();
+    expect(patchDoc).toHaveBeenCalledWith(fakeRow.doc_id, { title: "Corrected Title" });
+
+    await waitFor(() => expect(screen.getByText("Corrected Title")).toBeTruthy());
+  });
+
+  it("reverts the row and shows an error toast when patchDoc rejects", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    vi.spyOn(api, "patchDoc").mockRejectedValue(new Error("boom"));
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
+
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Will Fail" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByText("Will Fail")).toBeTruthy(); // optimistic
+
+    await waitFor(() => expect(screen.getByText("Couldn't save that change.")).toBeTruthy());
+    expect(screen.getByText("Attention Is All You Need")).toBeTruthy(); // reverted
+    expect(screen.queryByText("Will Fail")).toBeNull();
+  });
+
+  it("an older PATCH resolving after a newer one does not clobber the newer result (Codex review follow-up)", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    let resolveFirst: (doc: api.Doc) => void = () => {};
+    let resolveSecond: (doc: api.Doc) => void = () => {};
+    const patchDoc = vi
+      .spyOn(api, "patchDoc")
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
+
+    // First edit commits "First Edit"; its PATCH (#1) is left unresolved.
+    const cell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    fireEvent.change(screen.getByDisplayValue("Attention Is All You Need"), {
+      target: { value: "First Edit" },
+    });
+    fireEvent.keyDown(screen.getByDisplayValue("First Edit"), { key: "Enter" });
+    expect(screen.getByText("First Edit")).toBeTruthy();
+
+    // A second edit to the SAME field lands before PATCH #1 resolves. The
+    // row is still armed from the first cycle (commit doesn't change arm
+    // state), so a single click re-enters edit directly.
+    fireEvent.click(screen.getByText("First Edit"));
+    fireEvent.change(screen.getByDisplayValue("First Edit"), { target: { value: "Second Edit" } });
+    fireEvent.keyDown(screen.getByDisplayValue("Second Edit"), { key: "Enter" });
+    expect(screen.getByText("Second Edit")).toBeTruthy();
+
+    // The newer request (#2) resolves first.
+    resolveSecond({
+      ...fakeDoc(fakeRow.doc_id, "attention.pdf", "Second Edit"),
+      authors: fakeRow.authors,
+    });
+    await waitFor(() => expect(screen.getByText("Second Edit")).toBeTruthy());
+
+    // The older, superseded request (#1) resolves late. It must not clobber
+    // the newer, already-reconciled value.
+    resolveFirst({
+      ...fakeDoc(fakeRow.doc_id, "attention.pdf", "First Edit"),
+      authors: fakeRow.authors,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(screen.getByText("Second Edit")).toBeTruthy();
+    expect(screen.queryByText("First Edit")).toBeNull();
+    expect(patchDoc).toHaveBeenCalledTimes(2);
   });
 });
 

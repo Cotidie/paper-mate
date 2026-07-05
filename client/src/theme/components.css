@@ -219,6 +219,11 @@
   --collection-table-authors-width: 220px;
   --collection-table-added-width: 120px;
   --collection-table-file-type-width: 96px;
+  /* Reserved trailing space in the Title cell so its ellipsis-truncated
+     text never sits under the hover/focus-revealed Open button (a fixed
+     CSS padding, not a layout-shifting flex sibling — it costs no visible
+     space itself, just an earlier truncation point). */
+  --collection-table-open-button-reserve: 64px;
 
   /* add-menu (Library toolbar Add dropdown): File upload / Folder upload. */
   --add-menu-width: 180px;

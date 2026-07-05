@@ -7,15 +7,16 @@ bytes. ``PUT /api/docs/{doc_id}/annotations`` overwrites the full annotation
 set (AR-7, H9: bare list body, disk envelope is storage-internal).
 ``GET /api/docs/{doc_id}/annotations`` reads it back for hydrate-on-open
 (Story 3.5; bare list, ``[]`` when unannotated). ``GET /api/docs/{doc_id}``
-returns a document's own metadata (Story 6.1, AD-L6). Reserved (not built
-here): ``GET /api/docs``.
+returns a document's own metadata (Story 6.1, AD-L6). ``PATCH
+/api/docs/{doc_id}`` partially updates ``title``/``authors`` (Story 6.6,
+AD-L6). Reserved (not built here): ``GET /api/docs``.
 """
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app import domain, storage
-from app.models import Annotation, Doc, ExtractedMeta
+from app.models import Annotation, Doc, DocPatch, ExtractedMeta
 
 router = APIRouter(tags=["docs"])
 
@@ -109,6 +110,55 @@ async def get_doc(doc_id: str) -> Doc:
         raise HTTPException(status_code=404, detail="Document not found") from exc
     except storage.StorageError as exc:
         raise HTTPException(status_code=500, detail="Could not read document") from exc
+    return Doc(doc_id=doc_id, **meta.model_dump())
+
+
+@router.patch(
+    "/docs/{doc_id}",
+    response_model=Doc,
+    responses={
+        400: {
+            "description": "No fields to update.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+        404: {
+            "description": "No document with this id.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+        500: {
+            "description": "The document could not be updated.",
+            "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
+            },
+        },
+    },
+)
+async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
+    """Partially update a document's ``title``/``authors`` (Story 6.6, AD-L6).
+
+    Only fields present in the request body change (``exclude_unset``); an
+    empty body -> 400. A malformed/forbidden field (e.g. ``status``) is
+    rejected by ``DocPatch`` itself as FastAPI's standard 422. Unknown id ->
+    404; a storage failure -> 500. Both use the single ``{ "detail" }``
+    envelope (AR-11). Editing never touches ``status``/``page_count``/
+    ``added``/``last_opened``.
+    """
+    updates = patch.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    for field in ("title", "authors"):
+        if field in updates and updates[field] is not None:
+            updates[field] = updates[field].strip() or None
+    try:
+        meta = storage.update_doc_meta(doc_id, updates)
+    except storage.DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Document not found") from exc
+    except storage.StorageError as exc:
+        raise HTTPException(status_code=500, detail="Could not update document") from exc
     return Doc(doc_id=doc_id, **meta.model_dump())
 
 

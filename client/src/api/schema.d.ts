@@ -69,7 +69,18 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Patch Doc
+         * @description Partially update a document's ``title``/``authors`` (Story 6.6, AD-L6).
+         *
+         *     Only fields present in the request body change (``exclude_unset``); an
+         *     empty body -> 400. A malformed/forbidden field (e.g. ``status``) is
+         *     rejected by ``DocPatch`` itself as FastAPI's standard 422. Unknown id ->
+         *     404; a storage failure -> 500. Both use the single ``{ "detail" }``
+         *     envelope (AR-11). Editing never touches ``status``/``page_count``/
+         *     ``added``/``last_opened``.
+         */
+        patch: operations["patch_doc_api_docs__doc_id__patch"];
         trace?: never;
     };
     "/api/docs/{doc_id}/file": {
@@ -260,6 +271,24 @@ export interface components {
             schema_version: number;
             /** Doc Id */
             doc_id: string;
+        };
+        /**
+         * DocPatch
+         * @description Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6): a partial
+         *     title/authors edit. Request-only (no route returns it) — surfaced into
+         *     OpenAPI by the route's body parameter, not by a model injection.
+         *
+         *     Both fields default unset so ``model_dump(exclude_unset=True)`` yields
+         *     only what the client actually sent (true PATCH semantics: a title-only
+         *     edit leaves authors untouched). ``extra="forbid"`` turns an attempt to
+         *     patch a non-editable field (e.g. ``status``) into a loud 422 instead of a
+         *     silently-ignored no-op.
+         */
+        DocPatch: {
+            /** Title */
+            title?: string | null;
+            /** Authors */
+            authors?: string | null;
         };
         /**
          * Folder
@@ -507,6 +536,68 @@ export interface operations {
                 };
             };
             /** @description The stored document is unreadable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    patch_doc_api_docs__doc_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Doc"];
+                };
+            };
+            /** @description No fields to update. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description No document with this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The document could not be updated. */
             500: {
                 headers: {
                     [name: string]: unknown;

@@ -6,6 +6,7 @@ import type { components } from "./schema";
 
 export type HealthStatus = components["schemas"]["HealthStatus"];
 export type Doc = components["schemas"]["Doc"];
+export type DocPatch = components["schemas"]["DocPatch"];
 
 // Collection index (AD-L1, Story 6.2).
 export type CollectionRow = components["schemas"]["CollectionRow"];
@@ -63,6 +64,21 @@ export async function uploadDoc(file: File): Promise<Doc> {
  */
 export async function getDoc(docId: string): Promise<Doc> {
   const res = await fetch(`/api/docs/${encodeURIComponent(docId)}`);
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Doc;
+}
+
+/**
+ * Partially update a document's `title`/`authors` (`PATCH /api/docs/{doc_id}`,
+ * Story 6.6). Only the fields present in `patch` change; the response is the
+ * full updated `Doc` so `LibraryPage` can reconcile the edited row from it.
+ */
+export async function patchDoc(docId: string, patch: DocPatch): Promise<Doc> {
+  const res = await fetch(`/api/docs/${encodeURIComponent(docId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
   if (!res.ok) throw await envelopeError(res);
   return (await res.json()) as Doc;
 }
