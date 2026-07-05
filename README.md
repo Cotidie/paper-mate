@@ -1,4 +1,7 @@
-<h1 align="center">Paper Mate</h1>
+<h1 align="center">
+  <img src="client/public/favicon.png" alt="" width="24" height="24" style="vertical-align: middle;">
+  Paper Mate
+</h1>
 
 <p align="center">
   <strong>A local PDF reader for research and study.</strong><br/>
