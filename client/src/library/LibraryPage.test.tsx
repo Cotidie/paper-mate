@@ -546,6 +546,92 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
   });
 });
 
+describe("Inline edit Title/Authors (Story 6.6)", () => {
+  it("commits an edit optimistically and calls patchDoc with just that field", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    const patchDoc = vi.spyOn(api, "patchDoc").mockResolvedValue({
+      ...fakeDoc(fakeRow.doc_id, "attention.pdf", "Corrected Title"),
+      authors: fakeRow.authors,
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Attention Is All You Need"));
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Corrected Title" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Optimistic update lands immediately, before patchDoc resolves.
+    expect(screen.getByText("Corrected Title")).toBeTruthy();
+    expect(patchDoc).toHaveBeenCalledWith(fakeRow.doc_id, { title: "Corrected Title" });
+
+    await waitFor(() => expect(screen.getByText("Corrected Title")).toBeTruthy());
+  });
+
+  it("reverts the row and shows an error toast when patchDoc rejects", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    vi.spyOn(api, "patchDoc").mockRejectedValue(new Error("boom"));
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Attention Is All You Need"));
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Will Fail" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByText("Will Fail")).toBeTruthy(); // optimistic
+
+    await waitFor(() => expect(screen.getByText("Couldn't save that change.")).toBeTruthy());
+    expect(screen.getByText("Attention Is All You Need")).toBeTruthy(); // reverted
+    expect(screen.queryByText("Will Fail")).toBeNull();
+  });
+
+  it("an older PATCH resolving after a newer one does not clobber the newer result (Codex review follow-up)", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    let resolveFirst: (doc: api.Doc) => void = () => {};
+    let resolveSecond: (doc: api.Doc) => void = () => {};
+    const patchDoc = vi
+      .spyOn(api, "patchDoc")
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
+
+    // First edit commits "First Edit"; its PATCH (#1) is left unresolved.
+    fireEvent.click(screen.getByText("Attention Is All You Need"));
+    fireEvent.change(screen.getByDisplayValue("Attention Is All You Need"), {
+      target: { value: "First Edit" },
+    });
+    fireEvent.keyDown(screen.getByDisplayValue("First Edit"), { key: "Enter" });
+    expect(screen.getByText("First Edit")).toBeTruthy();
+
+    // A second edit to the SAME field lands before PATCH #1 resolves.
+    fireEvent.click(screen.getByText("First Edit"));
+    fireEvent.change(screen.getByDisplayValue("First Edit"), { target: { value: "Second Edit" } });
+    fireEvent.keyDown(screen.getByDisplayValue("Second Edit"), { key: "Enter" });
+    expect(screen.getByText("Second Edit")).toBeTruthy();
+
+    // The newer request (#2) resolves first.
+    resolveSecond({
+      ...fakeDoc(fakeRow.doc_id, "attention.pdf", "Second Edit"),
+      authors: fakeRow.authors,
+    });
+    await waitFor(() => expect(screen.getByText("Second Edit")).toBeTruthy());
+
+    // The older, superseded request (#1) resolves late. It must not clobber
+    // the newer, already-reconciled value.
+    resolveFirst({
+      ...fakeDoc(fakeRow.doc_id, "attention.pdf", "First Edit"),
+      authors: fakeRow.authors,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(screen.getByText("Second Edit")).toBeTruthy();
+    expect(screen.queryByText("First Edit")).toBeNull();
+    expect(patchDoc).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("Left pane (version display)", () => {
   it("shows the app version once fetchHealth resolves", async () => {
     vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.4.4" });
