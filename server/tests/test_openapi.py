@@ -34,3 +34,16 @@ def test_validation_errors_documented_as_string_envelope() -> None:
     resp422 = schema["paths"]["/api/docs"]["post"]["responses"]["422"]
     ref = resp422["content"]["application/json"]["schema"]["$ref"]
     assert ref.endswith("/ErrorEnvelope")
+
+
+def test_openapi_contains_library_models_and_path() -> None:
+    """AC-3: CollectionRow/Folder/Library are generated, and GET /api/library
+    is registered, so the client type-gen never hand-authors these."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    for name in ("CollectionRow", "Folder", "Library"):
+        assert name in schemas
+    assert "doc_id" in schemas["CollectionRow"]["properties"]
+    assert "folder_id" in schemas["CollectionRow"]["properties"]
+    assert "/api/library" in schema["paths"]
+    assert "get" in schema["paths"]["/api/library"]

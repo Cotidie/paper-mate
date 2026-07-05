@@ -7,7 +7,17 @@ import pytest
 from pydantic import ValidationError
 
 from app.main import app
-from app.models import Annotation, PathAnchor, RectAnchor, Style, TextAnchor
+from app.models import (
+    Annotation,
+    CollectionRow,
+    DocMeta,
+    Folder,
+    Library,
+    PathAnchor,
+    RectAnchor,
+    Style,
+    TextAnchor,
+)
 
 BASE = {
     "id": "11111111-1111-1111-1111-111111111111",
@@ -148,3 +158,68 @@ def test_annotation_surfaced_in_openapi_via_annotations_route() -> None:
     operations = schema["paths"][annotations_paths[0]]
     assert "put" in operations
     assert "get" in operations  # Story 3.5: hydrate-on-open GET now live
+
+
+# --- Library models (Story 6.2, AD-8 additive extension) --------------------
+
+
+def test_doc_meta_defaults_additive_fields() -> None:
+    """AD-8: a bare DocMeta (as a pre-6.2 v1 meta.json would validate) fills in
+    the new fields' defaults."""
+    meta = DocMeta(filename="f.pdf", page_count=1, added="t", last_opened="t")
+    assert meta.authors is None
+    assert meta.file_type == "pdf"
+    assert meta.status == "ready"
+
+
+def test_doc_meta_round_trips_new_fields() -> None:
+    meta = DocMeta(
+        filename="f.pdf",
+        page_count=1,
+        added="t",
+        last_opened="t",
+        authors="A. Author",
+        file_type="note",
+        status="extracting",
+    )
+    assert meta.authors == "A. Author"
+    assert meta.file_type == "note"
+    assert meta.status == "extracting"
+
+
+def test_folder_round_trips() -> None:
+    folder = Folder(id="11111111-1111-1111-1111-111111111111", name="Reading List")
+    assert folder.parent_id is None
+
+
+def test_collection_row_round_trips() -> None:
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+    )
+    assert row.doc_id == "d1"
+    assert row.trashed is False
+
+
+def test_library_wraps_papers_and_folders() -> None:
+    row = CollectionRow(
+        doc_id="d1",
+        title=None,
+        authors=None,
+        added="t",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+    )
+    library = Library(papers=[row], folders=[])
+    assert library.papers == [row]
+    assert library.folders == []

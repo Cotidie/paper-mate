@@ -28,6 +28,12 @@ class DocMeta(BaseModel):
 
     Storage-owned. ``doc_id`` is the library folder name and is intentionally
     NOT a field here; the API surfaces it via ``Doc``.
+
+    ``authors``/``file_type``/``status`` are additive (Story 6.2, no
+    ``schema_version`` bump): an existing v1 file missing them still validates
+    via defaults. A 6.2 import has no extraction pipeline yet, so it lands
+    immediately at ``status="ready"`` with ``authors=None``; Story 6.5 drives
+    the ``extracting -> ready | enrich-skipped | parse-failed`` transitions.
     """
 
     filename: str
@@ -35,6 +41,9 @@ class DocMeta(BaseModel):
     page_count: int
     added: str  # ISO-8601 UTC
     last_opened: str  # ISO-8601 UTC
+    authors: str | None = None
+    file_type: Literal["pdf", "note"] = "pdf"
+    status: Literal["extracting", "ready", "enrich-skipped", "parse-failed"] = "ready"
     schema_version: int = 1
 
 
@@ -42,6 +51,51 @@ class Doc(DocMeta):
     """API representation of an imported document = ``doc_id`` + its metadata."""
 
     doc_id: str
+
+
+# --- Library / collection index (AD-L1, Story 6.2) --------------------------
+#
+# ``library.json`` is the authoritative cross-doc index: folder tree,
+# membership, trash state, and paper order. Per-paper own fields stay
+# authoritative in ``meta.json``; ``CollectionRow`` merges the organizational
+# fields (authoritative here) with a meta-derived, non-authoritative display
+# cache (title/authors/added/file_type/status) so ``GET /api/library`` renders
+# the table from one file read (LNFR-4). Meta always wins on conflict.
+
+
+class Folder(BaseModel):
+    """A folder in the collection's organizing tree (Epic 7 CRUD; the type is
+    generated here so the client contract exists ahead of that epic). ``name``
+    is mutable and the folder is keyed by ``id``, so a rename never orphans
+    membership."""
+
+    id: str  # UUIDv4
+    name: str
+    parent_id: str | None = None
+
+
+class CollectionRow(BaseModel):
+    """One row of the collection table: organizational fields (authoritative
+    in ``library.json``) plus the meta-derived display projection (cached,
+    non-authoritative — refreshed from ``meta.json`` on every index write)."""
+
+    doc_id: str
+    title: str | None
+    authors: str | None
+    added: str  # ISO-8601 UTC
+    file_type: Literal["pdf", "note"]
+    status: Literal["extracting", "ready", "enrich-skipped", "parse-failed"]
+    folder_id: str | None
+    trashed: bool
+    order: int
+
+
+class Library(BaseModel):
+    """The ``GET /api/library`` response envelope: table + folder tree in one
+    read. ``folders`` is empty until Epic 7 builds folder CRUD."""
+
+    papers: list[CollectionRow]
+    folders: list[Folder]
 
 
 # --- Annotation entity (AD-4, AD-5) -----------------------------------------

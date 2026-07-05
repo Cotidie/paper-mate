@@ -44,14 +44,23 @@ the same bytes never overwrites an existing `annotations.json`/`meta.json` — o
     "page_count": 12,
     "added": "2026-06-28T00:00:00+00:00",
     "last_opened": "2026-06-28T00:00:00+00:00",
+    "authors": null,             // string | null; null until Story 6.5 extraction fills it
+    "file_type": "pdf",          // "pdf" | "note"
+    "status": "ready",           // "extracting" | "ready" | "enrich-skipped" | "parse-failed"
     "schema_version": 1
   }
   ```
 - **400** → `{ "detail": "Could not read PDF file" }` — corrupt, empty, or non-PDF bytes. Nothing is written.
 
 > `Doc` = `doc_id` + the on-disk `meta.json` schema (`DocMeta`:
-> `filename, title, page_count, added, last_opened, schema_version`). `doc_id`
-> is the library folder name and is **not** stored inside `meta.json` (AD-8).
+> `filename, title, page_count, added, last_opened, authors, file_type, status, schema_version`).
+> `doc_id` is the library folder name and is **not** stored inside `meta.json`
+> (AD-8). `authors`/`file_type`/`status` are additive (Story 6.2): a 6.2 import
+> has no extraction pipeline yet, so it lands immediately at `status: "ready"`,
+> `authors: null`; Story 6.5 drives the `extracting -> ready | enrich-skipped |
+> parse-failed` transitions and fills `authors`. This import also indexes the
+> paper into `library.json` (see `GET /api/library` below) as Uncategorized,
+> untrashed, at the next order.
 
 ### `GET /api/docs/{doc_id}` — get a document's own metadata
 
@@ -107,6 +116,48 @@ The disk envelope is stripped inside storage — the API body is the bare list (
   `annotations.json` or an unknown on-disk `schema_version` (rejected, never
   guessed — AD-8).
 
+### `GET /api/library` — read the collection index
+
+The organization layer (AD-L6): the collection table + folder tree in **one
+read** from `{data_root}/library.json`, no per-doc `meta.json` fan-out. This is
+the collection list (`GET /api/docs` list stays Reserved). `folders` is empty
+until Epic 7 builds folder CRUD; every paper is Uncategorized (`folder_id:
+null`) and untrashed until then.
+
+- **200** → `Library`
+  ```json
+  {
+    "papers": [
+      {
+        "doc_id": "40cb003b…c0347f4",
+        "title": "A Paper",
+        "authors": null,
+        "added": "2026-06-28T00:00:00+00:00",
+        "file_type": "pdf",
+        "status": "ready",
+        "folder_id": null,
+        "trashed": false,
+        "order": 0
+      }
+    ],
+    "folders": []
+  }
+  ```
+- **500** → `{ "detail": "Could not read library" }` — an unreadable or
+  wrong-shape `library.json` (unknown `schema_version`, invalid JSON/shape).
+
+> `library.json` is the authoritative index for **cross-doc** state: the
+> folder tree, membership (paper → ≤1 folder), trash, and paper order. A
+> paper's **own** fields (title/authors/added/file_type/status) stay
+> authoritative in its `meta.json`; `CollectionRow`'s display fields are a
+> non-authoritative cache of that projection, refreshed from `meta.json` on
+> every index write, so this endpoint never opens N `meta.json` files
+> (LNFR-4). At boot, storage reconciles `library.json` against
+> `library/{doc_id}/` dirs on disk (adds an unindexed dir as Uncategorized,
+> prunes an index entry whose dir vanished, best-effort skip on a
+> missing/corrupt `meta.json`) so papers imported before Story 6.2 (or
+> out-of-band) still show up here.
+
 ## Reserved (not yet built)
 
 Declared by the architecture (AR-11), implemented in later stories. Do not
@@ -120,6 +171,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-05 (Story 6.2):** added `GET /api/library` (the collection index in one read: `Library = { papers: CollectionRow[], folders: Folder[] }`; 500 on a corrupt/unknown-version `library.json`). `DocMeta`/`Doc` gain `authors: str | null`, `file_type: "pdf" | "note"`, `status: "extracting" | "ready" | "enrich-skipped" | "parse-failed"` (additive, no `schema_version` bump). `POST /api/docs` now also indexes the import into `library.json`; boot reconcile aligns the index with on-disk `library/{doc_id}/` dirs. `GET /api/docs` list stays reserved (the collection list is `GET /api/library`, not a docs scan).
 - **2026-07-05 (Story 6.1):** added `GET /api/docs/{doc_id}` (own metadata; 404 unknown doc, 500 corrupt/unknown-version disk record). `GET /api/docs` stays reserved (Story 6.2).
 - **2026-07-03 (comment bubble resize, user feature request):** `Style` gains `bubble_width: float | null` + `bubble_height: float | null` (comment-only; `null` = default CSS size; additive, no format break, AD-8). No endpoints added.
 - **2026-07-02 (memo collapse/expand, user feature request):** `Style` gains `collapsed: bool | null` (memo-only; `null` = expanded, the default; additive, no format break, AD-8). No endpoints added.

@@ -123,6 +123,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Library
+         * @description Return the collection in one lock-free read (AC-3).
+         *
+         *     An absent ``library.json`` is an empty collection, not an error. A
+         *     corrupt on-disk index surfaces as the single ``{ "detail" }`` envelope
+         *     (AR-11), mirroring ``get_annotations``.
+         */
+        get: operations["get_library_api_library_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -162,6 +186,38 @@ export interface components {
             file: string;
         };
         /**
+         * CollectionRow
+         * @description One row of the collection table: organizational fields (authoritative
+         *     in ``library.json``) plus the meta-derived display projection (cached,
+         *     non-authoritative — refreshed from ``meta.json`` on every index write).
+         */
+        CollectionRow: {
+            /** Doc Id */
+            doc_id: string;
+            /** Title */
+            title: string | null;
+            /** Authors */
+            authors: string | null;
+            /** Added */
+            added: string;
+            /**
+             * File Type
+             * @enum {string}
+             */
+            file_type: "pdf" | "note";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "extracting" | "ready" | "enrich-skipped" | "parse-failed";
+            /** Folder Id */
+            folder_id: string | null;
+            /** Trashed */
+            trashed: boolean;
+            /** Order */
+            order: number;
+        };
+        /**
          * Doc
          * @description API representation of an imported document = ``doc_id`` + its metadata.
          */
@@ -176,6 +232,20 @@ export interface components {
             added: string;
             /** Last Opened */
             last_opened: string;
+            /** Authors */
+            authors?: string | null;
+            /**
+             * File Type
+             * @default pdf
+             * @enum {string}
+             */
+            file_type: "pdf" | "note";
+            /**
+             * Status
+             * @default ready
+             * @enum {string}
+             */
+            status: "extracting" | "ready" | "enrich-skipped" | "parse-failed";
             /**
              * Schema Version
              * @default 1
@@ -183,6 +253,21 @@ export interface components {
             schema_version: number;
             /** Doc Id */
             doc_id: string;
+        };
+        /**
+         * Folder
+         * @description A folder in the collection's organizing tree (Epic 7 CRUD; the type is
+         *     generated here so the client contract exists ahead of that epic). ``name``
+         *     is mutable and the folder is keyed by ``id``, so a rename never orphans
+         *     membership.
+         */
+        Folder: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
         };
         /**
          * HealthStatus
@@ -198,6 +283,17 @@ export interface components {
             status: "ok";
             /** Version */
             version: string;
+        };
+        /**
+         * Library
+         * @description The ``GET /api/library`` response envelope: table + folder tree in one
+         *     read. ``folders`` is empty until Epic 7 builds folder CRUD.
+         */
+        Library: {
+            /** Papers */
+            papers: components["schemas"]["CollectionRow"][];
+            /** Folders */
+            folders: components["schemas"]["Folder"][];
         };
         /**
          * PathAnchor
@@ -555,6 +651,35 @@ export interface operations {
                 };
             };
             /** @description The annotation set could not be saved. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_library_api_library_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description The stored collection index is unreadable. */
             500: {
                 headers: {
                     [name: string]: unknown;
