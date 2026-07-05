@@ -12,50 +12,22 @@ returns a document's own metadata (Story 6.1, AD-L6). ``PATCH
 AD-L6). ``POST /api/docs/{doc_id}/open`` advances ``meta.last_opened`` when
 a paper opens (Story 6.7) - the only mutation alongside the otherwise-pure
 meta ``GET``. Reserved (not built here): ``GET /api/docs``.
+
+The repeated error-envelope ``responses=`` block and the storage-exception
+mapping are consolidated into ``_errors`` (``error_response`` / ``storage_errors``)
+so each handler stays a thin controller. The extract/enrich/persist orchestrator
+lives in ``routes/extraction.py``.
 """
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from app import domain, storage
-from app.models import Annotation, Doc, DocPatch, ExtractedMeta
+from app import storage
+from app.models import Annotation, Doc, DocPatch
+from app.routes._errors import error_response, storage_errors
+from app.routes.extraction import run_extraction
 
 router = APIRouter(tags=["docs"])
-
-
-def run_extraction(doc_id: str, pdf_bytes: bytes) -> None:
-    """Background orchestrator (AD-L2 composition root): extract -> enrich ->
-    persist. Runs as a **sync** FastAPI background task (Starlette's threadpool,
-    off the event loop) — correct for CPU-bound PyMuPDF + sync httpx.
-
-    Resolves the terminal status (AC-5): ``ready`` when Crossref enriched,
-    ``enrich-skipped`` when local fields survive but enrich skipped,
-    ``parse-failed`` when nothing was found (a never-lost filename row). It
-    **never raises**: a purged doc is a best-effort no-op, and any unexpected
-    failure still settles the row to ``parse-failed`` rather than leaving it
-    stuck ``extracting`` forever.
-    """
-    try:
-        extracted = domain.extract(pdf_bytes)
-        enriched = domain.enrich(extracted)
-        if isinstance(enriched, ExtractedMeta):
-            final, status = enriched, "ready"
-        elif extracted.title or extracted.authors:
-            final, status = extracted, "enrich-skipped"
-        else:
-            final, status = extracted, "parse-failed"
-        authors = ", ".join(final.authors) or None  # storage owns list->display
-        try:
-            storage.apply_extraction(doc_id, title=final.title, authors=authors, status=status)
-        except storage.DocumentNotFoundError:
-            pass  # purged mid-flight — best-effort no-op
-    except Exception:
-        # Never leave the row stuck at "extracting" (the client would poll to
-        # its cap and give up on a permanently-muted row). Settle it as failed.
-        try:
-            storage.apply_extraction(doc_id, title=None, authors=None, status="parse-failed")
-        except storage.StorageError:
-            pass
 
 
 @router.post("/docs", response_model=Doc)
@@ -86,18 +58,8 @@ async def upload_doc(background_tasks: BackgroundTasks, file: UploadFile = File(
     "/docs/{doc_id}",
     response_model=Doc,
     responses={
-        404: {
-            "description": "No document with this id.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
-        500: {
-            "description": "The stored document is unreadable.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
+        404: error_response("No document with this id."),
+        500: error_response("The stored document is unreadable."),
     },
 )
 async def get_doc(doc_id: str) -> Doc:
@@ -106,12 +68,8 @@ async def get_doc(doc_id: str) -> Doc:
     Unknown/unresolvable id → 404; a corrupt on-disk record → 500. Both use the
     single ``{ "detail" }`` envelope (AR-11).
     """
-    try:
+    with storage_errors("Could not read document"):
         meta = storage.read_meta(doc_id)
-    except storage.DocumentNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Document not found") from exc
-    except storage.StorageError as exc:
-        raise HTTPException(status_code=500, detail="Could not read document") from exc
     return Doc(doc_id=doc_id, **meta.model_dump())
 
 
@@ -119,24 +77,9 @@ async def get_doc(doc_id: str) -> Doc:
     "/docs/{doc_id}",
     response_model=Doc,
     responses={
-        400: {
-            "description": "No fields to update.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
-        404: {
-            "description": "No document with this id.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
-        500: {
-            "description": "The document could not be updated.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
+        400: error_response("No fields to update."),
+        404: error_response("No document with this id."),
+        500: error_response("The document could not be updated."),
     },
 )
 async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
@@ -155,12 +98,8 @@ async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
     for field in ("title", "authors"):
         if field in updates and updates[field] is not None:
             updates[field] = updates[field].strip() or None
-    try:
+    with storage_errors("Could not update document"):
         meta = storage.update_doc_meta(doc_id, updates)
-    except storage.DocumentNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Document not found") from exc
-    except storage.StorageError as exc:
-        raise HTTPException(status_code=500, detail="Could not update document") from exc
     return Doc(doc_id=doc_id, **meta.model_dump())
 
 
@@ -168,18 +107,8 @@ async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
     "/docs/{doc_id}/open",
     response_model=Doc,
     responses={
-        404: {
-            "description": "No document with this id.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
-        500: {
-            "description": "The document could not be updated.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
+        404: error_response("No document with this id."),
+        500: error_response("The document could not be updated."),
     },
 )
 async def mark_doc_opened(doc_id: str) -> Doc:
@@ -191,12 +120,8 @@ async def mark_doc_opened(doc_id: str) -> Doc:
     (AR-11). The client fires this as a best-effort side effect (AC-8); a
     failure here must never gate the reader opening the paper.
     """
-    try:
+    with storage_errors("Could not update document"):
         meta = storage.touch_last_opened(doc_id)
-    except storage.DocumentNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Document not found") from exc
-    except storage.StorageError as exc:
-        raise HTTPException(status_code=500, detail="Could not update document") from exc
     return Doc(doc_id=doc_id, **meta.model_dump())
 
 
@@ -208,18 +133,8 @@ async def mark_doc_opened(doc_id: str) -> Doc:
             "content": {"application/pdf": {}},
             "description": "The stored PDF bytes.",
         },
-        404: {
-            "description": "No document with this id.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
-        500: {
-            "description": "The stored document is unreadable.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
+        404: error_response("No document with this id."),
+        500: error_response("The stored document is unreadable."),
     },
 )
 async def get_doc_file(doc_id: str) -> FileResponse:
@@ -228,12 +143,8 @@ async def get_doc_file(doc_id: str) -> FileResponse:
     Unknown/unresolvable id → 404; a corrupt on-disk record → 500. Both use the
     single ``{ "detail" }`` envelope (AR-11).
     """
-    try:
+    with storage_errors("Could not read document"):
         path = storage.source_path(doc_id)
-    except storage.DocumentNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Document not found") from exc
-    except storage.StorageError as exc:
-        raise HTTPException(status_code=500, detail="Could not read document") from exc
     return FileResponse(path, media_type="application/pdf")
 
 
@@ -241,18 +152,8 @@ async def get_doc_file(doc_id: str) -> FileResponse:
     "/docs/{doc_id}/annotations",
     response_model=list[Annotation],
     responses={
-        404: {
-            "description": "No document with this id.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
-        500: {
-            "description": "The stored annotation set is unreadable.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
+        404: error_response("No document with this id."),
+        500: error_response("The stored annotation set is unreadable."),
     },
 )
 async def get_annotations(doc_id: str) -> list[Annotation]:
@@ -263,30 +164,16 @@ async def get_annotations(doc_id: str) -> list[Annotation]:
     not 404). Unknown/unresolvable id → 404; a corrupt or unknown-version disk
     file → 500. Both use the single ``{ "detail" }`` envelope (AR-11).
     """
-    try:
+    with storage_errors("Could not read annotations"):
         return storage.read_annotations(doc_id)
-    except storage.DocumentNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Document not found") from exc
-    except storage.StorageError as exc:
-        raise HTTPException(status_code=500, detail="Could not read annotations") from exc
 
 
 @router.put(
     "/docs/{doc_id}/annotations",
     response_model=list[Annotation],
     responses={
-        404: {
-            "description": "No document with this id.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
-        500: {
-            "description": "The annotation set could not be saved.",
-            "content": {
-                "application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}
-            },
-        },
+        404: error_response("No document with this id."),
+        500: error_response("The annotation set could not be saved."),
     },
 )
 async def put_annotations(doc_id: str, annotations: list[Annotation]) -> list[Annotation]:
@@ -296,10 +183,6 @@ async def put_annotations(doc_id: str, annotations: list[Annotation]) -> list[An
     is added/stripped only inside storage. No history, undo, or merge here:
     this overwrites with exactly what it received.
     """
-    try:
+    with storage_errors("Could not save annotations"):
         storage.write_annotations(doc_id, annotations)
-    except storage.DocumentNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Document not found") from exc
-    except storage.StorageError as exc:
-        raise HTTPException(status_code=500, detail="Could not save annotations") from exc
     return annotations

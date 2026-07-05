@@ -27,8 +27,8 @@ def _stub_enrich(monkeypatch):
     real ``domain.enrich`` (a live HTTP call). Default it to ``"skipped"`` on
     the ``app.domain`` package (what ``run_extraction`` resolves); a test that
     needs the enriched path re-patches ``domain.enrich`` in its own body. The
-    ``domain.extraction`` unit tests bind ``enrich`` directly, so they are
-    unaffected by this package-level stub.
+    ``domain.enrich`` unit tests bind the function (or patch ``crossref.httpx``)
+    directly, so they are unaffected by this package-level stub.
     """
     from app import domain
 

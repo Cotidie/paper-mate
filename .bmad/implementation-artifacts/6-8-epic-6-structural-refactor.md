@@ -1,6 +1,10 @@
+---
+baseline_commit: 0fe3212f3438391833c7771fb839a4329682c642
+---
+
 # Story 6.8: Epic 6 structural refactor: modularize the library client and split the storage/domain backend
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -34,46 +38,46 @@ Restated from `epics.md` Story 6.8 (lines 1511-1532). Fidelity preserved; wordin
 
 > Server and client are independent; either can be done and PR'd first. Regenerate the contract on the server side, then verify the client's committed `schema.d.ts` is byte-identical.
 
-- [ ] **Task 1: Split `storage/__init__.py` into a package behind a byte-identical facade (AC: 1, 5, 7)**
-  - [ ] Create focused modules under `server/app/storage/` (suggested: `errors.py`, `paths.py`, `atomic.py`, `meta_store.py`, `library_index.py`, `annotations_store.py`). Keep the process-level `_index_lock` (an `RLock`) and `_mutate_index` as the single serialized `library.json` writer (AL-7); it MUST be shared by every mutator, not duplicated.
-  - [ ] Make `storage/__init__.py` a thin facade that re-exports the FULL current public surface so `from app import storage; storage.<name>` and `from app.storage import <Name>` both keep working unchanged. Public surface to re-export (verified against call sites): functions `read_library`, `reconcile_library`, `source_path`, `read_meta`, `import_pdf`, `apply_extraction`, `update_doc_meta`, `touch_last_opened`, `write_annotations`, `read_annotations`; exception classes `StorageError`, `InvalidPDFError`, `UnsupportedSchemaError`, `CorruptMetadataError`, `CorruptAnnotationsError`, `DocumentNotFoundError`, `CorruptLibraryError`; constants `META_SCHEMA_VERSION`, `ANNOTATIONS_SCHEMA_VERSION`, `LIBRARY_SCHEMA_VERSION`.
-  - [ ] Preserve the `_update_meta_and_reindex` shared write core (re-read -> apply -> TOCTOU purge-guard with `create_parents=False` + `doc_dir.is_dir()` re-check -> write -> reindex, all under `_index_lock`). `apply_extraction`, `update_doc_meta`, `touch_last_opened` stay thin callers of it.
-  - [ ] **Test landmine (see Dev Notes):** `test_storage.py` does `monkeypatch.setattr(storage, "_read_meta", ...)` and expects the production TOCTOU path to call that patched name. Decide the seam so the patch still bites (keep `_read_meta` reachable-and-called via the facade name, OR update those three tests to patch the real call-site module attr). Do not let the guard test silently no-op.
-  - [ ] Run `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` (from `server/`); all of `test_storage.py`, `test_docs.py`, `test_library.py`, `test_models.py` green.
+- [x] **Task 1: Split `storage/__init__.py` into a package behind a byte-identical facade (AC: 1, 5, 7)**
+  - [x] Create focused modules under `server/app/storage/` (suggested: `errors.py`, `paths.py`, `atomic.py`, `meta_store.py`, `library_index.py`, `annotations_store.py`). Keep the process-level `_index_lock` (an `RLock`) and `_mutate_index` as the single serialized `library.json` writer (AL-7); it MUST be shared by every mutator, not duplicated.
+  - [x] Make `storage/__init__.py` a thin facade that re-exports the FULL current public surface so `from app import storage; storage.<name>` and `from app.storage import <Name>` both keep working unchanged. Public surface to re-export (verified against call sites): functions `read_library`, `reconcile_library`, `source_path`, `read_meta`, `import_pdf`, `apply_extraction`, `update_doc_meta`, `touch_last_opened`, `write_annotations`, `read_annotations`; exception classes `StorageError`, `InvalidPDFError`, `UnsupportedSchemaError`, `CorruptMetadataError`, `CorruptAnnotationsError`, `DocumentNotFoundError`, `CorruptLibraryError`; constants `META_SCHEMA_VERSION`, `ANNOTATIONS_SCHEMA_VERSION`, `LIBRARY_SCHEMA_VERSION`.
+  - [x] Preserve the `_update_meta_and_reindex` shared write core (re-read -> apply -> TOCTOU purge-guard with `create_parents=False` + `doc_dir.is_dir()` re-check -> write -> reindex, all under `_index_lock`). `apply_extraction`, `update_doc_meta`, `touch_last_opened` stay thin callers of it.
+  - [x] **Test landmine (see Dev Notes):** `test_storage.py` does `monkeypatch.setattr(storage, "_read_meta", ...)` and expects the production TOCTOU path to call that patched name. Decide the seam so the patch still bites (keep `_read_meta` reachable-and-called via the facade name, OR update those three tests to patch the real call-site module attr). Do not let the guard test silently no-op.
+  - [x] Run `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` (from `server/`); all of `test_storage.py`, `test_docs.py`, `test_library.py`, `test_models.py` green.
 
-- [ ] **Task 2: Separate `extract` and `enrich`; put Crossref behind an enricher port (AC: 2, 5, 7)**
-  - [ ] Split `domain/extraction.py` into `extract` (pure PyMuPDF, total, `bytes -> ExtractedMeta`) and `enrich` in their own modules. Suggested: `domain/extract.py`, `domain/enrich.py`, `domain/crossref.py` (the port + `CrossrefEnricher`).
-  - [ ] Define a small enricher port (a `Protocol` or ABC: `enrich(meta: ExtractedMeta) -> ExtractedMeta | Literal["skipped"]`, never raises, never blocks) and a `CrossrefEnricher` implementation holding the httpx client construction, DOI-first-then-title logic, `_titles_match` Jaccard gate, and `_meta_from_work`/`_authors_from_crossref` projection. `enrich(meta)` at the domain surface stays a stable function (`domain.enrich`) that delegates to the default `CrossrefEnricher`, so the route call site (`domain.enrich`) is unchanged and a test can inject a fake enricher (no HTTP).
-  - [ ] Keep `domain/__init__.py` re-exporting `extract`, `enrich` (and export the port + `CrossrefEnricher` if tests want to construct/inject them). `__all__` updated.
-  - [ ] **Test landmine (see Dev Notes):** `test_domain.py` does `ast.parse(pathlib.Path(extraction.__file__).read_text())` (a static check on the single extraction file, likely the no-`app.storage`-import / no-network guarantee). Point that AST check at the new module(s), or it inspects a file that no longer holds the code it asserts about.
-  - [ ] Confirm the domain layer imports nothing from `app.storage` (grep) and never touches the filesystem. `test_domain.py` green.
+- [x] **Task 2: Separate `extract` and `enrich`; put Crossref behind an enricher port (AC: 2, 5, 7)**
+  - [x] Split `domain/extraction.py` into `extract` (pure PyMuPDF, total, `bytes -> ExtractedMeta`) and `enrich` in their own modules. Suggested: `domain/extract.py`, `domain/enrich.py`, `domain/crossref.py` (the port + `CrossrefEnricher`).
+  - [x] Define a small enricher port (a `Protocol` or ABC: `enrich(meta: ExtractedMeta) -> ExtractedMeta | Literal["skipped"]`, never raises, never blocks) and a `CrossrefEnricher` implementation holding the httpx client construction, DOI-first-then-title logic, `_titles_match` Jaccard gate, and `_meta_from_work`/`_authors_from_crossref` projection. `enrich(meta)` at the domain surface stays a stable function (`domain.enrich`) that delegates to the default `CrossrefEnricher`, so the route call site (`domain.enrich`) is unchanged and a test can inject a fake enricher (no HTTP).
+  - [x] Keep `domain/__init__.py` re-exporting `extract`, `enrich` (and export the port + `CrossrefEnricher` if tests want to construct/inject them). `__all__` updated.
+  - [x] **Test landmine (see Dev Notes):** `test_domain.py` does `ast.parse(pathlib.Path(extraction.__file__).read_text())` (a static check on the single extraction file, likely the no-`app.storage`-import / no-network guarantee). Point that AST check at the new module(s), or it inspects a file that no longer holds the code it asserts about.
+  - [x] Confirm the domain layer imports nothing from `app.storage` (grep) and never touches the filesystem. `test_domain.py` green.
 
-- [ ] **Task 3: Dedup `routes/docs.py` error envelopes + exception mapping; home the orchestrator (AC: 3, 5, 7)**
-  - [ ] Consolidate the repeated OpenAPI `ErrorEnvelope` `responses=` blocks into one shared definition (a constant/factory, for example `error_responses(404, 500)` producing the `$ref: '#/components/schemas/ErrorEnvelope'` content). Reuse it in `docs.py` and `library.py`.
-  - [ ] Consolidate the `except DocumentNotFoundError -> 404 / except StorageError -> 500` mapping into one seam (a context manager or a small helper) so each handler is a thin controller. Preserve the exact status codes and detail strings per route (upload_doc 400 "Could not read PDF file" / 500 "Could not store document"; get_doc 404 "Document not found" / 500 "Could not read document"; patch_doc 400 "No fields to update" / 404 / 500 "Could not update document"; mark_doc_opened 404 / 500 "Could not update document"; get_doc_file 404 / 500 "Could not read document"; get_annotations 404 / 500 "Could not read annotations"; put_annotations 404 / 500 "Could not save annotations"; get_library 500 "Could not read library"). These detail strings and codes are the contract; keep them byte-identical.
-  - [ ] Home `run_extraction` (the extract-enrich-persist background orchestrator) where it composes storage + domain cleanly. It stays importable as `from app.routes.docs import run_extraction` OR update `test_docs.py`'s import if it moves (see landmine). Keep it a sync function (Starlette threadpool, CPU-bound PyMuPDF + sync httpx) and keep its never-raise settle-to-`parse-failed` fallback.
-  - [ ] Regenerate the contract and assert byte-identical (see Task 5).
+- [x] **Task 3: Dedup `routes/docs.py` error envelopes + exception mapping; home the orchestrator (AC: 3, 5, 7)**
+  - [x] Consolidate the repeated OpenAPI `ErrorEnvelope` `responses=` blocks into one shared definition (a constant/factory, for example `error_responses(404, 500)` producing the `$ref: '#/components/schemas/ErrorEnvelope'` content). Reuse it in `docs.py` and `library.py`.
+  - [x] Consolidate the `except DocumentNotFoundError -> 404 / except StorageError -> 500` mapping into one seam (a context manager or a small helper) so each handler is a thin controller. Preserve the exact status codes and detail strings per route (upload_doc 400 "Could not read PDF file" / 500 "Could not store document"; get_doc 404 "Document not found" / 500 "Could not read document"; patch_doc 400 "No fields to update" / 404 / 500 "Could not update document"; mark_doc_opened 404 / 500 "Could not update document"; get_doc_file 404 / 500 "Could not read document"; get_annotations 404 / 500 "Could not read annotations"; put_annotations 404 / 500 "Could not save annotations"; get_library 500 "Could not read library"). These detail strings and codes are the contract; keep them byte-identical.
+  - [x] Home `run_extraction` (the extract-enrich-persist background orchestrator) where it composes storage + domain cleanly. It stays importable as `from app.routes.docs import run_extraction` OR update `test_docs.py`'s import if it moves (see landmine). Keep it a sync function (Starlette threadpool, CPU-bound PyMuPDF + sync httpx) and keep its never-raise settle-to-`parse-failed` fallback.
+  - [x] Regenerate the contract and assert byte-identical (see Task 5).
 
-- [ ] **Task 4: Move client `library/` onto the scaffold-react layout; decompose `CollectionTable`/`LibraryPage` (AC: 4, 5, 6, 7)**
-  - [ ] Restructure `client/src/library/` to mirror the `reader/` feature-dir precedent (see Project Structure Notes for the recommended target and the shared-vs-colocated decision). Each component gets its own `<Name>/` folder with colocated `.css` + `.test.tsx`. Use `git mv` so history follows; update every `@/library/...` import (only external importer is `client/src/routes/router.tsx`, plus the intra-`library/` imports).
-  - [ ] Decompose the sprawl: pull upload / optimistic-row / polling / inline-edit state into cohesive units (`LibraryPage` currently owns 6 refs + ~10 callbacks: `handleResolved`, `applyLibrary`, `settleNotices`, `handleBatchSettled`, `handleEditField`, `handleFailed`, plus the settle-poll wiring). `CollectionTable` mixes `TableSkeleton`, `TableHead`, `ColumnGroup`, `InlineEditor`, `EditableCell`, and the row-render sprawl. Split these so each concern reads as one unit. Abstract the row/status shape (`CollectionRow` + the `"extracting"` pending overlay, `RowStatus`, `docToRow`) into a shared data type/module rather than re-deriving it inline.
-  - [ ] If any moved module is referenced through a `vi.mock(...)` factory, update BOTH mock barrels in the same change (CLAUDE.md standing rule; the canonical case is `vi.mock("./render")` in `App.test.tsx`/`Reader.test.tsx`, but audit every `vi.mock` whose path or export set shifts).
-  - [ ] Move CSS with the component; re-run `no-raw-values.test.ts` (raw hex/px allowed ONLY in `src/theme/**`). Grep moved/edited UI strings for `—` (em-dash) before committing.
-  - [ ] `npm test` (Vitest) and `npm run typecheck` green from `client/`.
+- [x] **Task 4: Move client `library/` onto the scaffold-react layout; decompose `CollectionTable`/`LibraryPage` (AC: 4, 5, 6, 7)**
+  - [x] Restructure `client/src/library/` to mirror the `reader/` feature-dir precedent (see Project Structure Notes for the recommended target and the shared-vs-colocated decision). Each component gets its own `<Name>/` folder with colocated `.css` + `.test.tsx`. Use `git mv` so history follows; update every `@/library/...` import (only external importer is `client/src/routes/router.tsx`, plus the intra-`library/` imports).
+  - [x] Decompose the sprawl: pull upload / optimistic-row / polling / inline-edit state into cohesive units (`LibraryPage` currently owns 6 refs + ~10 callbacks: `handleResolved`, `applyLibrary`, `settleNotices`, `handleBatchSettled`, `handleEditField`, `handleFailed`, plus the settle-poll wiring). `CollectionTable` mixes `TableSkeleton`, `TableHead`, `ColumnGroup`, `InlineEditor`, `EditableCell`, and the row-render sprawl. Split these so each concern reads as one unit. Abstract the row/status shape (`CollectionRow` + the `"extracting"` pending overlay, `RowStatus`, `docToRow`) into a shared data type/module rather than re-deriving it inline.
+  - [x] If any moved module is referenced through a `vi.mock(...)` factory, update BOTH mock barrels in the same change (CLAUDE.md standing rule; the canonical case is `vi.mock("./render")` in `App.test.tsx`/`Reader.test.tsx`, but audit every `vi.mock` whose path or export set shifts).
+  - [x] Move CSS with the component; re-run `no-raw-values.test.ts` (raw hex/px allowed ONLY in `src/theme/**`). Grep moved/edited UI strings for `—` (em-dash) before committing.
+  - [x] `npm test` (Vitest) and `npm run typecheck` green from `client/`.
 
-- [ ] **Task 5: Contract-identical + suites-green verification (AC: 6)**
-  - [ ] Server: `cd server && PYTHONPATH= uv run python -m app.export_openapi` writes `server/openapi.json`; confirm `git diff --stat server/openapi.json` is EMPTY (byte-identical).
-  - [ ] Client: `cd client && npm run gen:api` regenerates `client/src/api/schema.d.ts`; confirm `git diff --stat client/src/api/schema.d.ts` is EMPTY (byte-identical, committed).
-  - [ ] Full suites: backend `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` (154 baseline from Story 6.7; note the sandbox caveat, backend is run-it-yourself on the host); client `npm test` (965 baseline) + `npm run typecheck`.
-  - [ ] `docs/API.md`: NO change expected (contract-identical). If the contract diff is non-empty, the refactor changed behavior: stop and fix, do not paper over it in API.md.
+- [x] **Task 5: Contract-identical + suites-green verification (AC: 6)**
+  - [x] Server: `cd server && PYTHONPATH= uv run python -m app.export_openapi` writes `server/openapi.json`; confirm `git diff --stat server/openapi.json` is EMPTY (byte-identical).
+  - [x] Client: `cd client && npm run gen:api` regenerates `client/src/api/schema.d.ts`; confirm `git diff --stat client/src/api/schema.d.ts` is EMPTY (byte-identical, committed).
+  - [x] Full suites: backend `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` (154 baseline from Story 6.7; note the sandbox caveat, backend is run-it-yourself on the host); client `npm test` (965 baseline) + `npm run typecheck`.
+  - [x] `docs/API.md`: NO change expected (contract-identical). If the contract diff is non-empty, the refactor changed behavior: stop and fix, do not paper over it in API.md.
 
-- [ ] **Task 6: Live smoke at DPR>1 (AC: 6)**
-  - [ ] Launch YOUR OWN fresh servers (isolated `PAPER_MATE_DATA` scratch dir, alternate ports), never a user-launched/Docker one. Backend `uvicorn --reload`, client `vite dev`.
-  - [ ] At `deviceScaleFactor: 2`: bulk-upload 2+ real multi-page PDFs (optimistic rows stream in, statuses settle), the table renders + inline-edit commits/reverts, open a paper from the Library into the reader, make a CROSS-PAGE highlight (the highest-risk selection path; jsdom cannot see it), autosave settles, back-to-Library, open a SECOND paper and confirm doc-switch isolation (paper B shows none of A's marks; re-opening A shows exactly A's). Tear the smoke servers down after.
+- [x] **Task 6: Live smoke at DPR>1 (AC: 6)**
+  - [x] Launch YOUR OWN fresh servers (isolated `PAPER_MATE_DATA` scratch dir, alternate ports), never a user-launched/Docker one. Backend `uvicorn --reload`, client `vite dev`.
+  - [x] At `deviceScaleFactor: 2`: bulk-upload 2+ real multi-page PDFs (optimistic rows stream in, statuses settle), the table renders + inline-edit commits/reverts, open a paper from the Library into the reader, make a CROSS-PAGE highlight (the highest-risk selection path; jsdom cannot see it), autosave settles, back-to-Library, open a SECOND paper and confirm doc-switch isolation (paper B shows none of A's marks; re-opening A shows exactly A's). Tear the smoke servers down after.
 
-- [ ] **Task 7: Version + status (AC: 6)**
-  - [ ] Bump PATCH in `server/pyproject.toml` (`0.4.7 -> 0.4.8`) at story done/merge (once, not per commit); re-run `uv lock`. This is the only "version" touch; no MAJOR/MINOR and no schema-version change (behavior/contract-identical).
-  - [ ] Flip `sprint-status.yaml` `6-8-...` to done at PR-merge time (AE3-1), and fill the Dev Agent Record fully before done (AE3-2).
+- [x] **Task 7: Version + status (AC: 6)**
+  - [x] Bump PATCH in `server/pyproject.toml` (`0.4.7 -> 0.4.8`) at story done/merge (once, not per commit); re-run `uv lock`. This is the only "version" touch; no MAJOR/MINOR and no schema-version change (behavior/contract-identical).
+  - [x] Flip `sprint-status.yaml` `6-8-...` to done at PR-merge time (AE3-1), and fill the Dev Agent Record fully before done (AE3-2).
 
 ## Dev Notes
 
@@ -191,10 +195,35 @@ Only external importer of `library/`: `client/src/routes/router.tsx` (`import Li
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-opus-4-8 (Opus 4.8), bmad-dev-story
 
 ### Debug Log References
 
+- Backend suite (host): `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` -> 156 passed (154 baseline + 2 new domain tests for the enricher port).
+- Contract regen: `python -m app.export_openapi` + client `npm run gen:api` -> `client/src/api/schema.d.ts` git diff EMPTY (byte-identical; the only `openapi.json` change is `info.version` 0.4.7 -> 0.4.8, and openapi.json is a gitignored build artifact).
+- Client: `npm run typecheck` clean; `npx vitest run` -> 974 passed / 51 files (no tests lost; moves were `git mv`, imports repointed). `no-raw-values.test.ts` green (85).
+- Live smoke at `deviceScaleFactor: 2` (own servers: uvicorn :8123 + vite :5199, isolated scratch data root): bulk-uploaded two multi-page PDFs (optimistic rows -> settled, metadata enriched via Crossref), inline-edit committed AND persisted to the backend, opened paper A into the reader (10 pages rendered), made a CROSS-PAGE highlight grouped across two pages with tight per-line rects (maxW 0.386, maxH 0.014 normalized -> NOT a full-page highlight) persisted to disk, back to Library, opened paper B (0 annotations rendered -> doc-switch isolation), reopened A (its 3 annotations / 8 rects restored). Own servers torn down after.
+
 ### Completion Notes List
 
+- **Task 1 (storage split).** `storage/__init__.py` (621 lines) -> a package: `errors.py`, `paths.py`, `atomic.py`, `pdf.py`, `meta_store.py`, `library_index.py`, `annotations_store.py`, `documents.py`, behind a thin `__init__` facade re-exporting the full public surface (functions/exceptions/constants) unchanged. `_index_lock` (RLock) + `mutate_index` stay the single serialized `library.json` writer (AL-7); `update_meta_and_reindex` is the one shared re-read/TOCTOU-guard/write/reindex core (apply_extraction/update_doc_meta/touch_last_opened are thin callers). **Landmine 1 seam:** production `update_meta_and_reindex`/`reconcile_library` call `meta_store.read(doc_dir)` module-qualified; the three `test_storage.py` TOCTOU tests now patch `meta_store.read` (was `storage._read_meta`) so the purge-guard patch still bites. `test_docs.py`'s two `os.replace` patches repointed to `app.storage.atomic.os.replace`.
+- **Task 2 (extract/enrich + port).** `domain/extraction.py` (274 lines) -> `extract.py` (pure PyMuPDF), `crossref.py` (the `Enricher` Protocol port + `CrossrefEnricher` + the httpx/DOI-title logic), `enrich.py` (the stable `domain.enrich` facade delegating to a default `CrossrefEnricher`, injectable via an optional `enricher` arg), `_text.py` (shared `clean`). **Landmine 2:** `test_domain.py`'s AST purity check now globs every `app/domain/*.py` (not the single old file); `fake_httpx` patches `crossref.httpx`. Added two tests: port injection + default-enricher identity.
+- **Task 3 (route dedup).** New `routes/_errors.py`: `error_response(description)` (one ErrorEnvelope `content` block, per-route description preserved so the contract stays byte-identical) + `storage_errors(server_error)` context manager (DocumentNotFoundError -> 404 "Document not found", other StorageError -> 500 with the route message). `docs.py` and `library.py` handlers are now thin controllers using both. `run_extraction` moved to `routes/extraction.py` (the AD-L2 composition root); `test_docs.py` import repointed.
+- **Task 4 (client library/).** Adopted the scaffold-react `<Name>/` layout: `CollectionTable/` (shell + `PaperRow`, `PendingRow`, `EditableCell`) and `AddMenu/` folders (git mv, history preserved). New shared `row.ts` data-type module homes `RowStatus`, `PendingUpload`, `docToRow`, `statusLabel`/`rowStatusClass`, `formatAdded`/`stripPdfExtension`/`seedFieldValue`/`currentFieldValue`. `LibraryPage` decomposed into `useCollection` (fetch/optimistic-add/settle-poll/bulk-upload lifecycle) + `useInlineEdit` (optimistic-PATCH lifecycle); the page is now composition only. Preserved exactly: `fetchSeqRef`/`editSeqRef` monotonic guards, the `suppressClickRef` blur-vs-click discipline (centralized in the `CollectionTable` shell via `consumeSuppressedClick`), and the StrictMode `mountedRef` reset. No `vi.mock` barrel targeted a moved module (only api-client spies), so no barrel edits needed.
+- **Tasks 5-7.** Contract byte-identical; suites green; DPR>1 live smoke passed; PATCH bump 0.4.7 -> 0.4.8 (`uv lock` re-run). `docs/API.md` unchanged (contract-identical). No em-dash in any UI string (all `—` hits are in code/CSS comments, exempt). AD-9 layering holds: domain imports nothing from `app.storage`/os/pathlib (purity test green), routes stay thin, storage is the sole data-root writer.
+
 ### File List
+
+**Server (new):** server/app/storage/errors.py, server/app/storage/paths.py, server/app/storage/atomic.py, server/app/storage/pdf.py, server/app/storage/meta_store.py, server/app/storage/library_index.py, server/app/storage/annotations_store.py, server/app/storage/documents.py, server/app/domain/extract.py, server/app/domain/crossref.py, server/app/domain/enrich.py, server/app/domain/_text.py, server/app/routes/_errors.py, server/app/routes/extraction.py
+**Server (modified):** server/app/storage/__init__.py (621-line module -> thin facade), server/app/domain/__init__.py, server/app/routes/docs.py, server/app/routes/library.py, server/pyproject.toml (0.4.7 -> 0.4.8), server/uv.lock, server/tests/test_storage.py, server/tests/test_domain.py, server/tests/test_docs.py, server/tests/conftest.py
+**Server (deleted):** server/app/domain/extraction.py
+**Client (new):** client/src/library/row.ts, client/src/library/useCollection.ts, client/src/library/useInlineEdit.ts, client/src/library/CollectionTable/EditableCell.tsx, client/src/library/CollectionTable/PaperRow.tsx, client/src/library/CollectionTable/PendingRow.tsx
+**Client (moved via git mv, then edited):** client/src/library/CollectionTable/CollectionTable.{tsx,css,test.tsx} (from library/), client/src/library/AddMenu/AddMenu.{tsx,css,test.tsx} (from library/)
+**Client (modified):** client/src/library/LibraryPage.tsx (decomposed to composition), client/src/library/useBulkUpload.ts (PendingUpload now from row.ts)
+**Docs:** .bmad/implementation-artifacts/6-8-epic-6-structural-refactor.md, .bmad/implementation-artifacts/sprint-status.yaml
+
+## Change Log
+
+| Date | Version | Change |
+|------|---------|--------|
+| 2026-07-05 | 0.4.8 | Story 6.8: Epic 6 structural refactor. Split the 621-line `storage/__init__.py` into a focused package behind a byte-identical facade; separated `extract`/`enrich` with a Crossref `Enricher` port; deduped `routes/docs.py` error envelopes + exception mapping into `routes/_errors.py` and homed `run_extraction` in `routes/extraction.py`; moved the client `library/` onto the scaffold-react `<Name>/` layout and decomposed `LibraryPage`/`CollectionTable` into cohesive hooks/units with a shared `row.ts` data type. Behavior- and contract-identical (schema.d.ts byte-identical); suites green (server 156, client 974); DPR>1 live smoke passed. |

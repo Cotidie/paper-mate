@@ -1,17 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { runWithConcurrency, createSemaphore } from "@/library/uploadQueue";
+import type { PendingUpload } from "@/library/row";
 import { uploadDoc, type Doc } from "@/api/client";
 import { newId } from "@/lib/uuid";
 
 /** AD-L4: cap concurrent `POST /api/docs` in flight for one batch. */
 export const UPLOAD_CONCURRENCY = 4;
-
-/** An optimistic row: not yet a stored `CollectionRow`, so it carries no
- *  `doc_id`/`order`/`folder_id`/`trashed` — those would be fabricated. */
-export interface PendingUpload {
-  tempId: string;
-  filename: string;
-}
 
 interface QueuedFile extends PendingUpload {
   file: File;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, FileArrowUp, FolderOpen } from "@phosphor-icons/react";
-import "@/library/AddMenu.css";
+import "./AddMenu.css";
 
 /**
  * The Library's Add control (Library layout redesign): a button that opens a
