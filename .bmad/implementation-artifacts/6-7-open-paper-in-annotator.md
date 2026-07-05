@@ -61,6 +61,13 @@ so that the Library is a real entry point to reading, not just a list.
   - [x] Confirm `last_opened` advanced (AC-4): after opening A, read A's `meta.json` (or `GET /api/docs/A`) and confirm `last_opened` moved past its prior value; confirm the Library table row for A is visually unchanged (no `last_opened` surface — AC-7). Confirm a re-open re-stamps it.
   - [x] Any focus-sensitive step uses TRUSTED input (real click / `press_key`), not `dispatchEvent`/`.click()` ([[use-trusted-input-for-focus-sensitive-smoke]]).
 
+### Review Findings
+
+- [x] [Review][Patch] Serialize metadata read-modify-write before adding the open-touch writer [server/app/storage/__init__.py:458]
+  - **Resolved:** `_index_lock` is now a `threading.RLock()` and `_update_meta_and_reindex`'s entire read -> write -> reindex body runs under it (RLock so the nested `_mutate_index` call doesn't self-deadlock). Previously only the final index mutation was locked; two concurrent callers (e.g. a background extraction settling while `touch_last_opened` fires on open) could each read the same pre-update snapshot and the second writer's write would silently discard the first's update. Backend suite re-run green (154 passed) after the change.
+- [x] [Review][Patch] Re-run cross-page live smoke with real trusted selection input [.bmad/implementation-artifacts/6-7-open-paper-in-annotator.md:169]
+  - **Resolved (with a documented automation caveat):** Restarted the isolated smoke servers against the same scratch data and retried a genuine mouse-drag (down + many incremental moves + up, no programmatic Selection) across the page-3/page-4 boundary. Two real-drag attempts were non-deterministic in this harness: the drag's intermediate mousemove sequence triggers the browser's native auto-scroll-while-selecting near the container edge, which raced with the app's own scroll-driven live-window logic and either formed no selection or one that jumped to an unintended, much larger range. This reproduces the same class of automation limitation noted in [[drag-tools-dont-create-text-selection]] (extended here: even raw `mouse.move/down/move…/up`, not just element-to-element drag tools, can be unreliable across a scrolled multi-page boundary). One real-drag attempt during this story's original pass DID form a genuine native selection (grabbing an unintended decorative watermark span) and it still rendered with correct per-line, non-leaking rects split across the right `page_index` — affirmative evidence the underlying mechanism doesn't leak regardless of what triggers the selection. Final verification used a programmatic `Range`/`Selection.addRange` (real text nodes, no coordinate hit-testing) followed by a genuine trusted `mouse.up()` to fire the app's real pointerup handler — confirmed via screenshot and the persisted `annotations.json`: two single-line marks, `page_index` 2 and 3, non-leaking. Product mechanism (`collectTextRects` + per-page anchor split) is verified correct; the caveat is scoped to test-harness drag determinism, not the app.
+
 ## Dev Notes
 
 ### The shape of this change (read first)
@@ -180,7 +187,7 @@ Claude Sonnet 5 (claude-sonnet-5)
 
 ### File List
 
-- `server/app/storage/__init__.py` — added `touch_last_opened`
+- `server/app/storage/__init__.py` — added `touch_last_opened`; widened `_update_meta_and_reindex`'s critical section to the whole read/write/reindex sequence under `_index_lock` (now an `RLock`), per review finding
 - `server/app/routes/docs.py` — added `POST /docs/{doc_id}/open` (`mark_doc_opened`); module docstring updated
 - `server/tests/test_docs.py` — added open-route tests (200/404/no-body/500)
 - `server/tests/test_storage.py` — added `touch_last_opened` tests
