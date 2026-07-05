@@ -421,3 +421,74 @@ describe("Left pane (version display)", () => {
     expect(screen.getByText("All")).toBeTruthy();
   });
 });
+
+describe("Add dropdown (File upload / Folder upload)", () => {
+  it("opens the Add menu and uploads via the File upload item", async () => {
+    // The Add control lives in the toolbar row, which only shows once the
+    // collection has at least one paper (the true empty state shows just
+    // EmptyDropzone, no duplicated Add). Seed one existing paper so the
+    // toolbar (and Add) renders from the start.
+    const backend = mockBackend();
+    const existing = fakeDoc("l".repeat(64), "existing.pdf", "Existing Paper");
+    backend.store(existing);
+    const doc = fakeDoc("m".repeat(64), "via-menu.pdf", "Via Menu Paper");
+    vi.spyOn(api, "uploadDoc").mockImplementation(async () => backend.store(doc));
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Existing Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /file upload/i }));
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile("via-menu.pdf")] },
+    });
+
+    await waitFor(() => expect(screen.getByText("Via Menu Paper")).toBeTruthy());
+  });
+
+  it("filters a folder pick to PDFs before uploading (non-PDFs silently skipped)", async () => {
+    const backend = mockBackend();
+    const existing = fakeDoc("l".repeat(64), "existing.pdf", "Existing Paper");
+    backend.store(existing);
+    const doc1 = fakeDoc("n".repeat(64), "paper-one.pdf", "Folder Paper One");
+    const doc2 = fakeDoc("o".repeat(64), "paper-two.pdf", "Folder Paper Two");
+    const uploadDoc = vi.spyOn(api, "uploadDoc").mockImplementation(async (file: File) => {
+      if (file.name === "paper-one.pdf") return backend.store(doc1);
+      if (file.name === "paper-two.pdf") return backend.store(doc2);
+      throw new Error("should never be called for a non-PDF");
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Existing Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /folder upload/i }));
+
+    const readme = new File(["not a pdf"], "README.txt", { type: "text/plain" });
+    fireEvent.change(screen.getByTestId("library-folder-input"), {
+      target: { files: [pdfFile("paper-one.pdf"), readme, pdfFile("paper-two.pdf")] },
+    });
+
+    await waitFor(() => expect(screen.getByText("Folder Paper One")).toBeTruthy());
+    expect(screen.getByText("Folder Paper Two")).toBeTruthy();
+    expect(uploadDoc).toHaveBeenCalledTimes(2);
+  });
+
+  it("does nothing when a picked folder has zero PDFs", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    const uploadDoc = vi.spyOn(api, "uploadDoc");
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /folder upload/i }));
+
+    const readme = new File(["not a pdf"], "README.txt", { type: "text/plain" });
+    fireEvent.change(screen.getByTestId("library-folder-input"), {
+      target: { files: [readme] },
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(uploadDoc).not.toHaveBeenCalled();
+    expect(screen.getByText("Attention Is All You Need")).toBeTruthy();
+  });
+});

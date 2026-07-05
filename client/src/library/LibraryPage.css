@@ -122,9 +122,11 @@
   background: var(--color-reader-backdrop);
 }
 
-/* The table case top-aligns and scrolls vertically within this region;
-   only the empty/loading-empty case keeps centered copy (base rule above). */
+/* The table case stacks the toolbar row above the table and scrolls
+   vertically within this region; only the empty/loading-empty case keeps
+   centered copy in a row container (base rule above). */
 .library-main--table {
+  flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
   overflow-y: auto;

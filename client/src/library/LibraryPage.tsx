@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Plus } from "@phosphor-icons/react";
 import "@/library/LibraryPage.css";
 import Toast from "@/components/Toast/Toast";
 import CollectionTable from "@/library/CollectionTable";
 import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
+import AddMenu from "@/library/AddMenu";
 import { useBulkUpload } from "@/library/useBulkUpload";
 import { getLibrary, fetchHealth, type CollectionRow, type Doc, type Library } from "@/api/client";
+
+const PDF_EXTENSION = /\.pdf$/i;
+
+/** A folder pick returns every file type in the directory tree; this filters
+ *  it down to PDFs before handing anything to `uploadFiles` (a folder upload
+ *  silently skips non-PDF clutter rather than surfacing a failure toast per
+ *  non-PDF file). */
+function isPdfFile(file: File): boolean {
+  return file.type === "application/pdf" || PDF_EXTENSION.test(file.name);
+}
 
 /** Project an upload's `Doc` into the display-cache `CollectionRow` shape
  *  (Story 6.4): a freshly stored paper is never in a folder or trashed, and
@@ -41,7 +51,8 @@ function docToRow(doc: Doc, papers: CollectionRow[]): CollectionRow {
  */
 export default function LibraryPage() {
   const navigate = useNavigate();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [library, setLibrary] = useState<Library | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,6 +85,11 @@ export default function LibraryPage() {
     return () => {
       live = false;
     };
+  }, []);
+
+  useEffect(() => {
+    folderInputRef.current?.setAttribute("webkitdirectory", "");
+    folderInputRef.current?.setAttribute("directory", "");
   }, []);
 
   useEffect(() => {
@@ -180,18 +196,14 @@ export default function LibraryPage() {
               ) : (
                 <p className="library-toolbar__count">{papers.length} files in library</p>
               )}
-              <button
-                type="button"
-                className="library-add-button"
-                onClick={() => inputRef.current?.click()}
-              >
-                <Plus aria-hidden />
-                Add
-              </button>
+              <AddMenu
+                onFileUpload={() => fileInputRef.current?.click()}
+                onFolderUpload={() => folderInputRef.current?.click()}
+              />
             </div>
           )}
           <input
-            ref={inputRef}
+            ref={fileInputRef}
             type="file"
             accept="application/pdf"
             multiple
@@ -200,6 +212,18 @@ export default function LibraryPage() {
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               // Reset so re-picking the same file(s) after a failure refires change.
+              e.target.value = "";
+              if (files.length > 0) uploadFiles(files);
+            }}
+          />
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            className="library-add-input"
+            data-testid="library-folder-input"
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []).filter(isPdfFile);
               e.target.value = "";
               if (files.length > 0) uploadFiles(files);
             }}
