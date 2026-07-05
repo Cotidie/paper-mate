@@ -29,6 +29,12 @@
   --type-caption-weight: 400;
   --type-caption-leading: 1.4;
 
+  /* typography: caption-uppercase (badge-pill labels, section labels) */
+  --type-caption-uppercase-size: 11px;
+  --type-caption-uppercase-weight: 600;
+  --type-caption-uppercase-leading: 1.4;
+  --type-caption-uppercase-letter-spacing: 0.88px;
+
   /* empty-dropzone (S0) */
   --dropzone-max-width: 520px;
   --dropzone-min-height: 320px;
@@ -201,4 +207,16 @@
      in-progress selection reads clearly without competing with the yellow
      highlight it becomes (EXPERIENCE.md: Annotating = live preview). */
   --color-text-selection: rgba(13, 116, 206, 0.25);
+
+  /* badge-pill (DESIGN.md components.badge-pill): the File type cell chip. */
+  --badge-pill-padding-y: 4px;
+  --badge-pill-padding-x: 10px;
+
+  /* collection-table (Story 6.3): row/column dims for the Library table + its
+     loading skeleton, which must reserve the same layout. */
+  --collection-table-row-height: 44px;
+  --collection-table-title-width: 320px;
+  --collection-table-authors-width: 220px;
+  --collection-table-added-width: 120px;
+  --collection-table-file-type-width: 96px;
 }

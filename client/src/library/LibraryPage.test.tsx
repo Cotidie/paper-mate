@@ -7,6 +7,7 @@ import * as api from "@/api/client";
 afterEach(cleanup);
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [], folders: [] });
 });
 
 const fakeDoc: api.Doc = {
@@ -19,6 +20,18 @@ const fakeDoc: api.Doc = {
   file_type: "pdf",
   status: "ready",
   schema_version: 1,
+};
+
+const fakeRow: api.CollectionRow = {
+  doc_id: "c".repeat(64),
+  title: "Attention Is All You Need",
+  authors: "Vaswani et al.",
+  added: "2026-07-05T00:00:00+00:00",
+  file_type: "pdf",
+  status: "ready",
+  folder_id: null,
+  trashed: false,
+  order: 0,
 };
 
 function pdfFile() {
@@ -42,9 +55,9 @@ function renderLibrary() {
 }
 
 describe("Library shell (Story 6.1, AC-3)", () => {
-  it("renders the empty-collection copy, app identity, and folder panel", () => {
+  it("renders the empty-collection copy, app identity, and folder panel", async () => {
     renderLibrary();
-    expect(screen.getByText("No papers yet.")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("No papers yet.")).toBeTruthy());
     expect(screen.getByText("Paper Mate")).toBeTruthy();
     expect(screen.getByLabelText("Folders")).toBeTruthy();
   });
@@ -80,6 +93,56 @@ describe("Add affordance single-file upload bridge", () => {
 
     await waitFor(() => expect(screen.getByText("Couldn't add this file.")).toBeTruthy());
     expect(screen.queryByTestId("reader-stub")).toBeNull();
-    expect(screen.getByText("No papers yet.")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("No papers yet.")).toBeTruthy());
+  });
+});
+
+describe("Collection table (Story 6.3)", () => {
+  it("shows skeleton rows before the library fetch resolves", async () => {
+    let resolveFetch: (lib: api.Library) => void = () => {};
+    vi.spyOn(api, "getLibrary").mockReturnValue(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+    renderLibrary();
+
+    expect(document.querySelectorAll(".collection-table__skeleton-row").length).toBeGreaterThan(0);
+    expect(screen.queryByText("No papers yet.")).toBeNull();
+
+    resolveFetch({ papers: [], folders: [] });
+    await waitFor(() => expect(screen.getByText("No papers yet.")).toBeTruthy());
+  });
+
+  it("renders the collection as a table once the library loads", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
+    renderLibrary();
+
+    await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
+    expect(screen.getByText("1 files in library")).toBeTruthy();
+    expect(screen.queryByText("No papers yet.")).toBeNull();
+  });
+
+  it("shows an error toast and no table when the library fetch fails", async () => {
+    vi.spyOn(api, "getLibrary").mockRejectedValue(new Error("boom"));
+    renderLibrary();
+
+    await waitFor(() => expect(screen.getByText("Couldn't load your library.")).toBeTruthy());
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByText("No papers yet.")).toBeNull();
+  });
+
+  it("keeps the single-file Add bridge working after a load failure", async () => {
+    vi.spyOn(api, "getLibrary").mockRejectedValue(new Error("boom"));
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(fakeDoc);
+    renderLibrary();
+
+    await waitFor(() => expect(screen.getByText("Couldn't load your library.")).toBeTruthy());
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile()] },
+    });
+
+    await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
   });
 });

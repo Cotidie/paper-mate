@@ -7,8 +7,7 @@ import type { components } from "./schema";
 export type HealthStatus = components["schemas"]["HealthStatus"];
 export type Doc = components["schemas"]["Doc"];
 
-// Collection index (AD-L1, Story 6.2). No fetch function yet: Story 6.3's
-// collection table is the first consumer and adds `getLibrary()` alongside it.
+// Collection index (AD-L1, Story 6.2).
 export type CollectionRow = components["schemas"]["CollectionRow"];
 export type Folder = components["schemas"]["Folder"];
 export type Library = components["schemas"]["Library"];
@@ -94,4 +93,15 @@ export async function getAnnotations(docId: string): Promise<Annotation[]> {
   const res = await fetch(`/api/docs/${encodeURIComponent(docId)}/annotations`);
   if (!res.ok) throw await envelopeError(res);
   return (await res.json()) as Annotation[];
+}
+
+/**
+ * Fetch the collection index (`GET /api/library`, AD-L1/AD-L6, Story 6.3).
+ * The Library route's `CollectionTable` calls this on mount to render the
+ * display cache in one read.
+ */
+export async function getLibrary(): Promise<Library> {
+  const res = await fetch("/api/library");
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Library;
 }

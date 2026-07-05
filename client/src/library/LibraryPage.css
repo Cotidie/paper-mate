@@ -90,6 +90,15 @@
   background: var(--color-reader-backdrop);
 }
 
+/* The table case top-aligns and scrolls vertically within this region;
+   only the empty/loading-empty case keeps centered copy (base rule above). */
+.library-main--table {
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: var(--space-base);
+}
+
 .library-empty-copy {
   margin: 0;
   font-family: var(--font-sans);

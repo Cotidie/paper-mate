@@ -4,7 +4,7 @@ baseline_commit: 0288e545b57ffa5cf02a76439d50d0a942d0b71e
 
 # Story 6.3: Collection table view
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -34,46 +34,46 @@ This is the **first UI consumer** of the `GET /api/library` endpoint that Story 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1, API: add `getLibrary()` fetch function (AC: 1, 5)** [`client/src/api/client.ts`]
-  - [ ] Add `export async function getLibrary(): Promise<Library>` mirroring the existing `getAnnotations`/`getDoc` idiom: `fetch("/api/library")`, `if (!res.ok) throw await envelopeError(res)`, `return (await res.json()) as Library`. The `Library`/`CollectionRow`/`Folder` type aliases already exist here (added by Story 6.2) — use them, do not re-add. This is the first consumer that Story 6.2 deferred; remove/replace the "No fetch function yet" comment on the `CollectionRow`/`Folder`/`Library` alias block so it reads as shipped.
-  - [ ] Do NOT hand-author any response type. `Library.papers` is `CollectionRow[]`; each row is `{ doc_id, title, authors, added, file_type, status, folder_id, trashed, order }` (generated). `title`/`authors` are nullable.
+- [x] **Task 1, API: add `getLibrary()` fetch function (AC: 1, 5)** [`client/src/api/client.ts`]
+  - [x] Add `export async function getLibrary(): Promise<Library>` mirroring the existing `getAnnotations`/`getDoc` idiom: `fetch("/api/library")`, `if (!res.ok) throw await envelopeError(res)`, `return (await res.json()) as Library`. The `Library`/`CollectionRow`/`Folder` type aliases already exist here (added by Story 6.2) — use them, do not re-add. This is the first consumer that Story 6.2 deferred; remove/replace the "No fetch function yet" comment on the `CollectionRow`/`Folder`/`Library` alias block so it reads as shipped.
+  - [x] Do NOT hand-author any response type. `Library.papers` is `CollectionRow[]`; each row is `{ doc_id, title, authors, added, file_type, status, folder_id, trashed, order }` (generated). `title`/`authors` are nullable.
 
-- [ ] **Task 2, Component: `CollectionTable` (presentational) + skeleton + count (AC: 1, 2, 3, 6, 7)** [`client/src/library/CollectionTable.tsx` (new), `client/src/library/CollectionTable.css` (new)]
-  - [ ] New presentational component: takes `rows: CollectionRow[]` and renders the count line ("N files in library", `{typography.caption}`) + a `<table>` (semantic `<thead>`/`<tbody>`, `<th scope="col">` headers) with the four columns. Pure render, no data fetching (LibraryPage owns the fetch, AD-9 downward dependency: view → store/api, never the reverse). Keyed by `row.doc_id`.
-  - [ ] Title/Authors cells: `text-overflow: ellipsis; overflow: hidden; white-space: nowrap` with a fixed/max column width so long strings truncate on one line. A `null` title falls back to a muted placeholder (e.g. the filename is not on the row — use `Untitled` in `{colors.muted}`); a `null` authors renders empty (no placeholder needed). Add `title={row.title ?? undefined}` so the full string shows on hover (native tooltip; no em-dash risk since it is data, not our copy).
-  - [ ] Added cell: format the ISO `added` via a small local helper `formatAdded(iso: string): string` → `new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })`; guard an unparseable date (`Number.isNaN(d.getTime())`) by returning the raw string rather than `Invalid Date`. Colocate the helper in the component file (or `src/library/` if you prefer a testable unit) — do not add a date library (no dependency for one `toLocaleDateString` call).
-  - [ ] File type cell: a `{component.badge-pill}` span with label `file_type === "note" ? "Note" : "PDF"`. Badge visual = `{colors.surface-strong}` fill, `{typography.caption-uppercase}`, pill radius (see Task 4 for the token add).
-  - [ ] Row hover → `{colors.surface-strong}` (`tbody tr:hover`).
-  - [ ] Skeleton: render N placeholder rows (a fixed count, e.g. 6) that reserve the same row height/columns while loading. Give them a subtle pulse via a keyframe animation, and disable it under `@media (prefers-reduced-motion: reduce)`. Expose the skeleton either as a `loading` prop on `CollectionTable` or a tiny sibling `TableSkeleton` — dev's call; keep it minimal and in the same file/dir.
-  - [ ] CSS in `CollectionTable.css`, tokens only (no raw hex/px — `no-raw-values.test.ts` scans this file). If you need a new dimension (row height, column widths), add it as a `--` var in `client/src/theme/components.css` (the token layer where px is allowed) and reference it here, matching how `LibraryPage.css` references `--toc-panel-width` etc.
+- [x] **Task 2, Component: `CollectionTable` (presentational) + skeleton + count (AC: 1, 2, 3, 6, 7)** [`client/src/library/CollectionTable.tsx` (new), `client/src/library/CollectionTable.css` (new)]
+  - [x] New presentational component: takes `rows: CollectionRow[]` and renders the count line ("N files in library", `{typography.caption}`) + a `<table>` (semantic `<thead>`/`<tbody>`, `<th scope="col">` headers) with the four columns. Pure render, no data fetching (LibraryPage owns the fetch, AD-9 downward dependency: view → store/api, never the reverse). Keyed by `row.doc_id`.
+  - [x] Title/Authors cells: `text-overflow: ellipsis; overflow: hidden; white-space: nowrap` with a fixed/max column width so long strings truncate on one line. A `null` title falls back to a muted placeholder (e.g. the filename is not on the row — use `Untitled` in `{colors.muted}`); a `null` authors renders empty (no placeholder needed). Add `title={row.title ?? undefined}` so the full string shows on hover (native tooltip; no em-dash risk since it is data, not our copy).
+  - [x] Added cell: format the ISO `added` via a small local helper `formatAdded(iso: string): string` → `new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })`; guard an unparseable date (`Number.isNaN(d.getTime())`) by returning the raw string rather than `Invalid Date`. Colocate the helper in the component file (or `src/library/` if you prefer a testable unit) — do not add a date library (no dependency for one `toLocaleDateString` call).
+  - [x] File type cell: a `{component.badge-pill}` span with label `file_type === "note" ? "Note" : "PDF"`. Badge visual = `{colors.surface-strong}` fill, `{typography.caption-uppercase}`, pill radius (see Task 4 for the token add).
+  - [x] Row hover → `{colors.surface-strong}` (`tbody tr:hover`).
+  - [x] Skeleton: render N placeholder rows (a fixed count, e.g. 6) that reserve the same row height/columns while loading. Give them a subtle pulse via a keyframe animation, and disable it under `@media (prefers-reduced-motion: reduce)`. Expose the skeleton either as a `loading` prop on `CollectionTable` or a tiny sibling `TableSkeleton` — dev's call; keep it minimal and in the same file/dir.
+  - [x] CSS in `CollectionTable.css`, tokens only (no raw hex/px — `no-raw-values.test.ts` scans this file). If you need a new dimension (row height, column widths), add it as a `--` var in `client/src/theme/components.css` (the token layer where px is allowed) and reference it here, matching how `LibraryPage.css` references `--toc-panel-width` etc.
 
-- [ ] **Task 3, LibraryPage: wire fetch + loading/error/empty/data switch (AC: 1, 4, 5)** [`client/src/library/LibraryPage.tsx`, `client/src/library/LibraryPage.css`]
-  - [ ] On mount, fetch the library: `useEffect(() => { getLibrary().then(setLibrary).catch(() => setLoadError(...)).finally(() => setLoading(false)) }, [])`. Hold `library: Library | null`, `loading: boolean` (start `true`), and a `loadError: string | null`. Guard against setState-after-unmount (a `cancelled` flag in the effect) since the fetch is async.
-  - [ ] Render switch inside `.library-main`:
+- [x] **Task 3, LibraryPage: wire fetch + loading/error/empty/data switch (AC: 1, 4, 5)** [`client/src/library/LibraryPage.tsx`, `client/src/library/LibraryPage.css`]
+  - [x] On mount, fetch the library: `useEffect(() => { getLibrary().then(setLibrary).catch(() => setLoadError(...)).finally(() => setLoading(false)) }, [])`. Hold `library: Library | null`, `loading: boolean` (start `true`), and a `loadError: string | null`. Guard against setState-after-unmount (a `cancelled` flag in the effect) since the fetch is async.
+  - [x] Render switch inside `.library-main`:
     - `loading` → `<CollectionTable loading />` (skeleton).
     - loaded + `library.papers.length > 0` → `<CollectionTable rows={library.papers} />`.
     - loaded + empty → the existing **"No papers yet."** copy (keep Story 6.1's `.library-empty-copy`).
     - `loadError` → the error `Toast` (alongside the existing upload-error toast; both can use the same `error` slot or two slots — keep it simple, one toast at a time is fine).
-  - [ ] **Layout fix:** `.library-main` today is `display:flex; align-items:center; justify-content:center` (centers the empty copy). A table must top-align and scroll. Make the table case a top-aligned, vertically-scrollable region (`overflow-y:auto`, column layout) while the empty/loading-empty case keeps centered copy. Simplest: keep `.library-main` as the scroll container (change to `flex-direction: column; align-items: stretch; overflow-y: auto`) and center the empty copy with its own rule, OR branch the container class on state. Do not let the page body scroll horizontally; the table scrolls within `.library-main`.
-  - [ ] Keep the existing top-bar + Add bridge + folder-panel placeholder untouched (Story 6.1 behaviour preserved). Do not touch the router or the reader.
+  - [x] **Layout fix:** `.library-main` today is `display:flex; align-items:center; justify-content:center` (centers the empty copy). A table must top-align and scroll. Make the table case a top-aligned, vertically-scrollable region (`overflow-y:auto`, column layout) while the empty/loading-empty case keeps centered copy. Simplest: keep `.library-main` as the scroll container (change to `flex-direction: column; align-items: stretch; overflow-y: auto`) and center the empty copy with its own rule, OR branch the container class on state. Do not let the page body scroll horizontally; the table scrolls within `.library-main`.
+  - [x] Keep the existing top-bar + Add bridge + folder-panel placeholder untouched (Story 6.1 behaviour preserved). Do not touch the router or the reader.
 
-- [ ] **Task 4, Tokens: add `caption-uppercase` typography + `badge-pill` dims (AC: 2)** [`client/src/theme/components.css`]
-  - [ ] `components.css` currently has `--type-caption-*` but **not** `caption-uppercase` (11px/600, DESIGN.md typography table) — the badge needs it. Add `--type-caption-uppercase-size: 11px; --type-caption-uppercase-weight: 600; --type-caption-uppercase-leading: 1.4;` (+ letter-spacing if DESIGN.md specifies; it does not, so omit). [Source: DESIGN.md#typography `caption-uppercase`]
-  - [ ] Add badge-pill dims (padding, gap) as `--badge-pill-*` vars if needed, mirroring how other components carry their px here. The badge fill (`{colors.surface-strong}`) already exists as `--color-surface-strong`. [Source: DESIGN.md#components `badge-pill`]
-  - [ ] This is the token layer (theme/ is EXEMPT from `no-raw-values.test.ts`), so px is allowed here and ONLY here.
+- [x] **Task 4, Tokens: add `caption-uppercase` typography + `badge-pill` dims (AC: 2)** [`client/src/theme/components.css`]
+  - [x] `components.css` currently has `--type-caption-*` but **not** `caption-uppercase` (11px/600, DESIGN.md typography table) — the badge needs it. Add `--type-caption-uppercase-size: 11px; --type-caption-uppercase-weight: 600; --type-caption-uppercase-leading: 1.4;` (+ letter-spacing if DESIGN.md specifies; it does not, so omit). [Source: DESIGN.md#typography `caption-uppercase`]
+  - [x] Add badge-pill dims (padding, gap) as `--badge-pill-*` vars if needed, mirroring how other components carry their px here. The badge fill (`{colors.surface-strong}`) already exists as `--color-surface-strong`. [Source: DESIGN.md#components `badge-pill`]
+  - [x] This is the token layer (theme/ is EXEMPT from `no-raw-values.test.ts`), so px is allowed here and ONLY here.
 
-- [ ] **Task 5, Tests (AC: 1-7)** [`client/src/library/LibraryPage.test.tsx`, `client/src/library/CollectionTable.test.tsx` (new)]
-  - [ ] **REGRESSION FIRST — the existing 6.1 tests will break.** `LibraryPage.test.tsx` currently mounts `LibraryPage` with **no `getLibrary` mock**; after Task 3 the component fetches on mount, so the un-mocked `fetch("/api/library")` rejects in jsdom and the shell tests that assert "No papers yet." on first render will race the loading→error path. Fix: in `beforeEach` (or per test) `vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [], folders: [] })`, and change the empty-state assertions to `await waitFor(() => expect(screen.getByText("No papers yet.")).toBeTruthy())` (the copy now appears after the fetch settles, not synchronously). The two Add-bridge tests must also mock `getLibrary` (resolve empty) to avoid an unhandled rejection.
-  - [ ] `CollectionTable.test.tsx` (new): render with a `rows` fixture of a couple `CollectionRow`s → asserts the four column headers, the count line "2 files in library", a human date cell (assert the formatted string, not the ISO), the PDF/Note badge label, ellipsis class/style present, and `Untitled` fallback for a `null` title. Render with `loading` → asserts skeleton rows present and NO real data. Keep fixtures inline (mirror `LibraryPage.test.tsx`'s `fakeDoc` idiom); `CollectionRow` shape is `{ doc_id, title, authors, added, file_type, status, folder_id, trashed, order }`.
-  - [ ] `LibraryPage.test.tsx` new cases: `getLibrary` resolves with papers → the table renders (a row's title visible, count line shown), empty copy NOT shown; `getLibrary` rejects → `Couldn't load your library.` toast shown and no table; loading → skeleton shown before the promise resolves (assert skeleton, then `waitFor` the resolved state). Use the existing `createMemoryRouter`/`renderLibrary` harness.
-  - [ ] `cd client && npm run typecheck` clean; `cd client && npm test` green (run the whole suite — the shell-test edits must not regress the 861 baseline). Grep the new strings for `—` before committing.
+- [x] **Task 5, Tests (AC: 1-7)** [`client/src/library/LibraryPage.test.tsx`, `client/src/library/CollectionTable.test.tsx` (new)]
+  - [x] **REGRESSION FIRST — the existing 6.1 tests will break.** `LibraryPage.test.tsx` currently mounts `LibraryPage` with **no `getLibrary` mock**; after Task 3 the component fetches on mount, so the un-mocked `fetch("/api/library")` rejects in jsdom and the shell tests that assert "No papers yet." on first render will race the loading→error path. Fix: in `beforeEach` (or per test) `vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [], folders: [] })`, and change the empty-state assertions to `await waitFor(() => expect(screen.getByText("No papers yet.")).toBeTruthy())` (the copy now appears after the fetch settles, not synchronously). The two Add-bridge tests must also mock `getLibrary` (resolve empty) to avoid an unhandled rejection.
+  - [x] `CollectionTable.test.tsx` (new): render with a `rows` fixture of a couple `CollectionRow`s → asserts the four column headers, the count line "2 files in library", a human date cell (assert the formatted string, not the ISO), the PDF/Note badge label, ellipsis class/style present, and `Untitled` fallback for a `null` title. Render with `loading` → asserts skeleton rows present and NO real data. Keep fixtures inline (mirror `LibraryPage.test.tsx`'s `fakeDoc` idiom); `CollectionRow` shape is `{ doc_id, title, authors, added, file_type, status, folder_id, trashed, order }`.
+  - [x] `LibraryPage.test.tsx` new cases: `getLibrary` resolves with papers → the table renders (a row's title visible, count line shown), empty copy NOT shown; `getLibrary` rejects → `Couldn't load your library.` toast shown and no table; loading → skeleton shown before the promise resolves (assert skeleton, then `waitFor` the resolved state). Use the existing `createMemoryRouter`/`renderLibrary` harness.
+  - [x] `cd client && npm run typecheck` clean; `cd client && npm test` green (run the whole suite — the shell-test edits must not regress the 861 baseline). Grep the new strings for `—` before committing.
 
-- [ ] **Task 6, Live smoke (AC: 1-6)**
-  - [ ] Per CLAUDE.md, launch your OWN dev servers (fresh `uvicorn` + `vite dev` on alternate ports if 8000/5173 are taken), bound to your working tree, against a scratch `PAPER_MATE_DATA`. Import 2-3 real PDFs via the Add bridge (or `POST /api/docs`), return to `/`, and confirm: the table lists them (Title / Authors / Added / File type), the count line reads "N files in library", Added shows a human date, File type shows a PDF badge, row hover shifts to `surface-strong`, and a keyboard-focused control shows the 2px ink focus ring. Confirm the empty state ("No papers yet.") on a fresh data root, and that the skeleton flashes on a throttled load. Shut the servers down after.
-  - [ ] This is a table-render story, NOT a geometry/placement/anchor feature, so the AE-5 DPR>1 live-smoke gate does not apply (no PDF coordinates, no canvas). A single normal-DPR real-data pass is sufficient. [Source: CLAUDE.md AE-5 scope — placement features only]
+- [x] **Task 6, Live smoke (AC: 1-6)**
+  - [x] Per CLAUDE.md, launch your OWN dev servers (fresh `uvicorn` + `vite dev` on alternate ports if 8000/5173 are taken), bound to your working tree, against a scratch `PAPER_MATE_DATA`. Import 2-3 real PDFs via the Add bridge (or `POST /api/docs`), return to `/`, and confirm: the table lists them (Title / Authors / Added / File type), the count line reads "N files in library", Added shows a human date, File type shows a PDF badge, row hover shifts to `surface-strong`, and a keyboard-focused control shows the 2px ink focus ring. Confirm the empty state ("No papers yet.") on a fresh data root, and that the skeleton flashes on a throttled load. Shut the servers down after.
+  - [x] This is a table-render story, NOT a geometry/placement/anchor feature, so the AE-5 DPR>1 live-smoke gate does not apply (no PDF coordinates, no canvas). A single normal-DPR real-data pass is sufficient. [Source: CLAUDE.md AE-5 scope — placement features only]
 
-- [ ] **Task 7, Version bump (at merge)** [`server/pyproject.toml`]
-  - [ ] PATCH +1 at PR-merge (CLAUDE.md versioning). Read `[project].version` first (it is `0.4.2` as of this writing) and bump `0.4.2 → 0.4.3`. Single source is `server/pyproject.toml`; never hard-code a version elsewhere. Re-run `uv lock` after the bump and confirm `server/tests/test_version.py` (pyproject vs `uv.lock`) stays green.
+- [x] **Task 7, Version bump (at merge)** [`server/pyproject.toml`]
+  - [x] PATCH +1 at PR-merge (CLAUDE.md versioning). Read `[project].version` first (it is `0.4.2` as of this writing) and bump `0.4.2 → 0.4.3`. Single source is `server/pyproject.toml`; never hard-code a version elsewhere. Re-run `uv lock` after the bump and confirm `server/tests/test_version.py` (pyproject vs `uv.lock`) stays green.
 
 ## Dev Notes
 
@@ -178,8 +178,34 @@ Use a semantic `<table>` (`<thead>` with `<th scope="col">`, `<tbody>`). The cou
 
 ### Agent Model Used
 
+Claude Sonnet 5 (claude-sonnet-5)
+
 ### Debug Log References
+
+- `cd client && npm run typecheck` — clean, no errors.
+- `cd client && npm test` — 44 files, 874 tests passed (baseline 861 + 13 new; no regressions).
+- `cd server && uv run pytest -q` — 96 passed (incl. `test_version.py` after the 0.4.2 → 0.4.3 bump).
+- Live smoke: fresh `uvicorn` (port 8099) + `vite dev` (port 5199) against a scratch `PAPER_MATE_DATA`, imported 3 real PDFs (`09-regularization.pdf`, `no-outline.pdf`, `outlined-sample.pdf`) via `POST /api/docs`. Confirmed via Playwright: empty state before import, skeleton rows mid-fetch, loaded table with count line "3 files in library", `Untitled` fallback (no extraction pipeline yet so titles are null), human dates ("Jul 5, 2026"), PDF badges, row hover background exactly `rgb(240, 240, 243)` = `--color-surface-strong` (`#f0f0f3`), and the existing 2px ink focus ring on the Add button. Servers shut down and scratch data dir removed after.
 
 ### Completion Notes List
 
+- Added `getLibrary()` to `client/src/api/client.ts` mirroring the `getAnnotations`/`getDoc` idiom; removed the stale "no fetch function yet" comment on the Story 6.2 type aliases.
+- Built `CollectionTable` (presentational, `rows` or `loading` prop) + `CollectionTable.css`: semantic table, count line, ellipsis title/authors, `Untitled` fallback for null title, `formatAdded` helper (guards `Invalid Date`), `badge-pill` (PDF/Note), row hover, and a 6-row skeleton with a `prefers-reduced-motion`-gated pulse.
+- Wired `LibraryPage` to fetch on mount (with an unmount-guard) and switch between skeleton / table / empty-copy / error-toast; added a `loadFailed` flag so a fetch error shows only the toast (not a misleading "No papers yet."). Adapted `.library-main` to a top-aligned scrollable region for the table case while keeping the empty/loading-empty case centered.
+- Added `--type-caption-uppercase-*` (including the `0.88px` letter-spacing DESIGN.md specifies for this scale, which the story's own dev note incorrectly said to omit) and `--badge-pill-*` / `--collection-table-*` dimension vars to `client/src/theme/components.css` (token layer, px-exempt).
+- Fixed the Story 6.1 regression: every `LibraryPage.test.tsx` case now mocks `getLibrary` and awaits the fetch settling before asserting on empty/loaded/error state. Added `CollectionTable.test.tsx` (headers, count line, human date, badges, ellipsis class, `Untitled` fallback, skeleton) and new `LibraryPage.test.tsx` cases (loaded table, load-error toast, skeleton-before-resolve, Add bridge still works after a load failure).
+- Bumped `server/pyproject.toml` version `0.4.2 → 0.4.3` (PATCH, this story) and re-ran `uv lock`; `test_version.py` stays green.
+- No backend code changed (no contract regen); router/ReaderPage/storage untouched.
+
 ### File List
+
+- `client/src/api/client.ts` (modified: added `getLibrary()`)
+- `client/src/library/CollectionTable.tsx` (new)
+- `client/src/library/CollectionTable.css` (new)
+- `client/src/library/CollectionTable.test.tsx` (new)
+- `client/src/library/LibraryPage.tsx` (modified: fetch-on-mount, loading/error/empty/data switch)
+- `client/src/library/LibraryPage.css` (modified: `.library-main--table` scrollable layout)
+- `client/src/library/LibraryPage.test.tsx` (modified: mock `getLibrary` everywhere, new table/error/skeleton cases)
+- `client/src/theme/components.css` (modified: `caption-uppercase` typography, `badge-pill`/`collection-table` dims)
+- `server/pyproject.toml` (modified: version `0.4.2 → 0.4.3`)
+- `server/uv.lock` (modified: re-locked after version bump)

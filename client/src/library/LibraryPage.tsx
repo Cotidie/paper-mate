@@ -1,33 +1,60 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Plus } from "@phosphor-icons/react";
 import "@/library/LibraryPage.css";
 import Toast from "@/components/Toast/Toast";
-import { uploadDoc } from "@/api/client";
+import CollectionTable from "@/library/CollectionTable";
+import { getLibrary, uploadDoc, type Library } from "@/api/client";
 
 /**
- * Library route (`/`, Story 6.1 risk gate): the app's new front door. A
- * structural shell only, no table/folders/upload orchestration (those are
- * 6.2-6.7): a top bar, a static folder-panel placeholder, and the empty-
- * collection copy. The Add affordance is a temporary single-file bridge
- * (uploadDoc → navigate to the reader) that keeps the app usable end-to-end
- * until Story 6.4 lands bulk optimistic upload + a real dropzone.
+ * Library route (`/`, Story 6.1 shell + Story 6.3 table): the app's front
+ * door. Fetches the collection on mount and renders it as a read-only table
+ * (loading skeleton / empty copy / error toast per fetch state). The Add
+ * affordance is a temporary single-file bridge (uploadDoc → navigate to the
+ * reader) that keeps the app usable end-to-end until Story 6.4 lands bulk
+ * optimistic upload + a real dropzone.
  */
 export default function LibraryPage() {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [library, setLibrary] = useState<Library | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getLibrary()
+      .then((lib) => {
+        if (!cancelled) setLibrary(lib);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadFailed(true);
+          setToast("Couldn't load your library.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const papers = library?.papers ?? [];
+  const isTableLayout = loading || papers.length > 0;
 
   async function handleAdd(file: File) {
     if (busy) return; // single-flight, mirrors the old dropzone's guard
     setBusy(true);
-    setError(null);
+    setToast(null);
     try {
       const doc = await uploadDoc(file);
       navigate(`/reader/${doc.doc_id}`);
     } catch {
-      setError("Couldn't add this file.");
+      setToast("Couldn't add this file.");
     } finally {
       setBusy(false);
     }
@@ -65,11 +92,17 @@ export default function LibraryPage() {
         <aside className="library-folder-panel" aria-label="Folders">
           <span className="library-folder-panel__placeholder">All</span>
         </aside>
-        <main className="library-main" role="main">
-          <p className="library-empty-copy">No papers yet.</p>
+        <main className={isTableLayout ? "library-main library-main--table" : "library-main"} role="main">
+          {loading ? (
+            <CollectionTable loading />
+          ) : papers.length > 0 ? (
+            <CollectionTable rows={papers} />
+          ) : loadFailed ? null : (
+            <p className="library-empty-copy">No papers yet.</p>
+          )}
         </main>
       </div>
-      {error && <Toast message={error} onDismiss={() => setError(null)} />}
+      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
     </div>
   );
 }
