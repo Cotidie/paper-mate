@@ -4,7 +4,7 @@ baseline_commit: 0fe3212f3438391833c7771fb839a4329682c642
 
 # Story 6.8: Epic 6 structural refactor: modularize the library client and split the storage/domain backend
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
