@@ -60,6 +60,12 @@
   border-bottom: var(--hairline-width) solid var(--color-hairline);
 }
 
+.collection-table tbody tr {
+  /* Rows are click-to-select/click-to-open, not text; a double-click on a
+     cell must not trigger the browser's native word-selection first. */
+  user-select: none;
+}
+
 .collection-table tbody tr:hover {
   background: var(--color-surface-strong);
   cursor: pointer;
