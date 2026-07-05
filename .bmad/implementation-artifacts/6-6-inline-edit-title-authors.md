@@ -4,7 +4,7 @@ baseline_commit: 2a39b6ba63be1d0866256f94744d69eacc42de28
 
 # Story 6.6: Inline edit Title and Authors
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
