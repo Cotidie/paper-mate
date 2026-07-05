@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-05 (correct-course: added 6-8-epic-6-structural-refactor -> backlog)"
+last_updated: "2026-07-05 (6-7-open-paper-in-annotator -> done, PR #50 merged)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -186,7 +186,7 @@ development_status:
   6-4-bulk-upload-optimistic-rows: done
   6-5-metadata-extraction: done
   6-6-inline-edit-title-authors: done
-  6-7-open-paper-in-annotator: review
+  6-7-open-paper-in-annotator: done
   # 2026-07-05 correct-course (sprint-change-proposal-2026-07-05-epic-6-refactor.md):
   # user request -- Epic 6 maintainability refactor. Split the 621-line storage
   # god-module + the extract/enrich domain (Crossref behind a port) + dedupe the

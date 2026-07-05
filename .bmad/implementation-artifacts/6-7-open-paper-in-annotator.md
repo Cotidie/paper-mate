@@ -4,7 +4,7 @@ baseline_commit: 127cc26634b3bc79139003bd0fee95819e28dbec
 
 # Story 6.7: Open a paper in the annotator with its annotations
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
