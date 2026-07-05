@@ -330,6 +330,7 @@ export default function CollectionTable(props: CollectionTableProps) {
                       e.stopPropagation();
                       onOpenRow(row.doc_id);
                     }}
+                    onKeyDown={(e) => e.stopPropagation()}
                   >
                     Open
                   </button>

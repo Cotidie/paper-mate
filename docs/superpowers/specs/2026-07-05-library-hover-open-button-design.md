@@ -23,7 +23,7 @@ Single component touched for behavior (`CollectionTable.tsx`), one CSS-only reve
 
 1. **`handleRowClick` simplifies**: drops the `selectedId === docId` open-branch; the click handler purely toggles `selectedId` (arm/select, no side effect beyond the CSS highlight).
 2. **Open button**: a real `<button>` rendered as a sibling to the title text in the Title cell's *static* (non-editing) render branch, inside `EditableCell`'s `!isEditing` return, title field only. Reveal is CSS-only: hidden by default, shown via `tr:hover` or the button's own `:focus-visible`, no JS hover-state tracking (matches this file's existing `tr:hover` pattern for row highlighting).
-3. **Click isolation**: the button's own `onClick` calls `stopPropagation()` before invoking `onOpenRow(docId)`, same pattern `InlineEditor`'s `<input>` already uses. Stopping propagation at the button prevents the event from ever reaching the Title `<td>`'s edit-click handler or the `<tr>`'s arm/select handler, regardless of DOM nesting order.
+3. **Click and keydown isolation**: the button's own `onClick` calls `stopPropagation()` before invoking `onOpenRow(docId)`, same pattern `InlineEditor`'s `<input>` already uses; its `onKeyDown` also stops propagation (no other logic), since the Title `<td>`'s own `onKeyDown` doesn't check `event.target` and would otherwise treat a bubbled Enter from the button as an arm/edit gesture. Stopping propagation at the button prevents either event from ever reaching the Title `<td>`'s handlers or the `<tr>`'s arm/select handler, regardless of DOM nesting order.
 
 ## Component-level design
 
@@ -40,11 +40,13 @@ Single component touched for behavior (`CollectionTable.tsx`), one CSS-only reve
       e.stopPropagation();
       onOpenRow(docId);
     }}
+    onKeyDown={(e) => e.stopPropagation()}
   >
     Open
   </button>
   ```
   Wrapping the title text in its own `<span>` is necessary so the ellipsis truncation (`text-overflow: ellipsis; white-space: nowrap`) applies to the text alone, not the whole flex row (button included). The cell becomes a flex container (`display: flex; align-items: center; gap: var(--space-xxs)`); text span `min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto`; button `flex: 0 0 auto`. No `aria-label` needed: the button's own visible text ("Open") already supplies its accessible name.
+  The button's `onKeyDown` stopping propagation is not cosmetic: the Title `<td>`'s own `onKeyDown` doesn't check `event.target`, so without it a keydown on the nested button (e.g. Enter, while the button itself has keyboard focus) bubbles up and incorrectly arms/edits the row instead of letting the browser's native button-activation (Enter/Space triggers a click) proceed undisturbed. Caught live (a real browser fires that native translation; jsdom unit tests don't), not by the unit suite.
 - Button only renders for the Title field (`field === "title"`), and only in the non-editing branch: never alongside `InlineEditor`, never in the Authors cell, never for `pendingRows` rows (that render path is untouched, still no interactive children).
 - No new prop for the button: `onOpenRow` keeps its existing signature and owner (`LibraryPage`).
 
@@ -106,4 +108,5 @@ Unarmed + keyboard Enter: keydown on a `<td>` never bubbles to a `<tr>` handler 
   - Clicking a non-title cell (e.g. Added) still only arms/selects (`aria-selected` toggles); a **second** click no longer calls `onOpenRow` (this replaces the existing 6.3 "opens on a second click" test, which needs updating to reflect the new decoupled behavior).
   - An `extracting` row still renders a working Open button (regression: matches existing 6.5 "extracting row stays openable" case, now via the button instead of second-click); its Title cell is still not editable regardless of arm state (AC-8 unaffected by this addendum).
   - Keyboard: focusing the button and pressing Enter (or Space) calls `onOpenRow`, independent of arm state.
+  - A keydown on the focused Open button does not bubble to the cell's own Enter handler (regression: without the button's `onKeyDown` stopping propagation, this incorrectly armed/edited the row instead of opening, caught live).
 - Live smoke (own fresh dev servers per this repo's CLAUDE.md convention): hovering a row reveals the Open button with a visible fade-in; clicking it opens the reader; Tab reaches the button and Enter opens it; a single click on Title/Authors on an unarmed row only arms it; a second click (or Enter) then edits; an `extracting` row's Open button still works.

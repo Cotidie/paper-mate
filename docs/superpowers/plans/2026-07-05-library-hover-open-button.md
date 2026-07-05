@@ -489,6 +489,7 @@ with:
                       e.stopPropagation();
                       onOpenRow(row.doc_id);
                     }}
+                    onKeyDown={(e) => e.stopPropagation()}
                   >
                     Open
                   </button>
@@ -797,7 +798,7 @@ Click the title TEXT (not the button) on an unarmed row: confirm it only highlig
 
 - [ ] **Step 6: Verify keyboard access, including the arm-gate**
 
-Tab to a Title cell and press Enter: confirm it only arms the row (no editor). Press Enter again: confirm it now enters edit. Separately, Tab to the Open button (fades in on focus even without hovering) and press Enter: confirm it opens the reader, regardless of arm state.
+Tab to a Title cell and press Enter: confirm it only arms the row (no editor). Press Enter again: confirm it now enters edit. Separately, Tab to the Open button (fades in on focus even without hovering) and press Enter: confirm it opens the reader, regardless of arm state, and does NOT instead arm/edit the row (this exact failure was caught live once: the button needs its own `onKeyDown` stopping propagation, or a bubbled Enter reaches the Title `<td>`'s handler first).
 
 - [ ] **Step 7: Verify row arm/select still works, decoupled from opening**
 

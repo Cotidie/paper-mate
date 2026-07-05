@@ -392,6 +392,18 @@ describe("CollectionTable Open button", () => {
     fireEvent.click(button);
     expect(onOpenRow).toHaveBeenCalledWith(rows[0].doc_id);
   });
+
+  it("a keydown on the Open button does not bubble to the cell's own Enter handler (regression: live-smoke-caught bug)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const button = screen.getAllByRole("button", { name: "Open" })[0];
+    const row = button.closest("tr")!;
+    fireEvent.keyDown(button, { key: "Enter" });
+    // Without the button's own keydown stopPropagation, this Enter would
+    // bubble to the Title <td>'s onKeyDown and incorrectly arm/edit the row
+    // instead of letting the browser's native button-activation handle it.
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(row.getAttribute("aria-selected")).toBe("false");
+  });
 });
 
 describe("formatAdded", () => {
