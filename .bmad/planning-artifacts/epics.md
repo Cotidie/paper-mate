@@ -1500,6 +1500,37 @@ So that the Library is a real entry point to reading, not just a list.
 **Given** a doc SWITCH (open paper A, annotate, back to Library, open paper B)
 **Then** B restores its own annotations and A's marks never appear on B (inherited Story 5.8 atomic doc-scope; verify live at DPR>1)
 
+### Story 6.8: Epic 6 structural refactor — modularize the library client and split the storage/domain backend
+
+> User request (2026-07-05): Epic 6 landed the whole Library run (router flip, collection index, table, bulk upload, metadata extraction, inline edit, open-in-annotator) but grew structural debt: `server/app/storage/__init__.py` is a 621-line god-module spanning seven concerns; `server/app/domain/extraction.py` (274) fuses the PDF `extract` with the Crossref `enrich` network client behind no port; `routes/docs.py` (305) repeats the OpenAPI error-envelope block and the storage-exception→HTTP mapping in every handler; and the client `library/` dir keeps its components flat (`CollectionTable.tsx` 416, `LibraryPage.tsx` 386) with upload/optimistic/polling/inline-edit conditional sprawl, not the `components/<Name>/` colocation Story 5.4 adopted. Adopt the `/scaffold-react` layout for the client and an OOP/package decomposition for the server; audit inter-module dependencies, dedupe, abstract into classes/ports/data classes, and simplify overly conditional logic. A pure refactor thread, same footing as Story 5.0 / 5.3 / 5.4 — its own PR(s), never folded into a feature story. No behavior or contract change.
+
+As a developer,
+I want the Epic 6 code (client `library/` + backend `storage`/`domain`/`routes`) decomposed into cohesive, single-responsibility modules with dependencies audited, duplication removed, and conditional sprawl simplified,
+So that the next Library story (Epic 7 folders/trash/sort) builds on legible modular seams instead of a 621-line storage god-module and 400-line flat components.
+
+**Acceptance Criteria:**
+
+**Given** `server/app/storage/__init__.py` (621 lines spanning error taxonomy, path/data-root resolution, atomic-IO primitives, PDF parse, the `meta.json` store, the `library.json` read-modify-write index, and the annotations store)
+**Then** it is split into a `storage/` package of focused modules (e.g. errors, paths, atomic-IO, meta store, library index, annotations store) behind a stable `__init__` facade that re-exports the current public surface unchanged, so every `storage.<fn>` call site in routes stays byte-identical; storage remains the ONLY code that touches `~/.paper-mate` (AL-9) and the single process-level index lock stays the sole `library.json` writer (AL-7)
+
+**Given** `server/app/domain/extraction.py` (274 lines fusing the pure PyMuPDF `extract` with the Crossref-network `enrich`)
+**Then** `extract` (PDF-only, total, GROBID-swappable) and `enrich` (the backend's only network call) are separated into their own modules, with the Crossref access abstracted behind a small enricher port/class (interface + `CrossrefEnricher` implementation) so `enrich` is swappable and unit-testable without HTTP; the domain layer still imports nothing from `app.storage` and never touches disk (AD-L2)
+
+**Given** `routes/docs.py` (305 lines) repeats the OpenAPI `ErrorEnvelope` `responses=` block ~6× and the `except DocumentNotFoundError → 404 / except StorageError → 500` mapping in every handler
+**Then** the duplicated error-envelope responses and the storage-exception→HTTP mapping are each consolidated to one definition (a shared responses constant/factory + a single exception-mapping seam), leaving each handler a thin controller; the `run_extraction` extract→enrich→persist orchestrator is homed where it composes storage + domain cleanly
+
+**Given** the client `library/` dir (components flat: `AddMenu`, `CollectionTable` 416, `LibraryPage` 386; hooks `useBulkUpload`/`useSettlePolling`; leaf `uploadQueue`)
+**Then** it adopts the `/scaffold-react` convention (adapted to Vite + TS + Zustand as Story 5.4 established): each component in its own `components/<Name>/` folder colocated with its `.css` + `.test.tsx`, hooks given a hooks home, pure leaves a `lib/`-style home; `CollectionTable`/`LibraryPage` are decomposed so upload / optimistic-row / polling / inline-edit each own their state in a cohesive unit rather than one conditional sprawl, and the row/status shape is abstracted into a shared data type
+
+**Given** duplication and dead code across the Epic 6 surface (client and server)
+**Then** logic duplicated across these files (or vs. the existing `render/`/`anchor/`/`annotations/`/`store/` client layers and the `storage`/`domain` server layers) is consolidated to one definition, and dead code (unreferenced exports, stale branches, superseded comments) is deleted, not left "just in case"
+
+**Given** the refactor
+**Then** it is BEHAVIOR- and CONTRACT-identical: client + server suites stay green, `server/openapi.json` / `client/src/api/schema.d.ts` regenerate byte-identical, both `vi.mock("./render")` barrels updated if any import path moves, `no-raw-values` re-run after any CSS move, no em-dash introduced in any UI string, and the Library→open-in-annotator and bulk-upload/table paths re-smoked live at DPR>1 (inherited `annotations/` selection-geometry + doc-switch risk); its own PR(s), never folded into a feature story
+
+**Given** AD-9 downward layering (client `render/`→`anchor/`→`annotations/`→`App`; server `routes/`→`domain`/`storage`) and the domain's no-storage-import rule (AD-L2)
+**Then** the new module boundaries respect it: no upward imports, routes stay thin, domain stays pure, storage stays the sole data-root writer
+
 ## Epic 7: Organize & curate the collection
 
 Shape the collection into nested custom folders, multi-select and batch-move papers, sort / filter / hide columns to find any paper in seconds, reserve the Note file-type, and delete safely through a Trash lens (restore or permanently purge). Builds on Epic 6's table + collection index; stands alone as the curation layer.
