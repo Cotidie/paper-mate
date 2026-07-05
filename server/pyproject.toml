@@ -1,20 +1,27 @@
 [project]
 name = "paper-mate-server"
-version = "0.4.4"
+version = "0.4.5"
 description = "Paper Mate backend — thin FastAPI persistence + static SPA serving (AD-1, AD-10)."
 requires-python = ">=3.12"
+# PyMuPDF is AGPL-3.0 (copyleft); bundling it makes the combined distributed
+# work AGPL, so the repo LICENSE is AGPL-3.0 too (Story 6.5, spine "relicense").
+# Personal local-only use never triggers distribution; the field is just honest.
+license = "AGPL-3.0-or-later"
 dependencies = [
     "fastapi==0.138.1",
     "uvicorn[standard]==0.49.0",
     "pydantic==2.13.4",
     "pypdf==6.1.1",
     "python-multipart>=0.0.32",
+    # Metadata extraction (Story 6.5): PyMuPDF parses /Info+XMP+font spans in the
+    # background extract(); httpx is the runtime HTTP client for Crossref enrich().
+    "pymupdf==1.26.7",
+    "httpx==0.28.1",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.4,<9",
-    "httpx>=0.28,<0.29",
 ]
 
 [tool.pytest.ini_options]

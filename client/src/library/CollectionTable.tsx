@@ -21,14 +21,18 @@ function stripPdfExtension(filename: string): string {
 type RowStatus = CollectionRow["status"] | "extracting";
 
 /**
- * Status -> visual seam (Story 6.4 introduces it, Story 6.5 drives it for
- * real settled rows). Only `extracting` renders a label/modifier in this
- * story; every other status (including `ready`, which is all real rows are
- * in 6.4) is the silent default. Keyed off `status`, not "is this a pending
- * row", so 6.5's real `extracting` rows reuse it unchanged.
+ * Status -> visual seam (Story 6.4 introduces it, Story 6.5 drives it for real
+ * settled rows). Keyed off `status`, not "is this a pending row":
+ * - `extracting` -> a muted "Extracting" chip while the background job runs.
+ * - `parse-failed` -> a subtle muted "No metadata" chip; the row keeps its
+ *   filename-title fallback and stays fully interactive (editable in 6.6).
+ * - `ready` / `enrich-skipped` -> the silent default (a normal row); the
+ *   enrich skip was already conveyed by a one-time batch notice.
  */
 function statusLabel(status: RowStatus): string | null {
-  return status === "extracting" ? "Extracting" : null;
+  if (status === "extracting") return "Extracting";
+  if (status === "parse-failed") return "No metadata";
+  return null;
 }
 
 function rowStatusClass(status: RowStatus): string | undefined {
@@ -157,7 +161,13 @@ export default function CollectionTable(props: CollectionTableProps) {
                 <td className="collection-table__added">{formatAdded(row.added)}</td>
                 <td>
                   {label ? (
-                    <span className="badge-pill">{label}</span>
+                    <span
+                      className={
+                        row.status === "parse-failed" ? "badge-pill badge-pill--muted" : "badge-pill"
+                      }
+                    >
+                      {label}
+                    </span>
                   ) : (
                     <span className="badge-pill">{row.file_type === "note" ? "Note" : "PDF"}</span>
                   )}

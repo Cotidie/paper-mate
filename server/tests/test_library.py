@@ -35,7 +35,10 @@ def test_get_library_returns_row_after_import(data_root):
     assert row["doc_id"] == doc_id
     assert row["title"] == "Uploaded"
     assert row["file_type"] == "pdf"
-    assert row["status"] == "ready"
+    # The TestClient runs the background extraction synchronously after the POST
+    # (enrich stubbed to "skipped" by conftest), so by the time we read the
+    # library the row has settled — its embedded title kept, enrich skipped.
+    assert row["status"] == "enrich-skipped"
     assert row["folder_id"] is None
     assert row["trashed"] is False
     assert row["order"] == 0

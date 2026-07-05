@@ -20,8 +20,10 @@ interface QueuedFile extends PendingUpload {
 interface UseBulkUploadOptions {
   /** Fires once per file whose `POST /api/docs` resolves. */
   onResolved: (doc: Doc) => void;
-  /** Fires exactly once after every upload in a batch has settled. */
-  onBatchSettled: () => void;
+  /** Fires exactly once after every upload in a batch has settled, with the
+   *  `doc_id`s that resolved in THIS batch (Story 6.5: the caller scopes the
+   *  enrich-skipped notice to them). */
+  onBatchSettled: (resolvedDocIds: string[]) => void;
   /** Fires once per batch, only when at least one file failed to store. */
   onFailed: (count: number) => void;
 }
@@ -64,11 +66,13 @@ export function useBulkUpload({ onResolved, onBatchSettled, onFailed }: UseBulkU
       setPending((prev) => [...queued.map(({ tempId, filename }) => ({ tempId, filename })), ...prev]);
 
       let failedCount = 0;
+      const resolvedDocIds: string[] = [];
       void runWithConcurrency(queued, UPLOAD_CONCURRENCY, async (item) => {
         await semaphoreRef.current.acquire();
         try {
           const doc = await uploadDoc(item.file);
           if (!mountedRef.current) return;
+          resolvedDocIds.push(doc.doc_id);
           setPending((prev) => prev.filter((p) => p.tempId !== item.tempId));
           onResolved(doc);
         } catch {
@@ -80,7 +84,7 @@ export function useBulkUpload({ onResolved, onBatchSettled, onFailed }: UseBulkU
         }
       }).then(() => {
         if (!mountedRef.current) return;
-        onBatchSettled();
+        onBatchSettled(resolvedDocIds);
         if (failedCount > 0) onFailed(failedCount);
       });
     },

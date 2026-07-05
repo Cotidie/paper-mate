@@ -23,7 +23,7 @@ from pathlib import Path
 from pydantic import ValidationError
 from pypdf import PdfReader
 
-from app.models import Annotation, CollectionRow, DocMeta, Folder, Library
+from app.models import Annotation, CollectionRow, DocMeta, DocStatus, Folder, Library
 
 #: Current ``meta.json`` schema version. Unknown versions are rejected, not guessed.
 META_SCHEMA_VERSION = 1
@@ -426,7 +426,10 @@ def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
         _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, updated))
         return doc_id, updated
 
-    # New document.
+    # New document: lands at "extracting"; the route schedules the background
+    # extract->enrich->apply_extraction pipeline off this status (AD-L4). Its
+    # return signature is unchanged (tuple[str, DocMeta]) so no call-site
+    # re-unpacks; the route reads meta.status to decide whether to schedule.
     _atomic_write(doc_dir / "source.pdf", raw_bytes)
     meta = DocMeta(
         filename=original_filename,
@@ -434,11 +437,44 @@ def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
         page_count=page_count,
         added=now,
         last_opened=now,
+        status="extracting",
         schema_version=META_SCHEMA_VERSION,
     )
     _write_meta(doc_dir, meta)
     _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, meta))
     return doc_id, meta
+
+
+def apply_extraction(
+    doc_id: str,
+    *,
+    title: str | None,
+    authors: str | None,
+    status: DocStatus,
+) -> None:
+    """Persist a background extraction's result — the ONLY writer of it (AD-L2).
+
+    Re-reads the current ``meta.json`` first (so a stale in-flight snapshot
+    can't clobber a concurrent ``last_opened`` write), applies the resolved
+    ``title``/``authors``/``status``, writes it back, and refreshes the
+    ``library.json`` display cache through the serialized index-write path
+    (``_mutate_index`` under ``_index_lock``, AD-L7). ``authors`` is the
+    display string (storage owns the domain ``list[str]`` -> ``str`` join).
+
+    A doc purged mid-extraction (its dir/``meta.json`` gone) raises
+    ``DocumentNotFoundError``; the orchestrator swallows it (best-effort, never
+    a crash). Storage imports nothing from ``domain``.
+    """
+    try:
+        doc_dir = _doc_dir(doc_id)
+    except StorageError as exc:
+        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
+    current = _read_meta(doc_dir)
+    if current is None:
+        raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
+    updated = current.model_copy(update={"title": title, "authors": authors, "status": status})
+    _write_meta(doc_dir, updated)
+    _mutate_index(lambda index: _upsert_paper_entry(index, doc_id, updated))
 
 
 def write_annotations(doc_id: str, annotations: list[Annotation]) -> None:

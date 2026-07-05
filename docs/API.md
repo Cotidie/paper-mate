@@ -34,6 +34,17 @@ bytes and stores `source.pdf` + `meta.json` under
 the same bytes never overwrites an existing `annotations.json`/`meta.json` — only
 `meta.last_opened` advances (AD-8).
 
+A **new** import returns immediately at `status: "extracting"` and does the
+metadata work off the request path (NFR-3, Story 6.5): a **background task**
+runs `extract` (Title/Authors/DOI via PyMuPDF over `/Info` + XMP + a font-size
+heuristic) then `enrich` (Crossref, DOI-first with a title/authors fallback,
+degrading to a non-error skip when offline). Storage then settles the row to
+`ready` (Crossref corrected it), `enrich-skipped` (local fields kept, no
+external correction), or `parse-failed` (nothing found: a never-lost
+filename-title row). The client **polls `GET /api/library`** until every row
+settles. An **idempotent re-import** of an already-settled paper does **not**
+re-extract; it keeps its stored `status` and only advances `last_opened`.
+
 - **Request:** `multipart/form-data`, field `file` = the PDF.
 - **200** → `Doc`
   ```json
@@ -44,9 +55,9 @@ the same bytes never overwrites an existing `annotations.json`/`meta.json` — o
     "page_count": 12,
     "added": "2026-06-28T00:00:00+00:00",
     "last_opened": "2026-06-28T00:00:00+00:00",
-    "authors": null,             // string | null; null until Story 6.5 extraction fills it
+    "authors": null,             // string | null; filled by background enrichment
     "file_type": "pdf",          // "pdf" | "note"
-    "status": "ready",           // "extracting" | "ready" | "enrich-skipped" | "parse-failed"
+    "status": "extracting",      // a new import; settles to ready | enrich-skipped | parse-failed
     "schema_version": 1
   }
   ```
@@ -55,12 +66,11 @@ the same bytes never overwrites an existing `annotations.json`/`meta.json` — o
 > `Doc` = `doc_id` + the on-disk `meta.json` schema (`DocMeta`:
 > `filename, title, page_count, added, last_opened, authors, file_type, status, schema_version`).
 > `doc_id` is the library folder name and is **not** stored inside `meta.json`
-> (AD-8). `authors`/`file_type`/`status` are additive (Story 6.2): a 6.2 import
-> has no extraction pipeline yet, so it lands immediately at `status: "ready"`,
-> `authors: null`; Story 6.5 drives the `extracting -> ready | enrich-skipped |
-> parse-failed` transitions and fills `authors`. This import also indexes the
-> paper into `library.json` (see `GET /api/library` below) as Uncategorized,
-> untrashed, at the next order.
+> (AD-8). `authors`/`file_type`/`status` are additive (Story 6.2). A new import
+> lands at `status: "extracting"`; the background pipeline (Story 6.5) drives the
+> `extracting -> ready | enrich-skipped | parse-failed` transitions and fills
+> `authors`. This import also indexes the paper into `library.json` (see
+> `GET /api/library` below) as Uncategorized, untrashed, at the next order.
 
 ### `GET /api/docs/{doc_id}` — get a document's own metadata
 
@@ -174,6 +184,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-05 (Story 6.5):** `POST /api/docs` now imports asynchronously. A new import returns at `status: "extracting"` and runs `extract` + `enrich` (Title/Authors/DOI via PyMuPDF, then optional Crossref correction) as a **background task** off the request path; storage settles the row to `ready | enrich-skipped | parse-failed`; the client polls `GET /api/library` until statuses settle. An idempotent re-import does not re-extract. **No contract shape change** (the `status` enum has carried all four values since 6.2; the only generated-file change is the `POST /api/docs` description text). New internal backend: a pure `app/domain/` layer (`extract`/`enrich`, AD-L2) and a storage `apply_extraction` writer. PyMuPDF (AGPL-3.0) added and httpx promoted to a runtime dependency; the repo is relicensed MIT to AGPL-3.0 in the same change.
 - **2026-07-05 (Story 6.3 fix, user fix request):** `CollectionRow` gains `filename: str | null` (additive, default `null`; `GET /api/library`'s `Library` response). Populated from `meta.json` on every index write; `reconcile_library()` now also refreshes already-indexed entries (not just newly-discovered dirs), so a `library.json` row cached before this field existed backfills it on the next server start. The client falls back to this (extension stripped) when `title` is null.
 - **2026-07-05 (Story 6.2):** added `GET /api/library` (the collection index in one read: `Library = { papers: CollectionRow[], folders: Folder[] }`; 500 on a corrupt/unknown-version `library.json`). `DocMeta`/`Doc` gain `authors: str | null`, `file_type: "pdf" | "note"`, `status: "extracting" | "ready" | "enrich-skipped" | "parse-failed"` (additive, no `schema_version` bump). `POST /api/docs` now also indexes the import into `library.json`; boot reconcile aligns the index with on-disk `library/{doc_id}/` dirs. `GET /api/docs` list stays reserved (the collection list is `GET /api/library`, not a docs scan).
 - **2026-07-05 (Story 6.1):** added `GET /api/docs/{doc_id}` (own metadata; 404 unknown doc, 500 corrupt/unknown-version disk record). `GET /api/docs` stays reserved (Story 6.2).

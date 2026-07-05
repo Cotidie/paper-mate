@@ -79,13 +79,19 @@
 }
 
 /* Status-driven row treatment (Story 6.4 introduces the seam for optimistic
-   rows; Story 6.5 reuses it for real settled `extracting` rows). Muted,
-   non-interactive: no pointer cursor, no hover highlight. */
+   rows; Story 6.5 reuses it for real settled `extracting` rows). Muted text
+   only. Real rows stay interactive at every status — the pointer/hover kill
+   below is keyed off `aria-disabled`, which ONLY the pre-`doc_id` pending
+   rows carry. */
 .collection-table__row--extracting {
   color: var(--color-muted);
 }
 
-.collection-table__row--extracting:hover {
+.collection-table tbody tr[aria-disabled="true"] {
+  color: var(--color-muted);
+}
+
+.collection-table tbody tr[aria-disabled="true"]:hover {
   background: none;
   cursor: default;
 }
@@ -102,6 +108,13 @@
   text-transform: uppercase;
   border-radius: var(--radius-pill);
   padding: var(--badge-pill-padding-y) var(--badge-pill-padding-x);
+}
+
+/* A subtler pill for the `parse-failed` "No metadata" marker: no filled
+   surface, muted text — present but quiet (the row is still usable). */
+.badge-pill--muted {
+  background: none;
+  color: var(--color-muted);
 }
 
 .collection-table__skeleton-cell {

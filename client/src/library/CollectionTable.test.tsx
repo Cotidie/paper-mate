@@ -161,6 +161,64 @@ describe("CollectionTable pending rows (Story 6.4)", () => {
   });
 });
 
+describe("CollectionTable status visuals (Story 6.5)", () => {
+  function rowWith(status: CollectionRow["status"], overrides: Partial<CollectionRow> = {}): CollectionRow {
+    return {
+      doc_id: "s".repeat(64),
+      title: "A Title",
+      authors: null,
+      added: "2026-07-05T12:00:00+00:00",
+      file_type: "pdf",
+      status,
+      folder_id: null,
+      trashed: false,
+      order: 0,
+      filename: "a-title.pdf",
+      ...overrides,
+    };
+  }
+
+  it("shows the muted Extracting chip for a real extracting row", () => {
+    render(<CollectionTable rows={[rowWith("extracting")]} onOpenRow={noop} />);
+    expect(screen.getByText("Extracting")).toBeTruthy();
+    const row = screen.getByText("A Title").closest("tr")!;
+    expect(row.className).toContain("collection-table__row--extracting");
+  });
+
+  it("keeps a real extracting row selectable and openable (only pending rows are inert)", () => {
+    const onOpenRow = vi.fn();
+    render(<CollectionTable rows={[rowWith("extracting")]} onOpenRow={onOpenRow} />);
+    const row = screen.getByText("A Title").closest("tr")!;
+    expect(row.getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(row); // select
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(row); // open
+    expect(onOpenRow).toHaveBeenCalledWith("s".repeat(64));
+  });
+
+  it("renders enrich-skipped as a normal row (no status chip, shows PDF badge)", () => {
+    render(<CollectionTable rows={[rowWith("enrich-skipped")]} onOpenRow={noop} />);
+    expect(screen.queryByText("Extracting")).toBeNull();
+    expect(screen.queryByText("No metadata")).toBeNull();
+    expect(screen.getByText("PDF")).toBeTruthy();
+  });
+
+  it("marks a parse-failed row with a subtle No metadata chip and the filename fallback, still interactive", () => {
+    const onOpenRow = vi.fn();
+    render(
+      <CollectionTable rows={[rowWith("parse-failed", { title: null })]} onOpenRow={onOpenRow} />,
+    );
+    const chip = screen.getByText("No metadata");
+    expect(chip.className).toContain("badge-pill--muted");
+    // Filename fallback (extension stripped) stands in for the missing title.
+    expect(screen.getByText("a-title")).toBeTruthy();
+    const row = screen.getByText("a-title").closest("tr")!;
+    fireEvent.click(row);
+    fireEvent.click(row);
+    expect(onOpenRow).toHaveBeenCalledWith("s".repeat(64));
+  });
+});
+
 describe("formatAdded", () => {
   it("returns the raw string for an unparseable date", () => {
     expect(formatAdded("not-a-date")).toBe("not-a-date");

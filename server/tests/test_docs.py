@@ -9,7 +9,10 @@ import json
 
 from fastapi.testclient import TestClient
 
+from app import domain, storage
 from app.main import app
+from app.models import ExtractedMeta
+from app.routes.docs import run_extraction
 from tests.conftest import make_pdf_bytes, sha256_hex
 
 client = TestClient(app)
@@ -49,6 +52,126 @@ def test_upload_returns_doc(data_root):
     assert body["schema_version"] == 1
     # Persisted under the isolated data root.
     assert (data_root / "library" / body["doc_id"] / "source.pdf").is_file()
+
+
+def test_upload_new_import_returns_extracting_then_settles(data_root):
+    """AC-4/5: a new import's POST body is `status: "extracting"`; after the
+    (synchronous, in TestClient) background task the doc has settled. enrich is
+    stubbed to "skipped" by conftest, so the embedded title survives as
+    enrich-skipped."""
+    raw = make_pdf_bytes(pages=2, title="Fresh Paper")
+    resp = client.post("/api/docs", files={"file": ("fresh.pdf", raw, "application/pdf")})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "extracting"
+
+    doc_id = resp.json()["doc_id"]
+    settled = client.get(f"/api/docs/{doc_id}").json()
+    assert settled["status"] == "enrich-skipped"
+    assert settled["title"] == "Fresh Paper"
+
+
+def test_reimport_does_not_reextract(data_root):
+    """AC-4: an idempotent re-import keeps its settled status (never resets to
+    "extracting", so no background job is scheduled the second time)."""
+    raw = make_pdf_bytes(pages=1, title="Once")
+    first = client.post("/api/docs", files={"file": ("once.pdf", raw, "application/pdf")})
+    doc_id = first.json()["doc_id"]
+    assert client.get(f"/api/docs/{doc_id}").json()["status"] == "enrich-skipped"
+
+    second = client.post("/api/docs", files={"file": ("again.pdf", raw, "application/pdf")})
+    # The re-import response carries the already-settled status, not "extracting".
+    assert second.json()["status"] == "enrich-skipped"
+
+
+def test_run_extraction_ready_path(data_root, monkeypatch):
+    """AC-5: enrich succeeds -> status "ready" with corrected metadata persisted
+    to meta.json and the library.json cache (direct call, no TestClient)."""
+    raw = make_pdf_bytes(pages=1, title="rough")
+    doc_id, _ = storage.import_pdf(raw, "rough.pdf")
+    monkeypatch.setattr(domain, "extract", lambda b: ExtractedMeta(title="rough", doi="10.1/x"))
+    monkeypatch.setattr(
+        domain, "enrich", lambda m: ExtractedMeta(title="Corrected", authors=["Ada L"], doi="10.1/x")
+    )
+
+    run_extraction(doc_id, raw)
+
+    meta = storage.read_meta(doc_id)
+    assert meta.status == "ready"
+    assert meta.title == "Corrected"
+    assert meta.authors == "Ada L"
+    assert storage.read_library().papers[0].status == "ready"
+
+
+def test_run_extraction_enrich_skipped_path(data_root, monkeypatch):
+    """AC-5: local fields found but enrich skipped -> "enrich-skipped", fields kept."""
+    raw = make_pdf_bytes(pages=1, title="Local Title")
+    doc_id, _ = storage.import_pdf(raw, "local.pdf")
+    monkeypatch.setattr(domain, "extract", lambda b: ExtractedMeta(title="Local Title"))
+    monkeypatch.setattr(domain, "enrich", lambda m: "skipped")
+
+    run_extraction(doc_id, raw)
+
+    meta = storage.read_meta(doc_id)
+    assert meta.status == "enrich-skipped"
+    assert meta.title == "Local Title"
+
+
+def test_run_extraction_parse_failed_path(data_root, monkeypatch):
+    """AC-5: nothing found and enrich skipped -> "parse-failed", title null
+    (the client falls back to the filename — the row is never lost)."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "poor.pdf")
+    monkeypatch.setattr(domain, "extract", lambda b: ExtractedMeta())
+    monkeypatch.setattr(domain, "enrich", lambda m: "skipped")
+
+    run_extraction(doc_id, raw)
+
+    meta = storage.read_meta(doc_id)
+    assert meta.status == "parse-failed"
+    assert meta.title is None
+    assert meta.filename == "poor.pdf"
+
+
+def test_run_extraction_doi_only_settles_ready(data_root, monkeypatch):
+    """AC-5: a DOI-only paper (no local title) that enriches -> "ready", not
+    parse-failed."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "doi-only.pdf")
+    monkeypatch.setattr(domain, "extract", lambda b: ExtractedMeta(doi="10.1/only"))
+    monkeypatch.setattr(domain, "enrich", lambda m: ExtractedMeta(title="From DOI", doi="10.1/only"))
+
+    run_extraction(doc_id, raw)
+
+    assert storage.read_meta(doc_id).status == "ready"
+
+
+def test_run_extraction_purged_mid_flight_is_noop(data_root, monkeypatch):
+    """AC-6: a doc purged while extracting is a best-effort no-op, never a crash."""
+    raw = make_pdf_bytes(pages=1, title="Purge")
+    doc_id, _ = storage.import_pdf(raw, "purge.pdf")
+    import shutil
+
+    shutil.rmtree(data_root / "library" / doc_id)
+    monkeypatch.setattr(domain, "extract", lambda b: ExtractedMeta(title="Purge"))
+    monkeypatch.setattr(domain, "enrich", lambda m: "skipped")
+
+    run_extraction(doc_id, raw)  # must not raise
+
+
+def test_run_extraction_unexpected_failure_settles_parse_failed(data_root, monkeypatch):
+    """The task never leaves a row stuck "extracting": an unexpected extract
+    failure still best-effort settles it to "parse-failed"."""
+    raw = make_pdf_bytes(pages=1, title="Boom")
+    doc_id, _ = storage.import_pdf(raw, "boom.pdf")
+
+    def boom(_b):
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(domain, "extract", boom)
+
+    run_extraction(doc_id, raw)  # must not raise
+
+    assert storage.read_meta(doc_id).status == "parse-failed"
 
 
 def test_upload_non_pdf_returns_400_detail_envelope(data_root):

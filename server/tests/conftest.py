@@ -18,6 +18,23 @@ def data_root(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _stub_enrich(monkeypatch):
+    """Never hit the real Crossref network anywhere in the suite (Story 6.5).
+
+    FastAPI's ``TestClient`` runs a route's background task synchronously after
+    the response, so every ``POST /api/docs`` test would otherwise execute the
+    real ``domain.enrich`` (a live HTTP call). Default it to ``"skipped"`` on
+    the ``app.domain`` package (what ``run_extraction`` resolves); a test that
+    needs the enriched path re-patches ``domain.enrich`` in its own body. The
+    ``domain.extraction`` unit tests bind ``enrich`` directly, so they are
+    unaffected by this package-level stub.
+    """
+    from app import domain
+
+    monkeypatch.setattr(domain, "enrich", lambda meta: "skipped")
+
+
 def make_pdf_bytes(pages: int = 1, title: str | None = None) -> bytes:
     """Build a minimal, deterministic valid PDF in memory (no committed binary)."""
     writer = PdfWriter()
