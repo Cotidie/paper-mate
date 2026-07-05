@@ -81,13 +81,29 @@ def _parse_xmp(xmp: str) -> tuple[str | None, list[str]]:
     return title, authors
 
 
+def _is_horizontal(direction: object) -> bool:
+    """True for a left-to-right text line (``dir`` ≈ ``(1, 0)``).
+
+    PyMuPDF gives each line a unit writing-direction vector. Horizontal body
+    text is ``(1, 0)``; a vertical margin stamp is ``(0, -1)`` / ``(0, 1)``.
+    A missing/degenerate dir is treated as horizontal (the common case).
+    """
+    if not isinstance(direction, (tuple, list)) or len(direction) != 2:
+        return True
+    dx, dy = direction
+    return dx > 0.9 and abs(dy) < 0.1
+
+
 def _title_from_fonts(page: pymupdf.Page) -> str | None:
-    """Rung 2: the largest-font text near the top of page 0 ≈ the title.
+    """Rung 2: the largest-font *horizontal* text near the top of page 0 ≈ the title.
 
     Title-only and best-effort (authors come from ``/Info``/XMP + Crossref). We
     keep only the max-size spans that sit in the top of the page, joined in
     reading order, so a large lower-down section heading can't masquerade as
-    the title.
+    the title. **Only horizontal lines count** (line ``dir`` ≈ ``(1, 0)``):
+    rotated margin furniture (the arXiv left-margin ``arXiv:… [cs.CV] …`` stamp,
+    journal side-watermarks) is often rendered LARGER than the title but is never
+    the title — including it makes the stamp win the max-size pick.
     """
     try:
         blocks = page.get_text("dict")["blocks"]
@@ -100,6 +116,8 @@ def _title_from_fonts(page: pymupdf.Page) -> str | None:
         if block.get("type") != 0:
             continue
         for line in block.get("lines", []):
+            if not _is_horizontal(line.get("dir")):
+                continue  # skip rotated margin stamps / watermarks
             for span in line.get("spans", []):
                 text = _clean(span.get("text"))
                 if text is None:

@@ -87,6 +87,20 @@ def test_extract_font_heuristic_title_when_info_empty():
     assert meta.title == "The Big Title"
 
 
+def test_extract_ignores_rotated_margin_stamp():
+    # An arXiv-style vertical left-margin stamp rendered LARGER than the title
+    # must not be picked as the title (rotated text is never a title). Reproduces
+    # the real arXiv:1903.03295 failure where a 20pt vertical stamp beat the
+    # 14pt horizontal title.
+    d = pymupdf.open()
+    p = d.new_page()
+    p.insert_text((72, 100), "The Real Horizontal Title", fontsize=14)  # title
+    p.insert_text((20, 400), "arXiv:1234.56789v1 [cs.CV] 1 Jan 2026", fontsize=22, rotate=90)
+    data = d.tobytes()
+    d.close()
+    assert extract(data).title == "The Real Horizontal Title"
+
+
 def test_extract_font_heuristic_ignores_larger_lower_banner():
     # A legitimate top title (24pt) with an even-larger lower-page banner (40pt):
     # the heuristic must pick the top title, not return None because the global
