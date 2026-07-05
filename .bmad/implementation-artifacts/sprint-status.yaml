@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-06 (7-1-folders-crud-nest -> review, dev complete + Codex code-review clean, version 0.5.1; awaiting PR/merge per AE3-1)"
+last_updated: "2026-07-05 (7-1-folders-crud-nest -> done, PR #52 merged, version 0.5.1)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -200,7 +200,7 @@ development_status:
   # Epic 7: Organize & curate the collection (folders, batch move, sort/filter,
   # Trash lens, reserved Note file-type). Builds on Epic 6's table + index.
   epic-7: in-progress
-  7-1-folders-crud-nest: review
+  7-1-folders-crud-nest: done
   7-2-assign-filter-by-folder: backlog
   7-3-multi-select-batch-move: backlog
   7-4-display-sort-filter-controls: backlog

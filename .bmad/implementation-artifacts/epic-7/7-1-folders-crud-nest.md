@@ -4,7 +4,7 @@ baseline_commit: 17368e0950f20336ed07aebba95291848eb862cb
 
 # Story 7.1: Folders (create, rename, delete, nest)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
