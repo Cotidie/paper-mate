@@ -354,6 +354,44 @@ describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onEditField).not.toHaveBeenCalled();
   });
+
+  it("clicking Authors while Title is being edited only finishes the Title edit, does not immediately start editing Authors (fix request)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const titleCell = screen.getByText("Attention Is All You Need");
+    fireEvent.click(titleCell.closest("tr")!); // arm
+    fireEvent.click(titleCell); // edit title
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+
+    const authorsCell = screen.getByText("Vaswani et al.");
+    // Real browser order for a click that moves focus elsewhere: mousedown
+    // (focus starts to move) -> blur (commits the open edit) -> click.
+    fireEvent.mouseDown(authorsCell);
+    fireEvent.blur(input);
+    fireEvent.click(authorsCell);
+
+    expect(screen.queryByDisplayValue("Attention Is All You Need")).toBeNull(); // title edit closed
+    expect(screen.queryByRole("textbox")).toBeNull(); // authors did NOT open an editor
+  });
+
+  it("clicking a non-editable cell while editing only finishes the edit, does not also toggle row selection (fix request)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const titleCell = screen.getByText("Attention Is All You Need");
+    const row = titleCell.closest("tr")!;
+    fireEvent.click(row); // arm
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(titleCell); // edit title
+    const input = screen.getByDisplayValue("Attention Is All You Need") as HTMLInputElement;
+
+    const addedCell = row.querySelector(".collection-table__added")!;
+    fireEvent.mouseDown(addedCell);
+    fireEvent.blur(input);
+    fireEvent.click(addedCell);
+
+    expect(screen.queryByDisplayValue("Attention Is All You Need")).toBeNull(); // edit closed
+    // The click is consumed by the suppression guard, not treated as a
+    // fresh arm-toggle click, so the row's prior armed state is unchanged.
+    expect(row.getAttribute("aria-selected")).toBe("true");
+  });
 });
 
 describe("CollectionTable Open button", () => {

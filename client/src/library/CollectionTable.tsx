@@ -260,8 +260,21 @@ export default function CollectionTable(props: CollectionTableProps) {
   const { rows, onOpenRow, pendingRows = [], onEditField } = props;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ docId: string; field: EditableField } | null>(null);
+  // A click that lands elsewhere while a cell is being edited blurs the
+  // InlineEditor (committing it) BEFORE the click event itself is
+  // dispatched, so by the time a click handler runs, `editing` already
+  // reads null and the row is still armed — without this guard, the same
+  // click that closes one field's edit would immediately open another
+  // (fix request: clicking away should only finish editing, not chain into
+  // a new action). Set fresh on every mousedown (before the browser's
+  // blur-on-focus-change fires), consumed by the click handlers below.
+  const suppressClickRef = useRef(false);
 
   function handleRowClick(docId: string) {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     setSelectedId((prev) => (prev === docId ? null : docId));
   }
 
@@ -274,7 +287,12 @@ export default function CollectionTable(props: CollectionTableProps) {
 
   return (
     <div className="collection-table-wrap">
-      <table className="collection-table">
+      <table
+        className="collection-table"
+        onMouseDown={() => {
+          suppressClickRef.current = editing !== null;
+        }}
+      >
         <ColumnGroup />
         <TableHead />
         <tbody>
@@ -315,7 +333,13 @@ export default function CollectionTable(props: CollectionTableProps) {
                   armed={selectedId === row.doc_id}
                   isEditing={isEditingTitle}
                   seedValue={seedFieldValue(row, "title")}
-                  onStartEdit={() => setEditing({ docId: row.doc_id, field: "title" })}
+                  onStartEdit={() => {
+                    if (suppressClickRef.current) {
+                      suppressClickRef.current = false;
+                      return;
+                    }
+                    setEditing({ docId: row.doc_id, field: "title" });
+                  }}
                   onArm={() => setSelectedId(row.doc_id)}
                   onCommit={(value) => commitEdit(row, "title", value)}
                   onCancel={() => setEditing(null)}
@@ -328,6 +352,10 @@ export default function CollectionTable(props: CollectionTableProps) {
                     className="collection-table__open-button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (suppressClickRef.current) {
+                        suppressClickRef.current = false;
+                        return;
+                      }
                       onOpenRow(row.doc_id);
                     }}
                     onKeyDown={(e) => e.stopPropagation()}
@@ -343,7 +371,13 @@ export default function CollectionTable(props: CollectionTableProps) {
                   armed={selectedId === row.doc_id}
                   isEditing={isEditingAuthors}
                   seedValue={seedFieldValue(row, "authors")}
-                  onStartEdit={() => setEditing({ docId: row.doc_id, field: "authors" })}
+                  onStartEdit={() => {
+                    if (suppressClickRef.current) {
+                      suppressClickRef.current = false;
+                      return;
+                    }
+                    setEditing({ docId: row.doc_id, field: "authors" });
+                  }}
                   onArm={() => setSelectedId(row.doc_id)}
                   onCommit={(value) => commitEdit(row, "authors", value)}
                   onCancel={() => setEditing(null)}
