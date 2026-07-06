@@ -201,6 +201,33 @@ export default function CollectionTable(props: CollectionTableProps) {
   useEffect(() => {
     if (selectedIds.size === 0) anchorRef.current = null;
   }, [selectedIds]);
+  // A plain click arms a row by bubbling to the row's own onClick - unlike
+  // the modifier-click path below, nothing blurs the browser's native
+  // mousedown-focus it leaves on the clicked Title/Authors cell (that cell is
+  // tabIndex=0 for the Enter-to-edit keyboard path). CSS suppresses the
+  // resulting ring, but the native DOM focus itself persists - so a LATER,
+  // separate Shift/Ctrl/Cmd keydown (no new click at all) can still re-flip
+  // Chromium's `:focus-visible` heuristic on that stale focus (it
+  // re-evaluates on any keydown, not only at focus-time) and, more
+  // importantly, could let a later bare Enter reach that cell and re-arm/edit
+  // it. Blurring here removes the stale focus at its source, document-level
+  // per CLAUDE.md, the moment a modifier key is pressed - not just after a
+  // modifier click.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Shift" && e.key !== "Control" && e.key !== "Meta") return;
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLElement &&
+        (active.classList.contains("collection-table__title") ||
+          active.classList.contains("collection-table__authors"))
+      ) {
+        active.blur();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
   const [editing, setEditing] = useState<{ docId: string; field: EditableField } | null>(null);
   // A click that lands elsewhere while a cell is being edited blurs the
   // InlineEditor (auto-committing it) BEFORE the click event itself is

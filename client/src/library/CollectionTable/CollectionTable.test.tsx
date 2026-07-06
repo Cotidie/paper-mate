@@ -689,6 +689,34 @@ describe("CollectionTable Shift+click range selection (Story 7.3)", () => {
     fireEvent.click(titleCell, { shiftKey: true });
     expect(document.activeElement).not.toBe(titleCell);
   });
+
+  it("a BARE Shift/Ctrl/Cmd keydown (no click at all) blurs a stale native focus already sitting on the Title/Authors cell (fix request: Chromium's :focus-visible heuristic re-evaluates on any keydown while an element already holds focus, not only at focus-time, so a plain click that armed a row - leaving this cell natively focused, ring hidden since that focus came from a mouse click - could flip the ring visible again on a LATER, separate modifier keydown with no new click)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!); // arm, native focus lands here
+    const titleCell = screen.getByText("Attention Is All You Need").closest("td")!;
+    titleCell.focus(); // simulate the browser's native focus-on-mousedown left by the plain click above
+    expect(document.activeElement).toBe(titleCell);
+    fireEvent.keyDown(document, { key: "Shift" });
+    expect(document.activeElement).not.toBe(titleCell);
+  });
+
+  it("the bare-modifier-keydown blur guard does not fire for an unrelated key", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!);
+    const titleCell = screen.getByText("Attention Is All You Need").closest("td")!;
+    titleCell.focus();
+    fireEvent.keyDown(document, { key: "a" });
+    expect(document.activeElement).toBe(titleCell);
+  });
+
+  it("the bare-modifier-keydown blur guard leaves the row's own selection state untouched (only the native DOM focus is cleared)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.click(row);
+    screen.getByText("Attention Is All You Need").closest("td")!.focus();
+    fireEvent.keyDown(document, { key: "Shift" });
+    expect(row.getAttribute("aria-selected")).toBe("true");
+  });
 });
 
 describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () => {
