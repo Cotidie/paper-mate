@@ -4,7 +4,7 @@ baseline_commit: 9c91dc20be466699ad9ac247f86dbdf3d20bbf0d
 
 # Story 7.2: Assign and filter by folder
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -80,7 +80,7 @@ Keep `All` the resting default selection.
 - [x] **Task 8 - Client: single-paper move affordance in the table (AC: 3)** - REQUIRED path: a per-row "Move to folder" menu.
   - [x] Add a "Move to folder" control to a settled `PaperRow` (hover/focus-revealed, like the Open button), opening a small menu listing `Uncategorized` (clears membership) + each folder, each calling `onMovePaper(row.doc_id, targetFolderIdOrNull)`. **Reuse the `AddMenu` popover pattern** (`client/src/library/AddMenu/AddMenu.tsx`): a button with `aria-haspopup="menu"`/`aria-expanded`, a `role="menu"` popover of `role="menuitem"` buttons, document-level `pointerdown`/`Escape` dismiss (CLAUDE.md: document-level handlers), focus returns to the button on close. Do NOT reinvent a menu (`[[prefer-stable-solutions]]`). Thread `folders` + `onMovePaper` from `CollectionTable` down to `PaperRow`. Keep `CollectionTable` presentational; `LibraryPage` owns `movePapers`. **Live-smoke-caught fix:** the popover is portaled to `document.body` (React `createPortal`), not rendered inline in the table `<td>` - see Dev Agent Record / Completion Notes for the two-layer stacking bug this fixes.
   - [x] The move menu button must `stopPropagation` so opening it does not arm/select/open the row (same discipline as the Open button).
-  - [ ] **OPTIONAL enhancement (deferred):** native HTML5 drag-a-row-onto-a-folder. NOT built this story - the REQUIRED menu path fully satisfies AC-3 ("move action OR drag"); the story text explicitly allows deferring this ("do not let it block the story"). No `dataTransfer`/`draggable` wiring exists yet; a future story can add it without touching the menu path.
+  - [x] **OPTIONAL enhancement:** native HTML5 drag-a-row-onto-a-folder. Deferred at initial dev-story completion, then built in a same-session follow-up fix round (see Completion Notes: the per-row move menu was superseded by toolbar bulk Move + drag-to-folder per direct user request) - `draggable` rows carry a custom compact drag image via `dataTransfer.setDragImage`, dropped onto `FolderPanel`'s Uncategorized/folder rows.
 
 - [x] **Task 9 - Tests (all ACs)**
   - [x] Backend `test_storage.py`: `move_papers` sets `folder_id` for one id and for many ids; move to `None` clears membership (Uncategorized); a move replaces a prior folder (at most one); move to a nonexistent `folder_id` → `FolderNotFoundError` with NO write applied; move with an unknown `doc_id` in the set → `DocumentNotFoundError` with NO partial write (all-or-nothing); move never touches `trashed`/`order`/other papers/folders; membership survives a `read_library` round-trip.
@@ -188,6 +188,8 @@ Recommended: Sonnet 5 xHigh (bmad-dev-story), per CLAUDE.md model-per-job and Ep
 - Frontend: `cd client && npm run typecheck` → clean; `npx vitest run` → 1036 passed (1000 baseline + 36 new: `folderFilter.test.ts`, `useMovePapers.test.ts`, `FolderPanel.test.tsx` selection tests, `CollectionTable.test.tsx` move-menu tests, `LibraryPage.test.tsx` folder-filter/move regression tests).
 - Contract regen: `uv run python -m app.export_openapi` then `npm run gen:api` → `MoveRequest` + `POST /api/library/move` present in `schema.d.ts`.
 - Live smoke: own `uvicorn` (port 8010) + `vite dev` (port 5183) against an isolated scratch `PAPER_MATE_DATA`, seeded 3 real sample PDFs + a folder + subfolder via the real import/create paths, driven with Playwright MCP (real click/hover, not `dispatchEvent`). Verified all 5 ACs end to end, including a full backend restart to confirm persistence. **Live smoke caught a real bug the unit suite could not see** (jsdom's `getBoundingClientRect`/`elementFromPoint` are inert, so this class of bug is structurally invisible to any jsdom-based test): the per-row "Move to folder" popover, originally `position: absolute` nested in the table `<td>`, was visually painted on top of sibling rows but Chromium's table stacking model still routed clicks to a SIBLING row's cell underneath regardless of `z-index` (confirmed via `elementFromPoint` returning the wrong row's cell). Switching to `position: fixed` alone did not fix it either: `.collection-table__row-actions` (the hover-reveal wrapper) sets `transform: translateY(-50%)`, and a `transform` on any ancestor makes IT the containing block for `position: fixed` descendants (CSS spec) instead of the viewport, so the popover was still being mispositioned (measured off-screen via `getBoundingClientRect`). Fixed by portaling the popover to `document.body` via `createPortal`, which fully sidesteps both the table's stacking model and the transformed ancestor's containing-block override. Re-ran the whole smoke sequence clean after the fix, plus the full backend + client regression suites (195 + 1036 passed) and typecheck.
+- **Same-session follow-up fix rounds** (user-driven UX iteration on the shipped review-status build, commits `8ebf6a4`/`3dbcf17`/`885c6c3`/`2290ef8`): each round re-ran `npx vitest run` + `npm run typecheck` (final tally: 1060 client tests, 55 files, clean typecheck) and was live-smoked against a freshly launched isolated `uvicorn`+`vite` pair (never a server the user already had running, per CLAUDE.md). Round-by-round: (1) toolbar bulk "Move" button + `FolderPanel` drop targets replaced the per-row move menu; a checkbox-select column was built then explicitly reverted in favor of Ctrl/Cmd+click multi-select per direct user correction; an inert "Starred" mock entry was added to the panel. (2) Ctrl/Cmd-checked rows unified onto the exact same highlight as a single-armed row (left ink bar + `surface-strong`), the separate check-mark icon removed; the native full-row drag snapshot replaced with a compact custom drag image (`setDragImage` on a detached off-screen node) mirroring Google Drive. (3) Add/Move toolbar buttons unified onto one shared `.toolbar-button` class. (4) Root-caused and fixed two selection bugs live-smoke/user-reported: a plain click after a Ctrl/Cmd multi-select didn't clear the stale checked rows, and a single (non-multi) selection never enabled the toolbar Move button - both traced to `selectedId` (table-local single-arm state) and `checkedIds` (lifted multi-select state) being two disjoint pieces of state that never synced; unified into one controlled-or-uncontrolled `selectedIds` set. Also fixed the toolbar count always reading "N files in library" regardless of the selected folder/Uncategorized view.
+- **Cross-model Codex review (AE-6, `bmad-code-review` via `codex exec`)**, run against the full `baseline_commit..HEAD` diff (all 4 follow-up commits included, not just the original `772539e`): 0 High, 3 Medium, 3 Low. Fixed 2 of 3 Mediums in the same session (commit `2290ef8`): a drag starting on the Open button or an inline-edit input incorrectly carried a row-move payload (every `<tr>` is `draggable` with no interactive-descendant guard) - fixed with a `closest("input, textarea, button, [contenteditable=true]")` + `preventDefault` guard; `MoveMenu`'s trigger button stopped propagation for every keydown including Escape, so Escape did nothing while focus stayed on the button - fixed to exempt Escape. Deferred 1 Medium (`useMovePapers.ts` overlapping-failed-moves revert-to-intermediate-value race): traced and confirmed as a pre-existing architectural pattern shared with `useFolders.renameFolder` (not introduced this session), needing a consistent fix across both hooks - out of scope for a review fix-up, left for a future story/cleanup. 3 Lows reported, not fixed: `FolderPanel` drop-hover state can stick after a cancelled drag; `_errors.py`'s `storage_errors` docstring claims a check order the code doesn't follow (works today, misleading contract); the `Starred` entry is scope creep beyond the story's own boundary (explicit user request, documented above).
 
 ### Completion Notes List
 
@@ -199,48 +201,69 @@ Recommended: Sonnet 5 xHigh (bmad-dev-story), per CLAUDE.md model-per-job and Ep
 - `FolderPanel`/`FolderRow`: `All`/`Uncategorized`/each folder row are now real `<button>`s (native focus + Enter/Space, no custom keydown wiring needed - the page already has a global `:focus-visible` ring). `Recent`/`Trash` stay plain, inert `<li>`. `FolderRow`'s name label became a button (previously a non-interactive span reserved for exactly this); the three action buttons `stopPropagation` so a rename/add-subfolder/delete click never also selects the row. **Retargeted `.library-folder-panel__item--active`'s color from `--color-ink`/`--color-canvas` to `--color-surface-strong`/`--color-ink`**: the on-disk CSS did NOT actually match this story's own Dev Notes claim that it was "already" surface-strong (verified by reading the file) - it was a 7.1-era placeholder for the permanently-active `All`, and 7.1's own story file explicitly defers the real surface-strong highlight to 7.2 (AC-5, L-UX-DR4). Added a matching `folder-panel__row--active` for a selected folder row.
 - `CollectionTable`/`PaperRow`: added a "Move to folder" control mirroring `AddMenu`'s popover pattern (new `MoveMenu.tsx`/`.css`). `folders`/`onMovePaper` are optional props (default `[]`/no-op) on `CollectionTable` so the ~40 existing call sites in `CollectionTable.test.tsx` didn't need touching, matching the already-optional `pendingRows` precedent.
 - **Live-smoke-caught fix (see Debug Log for the full diagnosis):** `MoveMenu`'s popover is portaled to `document.body` via `createPortal`, `position: fixed`, anchored from the trigger button's own `getBoundingClientRect()` at open time. This was a genuine correctness bug (a click on a menu item could land on the wrong row's cell), invisible to jsdom-based unit tests since jsdom's layout geometry (`getBoundingClientRect`, `elementFromPoint`) is inert - only a real browser's layout/hit-testing surfaces it. The outside-click dismiss handler checks both the trigger's root ref AND a second ref on the portaled popover (a plain DOM `.contains()` check on `rootRef` alone would miss clicks landing in the portal, which lives in a different DOM subtree despite being a React child).
-- The optional native-HTML5-drag enhancement (Task 8) was not built - deferred, per the story's own "do not let it block the story" allowance; the required menu path fully satisfies AC-3.
-- Version bumped `0.5.1 → 0.5.2` (PATCH, story done).
-- Codex `bmad-code-review` not yet run (queued as the next step per CLAUDE.md AE-6 / the workflow's own recommendation to use a different model).
+- Version bumped `0.5.1 → 0.5.2` (PATCH, story done; not bumped again by the follow-up fix rounds below - same story, one PATCH).
+
+**Follow-up fix rounds (same session, after initial "review" status - the paragraphs above describe the original `772539e` implementation; everything below is what changed on top of it, commits `8ebf6a4`/`3dbcf17`/`885c6c3`/`2290ef8`):**
+
+- **Per-row move menu -> toolbar bulk Move + drag-to-folder (user-requested UX pivot).** The per-row "Move to folder" popover (Task 8's required path) was removed from `PaperRow`/`CollectionTable` entirely; `MoveMenu.tsx`/`.css` moved from `CollectionTable/` up to `client/src/library/` since it is now toolbar-level only, triggered by a new "Move" button next to "+Add". `CollectionTable` gained a lifted, controlled-or-uncontrolled `selectedIds: Set<string>` + `onSelectionChange` (a plain-click replaces the whole set with just that row; Ctrl/Cmd+click toggles one row's membership, intercepted at the row's CAPTURE phase so it never also arms/edits/opens the row). `LibraryPage` mirrors it and passes the set to the toolbar Move button (`disabled` when empty) and to `FolderPanel` (drop targets on Uncategorized + every folder row, gated on a custom `application/x-papermate-move` `dataTransfer` MIME so a folder-drop is never confused with the existing PDF-upload drag). A checkbox-select column was built for this first, then explicitly reverted per direct user correction ("bad idea, wastes space") in favor of the Ctrl/Cmd+click model described above. An inert "Starred" mock entry (`Star` icon + label, unimplemented) was added to `FolderPanel` between Uncategorized and Trash per an explicit user ask.
+- **Selection-highlight/drag-image polish.** A Ctrl/Cmd-checked row now renders with the exact same visual treatment as a single-armed row (left ink bar + `--color-surface-strong`, one shared CSS rule keyed on `[aria-selected="true"], [data-checked]`) - the separate check-mark icon was removed per user request ("no check mark, delete it"). Dragging now shows a compact custom drag image (a detached, off-screen DOM node built fresh per `dragstart`, rasterized via `dataTransfer.setDragImage`) instead of the browser's default full-row snapshot - a filename chip, plus a count badge when dragging a multi-selection, mirroring Google Drive's affordance per the user's explicit reference.
+- **Toolbar button unification.** Add and Move now share one `.toolbar-button` class (a bordered chip) in `LibraryPage.css`, replacing `AddMenu`'s previously distinct filled-pill style, per direct user request to make the two buttons read as one family.
+- **Selection-model bug fix (root cause, not a patch).** Two bugs were reported after the above rounds shipped: (1) a plain click on another row while a Ctrl/Cmd multi-selection was active did not clear the previously-checked rows; (2) a single (non-multi) selection never enabled the toolbar Move button. Root cause: the table had accumulated TWO disjoint pieces of selection state - a local `selectedId` (single-row arm, used for the inline-edit affordance) and a lifted `checkedIds` (Ctrl/Cmd multi-select, used by the toolbar) - that were never synchronized; a plain click only ever touched the former. Fixed by unifying both into one `selectedIds: Set<string>`, controlled-or-uncontrolled like `<input value onChange>` (LibraryPage drives it; isolated component tests that don't care about the toolbar fall back to the table owning it internally). `armed` (inline-edit affordance) now derives as `selectedIds.size === 1 && selectedIds.has(id)`; `checked` (highlight/drag payload) as plain membership; Move is enabled by `selectedIds.size > 0`.
+- **Toolbar count is per-view, not whole-library.** The count previously always read "N files in library" regardless of the selected folder/Uncategorized view. Added `selectionLabel(selection, folders)` in `LibraryPage.tsx` and switched the count to `visiblePapers.length` (the already-filtered rows) instead of the unfiltered `papers.length` - now reads e.g. "3 files in Anomaly Detection" or "2 files in Uncategorized".
+- **Codex `bmad-code-review` (AE-6) run via `codex exec`** against the full diff spanning all 4 follow-up commits (see Debug Log for the full findings + fix summary). 2 of 3 Medium findings fixed in commit `2290ef8` (drag-from-interactive-descendant guard; Escape-swallowed-by-Move-trigger); 1 Medium deferred (pre-existing optimistic-revert race shared with `useFolders`, needs a consistent cross-hook fix, out of scope here); 3 Lows reported only.
+- Every fix round was live-smoked end to end against a freshly launched isolated `uvicorn`+`vite` pair (never a server already running for the user), per CLAUDE.md convention - see Debug Log for specifics.
 
 ### File List
 
-**New:**
-- `client/src/library/folderFilter.ts`
-- `client/src/library/folderFilter.test.ts`
-- `client/src/library/useMovePapers.ts`
-- `client/src/library/useMovePapers.test.ts`
-- `client/src/library/CollectionTable/MoveMenu.tsx`
-- `client/src/library/CollectionTable/MoveMenu.css`
+State below is the FINAL state after the initial dev-story pass AND the same-session follow-up fix rounds (some files this story originally created were later moved/removed as the per-row move menu was superseded by toolbar bulk Move + drag-to-folder - see Completion Notes).
 
-**Modified:**
+**New:**
+- `client/src/library/folderFilter.ts` / `folderFilter.test.ts`
+- `client/src/library/useMovePapers.ts` / `useMovePapers.test.ts`
+- `client/src/library/moveDrag.ts` (`MOVE_DRAG_MIME` + drag-payload encode/decode, shared by `CollectionTable`'s `dragstart` and `FolderPanel`'s `drop`)
+- `client/src/library/MoveMenu.tsx` / `MoveMenu.css` / `MoveMenu.test.tsx` (moved here from `CollectionTable/` - now toolbar-level only, mirrors `AddMenu`)
+
+**Modified (backend):**
 - `server/app/storage/library_index.py` (`move_papers`)
 - `server/app/storage/__init__.py` (facade re-export)
 - `server/app/models.py` (`MoveRequest`)
 - `server/app/routes/_errors.py` (`storage_errors` generalized with `extra_not_found`)
 - `server/app/routes/library.py` (`POST /library/move`)
-- `server/tests/test_storage.py` (`move_papers` storage tests)
-- `server/tests/test_library.py` (move route tests)
-- `server/tests/test_openapi.py` (`MoveRequest`/move-path contract test)
-- `server/pyproject.toml` (version `0.5.1` → `0.5.2`)
-- `server/uv.lock` (regenerated for the version bump)
-- `client/src/api/client.ts` (`movePapers` + `MoveRequest` type)
-- `client/src/api/schema.d.ts` (regenerated)
-- `client/src/library/LibraryPage.tsx` (lifted `selection`, `useMovePapers`, filtered rows, empty-folder line)
-- `client/src/library/LibraryPage.css` (`.library-empty-line`)
-- `client/src/library/LibraryPage.test.tsx` (folder-filter/move regression tests)
-- `client/src/library/FolderPanel/FolderPanel.tsx` (selection/onSelect wiring)
-- `client/src/library/FolderPanel/FolderPanel.css` (button-reset + active-highlight retarget to surface-strong)
-- `client/src/library/FolderPanel/FolderPanel.test.tsx` (selection tests)
-- `client/src/library/FolderPanel/FolderRow.tsx` (name button + `isSelected`/`onSelect`)
-- `client/src/library/CollectionTable/CollectionTable.tsx` (`folders`/`onMovePaper` props threaded to `PaperRow`)
-- `client/src/library/CollectionTable/CollectionTable.css` (row-actions wrapper generalized for Move + Open)
-- `client/src/library/CollectionTable/CollectionTable.test.tsx` (move-menu tests)
-- `client/src/library/CollectionTable/PaperRow.tsx` (Move-to-folder control + `moveMenuOpen` state)
-- `client/src/theme/components.css` (`--move-menu-popover-max-height`)
+- `server/tests/test_storage.py`, `server/tests/test_library.py`, `server/tests/test_openapi.py`
+- `server/pyproject.toml` (version `0.5.1` → `0.5.2`), `server/uv.lock`
+
+**Modified (client, contract + core filter/move):**
+- `client/src/api/client.ts` (`movePapers` + `MoveRequest` type), `client/src/api/schema.d.ts` (regenerated)
+- `client/src/library/LibraryPage.tsx` (lifted `selection` + unified `selectedIds`, `useMovePapers`, filtered rows via `visiblePapers`, empty-folder line, per-view toolbar count via `selectionLabel`)
+- `client/src/library/LibraryPage.css` (`.library-empty-line`, `.toolbar-button` shared chip, `.library-toolbar__actions`)
+- `client/src/library/LibraryPage.test.tsx` (folder-filter/move regression, Ctrl+click + toolbar-Move, single-selection-enables-Move, plain-click-clears-multi-select, drag-to-folder, per-view count)
+
+**Modified (client, folder panel):**
+- `client/src/library/FolderPanel/FolderPanel.tsx` (selection/`onSelect` wiring; `onDropMove` + drop-target handlers on Uncategorized/each folder row; inert "Starred" mock entry)
+- `client/src/library/FolderPanel/FolderPanel.css` (button-reset + active-highlight retarget to surface-strong; drop-hover styling)
+- `client/src/library/FolderPanel/FolderPanel.test.tsx` (selection tests; `onDropMove` harness)
+- `client/src/library/FolderPanel/FolderRow.tsx` (name button + `isSelected`/`onSelect`; drop-target props)
+
+**Modified (client, collection table - superseded the per-row move menu):**
+- `client/src/library/CollectionTable/CollectionTable.tsx` (no more `folders`/`onMovePaper`; unified controlled-or-uncontrolled `selectedIds`/`onSelectionChange`; Ctrl/Cmd+click capture-phase toggle; plain-click replace-selection; drag-start with a custom compact drag image + interactive-descendant guard)
+- `client/src/library/CollectionTable/CollectionTable.css` (checked/armed rows share one highlight rule; `.collection-table__drag-preview` + badge; per-row move-menu/checkbox rules removed)
+- `client/src/library/CollectionTable/CollectionTable.test.tsx` (Ctrl/Cmd+click, unified-selection, drag-payload/drag-image, drag-guard tests)
+- `client/src/library/CollectionTable/PaperRow.tsx` (no per-row move menu, no checkbox, no check-mark icon; `data-checked`/`aria-selected` only)
+
+**Modified (client, toolbar/add menu):**
+- `client/src/library/AddMenu/AddMenu.tsx` / `AddMenu.css` (trigger button now uses the shared `.toolbar-button` class)
+
+**Modified (client, tokens):**
+- `client/src/theme/components.css` (`--move-menu-popover-max-height`, `--drag-preview-max-width`, `--drag-preview-badge-size`, `--offscreen-distance`)
+
+**Modified (docs / sprint):**
 - `docs/API.md` (`POST /api/library/move` resource entry + changelog line)
 - `.bmad/implementation-artifacts/sprint-status.yaml` (status transitions)
 
 ### Change Log
 
 - **2026-07-06 (Story 7.2):** Assign and filter by folder. New set-based `POST /api/library/move` (`MoveRequest`: `{doc_ids, folder_id}`, all-or-nothing validation, two distinct 404s) backed by `move_papers` in `library_index.py` (through the single serialized `mutate_index` writer, AL-7); the `storage_errors` seam generalized again with an additive `extra_not_found` param. Client: folder selection is a lifted `FolderSelection` view-state in `LibraryPage` (never a route, AD-L3) driving both the `FolderPanel` highlight and the table's filtered rows (`folderFilter.ts`); a new `useMovePapers` hook does the optimistic-then-reconcile move; a per-row "Move to folder" menu (`MoveMenu.tsx`, mirrors `AddMenu`) is the required move affordance (the optional drag enhancement was deferred). `All`/`Uncategorized`/folder rows in `FolderPanel` are now real, keyboard-operable buttons with a `{colors.surface-strong}` selected highlight (retargeted from a 7.1 placeholder color that didn't match the AC). **Live smoke caught and fixed a real correctness bug** invisible to jsdom-based tests: the move menu's popover needed portaling to `document.body` (`position: fixed`, anchored via `getBoundingClientRect`) to escape both the table's own click-stacking model and a transformed ancestor's containing-block override - either alone routed a menu-item click to the wrong row. Contract shape change (one new path + one new schema): `openapi.json`/`schema.d.ts` regenerated, `docs/API.md` updated. Version `0.5.1 -> 0.5.2`.
+- **2026-07-06 (Story 7.2, follow-up round 1 - `8ebf6a4`):** Per user request, replaced the per-row "Move to folder" menu with a toolbar bulk "Move" button (next to "+Add") plus native HTML5 drag-a-row-onto-a-folder-panel-entry, built on a lifted `checkedIds` multi-select (Ctrl/Cmd+click; a checkbox-select column was tried first, then explicitly reverted per user correction). Added an inert "Starred" mock entry to `FolderPanel` per explicit user request.
+- **2026-07-06 (Story 7.2, follow-up round 2 - `3dbcf17`):** Per user request (with reference screenshots), unified the Ctrl/Cmd-checked-row highlight onto the exact same treatment as a single-armed row (removed the separate check-mark icon), and replaced the browser's default full-row drag snapshot with a compact custom drag image (filename chip + count badge), mirroring Google Drive.
+- **2026-07-06 (Story 7.2, follow-up round 3 - `885c6c3`):** Unified the Add and Move toolbar buttons onto one shared `.toolbar-button` class per user request. **Root-caused and fixed two selection bugs**: a plain click after a Ctrl/Cmd multi-select left the previously-checked rows highlighted (the table had two disjoint pieces of selection state that never synced), and a single non-multi selection never enabled the toolbar Move button (same root cause) - unified into one controlled-or-uncontrolled `selectedIds` set. Also fixed the toolbar count always reading "N files in library" regardless of the selected folder/Uncategorized view; it now reports the visible selection's own count and target name.
+- **2026-07-06 (Story 7.2, follow-up round 4 - `2290ef8`):** Codex `bmad-code-review` (AE-6) run via `codex exec` against the full diff. Fixed 2 Medium findings: a drag starting on the Open button or an inline-edit input incorrectly carried a row-move payload (added an interactive-descendant guard); `MoveMenu`'s trigger button swallowed Escape via a blanket `stopPropagation`, so the popover couldn't be dismissed by keyboard while focus stayed on the button (now exempts Escape). 1 Medium (an optimistic-revert race in `useMovePapers`, shared with `useFolders`) and 3 Lows deferred - see Completion Notes.

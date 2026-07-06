@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-06 (7-2-assign-filter-by-folder -> review, dev-story complete)"
+last_updated: "2026-07-06 (7-2-assign-filter-by-folder story file marked done: Dev Agent Record updated with 4 same-session follow-up fix rounds + Codex bmad-code-review; sprint-status stays 'review' per AE3-1 until PR merges)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
