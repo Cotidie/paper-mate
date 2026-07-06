@@ -6,6 +6,7 @@ import CollectionTable from "@/library/CollectionTable/CollectionTable";
 import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
 import AddMenu from "@/library/AddMenu/AddMenu";
 import FolderPanel from "@/library/FolderPanel/FolderPanel";
+import MoveMenu from "@/library/MoveMenu";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useMovePapers } from "@/library/useMovePapers";
@@ -60,6 +61,32 @@ export default function LibraryPage() {
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
   const { movePapers } = useMovePapers({ setLibrary, onToast });
   const [selection, setSelection] = useState<FolderSelection>({ kind: "all" });
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+
+  // A folder switch clears the bulk-select: checked ids from a prior view
+  // could otherwise silently carry into a Move/drop the user can no longer see.
+  const handleSelect = useCallback((next: FolderSelection) => {
+    setSelection(next);
+    setCheckedIds(new Set());
+  }, []);
+
+  const toggleChecked = useCallback((docId: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(docId)) next.delete(docId);
+      else next.add(docId);
+      return next;
+    });
+  }, []);
+
+  const handleMoveRequest = useCallback(
+    (docIds: string[], folderId: string | null) => {
+      if (docIds.length === 0) return;
+      movePapers(docIds, folderId);
+      setCheckedIds(new Set());
+    },
+    [movePapers],
+  );
 
   useEffect(() => {
     let live = true;
@@ -102,7 +129,8 @@ export default function LibraryPage() {
           onToast={onToast}
           version={version}
           selection={selection}
-          onSelect={setSelection}
+          onSelect={handleSelect}
+          onDropMove={handleMoveRequest}
         />
         <main
           className={mainClassName}
@@ -129,10 +157,18 @@ export default function LibraryPage() {
               ) : (
                 <p className="library-toolbar__count">{papers.length} files in library</p>
               )}
-              <AddMenu
-                onFileUpload={() => fileInputRef.current?.click()}
-                onFolderUpload={() => folderInputRef.current?.click()}
-              />
+              <div className="library-toolbar__actions">
+                <MoveMenu
+                  folders={folders}
+                  onMove={(folderId) => handleMoveRequest(Array.from(checkedIds), folderId)}
+                  label="Move"
+                  disabled={checkedIds.size === 0}
+                />
+                <AddMenu
+                  onFileUpload={() => fileInputRef.current?.click()}
+                  onFolderUpload={() => folderInputRef.current?.click()}
+                />
+              </div>
             </div>
           )}
           <input
@@ -170,10 +206,10 @@ export default function LibraryPage() {
               <CollectionTable
                 rows={visiblePapers}
                 pendingRows={visiblePending}
-                folders={folders}
                 onOpenRow={(docId) => navigate(`/reader/${docId}`)}
                 onEditField={handleEditField}
-                onMovePaper={(docId, folderId) => movePapers([docId], folderId)}
+                checkedIds={checkedIds}
+                onToggleChecked={toggleChecked}
               />
             )
           ) : loadFailed ? null : (

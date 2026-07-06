@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import CollectionTable from "./CollectionTable";
 import { formatAdded } from "@/library/row";
-import type { CollectionRow, Folder } from "@/api/client";
+import type { CollectionRow } from "@/api/client";
 
 afterEach(cleanup);
 
@@ -470,55 +470,103 @@ describe("CollectionTable Open button", () => {
   });
 });
 
-describe("CollectionTable Move-to-folder menu (Story 7.2, AC-3)", () => {
-  const folders: Folder[] = [
-    { id: "f1", name: "Reading list", parent_id: null },
-    { id: "f2", name: "Archive", parent_id: null },
-  ];
-
-  it("lists Uncategorized plus every folder", () => {
-    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} folders={folders} onMovePaper={noop} />);
-    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
-    expect(screen.getByRole("menuitem", { name: "Uncategorized" })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: "Reading list" })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: "Archive" })).toBeTruthy();
+describe("CollectionTable multi-select via Ctrl/Cmd+click (Story 7.2 fix request)", () => {
+  it("does not render a per-row Move to folder control", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    expect(screen.queryByRole("button", { name: "Move to folder" })).toBeNull();
   });
 
-  it("choosing a folder calls onMovePaper(docId, folderId)", () => {
-    const onMovePaper = vi.fn();
+  it("Ctrl+click toggles a row into checkedIds without arming it", () => {
+    const onToggleChecked = vi.fn();
     render(
-      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} folders={folders} onMovePaper={onMovePaper} />,
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        checkedIds={new Set()}
+        onToggleChecked={onToggleChecked}
+      />,
     );
-    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Reading list" }));
-    expect(onMovePaper).toHaveBeenCalledWith(rows[0].doc_id, "f1");
-  });
-
-  it("choosing Uncategorized calls onMovePaper(docId, null)", () => {
-    const onMovePaper = vi.fn();
-    render(
-      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} folders={folders} onMovePaper={onMovePaper} />,
-    );
-    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Uncategorized" }));
-    expect(onMovePaper).toHaveBeenCalledWith(rows[0].doc_id, null);
-  });
-
-  it("opening the menu does not arm/select the row", () => {
-    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} folders={folders} onMovePaper={noop} />);
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
-    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
+    fireEvent.click(row, { ctrlKey: true });
+    expect(onToggleChecked).toHaveBeenCalledWith(rows[0].doc_id);
     expect(row.getAttribute("aria-selected")).toBe("false");
   });
 
-  it("choosing a folder does not open the row", () => {
-    const onOpenRow = vi.fn();
+  it("Cmd (meta)+click also toggles checked", () => {
+    const onToggleChecked = vi.fn();
     render(
-      <CollectionTable rows={rows} onOpenRow={onOpenRow} onEditField={noop} folders={folders} onMovePaper={noop} />,
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onToggleChecked={onToggleChecked} />,
     );
-    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Reading list" }));
-    expect(onOpenRow).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!, { metaKey: true });
+    expect(onToggleChecked).toHaveBeenCalledWith(rows[0].doc_id);
+  });
+
+  it("Ctrl+click on the Title cell does not enter edit mode", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onToggleChecked={noop} />);
+    fireEvent.click(screen.getByText("Attention Is All You Need"), { ctrlKey: true });
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("a plain click still arms the row (Ctrl/Cmd+click did not break normal selection)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.click(row);
+    expect(row.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("a checked row renders the check glyph over the Title cell", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        checkedIds={new Set([rows[0].doc_id])}
+      />,
+    );
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    expect(row.querySelector('[data-testid="row-checked-icon"]')).toBeTruthy();
+  });
+
+  it("an unchecked row renders no check glyph", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    expect(row.querySelector('[data-testid="row-checked-icon"]')).toBeNull();
+  });
+});
+
+describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () => {
+  function dataTransferStub() {
+    const store = new Map<string, string>();
+    return {
+      setData: (type: string, value: string) => store.set(type, value),
+      getData: (type: string) => store.get(type) ?? "",
+      get effectAllowed() {
+        return store.get("__effectAllowed") ?? "";
+      },
+      set effectAllowed(value: string) {
+        store.set("__effectAllowed", value);
+      },
+      types: [] as string[],
+    };
+  }
+
+  it("dragging an unchecked row carries just that row's doc_id", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(row, { dataTransfer });
+    expect(JSON.parse(dataTransfer.getData("application/x-papermate-move"))).toEqual([rows[0].doc_id]);
+  });
+
+  it("dragging a CHECKED row carries the whole checked set", () => {
+    const checkedIds = new Set([rows[0].doc_id, rows[1].doc_id]);
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} checkedIds={checkedIds} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(row, { dataTransfer });
+    const ids = JSON.parse(dataTransfer.getData("application/x-papermate-move"));
+    expect(new Set(ids)).toEqual(checkedIds);
   });
 });
 

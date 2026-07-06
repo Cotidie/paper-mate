@@ -113,6 +113,15 @@ button.library-folder-panel__item:hover {
   color: var(--color-ink);
 }
 
+/* Drag-to-folder drop-hover (fix request): a dashed ink outline while a
+   dragged row is over a valid target (Uncategorized or a folder row). */
+.library-folder-panel__item--drop-hover,
+.folder-panel__row--drop-hover {
+  background: var(--color-surface-strong);
+  outline: var(--hairline-width) dashed var(--color-ink);
+  outline-offset: calc(-1 * var(--hairline-width));
+}
+
 .folder-panel__row {
   display: flex;
   align-items: center;

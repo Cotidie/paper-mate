@@ -1,12 +1,14 @@
 import { useRef, useState } from "react";
-import type { CollectionRow, Folder } from "@/api/client";
+import type { CollectionRow } from "@/api/client";
 import { currentFieldValue, type EditableField, type PendingUpload } from "@/library/row";
+import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
 import PaperRow from "./PaperRow";
 import PendingRow from "./PendingRow";
 import "./CollectionTable.css";
 
 const SKELETON_ROW_COUNT = 6;
 const COLUMNS = ["Title", "Authors", "Added", "File type"] as const;
+const EMPTY_CHECKED: Set<string> = new Set();
 
 function ColumnGroup() {
   return (
@@ -62,8 +64,8 @@ type CollectionTableProps =
       onOpenRow?: never;
       pendingRows?: never;
       onEditField?: never;
-      folders?: never;
-      onMovePaper?: never;
+      checkedIds?: never;
+      onToggleChecked?: never;
     }
   | {
       loading?: false;
@@ -71,9 +73,11 @@ type CollectionTableProps =
       onOpenRow: (docId: string) => void;
       pendingRows?: PendingUpload[];
       onEditField: (docId: string, field: EditableField, value: string | null) => void;
-      /** Move-to-folder menu targets (Story 7.2); empty until `LibraryPage` wires folders. */
-      folders?: Folder[];
-      onMovePaper?: (docId: string, folderId: string | null) => void;
+      /** Ctrl/Cmd+click multi-select (Story 7.2 fix request) for the toolbar's
+       *  bulk Move + drag-to-folder; lifted to `LibraryPage` since the toolbar
+       *  needs it too. */
+      checkedIds?: Set<string>;
+      onToggleChecked?: (docId: string) => void;
     };
 
 /**
@@ -82,15 +86,18 @@ type CollectionTableProps =
  * (client sort is Story 7.4), with optimistic `pendingRows` (Story 6.4) above
  * them, newest batch first. A pending row is not yet a stored paper: no
  * `doc_id`, so it is not selectable, openable, or editable (see `PendingRow`).
- * A real row (`PaperRow`) click arms/selects it (purely visual,
- * `aria-selected`); opening a paper is a dedicated Open button in the Title
- * cell (it calls `onOpenRow` directly, independent of arm state). Inline
- * editing on the Title/Authors cells of settled rows requires the row already
- * armed: the table reports `onEditField`, `LibraryPage` owns the `PATCH` +
- * optimistic state (the same split as `onOpenRow`). Selection and the editing
- * cursor are local UI state, not lifted, since nothing outside the table needs
- * them; this shell owns them plus the click-suppression discipline and hands
- * each row a set of clean gesture callbacks.
+ * A plain row click arms/selects it (purely visual, `aria-selected`); opening
+ * a paper is a dedicated Open button in the Title cell (it calls `onOpenRow`
+ * directly, independent of arm state). Inline editing on the Title/Authors
+ * cells of settled rows requires the row already armed: the table reports
+ * `onEditField`, `LibraryPage` owns the `PATCH` + optimistic state (the same
+ * split as `onOpenRow`). The single-row arm (`selectedId`) and the editing
+ * cursor are local UI state, not lifted, since nothing outside the table
+ * needs them. Ctrl/Cmd+click instead toggles `checkedIds` (lifted to
+ * `LibraryPage`, controlled, default empty - the toolbar's bulk Move button
+ * needs it too), intercepted at the row's CAPTURE phase so it never also
+ * arms/edits/opens; a checked row's `dragstart` carries the whole checked set
+ * (else just itself) for drag-to-folder.
  */
 export default function CollectionTable(props: CollectionTableProps) {
   if (props.loading) return <TableSkeleton />;
@@ -99,8 +106,8 @@ export default function CollectionTable(props: CollectionTableProps) {
     onOpenRow,
     pendingRows = [],
     onEditField,
-    folders = [],
-    onMovePaper = () => {},
+    checkedIds = EMPTY_CHECKED,
+    onToggleChecked = () => {},
   } = props;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ docId: string; field: EditableField } | null>(null);
@@ -134,6 +141,16 @@ export default function CollectionTable(props: CollectionTableProps) {
     setSelectedId((prev) => (prev === docId ? null : docId));
   }
 
+  // Ctrl/Cmd+click toggles multi-select instead of arming/editing. Fires in
+  // the CAPTURE phase (before the Title/Authors cells' own bubble-phase click
+  // handlers), so `stopPropagation` here keeps it from ALSO arming the row,
+  // entering edit mode, or opening the reader.
+  function handleRowClickCapture(e: React.MouseEvent<HTMLTableRowElement>, docId: string) {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.stopPropagation();
+    onToggleChecked(docId);
+  }
+
   function startEdit(docId: string, field: EditableField) {
     if (consumeSuppressedClick()) return;
     setEditing({ docId, field });
@@ -152,6 +169,12 @@ export default function CollectionTable(props: CollectionTableProps) {
     onEditField(row.doc_id, field, trimmed || null); // AC-7: empty -> null
   }
 
+  function handleDragStart(e: React.DragEvent<HTMLTableRowElement>, docId: string) {
+    const ids = checkedIds.has(docId) ? Array.from(checkedIds) : [docId];
+    e.dataTransfer.setData(MOVE_DRAG_MIME, encodeDragIds(ids));
+    e.dataTransfer.effectAllowed = "move";
+  }
+
   return (
     <div className="collection-table-wrap">
       <table className="collection-table">
@@ -167,11 +190,12 @@ export default function CollectionTable(props: CollectionTableProps) {
               row={row}
               armed={selectedId === row.doc_id}
               editingField={editing?.docId === row.doc_id ? editing.field : null}
-              folders={folders}
+              checked={checkedIds.has(row.doc_id)}
               onRowClick={() => handleRowClick(row.doc_id)}
+              onRowClickCapture={(e) => handleRowClickCapture(e, row.doc_id)}
               onArm={() => setSelectedId(row.doc_id)}
               onOpen={() => openRow(row.doc_id)}
-              onMove={(folderId) => onMovePaper(row.doc_id, folderId)}
+              onDragStart={(e) => handleDragStart(e, row.doc_id)}
               onStartEdit={(field) => startEdit(row.doc_id, field)}
               onCommit={(field, value, viaBlur) => commitEdit(row, field, value, viaBlur)}
               onCancel={() => setEditing(null)}

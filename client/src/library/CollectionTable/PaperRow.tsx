@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { CollectionRow, Folder } from "@/api/client";
+import { Check } from "@phosphor-icons/react";
+import type { CollectionRow } from "@/api/client";
 import {
   formatAdded,
   rowStatusClass,
@@ -9,25 +9,33 @@ import {
   type EditableField,
 } from "@/library/row";
 import EditableCell from "./EditableCell";
-import MoveMenu from "./MoveMenu";
 
 /**
- * One settled row of the collection table. A row click arms/selects it (purely
- * visual, `aria-selected`); the Title cell reveals an Open button on
+ * One settled row of the collection table. A plain row click arms/selects it
+ * (purely visual, `aria-selected`); the Title cell reveals an Open button on
  * hover/focus (independent of arm state). Title/Authors cells inline-edit once
- * the row is armed (see `EditableCell`). Every gesture is reported up via a
- * callback — `CollectionTable` owns the selection/editing state and the
- * click-suppression discipline; this component only renders and reports.
+ * the row is armed (see `EditableCell`). Ctrl/Cmd+click instead toggles this
+ * row into the MULTI-select set (`checked`, no dedicated checkbox column - a
+ * space-saving fix request) that drives the toolbar's bulk "Move" and
+ * drag-to-folder: `onClickCapture` intercepts a Ctrl/Cmd+click BEFORE it
+ * reaches the Title/Authors cells' own click handlers (capture fires first),
+ * so it never also arms or opens an editor. A checked row shows a small
+ * check glyph over the Title cell (no permanent column). Dragging a CHECKED
+ * row carries the whole checked set; dragging an unchecked row carries just
+ * itself. Every gesture is reported up via a callback — `CollectionTable`
+ * owns the selection/editing/checked state and the click-suppression
+ * discipline; this component only renders and reports.
  */
 export default function PaperRow({
   row,
   armed,
   editingField,
-  folders,
+  checked,
   onRowClick,
+  onRowClickCapture,
   onArm,
   onOpen,
-  onMove,
+  onDragStart,
   onStartEdit,
   onCommit,
   onCancel,
@@ -35,11 +43,12 @@ export default function PaperRow({
   row: CollectionRow;
   armed: boolean;
   editingField: EditableField | null;
-  folders: Folder[];
+  checked: boolean;
   onRowClick: () => void;
+  onRowClickCapture: (e: React.MouseEvent<HTMLTableRowElement>) => void;
   onArm: () => void;
   onOpen: () => void;
-  onMove: (folderId: string | null) => void;
+  onDragStart: (e: React.DragEvent<HTMLTableRowElement>) => void;
   onStartEdit: (field: EditableField) => void;
   onCommit: (field: EditableField, value: string, viaBlur: boolean) => void;
   onCancel: () => void;
@@ -49,9 +58,16 @@ export default function PaperRow({
   const displayTitle = row.title ?? (row.filename ? stripPdfExtension(row.filename) : null);
   const label = statusLabel(row.status);
   const editable = row.status !== "extracting";
-  const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   return (
-    <tr aria-selected={armed} onClick={onRowClick} className={rowStatusClass(row.status)}>
+    <tr
+      aria-selected={armed}
+      data-checked={checked || undefined}
+      onClickCapture={onRowClickCapture}
+      onClick={onRowClick}
+      className={rowStatusClass(row.status)}
+      draggable
+      onDragStart={onDragStart}
+    >
       <EditableCell
         className="collection-table__title"
         title={displayTitle ?? undefined}
@@ -65,28 +81,21 @@ export default function PaperRow({
         onCommit={(value, viaBlur) => onCommit("title", value, viaBlur)}
         onCancel={onCancel}
       >
+        {checked && <Check className="collection-table__check-icon" aria-hidden data-testid="row-checked-icon" />}
         <span className="collection-table__title-text">
           {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
         </span>
-        <div
-          className={
-            "collection-table__row-actions" +
-            (moveMenuOpen ? " collection-table__row-actions--menu-open" : "")
-          }
+        <button
+          type="button"
+          className="collection-table__open-button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
         >
-          <MoveMenu folders={folders} onMove={onMove} onOpenChange={setMoveMenuOpen} />
-          <button
-            type="button"
-            className="collection-table__open-button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpen();
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            Open
-          </button>
-        </div>
+          Open
+        </button>
       </EditableCell>
       <EditableCell
         className="collection-table__authors"

@@ -23,11 +23,13 @@ function Harness({
   onToast = () => {},
   initialSelection = { kind: "all" },
   onSelect,
+  onDropMove = () => {},
 }: {
   initialFolders: api.Folder[];
   onToast?: (message: string, variant: "error" | "info") => void;
   initialSelection?: FolderSelection;
   onSelect?: (selection: FolderSelection) => void;
+  onDropMove?: (docIds: string[], folderId: string | null) => void;
 }) {
   const [library, setLibrary] = useState<api.Library | null>({ papers: [], folders: initialFolders });
   const [selection, setSelection] = useState<FolderSelection>(initialSelection);
@@ -42,6 +44,7 @@ function Harness({
         setSelection(s);
         onSelect?.(s);
       }}
+      onDropMove={onDropMove}
     />
   );
 }

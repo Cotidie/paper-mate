@@ -10,14 +10,21 @@ import FolderNameEditor from "./FolderNameEditor";
  * The name is a real `<button>` (Story 7.2, L-UX-DR12): clicking or
  * Enter/Space-activating it selects this folder, filtering the table. It is
  * a SIBLING of the action buttons (not a wrapping element), so clicking
- * rename/add-subfolder/delete can never also fire a select.
+ * rename/add-subfolder/delete can never also fire a select. The whole row is
+ * ALSO a drag-to-folder drop target (fix request): `FolderPanel` owns the
+ * hover-highlight state and the drag-payload decode, this just forwards the
+ * three native drag events and renders the hover class.
  */
 export default function FolderRow({
   folder,
   depth,
   isEditing,
   isSelected,
+  isDropHover,
   onSelect,
+  onDragOver,
+  onDragLeave,
+  onDrop,
   onStartRename,
   onCommitRename,
   onCancelRename,
@@ -28,7 +35,11 @@ export default function FolderRow({
   depth: number;
   isEditing: boolean;
   isSelected: boolean;
+  isDropHover: boolean;
   onSelect: () => void;
+  onDragOver: (e: React.DragEvent<HTMLLIElement>) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent<HTMLLIElement>) => void;
   onStartRename: (id: string) => void;
   onCommitRename: (id: string, name: string) => void;
   onCancelRename: () => void;
@@ -37,8 +48,15 @@ export default function FolderRow({
 }) {
   return (
     <li
-      className={"folder-panel__row" + (isSelected ? " folder-panel__row--active" : "")}
+      className={
+        "folder-panel__row" +
+        (isSelected ? " folder-panel__row--active" : "") +
+        (isDropHover ? " folder-panel__row--drop-hover" : "")
+      }
       style={{ paddingInlineStart: `calc(var(--folder-panel-indent-step) * ${depth})` }}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       {isEditing ? (
         <FolderNameEditor

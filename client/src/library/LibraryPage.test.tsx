@@ -744,7 +744,7 @@ describe("Folder filter + move (Story 7.2)", () => {
     expect(screen.queryByText("Foldered Paper")).toBeNull();
   });
 
-  it("moving a paper via the row menu updates membership and it leaves the current (Uncategorized) view", async () => {
+  it("Ctrl+click-checking a paper then using the toolbar Move button updates membership and it leaves the current (Uncategorized) view", async () => {
     const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
     const movePapers = vi
@@ -756,11 +756,46 @@ describe("Folder filter + move (Story 7.2)", () => {
     fireEvent.click(screen.getByText("Uncategorized"));
     expect(screen.getByText("Movable Paper")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Move to folder" }));
+    fireEvent.click(screen.getByText("Movable Paper").closest("tr")!, { ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Move" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Folder A" }));
 
     expect(movePapers).toHaveBeenCalledWith([paper.doc_id], folderA.id);
     await waitFor(() => expect(screen.queryByText("Movable Paper")).toBeNull());
+  });
+
+  it("the toolbar Move button is disabled with nothing checked, enabled once a row is checked", async () => {
+    const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Movable Paper")).toBeTruthy());
+
+    expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByText("Movable Paper").closest("tr")!, { ctrlKey: true });
+    expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("dragging a row onto a folder entry moves it (drag-to-folder fix request)", async () => {
+    const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
+    const movePapers = vi
+      .spyOn(api, "movePapers")
+      .mockResolvedValue({ papers: [{ ...paper, folder_id: folderA.id }], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Movable Paper")).toBeTruthy());
+
+    const row = screen.getByText("Movable Paper").closest("tr")!;
+    const store = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => store.set(type, value),
+      getData: (type: string) => store.get(type) ?? "",
+      types: ["application/x-papermate-move"],
+      effectAllowed: "",
+    };
+    fireEvent.dragStart(row, { dataTransfer });
+    fireEvent.drop(screen.getByText("Folder A"), { dataTransfer });
+
+    expect(movePapers).toHaveBeenCalledWith([paper.doc_id], folderA.id);
   });
 
   it("entering an empty folder in a non-empty library keeps the table layout (no EmptyDropzone flash) and shows the empty-folder line", async () => {

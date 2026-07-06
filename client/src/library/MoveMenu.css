@@ -1,5 +1,5 @@
-/* Per-row "Move to folder" popover (Story 7.2). Tokens only, mirrors
-   AddMenu.css - no raw hex/px (CLAUDE.md). */
+/* Folder-picker popover (Story 7.2), used by LibraryPage's toolbar Move
+   button. Tokens only, mirrors AddMenu.css - no raw hex/px (CLAUDE.md). */
 
 .move-menu {
   position: relative;
@@ -25,6 +25,12 @@
   width: var(--pill-icon-size);
   height: var(--pill-icon-size);
   display: block;
+}
+
+.move-menu__button:disabled {
+  color: var(--color-muted);
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* `top`/`right` are set inline from the trigger button's own

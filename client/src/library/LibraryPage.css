@@ -56,6 +56,12 @@
   height: calc(var(--type-caption-size) * var(--type-caption-leading));
 }
 
+.library-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .library-empty-line {
   margin: var(--space-base) 0 0;
   font-family: var(--font-sans);

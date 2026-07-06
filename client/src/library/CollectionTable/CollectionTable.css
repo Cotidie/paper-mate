@@ -67,6 +67,14 @@
   box-shadow: inset var(--focus-ring-width) 0 0 0 var(--color-ink);
 }
 
+/* Ctrl/Cmd+click multi-select (Story 7.2 fix request: no dedicated checkbox
+   column - keep the table compact). A checked row is tinted even when idle
+   (not just on hover); the check glyph in the Title cell is the only other
+   affordance, no permanent column reserved. */
+.collection-table tbody tr[data-checked] {
+  background: var(--color-surface-strong);
+}
+
 .collection-table__title {
   position: relative;
 }
@@ -86,6 +94,18 @@
 
 .collection-table__untitled {
   color: var(--color-muted);
+}
+
+/* Check glyph overlaying the Title cell's leading padding when the row is
+   Ctrl/Cmd+click-checked - no layout shift, no reserved column. */
+.collection-table__check-icon {
+  position: absolute;
+  left: var(--space-xs);
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--pill-icon-size);
+  height: var(--pill-icon-size);
+  color: var(--color-ink);
 }
 
 /* Inline-editable Title/Authors cells (Story 6.6). The static cell above
@@ -111,36 +131,22 @@
   border-color: var(--color-ink);
 }
 
-/* Hover/focus-revealed row actions - Move-to-folder + Open (Story 7.2 adds
-   Move alongside 6.x's Open). A real <button> each, so Tab reaches them and
-   Enter/Space activates natively; the reveal itself is CSS-only, no JS
-   hover-state tracking. The wrapper is absolutely positioned (not a flex
-   sibling), overlaying the title text rather than reserving space for it
-   (user fix request 2026-07-06): the title keeps its full column width when
-   idle, at the cost of the buttons' own opaque chips covering whatever text
-   sits under them while revealed. `--menu-open` keeps the group visible when
-   the Move popover is open even if the pointer has left the row. */
-.collection-table__row-actions {
+/* Hover/focus-revealed Open button (Story 7.2 fix request reverted the
+   per-row Move-to-folder menu back to a single button - bulk move is now the
+   toolbar's Move button + drag-to-folder, see LibraryPage/FolderPanel). A
+   real <button>, so Tab reaches it and Enter/Space activates it natively;
+   the reveal itself is CSS-only, no JS hover-state tracking. Absolutely
+   positioned (not a flex sibling), overlaying the title text rather than
+   reserving space for it: the title keeps its full column width when idle,
+   at the cost of the button's own opaque chip covering whatever text sits
+   under it while revealed. */
+.collection-table__open-button {
   position: absolute;
   top: 50%;
   right: var(--space-xs);
   transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  gap: var(--space-xxs);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.1s ease-out;
-}
-
-.collection-table tbody tr:hover .collection-table__row-actions,
-.collection-table__row-actions:focus-within,
-.collection-table__row-actions--menu-open {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.collection-table__open-button {
   background: var(--color-surface-card);
   color: var(--color-ink);
   font-family: var(--font-sans);
@@ -150,6 +156,13 @@
   border: var(--hairline-width) solid var(--color-hairline-strong);
   border-radius: var(--radius-sm);
   padding: var(--space-xxs) var(--space-xs);
+  transition: opacity 0.1s ease-out;
+}
+
+.collection-table tbody tr:hover .collection-table__open-button,
+.collection-table__open-button:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Status-driven row treatment (Story 6.4 introduces the seam for optimistic
