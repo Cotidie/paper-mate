@@ -159,6 +159,25 @@
   border-color: var(--color-ink);
 }
 
+/* The settled Title/Authors <td> is tabIndex=0 (Enter-to-edit once armed).
+   Chromium's :focus-visible heuristic re-evaluates on ANY keydown while an
+   element already holds focus, not only at the moment focus is granted - so
+   holding Shift (or Ctrl/Cmd) after a plain click armed a row (which left
+   this cell natively focused, ring hidden since that focus came from a
+   mouse click) flips the ring visible with no new click at all (fix
+   request: a stray browser-default outline box kept appearing under this
+   exact sequence). The row's own armed/checked treatment (ink bar +
+   `{colors.surface-strong}`) already IS this cell's selection indicator, so
+   a second, incidental ring driven by raw DOM focus is a redundant surprise,
+   not a deliberate affordance - suppressed outright, in both the
+   mouse-triggered and heuristic-flipped-visible cases. */
+.collection-table__title:focus,
+.collection-table__authors:focus,
+.collection-table__title:focus-visible,
+.collection-table__authors:focus-visible {
+  outline: none;
+}
+
 /* Hover/focus-revealed Open button (Story 7.2 fix request reverted the
    per-row Move-to-folder menu back to a single button - bulk move is now the
    toolbar's Move button + drag-to-folder, see LibraryPage/FolderPanel). A
