@@ -223,7 +223,16 @@ export default function CollectionTable(props: CollectionTableProps) {
     onEditField(row.doc_id, field, trimmed || null); // AC-7: empty -> null
   }
 
+  // The whole <tr> is draggable, so a drag gesture starting on the Open
+  // button or an inline-edit input would otherwise still fire this (native
+  // buttons/inputs don't block an ancestor's `draggable` by themselves) -
+  // preventDefault bails out of the drag entirely rather than starting a
+  // bogus row-move over a click/text-select gesture (code-review fix).
   function handleDragStart(e: React.DragEvent<HTMLTableRowElement>, docId: string) {
+    if ((e.target as HTMLElement).closest("input, textarea, button, [contenteditable=true]")) {
+      e.preventDefault();
+      return;
+    }
     const ids = selectedIds.has(docId) ? Array.from(selectedIds) : [docId];
     e.dataTransfer.setData(MOVE_DRAG_MIME, encodeDragIds(ids));
     e.dataTransfer.effectAllowed = "move";

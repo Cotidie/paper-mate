@@ -608,6 +608,15 @@ describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () =>
     };
   }
 
+  it("a drag starting on the Open button is rejected, not treated as a row move (code-review fix: the whole <tr> is draggable, so a native button/input descendant doesn't block it by itself)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const openButton = screen.getAllByRole("button", { name: "Open" })[0];
+    const dataTransfer = dataTransferStub();
+    const event = fireEvent.dragStart(openButton, { dataTransfer, cancelable: true });
+    expect(event).toBe(false); // false return means preventDefault() was called
+    expect(dataTransfer.getData("application/x-papermate-move")).toBe("");
+  });
+
   it("dragging an unchecked row carries just that row's doc_id", () => {
     render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;

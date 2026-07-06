@@ -94,7 +94,13 @@ export default function MoveMenu({
           e.stopPropagation();
           setOpen(!open);
         }}
-        onKeyDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          // Escape must reach the document-level listener above that closes
+          // the popover: stopping propagation for every key (as before) also
+          // ate Escape while focus stayed on this button, so it silently did
+          // nothing (code-review fix).
+          if (e.key !== "Escape") e.stopPropagation();
+        }}
       >
         <FolderSimple aria-hidden />
         {label}
