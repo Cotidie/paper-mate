@@ -11,6 +11,7 @@ import DisplayMenu from "@/library/TableControls/DisplayMenu";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useMovePapers } from "@/library/useMovePapers";
+import { useColumnWidths } from "@/library/useColumnWidths";
 import { useResizablePanel } from "@/library/useResizablePanel";
 import { useTableView } from "@/library/useTableView";
 import { filterPapers, type FolderSelection } from "@/library/folderFilter";
@@ -74,6 +75,7 @@ export default function LibraryPage() {
   const { movePapers } = useMovePapers({ setLibrary, onToast });
   const tableView = useTableView();
   const folderPanelResize = useResizablePanel();
+  const columnWidths = useColumnWidths();
   const [selection, setSelection] = useState<FolderSelection>({ kind: "all" });
   // The one selection set driving BOTH a plain-click single row and a
   // Ctrl/Cmd+click multi-select (fix request: they were two disjoint pieces
@@ -234,7 +236,11 @@ export default function LibraryPage() {
             }}
           />
           {loading && papers.length === 0 && pending.length === 0 ? (
-            <CollectionTable loading visibleColumns={tableView.visibleColumns} />
+            <CollectionTable
+              loading
+              visibleColumns={tableView.visibleColumns}
+              columnWidths={columnWidths.widths}
+            />
           ) : papers.length > 0 || pending.length > 0 ? (
             visiblePapers.length === 0 && visiblePending.length === 0 ? (
               <p className="library-empty-line">{emptySelectionMessage(selection)}</p>
@@ -250,6 +256,9 @@ export default function LibraryPage() {
                 sort={tableView.sort}
                 onSortChange={tableView.setSort}
                 onToggleColumn={tableView.toggleColumn}
+                columnWidths={columnWidths.widths}
+                onResizeColumnStart={columnWidths.startResize}
+                onResizeColumnKeyDown={columnWidths.handleKeyDown}
               />
             )
           ) : loadFailed ? null : (

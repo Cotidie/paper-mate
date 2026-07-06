@@ -690,33 +690,6 @@ describe("CollectionTable Shift+click range selection (Story 7.3)", () => {
     expect(document.activeElement).not.toBe(titleCell);
   });
 
-  it("a BARE Shift/Ctrl/Cmd keydown (no click at all) blurs a stale native focus already sitting on the Title/Authors cell (fix request: Chromium's :focus-visible heuristic re-evaluates on any keydown while an element already holds focus, not only at focus-time, so a plain click that armed a row - leaving this cell natively focused, ring hidden since that focus came from a mouse click - could flip the ring visible again on a LATER, separate modifier keydown with no new click)", () => {
-    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
-    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!); // arm, native focus lands here
-    const titleCell = screen.getByText("Attention Is All You Need").closest("td")!;
-    titleCell.focus(); // simulate the browser's native focus-on-mousedown left by the plain click above
-    expect(document.activeElement).toBe(titleCell);
-    fireEvent.keyDown(document, { key: "Shift" });
-    expect(document.activeElement).not.toBe(titleCell);
-  });
-
-  it("the bare-modifier-keydown blur guard does not fire for an unrelated key", () => {
-    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
-    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!);
-    const titleCell = screen.getByText("Attention Is All You Need").closest("td")!;
-    titleCell.focus();
-    fireEvent.keyDown(document, { key: "a" });
-    expect(document.activeElement).toBe(titleCell);
-  });
-
-  it("the bare-modifier-keydown blur guard leaves the row's own selection state untouched (only the native DOM focus is cleared)", () => {
-    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
-    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
-    fireEvent.click(row);
-    screen.getByText("Attention Is All You Need").closest("td")!.focus();
-    fireEvent.keyDown(document, { key: "Shift" });
-    expect(row.getAttribute("aria-selected")).toBe("true");
-  });
 });
 
 describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () => {
@@ -962,5 +935,126 @@ describe("CollectionTable column header dropdown (fix request: clickable headers
     fireEvent.pointerDown(authorsButton);
     fireEvent.click(authorsButton);
     expect(screen.getAllByRole("menu").length).toBe(1);
+  });
+});
+
+describe("CollectionTable column resize (fix request: adjustable column widths)", () => {
+  it("renders no resize handle when the resize callbacks are omitted", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    expect(document.querySelector(".collection-table__col-resize-handle")).toBeNull();
+  });
+
+  it("renders a resize handle per column when both resize callbacks are supplied", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onResizeColumnStart={noop}
+        onResizeColumnKeyDown={noop}
+      />,
+    );
+    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(4);
+  });
+
+  it("pointerdown on a column's handle calls onResizeColumnStart with that column's key", () => {
+    const onResizeColumnStart = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onResizeColumnStart={onResizeColumnStart}
+        onResizeColumnKeyDown={noop}
+      />,
+    );
+    const authorsHandle = screen
+      .getByRole("button", { name: "Authors" })
+      .closest("th")!
+      .querySelector(".collection-table__col-resize-handle")!;
+    fireEvent.pointerDown(authorsHandle);
+    expect(onResizeColumnStart).toHaveBeenCalledWith("authors", expect.anything());
+  });
+
+  it("ArrowRight on a column's handle calls onResizeColumnKeyDown with that column's key", () => {
+    const onResizeColumnKeyDown = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onResizeColumnStart={noop}
+        onResizeColumnKeyDown={onResizeColumnKeyDown}
+      />,
+    );
+    const addedHandle = screen
+      .getByRole("button", { name: "Added" })
+      .closest("th")!
+      .querySelector(".collection-table__col-resize-handle")!;
+    fireEvent.keyDown(addedHandle, { key: "ArrowRight" });
+    expect(onResizeColumnKeyDown).toHaveBeenCalledWith("added", expect.anything());
+  });
+
+  it("applies columnWidths as inline widths on the <col> elements", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80 }}
+      />,
+    );
+    const cols = document.querySelectorAll("colgroup col");
+    expect((cols[0] as HTMLElement).style.width).toBe("400px");
+    expect((cols[1] as HTMLElement).style.width).toBe("150px");
+    expect((cols[2] as HTMLElement).style.width).toBe("100px");
+    expect((cols[3] as HTMLElement).style.width).toBe("80px");
+  });
+
+  it("sizes the <table> itself to the exact sum of columnWidths (fix request: table-layout:fixed + width:100% rescaled every <col> proportionally when they didn't sum to 100%, so narrowing one column visibly widened another even though its own width state never changed)", () => {
+    const { container } = render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80 }}
+      />,
+    );
+    const table = container.querySelector("table.collection-table") as HTMLElement;
+    expect(table.style.width).toBe("730px");
+  });
+
+  it("falls back to the CSS width:100% default when columnWidths is omitted", () => {
+    const { container } = render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const table = container.querySelector("table.collection-table") as HTMLElement;
+    expect(table.style.width).toBe("");
+  });
+
+  it("clicking a resize handle does not also open the header's Sort/Hide dropdown", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onResizeColumnStart={noop}
+        onResizeColumnKeyDown={noop}
+      />,
+    );
+    const authorsHandle = screen
+      .getByRole("button", { name: "Authors" })
+      .closest("th")!
+      .querySelector(".collection-table__col-resize-handle")!;
+    fireEvent.pointerDown(authorsHandle);
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

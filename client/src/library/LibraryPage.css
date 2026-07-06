@@ -133,6 +133,10 @@
   align-items: stretch;
   justify-content: flex-start;
   overflow-y: auto;
+  /* Fix request (column resize): the table is now sized to the exact sum of
+     its column widths rather than a forced 100%, so growing columns can
+     exceed this region's width - scroll horizontally rather than clip. */
+  overflow-x: auto;
   padding: var(--space-base);
 }
 
