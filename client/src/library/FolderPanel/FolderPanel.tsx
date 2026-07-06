@@ -67,6 +67,7 @@ export default function FolderPanel({
   selection,
   onSelect,
   onDropMove,
+  width,
 }: {
   folders: Folder[];
   setLibrary: Dispatch<SetStateAction<Library | null>>;
@@ -75,6 +76,8 @@ export default function FolderPanel({
   selection: FolderSelection;
   onSelect: (selection: FolderSelection) => void;
   onDropMove: (docIds: string[], folderId: string | null) => void;
+  /** Drag-to-resize (fix request): overrides the CSS default `--toc-panel-width`. */
+  width: number;
 }) {
   const { createFolder, renameFolder, deleteFolder } = useFolders({ folders, setLibrary, onToast });
 
@@ -128,7 +131,7 @@ export default function FolderPanel({
   const rows = flattenTree(folders);
 
   return (
-    <aside className="library-folder-panel" aria-label="Folders">
+    <aside className="library-folder-panel" aria-label="Folders" style={{ width }}>
       <span className="library-folder-panel__label">Library</span>
 
       <ul className="folder-panel__pseudo-list">

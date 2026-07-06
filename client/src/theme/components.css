@@ -255,4 +255,10 @@
   --table-control-popover-width: 200px;
   --table-control-sort-caret-size: 14px;
   --table-control-checkbox-size: 14px;
+
+  /* library-resize-handle (fix request): the folder panel's drag-to-resize
+     boundary. A wider invisible hit target than the visible hairline itself
+     (easier to grab), widening to 2px on hover/drag. */
+  --library-resize-handle-width: 6px;
+  --library-resize-handle-active-width: 2px;
 }

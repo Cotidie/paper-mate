@@ -11,6 +11,7 @@ import DisplayMenu from "@/library/TableControls/DisplayMenu";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useMovePapers } from "@/library/useMovePapers";
+import { useResizablePanel } from "@/library/useResizablePanel";
 import { useTableView } from "@/library/useTableView";
 import { filterPapers, type FolderSelection } from "@/library/folderFilter";
 import { fetchHealth, type Folder } from "@/api/client";
@@ -72,6 +73,7 @@ export default function LibraryPage() {
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
   const { movePapers } = useMovePapers({ setLibrary, onToast });
   const tableView = useTableView();
+  const folderPanelResize = useResizablePanel();
   const [selection, setSelection] = useState<FolderSelection>({ kind: "all" });
   // The one selection set driving BOTH a plain-click single row and a
   // Ctrl/Cmd+click multi-select (fix request: they were two disjoint pieces
@@ -149,6 +151,19 @@ export default function LibraryPage() {
           selection={selection}
           onSelect={handleSelect}
           onDropMove={handleMoveRequest}
+          width={folderPanelResize.width}
+        />
+        <div
+          className="library-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize folder panel"
+          aria-valuenow={folderPanelResize.width}
+          aria-valuemin={folderPanelResize.minWidth}
+          aria-valuemax={folderPanelResize.maxWidth}
+          tabIndex={0}
+          onPointerDown={folderPanelResize.startResize}
+          onKeyDown={folderPanelResize.handleKeyDown}
         />
         <main
           className={mainClassName}
