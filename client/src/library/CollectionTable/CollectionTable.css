@@ -40,6 +40,83 @@
   border-bottom: var(--hairline-width) solid var(--color-hairline);
 }
 
+/* An interactive header's `<th>` hands its own padding to the button inside
+   it (fix request: clicking anywhere in the header cell should open the
+   dropdown, not just the label text) - zeroed here so the button can fill
+   the cell edge-to-edge. `position: relative` anchors the resize handle
+   (fix request: adjustable column widths) to this cell's own right edge. */
+.collection-table th.collection-table__th--interactive {
+  position: relative;
+  padding: 0;
+}
+
+/* The per-column drag/keyboard resize handle (fix request), a sibling of the
+   header button (not nested in it, so it never also toggles the dropdown).
+   Mirrors the folder panel's `.library-resize-handle`: a wider invisible hit
+   target than the visible hairline `::after` paints, widening on hover. */
+/* Fix request: previously straddled the column border via `translateX(50%)`,
+   so half its hit area sat inside the NEXT column's `<th>` - a later DOM
+   sibling whose own full-cell header button painted on top there,
+   intercepting the click. Kept fully inside this column's own box instead
+   (right: 0, no overlap), so there's no neighboring element to lose the hit
+   test to. */
+.collection-table__col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--library-resize-handle-width);
+  cursor: col-resize;
+}
+
+.collection-table__col-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: var(--hairline-width);
+  background: transparent;
+}
+
+.collection-table__col-resize-handle:hover::after,
+.collection-table__col-resize-handle:focus-visible::after {
+  width: var(--library-resize-handle-active-width);
+  background: var(--color-ink);
+}
+
+/* A header's Sort/Hide dropdown trigger (reset button chrome, inherits the
+   `<th>`'s own type). Fills the whole `<th>` (`width`/`height: 100%`) with
+   the padding the `<th>` used to carry, so the entire cell is the click/hover
+   target, not just the label. */
+.collection-table__header-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: var(--space-xs) var(--space-sm);
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.collection-table__header-button:hover {
+  background: var(--color-surface-strong);
+}
+
+/* The active sort column's caret (Story 7.4, AC-2). */
+.collection-table__sort-caret {
+  width: var(--table-control-sort-caret-size);
+  height: var(--table-control-sort-caret-size);
+  vertical-align: middle;
+  margin-left: var(--space-xxs);
+}
+
 .collection-table td {
   height: var(--collection-table-row-height);
   font-family: var(--font-sans);
@@ -244,8 +321,8 @@
   padding: var(--badge-pill-padding-y) var(--badge-pill-padding-x);
 }
 
-/* A subtler pill for the `parse-failed` "No metadata" marker: no filled
-   surface, muted text — present but quiet (the row is still usable). */
+/* A subtler pill for the `parse-failed` "-" marker: no filled surface,
+   muted text — present but quiet (the row is still usable). */
 .badge-pill--muted {
   background: none;
   color: var(--color-muted);

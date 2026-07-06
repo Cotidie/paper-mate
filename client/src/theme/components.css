@@ -249,4 +249,16 @@
   --folder-panel-icon-size: 16px;
   --folder-panel-indent-step: 16px;
   --folder-panel-action-size: 22px;
+
+  /* table-controls (Story 7.4): the Display/Sort toolbar popovers + the
+     column-header dropdown (fix request: width now fits content, `max-content`
+     in TableControls.css, so no fixed width token is needed here). */
+  --table-control-sort-caret-size: 14px;
+  --table-control-checkbox-size: 14px;
+
+  /* library-resize-handle (fix request): the folder panel's drag-to-resize
+     boundary. A wider invisible hit target than the visible hairline itself
+     (easier to grab), widening to 2px on hover/drag. */
+  --library-resize-handle-width: 6px;
+  --library-resize-handle-active-width: 2px;
 }

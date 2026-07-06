@@ -7,6 +7,7 @@ import {
   stripPdfExtension,
   type EditableField,
 } from "@/library/row";
+import type { ColumnKey } from "@/library/tableView";
 import EditableCell from "./EditableCell";
 
 /**
@@ -33,6 +34,7 @@ import EditableCell from "./EditableCell";
  */
 export default function PaperRow({
   row,
+  visibleColumns,
   armed,
   editingField,
   checked,
@@ -46,6 +48,7 @@ export default function PaperRow({
   onCancel,
 }: {
   row: CollectionRow;
+  visibleColumns: Set<ColumnKey>;
   armed: boolean;
   editingField: EditableField | null;
   checked: boolean;
@@ -73,63 +76,71 @@ export default function PaperRow({
       draggable
       onDragStart={onDragStart}
     >
-      <EditableCell
-        className="collection-table__title"
-        title={displayTitle ?? undefined}
-        field="title"
-        editable={editable}
-        armed={armed}
-        isEditing={editingField === "title"}
-        seedValue={seedFieldValue(row, "title")}
-        onStartEdit={() => onStartEdit("title")}
-        onArm={onArm}
-        onCommit={(value, viaBlur) => onCommit("title", value, viaBlur)}
-        onCancel={onCancel}
-      >
-        <span className="collection-table__title-text">
-          {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
-        </span>
-        <button
-          type="button"
-          className="collection-table__open-button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen();
-          }}
-          onKeyDown={(e) => e.stopPropagation()}
+      {visibleColumns.has("title") && (
+        <EditableCell
+          className="collection-table__title"
+          title={displayTitle ?? undefined}
+          field="title"
+          editable={editable}
+          armed={armed}
+          isEditing={editingField === "title"}
+          seedValue={seedFieldValue(row, "title")}
+          onStartEdit={() => onStartEdit("title")}
+          onArm={onArm}
+          onCommit={(value, viaBlur) => onCommit("title", value, viaBlur)}
+          onCancel={onCancel}
         >
-          Open
-        </button>
-      </EditableCell>
-      <EditableCell
-        className="collection-table__authors"
-        title={row.authors ?? undefined}
-        field="authors"
-        editable={editable}
-        armed={armed}
-        isEditing={editingField === "authors"}
-        seedValue={seedFieldValue(row, "authors")}
-        onStartEdit={() => onStartEdit("authors")}
-        onArm={onArm}
-        onCommit={(value, viaBlur) => onCommit("authors", value, viaBlur)}
-        onCancel={onCancel}
-      >
-        {row.authors ?? ""}
-      </EditableCell>
-      <td className="collection-table__added">{formatAdded(row.added)}</td>
-      <td>
-        {label ? (
-          <span
-            className={
-              row.status === "parse-failed" ? "badge-pill badge-pill--muted" : "badge-pill"
-            }
-          >
-            {label}
+          <span className="collection-table__title-text">
+            {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
           </span>
-        ) : (
-          <span className="badge-pill">{row.file_type === "note" ? "Note" : "PDF"}</span>
-        )}
-      </td>
+          <button
+            type="button"
+            className="collection-table__open-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen();
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            Open
+          </button>
+        </EditableCell>
+      )}
+      {visibleColumns.has("authors") && (
+        <EditableCell
+          className="collection-table__authors"
+          title={row.authors ?? undefined}
+          field="authors"
+          editable={editable}
+          armed={armed}
+          isEditing={editingField === "authors"}
+          seedValue={seedFieldValue(row, "authors")}
+          onStartEdit={() => onStartEdit("authors")}
+          onArm={onArm}
+          onCommit={(value, viaBlur) => onCommit("authors", value, viaBlur)}
+          onCancel={onCancel}
+        >
+          {row.authors ?? ""}
+        </EditableCell>
+      )}
+      {visibleColumns.has("added") && (
+        <td className="collection-table__added">{formatAdded(row.added)}</td>
+      )}
+      {visibleColumns.has("file_type") && (
+        <td>
+          {label ? (
+            <span
+              className={
+                row.status === "parse-failed" ? "badge-pill badge-pill--muted" : "badge-pill"
+              }
+            >
+              {label}
+            </span>
+          ) : (
+            <span className="badge-pill">{row.file_type === "note" ? "Note" : "PDF"}</span>
+          )}
+        </td>
+      )}
     </tr>
   );
 }

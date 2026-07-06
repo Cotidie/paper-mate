@@ -90,6 +90,33 @@
   min-height: 0;
 }
 
+/* Drag-to-resize boundary between the folder panel and the table (fix
+   request). A wider invisible hit target (`::after` paints the visible
+   hairline centered inside it) so the cursor doesn't need to land on a
+   literal 1px line; widens and darkens on hover/drag for feedback. */
+.library-resize-handle {
+  flex: 0 0 auto;
+  width: var(--library-resize-handle-width);
+  cursor: col-resize;
+  position: relative;
+}
+
+.library-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: var(--hairline-width);
+  background: var(--color-hairline);
+  transform: translateX(-50%);
+}
+
+.library-resize-handle:hover::after {
+  width: var(--library-resize-handle-active-width);
+  background: var(--color-ink);
+}
+
 .library-main {
   flex: 1 1 auto;
   display: flex;
@@ -106,6 +133,10 @@
   align-items: stretch;
   justify-content: flex-start;
   overflow-y: auto;
+  /* Fix request (column resize): the table is now sized to the exact sum of
+     its column widths rather than a forced 100%, so growing columns can
+     exceed this region's width - scroll horizontally rather than clip. */
+  overflow-x: auto;
   padding: var(--space-base);
 }
 

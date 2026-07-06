@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import CollectionTable from "./CollectionTable";
 import { formatAdded } from "@/library/row";
+import { COLUMNS } from "@/library/tableView";
 import type { CollectionRow } from "@/api/client";
 
 afterEach(cleanup);
@@ -209,16 +210,16 @@ describe("CollectionTable status visuals (Story 6.5)", () => {
   it("renders enrich-skipped as a normal row (no status chip, shows PDF badge)", () => {
     render(<CollectionTable rows={[rowWith("enrich-skipped")]} onOpenRow={noop} onEditField={noop} />);
     expect(screen.queryByText("Extracting")).toBeNull();
-    expect(screen.queryByText("No metadata")).toBeNull();
+    expect(screen.queryByText("-")).toBeNull();
     expect(screen.getByText("PDF")).toBeTruthy();
   });
 
-  it("marks a parse-failed row with a subtle No metadata chip and the filename fallback; its Open button still works", () => {
+  it("marks a parse-failed row with a subtle '-' chip (fix request: 'No metadata' wrapped to two lines and grew the row) and the filename fallback; its Open button still works", () => {
     const onOpenRow = vi.fn();
     render(
       <CollectionTable rows={[rowWith("parse-failed", { title: null })]} onOpenRow={onOpenRow} onEditField={noop} />,
     );
-    const chip = screen.getByText("No metadata");
+    const chip = screen.getByText("-");
     expect(chip.className).toContain("badge-pill--muted");
     // Filename fallback (extension stripped) stands in for the missing title.
     expect(screen.getByText("a-title")).toBeTruthy();
@@ -688,6 +689,7 @@ describe("CollectionTable Shift+click range selection (Story 7.3)", () => {
     fireEvent.click(titleCell, { shiftKey: true });
     expect(document.activeElement).not.toBe(titleCell);
   });
+
 });
 
 describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () => {
@@ -768,5 +770,291 @@ describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () =>
 describe("formatAdded", () => {
   it("returns the raw string for an unparseable date", () => {
     expect(formatAdded("not-a-date")).toBe("not-a-date");
+  });
+});
+
+describe("CollectionTable column visibility (Story 7.4, AC-1)", () => {
+  const visibleColumns = COLUMNS.filter((c) => c.key !== "authors");
+
+  it("omits a hidden column's header", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} visibleColumns={visibleColumns} />);
+    expect(screen.queryByRole("columnheader", { name: "Authors" })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Title" })).toBeTruthy();
+  });
+
+  it("omits a hidden column's cell in every row", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} visibleColumns={visibleColumns} />);
+    expect(screen.queryByText("Vaswani et al.")).toBeNull();
+    // Title still renders - it is never hideable.
+    expect(screen.getByText("Attention Is All You Need")).toBeTruthy();
+  });
+
+  it("honors the same visible-column set in the loading skeleton", () => {
+    render(<CollectionTable loading visibleColumns={visibleColumns} />);
+    expect(screen.queryByRole("columnheader", { name: "Authors" })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Title" })).toBeTruthy();
+  });
+
+  it("defaults to every column when visibleColumns is omitted", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    for (const label of ["Title", "Authors", "Added", "File type"]) {
+      expect(screen.getByRole("columnheader", { name: label })).toBeTruthy();
+    }
+  });
+});
+
+describe("CollectionTable sort indicator (Story 7.4, AC-2)", () => {
+  it("shows no caret on any header when sort is null", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} sort={null} />);
+    expect(document.querySelector(".collection-table__sort-caret")).toBeNull();
+  });
+
+  it("shows an ascending caret on the active sort column's header", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        sort={{ column: "added", direction: "asc" }}
+      />,
+    );
+    const header = screen.getByRole("columnheader", { name: /Added/ });
+    expect(header.querySelector(".collection-table__sort-caret")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Title" }).querySelector(".collection-table__sort-caret")).toBeNull();
+  });
+
+  it("shows a different caret when the direction is descending", () => {
+    const { container: ascContainer } = render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} sort={{ column: "added", direction: "asc" }} />,
+    );
+    const ascIcon = ascContainer.querySelector(".collection-table__sort-caret")!.outerHTML;
+    cleanup();
+    const { container: descContainer } = render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} sort={{ column: "added", direction: "desc" }} />,
+    );
+    const descIcon = descContainer.querySelector(".collection-table__sort-caret")!.outerHTML;
+    expect(ascIcon).not.toBe(descIcon);
+  });
+});
+
+describe("CollectionTable column header dropdown (fix request: clickable headers)", () => {
+  it("is not clickable (plain <th>, no popover) when onSortChange/onToggleColumn are omitted", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    expect(screen.queryByRole("button", { name: "Title" })).toBeNull();
+  });
+
+  it("opens a menu listing Sort ASC, Sort DESC, and Hide", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
+    expect(screen.getByRole("menuitem", { name: "Sort ASC" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Sort DESC" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Hide" })).toBeTruthy();
+  });
+
+  it("omits Hide for the Title column (never hideable)", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    expect(screen.queryByRole("menuitem", { name: "Hide" })).toBeNull();
+  });
+
+  it("Sort ASC calls onSortChange with the column and asc direction, then closes", () => {
+    const onSortChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={onSortChange}
+        onToggleColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Added" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort ASC" }));
+    expect(onSortChange).toHaveBeenCalledWith({ column: "added", direction: "asc" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("Sort DESC calls onSortChange with the column and desc direction", () => {
+    const onSortChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={onSortChange}
+        onToggleColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Added" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort DESC" }));
+    expect(onSortChange).toHaveBeenCalledWith({ column: "added", direction: "desc" });
+  });
+
+  it("Hide calls onToggleColumn with the column key", () => {
+    const onToggleColumn = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={onToggleColumn}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide" }));
+    expect(onToggleColumn).toHaveBeenCalledWith("authors");
+  });
+
+  it("Escape closes the menu and returns focus to the header trigger", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    const button = screen.getByRole("button", { name: "Authors" });
+    fireEvent.click(button);
+    fireEvent.keyDown(button, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("opening a different header's menu closes the previous one (document-level outside-pointerdown dismiss)", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    const titleButton = screen.getByRole("button", { name: "Title" });
+    const authorsButton = screen.getByRole("button", { name: "Authors" });
+    fireEvent.click(titleButton);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    // A real click is preceded by a pointerdown; usePopover's outside-dismiss
+    // listens for that, so simulate both (RTL's fireEvent.click alone does
+    // not synthesize a pointerdown).
+    fireEvent.pointerDown(authorsButton);
+    fireEvent.click(authorsButton);
+    expect(screen.getAllByRole("menu").length).toBe(1);
+  });
+});
+
+describe("CollectionTable column resize (fix request: adjustable column widths)", () => {
+  it("renders no resize handle when the resize callbacks are omitted", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    expect(document.querySelector(".collection-table__col-resize-handle")).toBeNull();
+  });
+
+  it("renders a resize handle per column when both resize callbacks are supplied", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onResizeColumnStart={noop}
+        onResizeColumnKeyDown={noop}
+      />,
+    );
+    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(4);
+  });
+
+  it("pointerdown on a column's handle calls onResizeColumnStart with that column's key", () => {
+    const onResizeColumnStart = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onResizeColumnStart={onResizeColumnStart}
+        onResizeColumnKeyDown={noop}
+      />,
+    );
+    const authorsHandle = screen
+      .getByRole("button", { name: "Authors" })
+      .closest("th")!
+      .querySelector(".collection-table__col-resize-handle")!;
+    fireEvent.pointerDown(authorsHandle);
+    expect(onResizeColumnStart).toHaveBeenCalledWith("authors", expect.anything());
+  });
+
+  it("ArrowRight on a column's handle calls onResizeColumnKeyDown with that column's key", () => {
+    const onResizeColumnKeyDown = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onResizeColumnStart={noop}
+        onResizeColumnKeyDown={onResizeColumnKeyDown}
+      />,
+    );
+    const addedHandle = screen
+      .getByRole("button", { name: "Added" })
+      .closest("th")!
+      .querySelector(".collection-table__col-resize-handle")!;
+    fireEvent.keyDown(addedHandle, { key: "ArrowRight" });
+    expect(onResizeColumnKeyDown).toHaveBeenCalledWith("added", expect.anything());
+  });
+
+  it("applies columnWidths as inline widths on the <col> elements", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80 }}
+      />,
+    );
+    const cols = document.querySelectorAll("colgroup col");
+    expect((cols[0] as HTMLElement).style.width).toBe("400px");
+    expect((cols[1] as HTMLElement).style.width).toBe("150px");
+    expect((cols[2] as HTMLElement).style.width).toBe("100px");
+    expect((cols[3] as HTMLElement).style.width).toBe("80px");
+  });
+
+  it("sizes the <table> itself to the exact sum of columnWidths (fix request: table-layout:fixed + width:100% rescaled every <col> proportionally when they didn't sum to 100%, so narrowing one column visibly widened another even though its own width state never changed)", () => {
+    const { container } = render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80 }}
+      />,
+    );
+    const table = container.querySelector("table.collection-table") as HTMLElement;
+    expect(table.style.width).toBe("730px");
+  });
+
+  it("falls back to the CSS width:100% default when columnWidths is omitted", () => {
+    const { container } = render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const table = container.querySelector("table.collection-table") as HTMLElement;
+    expect(table.style.width).toBe("");
+  });
+
+  it("clicking a resize handle does not also open the header's Sort/Hide dropdown", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onResizeColumnStart={noop}
+        onResizeColumnKeyDown={noop}
+      />,
+    );
+    const authorsHandle = screen
+      .getByRole("button", { name: "Authors" })
+      .closest("th")!
+      .querySelector(".collection-table__col-resize-handle")!;
+    fireEvent.pointerDown(authorsHandle);
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

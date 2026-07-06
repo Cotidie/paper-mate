@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import "@/library/LibraryPage.css";
 import Toast from "@/components/Toast/Toast";
@@ -7,9 +7,13 @@ import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
 import AddMenu from "@/library/AddMenu/AddMenu";
 import FolderPanel from "@/library/FolderPanel/FolderPanel";
 import MoveMenu from "@/library/MoveMenu";
+import DisplayMenu from "@/library/TableControls/DisplayMenu";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useMovePapers } from "@/library/useMovePapers";
+import { useColumnWidths } from "@/library/useColumnWidths";
+import { useResizablePanel } from "@/library/useResizablePanel";
+import { useTableView } from "@/library/useTableView";
 import { filterPapers, type FolderSelection } from "@/library/folderFilter";
 import { fetchHealth, type Folder } from "@/api/client";
 
@@ -69,6 +73,9 @@ export default function LibraryPage() {
   });
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
   const { movePapers } = useMovePapers({ setLibrary, onToast });
+  const tableView = useTableView();
+  const folderPanelResize = useResizablePanel();
+  const columnWidths = useColumnWidths();
   const [selection, setSelection] = useState<FolderSelection>({ kind: "all" });
   // The one selection set driving BOTH a plain-click single row and a
   // Ctrl/Cmd+click multi-select (fix request: they were two disjoint pieces
@@ -116,7 +123,14 @@ export default function LibraryPage() {
   const papers = library?.papers ?? [];
   const folders = library?.folders ?? [];
   const isTableLayout = loading || papers.length > 0 || pending.length > 0;
-  const visiblePapers = filterPapers(papers, selection);
+  // The column filter + sort (Story 7.4) fold onto the folder-filtered array
+  // HERE, so the same array CollectionTable paints is the one Story 7.3's
+  // Shift+click range indexes (its range math is index-based over `rows`).
+  const { applyTableView } = tableView;
+  const visiblePapers = useMemo(
+    () => applyTableView(filterPapers(papers, selection)),
+    [papers, selection, applyTableView],
+  );
   // A just-uploaded paper lands Uncategorized; it should not appear under an
   // unrelated selected folder (Dev Notes: gate pending rows on selection kind).
   const visiblePending = selection.kind === "folder" ? [] : pending;
@@ -139,6 +153,19 @@ export default function LibraryPage() {
           selection={selection}
           onSelect={handleSelect}
           onDropMove={handleMoveRequest}
+          width={folderPanelResize.width}
+        />
+        <div
+          className="library-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize folder panel"
+          aria-valuenow={folderPanelResize.width}
+          aria-valuemin={folderPanelResize.minWidth}
+          aria-valuemax={folderPanelResize.maxWidth}
+          tabIndex={0}
+          onPointerDown={folderPanelResize.startResize}
+          onKeyDown={folderPanelResize.handleKeyDown}
         />
         <main
           className={mainClassName}
@@ -168,6 +195,7 @@ export default function LibraryPage() {
                 </p>
               )}
               <div className="library-toolbar__actions">
+                <DisplayMenu hiddenColumns={tableView.hiddenColumns} onToggleColumn={tableView.toggleColumn} />
                 <MoveMenu
                   folders={folders}
                   onMove={(folderId) => handleMoveRequest(Array.from(selectedIds), folderId)}
@@ -208,7 +236,11 @@ export default function LibraryPage() {
             }}
           />
           {loading && papers.length === 0 && pending.length === 0 ? (
-            <CollectionTable loading />
+            <CollectionTable
+              loading
+              visibleColumns={tableView.visibleColumns}
+              columnWidths={columnWidths.widths}
+            />
           ) : papers.length > 0 || pending.length > 0 ? (
             visiblePapers.length === 0 && visiblePending.length === 0 ? (
               <p className="library-empty-line">{emptySelectionMessage(selection)}</p>
@@ -220,6 +252,13 @@ export default function LibraryPage() {
                 onEditField={handleEditField}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
+                visibleColumns={tableView.visibleColumns}
+                sort={tableView.sort}
+                onSortChange={tableView.setSort}
+                onToggleColumn={tableView.toggleColumn}
+                columnWidths={columnWidths.widths}
+                onResizeColumnStart={columnWidths.startResize}
+                onResizeColumnKeyDown={columnWidths.handleKeyDown}
               />
             )
           ) : loadFailed ? null : (

@@ -40,6 +40,7 @@ function Harness({
       onToast={onToast}
       version="1.2.3"
       selection={selection}
+      width={280}
       onSelect={(s) => {
         setSelection(s);
         onSelect?.(s);

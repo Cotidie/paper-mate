@@ -1,0 +1,80 @@
+/* Display/Sort toolbar controls (Story 7.4). Tokens only, no raw hex/px
+   (CLAUDE.md). Mirrors move-menu.css's popover shape - `position: fixed`
+   anchored off the trigger's own `getBoundingClientRect()` (see
+   `usePopover`), portaled to `document.body` so it never reflows the
+   toolbar/table/page floor (AC-6). */
+
+.table-control {
+  position: relative;
+}
+
+.table-control__popover {
+  position: fixed;
+  width: max-content;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  z-index: 4;
+}
+
+.table-control__item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-xs);
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  color: var(--color-body);
+  background: none;
+  border: 0;
+  border-bottom: var(--hairline-width) solid var(--color-hairline);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.table-control__item:last-child {
+  border-bottom: 0;
+}
+
+.table-control__item:hover {
+  background: var(--color-surface-strong);
+}
+
+.table-control__item svg {
+  width: var(--table-control-sort-caret-size);
+  height: var(--table-control-sort-caret-size);
+  flex: 0 0 auto;
+}
+
+.table-control__checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  color: var(--color-body);
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: var(--hairline-width) solid var(--color-hairline);
+  cursor: pointer;
+}
+
+.table-control__checkbox-item:last-child {
+  border-bottom: 0;
+}
+
+.table-control__checkbox-item:hover {
+  background: var(--color-surface-strong);
+}
+
+.table-control__checkbox-item input {
+  width: var(--table-control-checkbox-size);
+  height: var(--table-control-checkbox-size);
+  margin: 0;
+}

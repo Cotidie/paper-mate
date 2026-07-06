@@ -123,10 +123,9 @@ button.library-folder-panel__item:hover {
 }
 
 .folder-panel__row {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-xxs);
   min-height: var(--folder-panel-row-height);
   border-radius: var(--radius-sm);
 }
@@ -164,11 +163,20 @@ button.library-folder-panel__item:hover {
 }
 
 /* Hover/focus-revealed row actions (mirrors CollectionTable's Open-button
-   reveal): opacity-only, no layout shift, so the idle tree stays quiet. */
+   reveal, fix request: was a static flex sibling that reserved its own width
+   even at opacity 0, permanently shrinking the name's ellipsis width - now
+   absolutely positioned like the Open button, so the idle name gets the
+   row's full width and the actions only overlay it once revealed). An opaque
+   background matching the row's own hover/active tint keeps the overlay from
+   reading as a see-through seam over the name text it covers. */
 .folder-panel__row-actions {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 50%;
+  right: var(--space-xs);
+  transform: translateY(-50%);
   display: flex;
   gap: var(--space-xxs);
+  background: var(--color-surface-strong);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.1s ease-out;

@@ -1,14 +1,47 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { CaretDown, CaretUp, EyeSlash, X } from "@phosphor-icons/react";
 import type { CollectionRow } from "@/api/client";
 import { currentFieldValue, stripPdfExtension, type EditableField, type PendingUpload } from "@/library/row";
 import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
+import { COLUMNS, type ColumnDef, type ColumnKey, type SortState } from "@/library/tableView";
+import { usePopover } from "@/library/usePopover";
 import PaperRow from "./PaperRow";
 import PendingRow from "./PendingRow";
 import "./CollectionTable.css";
+import "@/library/TableControls/TableControls.css";
 
 const SKELETON_ROW_COUNT = 6;
-const COLUMNS = ["Title", "Authors", "Added", "File type"] as const;
 const EMPTY_SELECTED: Set<string> = new Set();
+
+/** `file_type`'s CSS class suffix drops the underscore (`col-file-type`);
+ *  every other key is already a valid class-name segment. */
+function columnClassSuffix(key: ColumnKey): string {
+  return key === "file_type" ? "file-type" : key;
+}
+
+/** `aria-sort` for a sortable column's `<th>` (fix request: the visual caret
+ *  was `aria-hidden`, leaving screen readers with no way to tell which
+ *  column is sorted or in which direction). */
+function ariaSortValue(col: ColumnDef, sort: SortState | null): "ascending" | "descending" | "none" | undefined {
+  if (!col.sortable) return undefined;
+  if (sort?.column !== col.key) return "none";
+  return sort.direction === "asc" ? "ascending" : "descending";
+}
+
+/** The table's own width, in `table-layout: fixed` (fix request: resizing
+ *  one column was also resizing the others). With `width: 100%` and `<col>`
+ *  widths that don't sum to the table's rendered width, the browser treats
+ *  each `<col>`'s pixel value as a PROPORTION to rescale, not a literal size
+ *  - so narrowing one column visibly widened another even though its own
+ *  state never changed. Sizing the table itself to the exact sum makes each
+ *  `<col>` width literal (sum == table width, nothing left to redistribute).
+ *  Omitted (falls back to the CSS `width: 100%` default) when no explicit
+ *  `columnWidths` are supplied. */
+function sumColumnWidths(columns: ColumnDef[], widths?: Record<ColumnKey, number>): number | undefined {
+  if (!widths) return undefined;
+  return columns.reduce((total, col) => total + widths[col.key], 0);
+}
 
 /**
  * A compact custom HTML5 drag image (fix request), built fresh per
@@ -42,42 +75,221 @@ function buildDragPreview(rows: CollectionRow[], ids: string[]): HTMLElement {
   return el;
 }
 
-function ColumnGroup() {
+/** `widths` overrides each column's CSS-default width (fix request:
+ *  drag-to-resize) - omitted, the `<col>` falls back to its
+ *  `--collection-table-*-width` CSS token. */
+function ColumnGroup({ columns, widths }: { columns: ColumnDef[]; widths?: Record<ColumnKey, number> }) {
   return (
     <colgroup>
-      <col className="collection-table__col-title" />
-      <col className="collection-table__col-authors" />
-      <col className="collection-table__col-added" />
-      <col className="collection-table__col-file-type" />
+      {columns.map((col) => (
+        <col
+          key={col.key}
+          className={`collection-table__col-${columnClassSuffix(col.key)}`}
+          style={widths ? { width: widths[col.key] } : undefined}
+        />
+      ))}
     </colgroup>
   );
 }
 
-function TableHead() {
+/** A clickable header: opens a per-column dropdown (Sort ASC/DESC,
+ *  Hide) mirroring the reference product's column-header menu. Each instance
+ *  owns its own `usePopover` so multiple headers can each have (only one at a
+ *  time, per-instance) open state. Closes on pick - a one-shot action menu,
+ *  like `MoveMenu`, not a stays-open toggle panel like `DisplayMenu`. */
+function ColumnHeaderCell({
+  col,
+  sort,
+  onSortChange,
+  onToggleColumn,
+  onResizeStart,
+  onResizeKeyDown,
+}: {
+  col: ColumnDef;
+  sort: SortState | null;
+  onSortChange: (next: SortState | null) => void;
+  onToggleColumn: (key: ColumnKey) => void;
+  onResizeStart?: (key: ColumnKey, e: React.PointerEvent) => void;
+  onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+}) {
+  const { anchor, buttonRef, popoverRef, toggle, close } = usePopover();
+  const active = sort?.column === col.key;
+  return (
+    <th scope="col" className="collection-table__th--interactive" aria-sort={ariaSortValue(col, sort)}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="collection-table__header-button"
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggle();
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") e.stopPropagation();
+        }}
+      >
+        {col.label}
+        {active &&
+          (sort!.direction === "asc" ? (
+            <CaretUp aria-hidden className="collection-table__sort-caret" />
+          ) : (
+            <CaretDown aria-hidden className="collection-table__sort-caret" />
+          ))}
+      </button>
+      {anchor &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            className="table-control__popover"
+            role="menu"
+            style={{ top: anchor.top, left: anchor.left }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="table-control__item"
+              onClick={(e) => {
+                e.stopPropagation();
+                close();
+                onSortChange({ column: col.key, direction: "asc" });
+              }}
+            >
+              <CaretUp aria-hidden />
+              Sort ASC
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="table-control__item"
+              onClick={(e) => {
+                e.stopPropagation();
+                close();
+                onSortChange({ column: col.key, direction: "desc" });
+              }}
+            >
+              <CaretDown aria-hidden />
+              Sort DESC
+            </button>
+            {active && (
+              <button
+                type="button"
+                role="menuitem"
+                className="table-control__item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                  onSortChange(null);
+                }}
+              >
+                <X aria-hidden />
+                Clear sort
+              </button>
+            )}
+            {col.hideable && (
+              <button
+                type="button"
+                role="menuitem"
+                className="table-control__item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                  onToggleColumn(col.key);
+                }}
+              >
+                <EyeSlash aria-hidden />
+                Hide
+              </button>
+            )}
+          </div>,
+          document.body,
+        )}
+      {onResizeStart && onResizeKeyDown && (
+        <span
+          className="collection-table__col-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={`Resize ${col.label} column`}
+          tabIndex={0}
+          onPointerDown={(e) => onResizeStart(col.key, e)}
+          onKeyDown={(e) => onResizeKeyDown(col.key, e)}
+        />
+      )}
+    </th>
+  );
+}
+
+/** Renders the active sort column's caret. Headers are clickable
+ *  (`ColumnHeaderCell`) when `onSortChange`/`onToggleColumn` are supplied;
+ *  otherwise (the loading skeleton) they render as plain static text. */
+function TableHead({
+  columns,
+  sort,
+  onSortChange,
+  onToggleColumn,
+  onResizeStart,
+  onResizeKeyDown,
+}: {
+  columns: ColumnDef[];
+  sort: SortState | null;
+  onSortChange?: (next: SortState | null) => void;
+  onToggleColumn?: (key: ColumnKey) => void;
+  onResizeStart?: (key: ColumnKey, e: React.PointerEvent) => void;
+  onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+}) {
   return (
     <thead>
       <tr>
-        {COLUMNS.map((label) => (
-          <th key={label} scope="col">
-            {label}
-          </th>
-        ))}
+        {columns.map((col) =>
+          onSortChange && onToggleColumn ? (
+            <ColumnHeaderCell
+              key={col.key}
+              col={col}
+              sort={sort}
+              onSortChange={onSortChange}
+              onToggleColumn={onToggleColumn}
+              onResizeStart={onResizeStart}
+              onResizeKeyDown={onResizeKeyDown}
+            />
+          ) : (
+            <th key={col.key} scope="col" aria-sort={ariaSortValue(col, sort)}>
+              {col.label}
+              {sort?.column === col.key &&
+                (sort.direction === "asc" ? (
+                  <CaretUp aria-hidden className="collection-table__sort-caret" />
+                ) : (
+                  <CaretDown aria-hidden className="collection-table__sort-caret" />
+                ))}
+            </th>
+          ),
+        )}
       </tr>
     </thead>
   );
 }
 
-function TableSkeleton() {
+function TableSkeleton({
+  visibleColumns,
+  columnWidths,
+}: {
+  visibleColumns: ColumnDef[];
+  columnWidths?: Record<ColumnKey, number>;
+}) {
   return (
     <div className="collection-table-wrap">
-      <table className="collection-table" aria-busy="true">
-        <ColumnGroup />
-        <TableHead />
+      <table
+        className="collection-table"
+        aria-busy="true"
+        style={{ width: sumColumnWidths(visibleColumns, columnWidths) }}
+      >
+        <ColumnGroup columns={visibleColumns} widths={columnWidths} />
+        <TableHead columns={visibleColumns} sort={null} />
         <tbody>
           {Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
             <tr key={i} className="collection-table__skeleton-row">
-              {COLUMNS.map((label) => (
-                <td key={label}>
+              {visibleColumns.map((col) => (
+                <td key={col.key}>
                   <span className="collection-table__skeleton-cell" />
                 </td>
               ))}
@@ -98,6 +310,11 @@ type CollectionTableProps =
       onEditField?: never;
       selectedIds?: never;
       onSelectionChange?: never;
+      /** Defaults to every column (all `COLUMNS`) when omitted - existing
+       *  isolated tests that don't care about Display/Sort keep working. */
+      visibleColumns?: ColumnDef[];
+      sort?: never;
+      columnWidths?: Record<ColumnKey, number>;
     }
   | {
       loading?: false;
@@ -114,6 +331,17 @@ type CollectionTableProps =
        *  arm/edit tests that don't care about the toolbar). */
       selectedIds?: Set<string>;
       onSelectionChange?: (ids: Set<string>) => void;
+      visibleColumns?: ColumnDef[];
+      sort?: SortState | null;
+      /** Column headers become clickable (Sort ASC/DESC, Hide)
+       *  when both are supplied; omit for isolated tests that don't care. */
+      onSortChange?: (next: SortState | null) => void;
+      onToggleColumn?: (key: ColumnKey) => void;
+      columnWidths?: Record<ColumnKey, number>;
+      /** Column headers grow a drag/keyboard resize handle (fix request) when
+       *  both are supplied; omit for isolated tests that don't care. */
+      onResizeColumnStart?: (key: ColumnKey, e: React.PointerEvent) => void;
+      onResizeColumnKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
     };
 
 /**
@@ -153,8 +381,23 @@ type CollectionTableProps =
  * both stay local UI state since nothing outside the table needs them.
  */
 export default function CollectionTable(props: CollectionTableProps) {
-  if (props.loading) return <TableSkeleton />;
-  const { rows, onOpenRow, pendingRows = [], onEditField } = props;
+  const visibleColumns = props.visibleColumns ?? COLUMNS;
+  if (props.loading) {
+    return <TableSkeleton visibleColumns={visibleColumns} columnWidths={props.columnWidths} />;
+  }
+  const {
+    rows,
+    onOpenRow,
+    pendingRows = [],
+    onEditField,
+    sort = null,
+    onSortChange,
+    onToggleColumn,
+    columnWidths,
+    onResizeColumnStart,
+    onResizeColumnKeyDown,
+  } = props;
+  const visibleKeys = new Set(visibleColumns.map((c) => c.key));
   // Controlled-or-uncontrolled (like `<input value onChange>`): when the
   // caller doesn't pass `selectedIds`, the table owns the set itself so
   // isolated tests of the arm/edit flow don't need to wire a selection
@@ -315,17 +558,25 @@ export default function CollectionTable(props: CollectionTableProps) {
 
   return (
     <div className="collection-table-wrap">
-      <table className="collection-table">
-        <ColumnGroup />
-        <TableHead />
+      <table className="collection-table" style={{ width: sumColumnWidths(visibleColumns, columnWidths) }}>
+        <ColumnGroup columns={visibleColumns} widths={columnWidths} />
+        <TableHead
+          columns={visibleColumns}
+          sort={sort}
+          onSortChange={onSortChange}
+          onToggleColumn={onToggleColumn}
+          onResizeStart={onResizeColumnStart}
+          onResizeKeyDown={onResizeColumnKeyDown}
+        />
         <tbody>
           {pendingRows.map((pending) => (
-            <PendingRow key={pending.tempId} filename={pending.filename} />
+            <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={visibleKeys} />
           ))}
           {rows.map((row) => (
             <PaperRow
               key={row.doc_id}
               row={row}
+              visibleColumns={visibleKeys}
               armed={selectedIds.size === 1 && selectedIds.has(row.doc_id)}
               editingField={editing?.docId === row.doc_id ? editing.field : null}
               checked={selectedIds.has(row.doc_id)}
