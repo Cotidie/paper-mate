@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { CollectionRow } from "@/api/client";
-import { currentFieldValue, type EditableField, type PendingUpload } from "@/library/row";
+import { currentFieldValue, stripPdfExtension, type EditableField, type PendingUpload } from "@/library/row";
 import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
 import PaperRow from "./PaperRow";
 import PendingRow from "./PendingRow";
@@ -9,6 +9,38 @@ import "./CollectionTable.css";
 const SKELETON_ROW_COUNT = 6;
 const COLUMNS = ["Title", "Authors", "Added", "File type"] as const;
 const EMPTY_CHECKED: Set<string> = new Set();
+
+/**
+ * A compact custom HTML5 drag image (fix request), built fresh per
+ * `dragstart` as a detached DOM node: the browser default is to snapshot the
+ * WHOLE dragged element, which for a `<tr>` means the full table width -
+ * ugly and unreadable. Mirrors Google Drive's small filename chip + a count
+ * badge when more than one item is dragged. Appended off-screen (see
+ * `.collection-table__drag-preview`'s `position: fixed; top/left: -9999px`)
+ * so the browser can rasterize it before `setDragImage` is called; the
+ * caller removes it on the next tick (must still exist at the moment
+ * `setDragImage` runs, but the OS-level snapshot is captured synchronously).
+ */
+function buildDragPreview(rows: CollectionRow[], ids: string[]): HTMLElement {
+  const byId = new Map(rows.map((r) => [r.doc_id, r]));
+  const primary = byId.get(ids[0]);
+  const title =
+    primary?.title ?? (primary?.filename ? stripPdfExtension(primary.filename) : "Untitled");
+
+  const el = document.createElement("div");
+  el.className = "collection-table__drag-preview";
+  el.textContent = title;
+
+  if (ids.length > 1) {
+    const badge = document.createElement("span");
+    badge.className = "collection-table__drag-preview-badge";
+    badge.textContent = String(ids.length);
+    el.appendChild(badge);
+  }
+
+  document.body.appendChild(el);
+  return el;
+}
 
 function ColumnGroup() {
   return (
@@ -173,6 +205,9 @@ export default function CollectionTable(props: CollectionTableProps) {
     const ids = checkedIds.has(docId) ? Array.from(checkedIds) : [docId];
     e.dataTransfer.setData(MOVE_DRAG_MIME, encodeDragIds(ids));
     e.dataTransfer.effectAllowed = "move";
+    const preview = buildDragPreview(rows, ids);
+    e.dataTransfer.setDragImage(preview, 12, 16);
+    setTimeout(() => preview.remove(), 0);
   }
 
   return (

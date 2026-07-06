@@ -223,6 +223,15 @@
   /* add-menu (Library toolbar Add dropdown): File upload / Folder upload. */
   --add-menu-width: 180px;
 
+  /* drag-preview (Story 7.2 fix request): a compact custom HTML5 drag image
+     (mirrors Google Drive's small filename chip + count badge) replacing the
+     browser default of snapshotting the whole dragged <tr>. Positioned this
+     far off-screen so it renders (needed for the browser to rasterize a
+     `setDragImage` snapshot) without ever being visible in normal layout. */
+  --drag-preview-max-width: 220px;
+  --drag-preview-badge-size: 18px;
+  --offscreen-distance: -9999px;
+
   /* move-menu (Story 7.2): per-row "Move to folder" popover; caps the list
      height once a library has many folders, scrolling internally instead of
      overflowing off-screen. */

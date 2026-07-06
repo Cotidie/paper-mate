@@ -1,36 +1,11 @@
 /* Folder-picker popover (Story 7.2), used by LibraryPage's toolbar Move
-   button. Tokens only, mirrors AddMenu.css - no raw hex/px (CLAUDE.md). */
+   button. Tokens only, mirrors AddMenu.css - no raw hex/px (CLAUDE.md).
+   The trigger button's own look is the SHARED `.toolbar-button` class in
+   LibraryPage.css (fix request: unify Add/Move) - this file only owns the
+   popover + its menu items. */
 
 .move-menu {
   position: relative;
-}
-
-.move-menu__button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xxs);
-  background: var(--color-surface-card);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  font-size: var(--type-body-sm-size);
-  font-weight: var(--type-body-sm-weight);
-  line-height: var(--type-body-sm-leading);
-  border: var(--hairline-width) solid var(--color-hairline-strong);
-  border-radius: var(--radius-sm);
-  padding: var(--space-xxs) var(--space-xs);
-  cursor: pointer;
-}
-
-.move-menu__button svg {
-  width: var(--pill-icon-size);
-  height: var(--pill-icon-size);
-  display: block;
-}
-
-.move-menu__button:disabled {
-  color: var(--color-muted);
-  cursor: default;
-  opacity: 0.6;
 }
 
 /* `top`/`right` are set inline from the trigger button's own

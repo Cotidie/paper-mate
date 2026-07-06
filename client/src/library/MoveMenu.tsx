@@ -86,7 +86,7 @@ export default function MoveMenu({
       <button
         ref={buttonRef}
         type="button"
-        className="move-menu__button"
+        className="toolbar-button"
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}

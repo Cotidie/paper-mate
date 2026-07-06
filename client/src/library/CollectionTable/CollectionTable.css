@@ -62,17 +62,14 @@
   cursor: pointer;
 }
 
-.collection-table tbody tr[aria-selected="true"] {
-  background: var(--color-surface-strong);
-  box-shadow: inset var(--focus-ring-width) 0 0 0 var(--color-ink);
-}
-
-/* Ctrl/Cmd+click multi-select (Story 7.2 fix request: no dedicated checkbox
-   column - keep the table compact). A checked row is tinted even when idle
-   (not just on hover); the check glyph in the Title cell is the only other
-   affordance, no permanent column reserved. */
+/* Armed (single click) and Ctrl/Cmd+click-checked (multi-select) read as the
+   SAME "active row" state (fix request: no separate check-mark affordance) -
+   a checked row is tinted even when idle, not just on hover; no permanent
+   column reserved (Story 7.2 fix request: keep the table compact). */
+.collection-table tbody tr[aria-selected="true"],
 .collection-table tbody tr[data-checked] {
   background: var(--color-surface-strong);
+  box-shadow: inset var(--focus-ring-width) 0 0 0 var(--color-ink);
 }
 
 .collection-table__title {
@@ -96,16 +93,47 @@
   color: var(--color-muted);
 }
 
-/* Check glyph overlaying the Title cell's leading padding when the row is
-   Ctrl/Cmd+click-checked - no layout shift, no reserved column. */
-.collection-table__check-icon {
-  position: absolute;
-  left: var(--space-xs);
-  top: 50%;
-  transform: translateY(-50%);
-  width: var(--pill-icon-size);
-  height: var(--pill-icon-size);
+/* Compact custom drag image (Story 7.2 fix request): built once per
+   dragstart in JS (`buildDragPreview`) as a detached DOM node passed to
+   `dataTransfer.setDragImage`, positioned off-screen so it renders (the
+   browser needs it painted to rasterize a snapshot) without ever being
+   visible in normal layout. Mirrors Google Drive's small filename chip +
+   count badge rather than the browser default of dragging a full-width
+   snapshot of the whole row. */
+.collection-table__drag-preview {
+  position: fixed;
+  top: var(--offscreen-distance);
+  left: var(--offscreen-distance);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  max-width: var(--drag-preview-max-width);
+  padding: var(--space-xxs) var(--space-sm);
+  background: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
   color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collection-table__drag-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: var(--drag-preview-badge-size);
+  height: var(--drag-preview-badge-size);
+  padding: 0 var(--space-xxs);
+  border-radius: var(--radius-pill);
+  background: var(--color-ink);
+  color: var(--color-canvas);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
 }
 
 /* Inline-editable Title/Authors cells (Story 6.6). The static cell above

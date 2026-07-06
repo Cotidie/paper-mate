@@ -1,4 +1,3 @@
-import { Check } from "@phosphor-icons/react";
 import type { CollectionRow } from "@/api/client";
 import {
   formatAdded,
@@ -19,12 +18,14 @@ import EditableCell from "./EditableCell";
  * space-saving fix request) that drives the toolbar's bulk "Move" and
  * drag-to-folder: `onClickCapture` intercepts a Ctrl/Cmd+click BEFORE it
  * reaches the Title/Authors cells' own click handlers (capture fires first),
- * so it never also arms or opens an editor. A checked row shows a small
- * check glyph over the Title cell (no permanent column). Dragging a CHECKED
- * row carries the whole checked set; dragging an unchecked row carries just
- * itself. Every gesture is reported up via a callback — `CollectionTable`
- * owns the selection/editing/checked state and the click-suppression
- * discipline; this component only renders and reports.
+ * so it never also arms or opens an editor. A checked row gets the SAME
+ * highlight as an armed row (left ink bar + `{colors.surface-strong}`, fix
+ * request: no separate check-mark affordance - both states read as "this
+ * row is the active one"). Dragging a CHECKED row carries the whole checked
+ * set; dragging an unchecked row carries just itself. Every gesture is
+ * reported up via a callback — `CollectionTable` owns the
+ * selection/editing/checked state and the click-suppression discipline;
+ * this component only renders and reports.
  */
 export default function PaperRow({
   row,
@@ -81,7 +82,6 @@ export default function PaperRow({
         onCommit={(value, viaBlur) => onCommit("title", value, viaBlur)}
         onCancel={onCancel}
       >
-        {checked && <Check className="collection-table__check-icon" aria-hidden data-testid="row-checked-icon" />}
         <span className="collection-table__title-text">
           {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
         </span>

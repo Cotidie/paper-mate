@@ -5,6 +5,13 @@ import { formatAdded } from "@/library/row";
 import type { CollectionRow } from "@/api/client";
 
 afterEach(cleanup);
+// The drag-preview node is appended directly to document.body (outside
+// React's tree, so RTL's cleanup() above doesn't remove it) and only
+// scheduled for removal via setTimeout(0) - sweep up any that a test's own
+// dragStart didn't wait a tick for, so it can't leak into the next test.
+afterEach(() => {
+  document.querySelectorAll(".collection-table__drag-preview").forEach((el) => el.remove());
+});
 
 const rows: CollectionRow[] = [
   {
@@ -515,7 +522,7 @@ describe("CollectionTable multi-select via Ctrl/Cmd+click (Story 7.2 fix request
     expect(row.getAttribute("aria-selected")).toBe("true");
   });
 
-  it("a checked row renders the check glyph over the Title cell", () => {
+  it("a checked row carries data-checked (same highlight treatment as an armed row, no check-mark)", () => {
     render(
       <CollectionTable
         rows={rows}
@@ -525,13 +532,13 @@ describe("CollectionTable multi-select via Ctrl/Cmd+click (Story 7.2 fix request
       />,
     );
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
-    expect(row.querySelector('[data-testid="row-checked-icon"]')).toBeTruthy();
+    expect(row.hasAttribute("data-checked")).toBe(true);
   });
 
-  it("an unchecked row renders no check glyph", () => {
+  it("an unchecked row carries no data-checked", () => {
     render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
-    expect(row.querySelector('[data-testid="row-checked-icon"]')).toBeNull();
+    expect(row.hasAttribute("data-checked")).toBe(false);
   });
 });
 
@@ -548,6 +555,7 @@ describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () =>
         store.set("__effectAllowed", value);
       },
       types: [] as string[],
+      setDragImage: () => {},
     };
   }
 
@@ -567,6 +575,36 @@ describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () =>
     fireEvent.dragStart(row, { dataTransfer });
     const ids = JSON.parse(dataTransfer.getData("application/x-papermate-move"));
     expect(new Set(ids)).toEqual(checkedIds);
+  });
+
+  it("uses a compact custom drag image instead of the browser default full-row snapshot", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    const setDragImage = vi.fn();
+    fireEvent.dragStart(row, { dataTransfer: { ...dataTransferStub(), setDragImage } });
+    expect(setDragImage).toHaveBeenCalledTimes(1);
+    const [previewEl] = setDragImage.mock.calls[0];
+    expect(previewEl.className).toBe("collection-table__drag-preview");
+    expect(previewEl.textContent).toBe("Attention Is All You Need");
+  });
+
+  it("the drag preview shows a count badge when dragging multiple checked rows", () => {
+    const checkedIds = new Set([rows[0].doc_id, rows[1].doc_id]);
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} checkedIds={checkedIds} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    const setDragImage = vi.fn();
+    fireEvent.dragStart(row, { dataTransfer: { ...dataTransferStub(), setDragImage } });
+    const [previewEl] = setDragImage.mock.calls[0];
+    const badge = previewEl.querySelector(".collection-table__drag-preview-badge");
+    expect(badge?.textContent).toBe("2");
+  });
+
+  it("removes the drag preview node from the DOM (does not leak elements)", async () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.dragStart(row, { dataTransfer: dataTransferStub() });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector(".collection-table__drag-preview")).toBeNull();
   });
 });
 

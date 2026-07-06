@@ -8,6 +8,10 @@ afterEach(() => {
   cleanup();
   // A fake-timer test must never leak into the next (would hang every waitFor).
   vi.useRealTimers();
+  // The drag-preview node is appended directly to document.body (outside
+  // React's tree, so cleanup() above doesn't remove it) and only scheduled
+  // for removal via setTimeout(0) - sweep up any stray one.
+  document.querySelectorAll(".collection-table__drag-preview").forEach((el) => el.remove());
 });
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -791,6 +795,7 @@ describe("Folder filter + move (Story 7.2)", () => {
       getData: (type: string) => store.get(type) ?? "",
       types: ["application/x-papermate-move"],
       effectAllowed: "",
+      setDragImage: () => {},
     };
     fireEvent.dragStart(row, { dataTransfer });
     fireEvent.drop(screen.getByText("Folder A"), { dataTransfer });
