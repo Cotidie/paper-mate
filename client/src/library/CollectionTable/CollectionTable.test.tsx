@@ -483,34 +483,39 @@ describe("CollectionTable multi-select via Ctrl/Cmd+click (Story 7.2 fix request
     expect(screen.queryByRole("button", { name: "Move to folder" })).toBeNull();
   });
 
-  it("Ctrl+click toggles a row into checkedIds without arming it", () => {
-    const onToggleChecked = vi.fn();
+  it("Ctrl+click toggles a row into selectedIds without arming it", () => {
+    const onSelectionChange = vi.fn();
     render(
       <CollectionTable
         rows={rows}
         onOpenRow={noop}
         onEditField={noop}
-        checkedIds={new Set()}
-        onToggleChecked={onToggleChecked}
+        selectedIds={new Set()}
+        onSelectionChange={onSelectionChange}
       />,
     );
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
     fireEvent.click(row, { ctrlKey: true });
-    expect(onToggleChecked).toHaveBeenCalledWith(rows[0].doc_id);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([rows[0].doc_id]));
     expect(row.getAttribute("aria-selected")).toBe("false");
   });
 
-  it("Cmd (meta)+click also toggles checked", () => {
-    const onToggleChecked = vi.fn();
+  it("Cmd (meta)+click also toggles selection", () => {
+    const onSelectionChange = vi.fn();
     render(
-      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onToggleChecked={onToggleChecked} />,
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSelectionChange={onSelectionChange}
+      />,
     );
     fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!, { metaKey: true });
-    expect(onToggleChecked).toHaveBeenCalledWith(rows[0].doc_id);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([rows[0].doc_id]));
   });
 
   it("Ctrl+click on the Title cell does not enter edit mode", () => {
-    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onToggleChecked={noop} />);
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
     fireEvent.click(screen.getByText("Attention Is All You Need"), { ctrlKey: true });
     expect(screen.queryByRole("textbox")).toBeNull();
   });
@@ -528,7 +533,7 @@ describe("CollectionTable multi-select via Ctrl/Cmd+click (Story 7.2 fix request
         rows={rows}
         onOpenRow={noop}
         onEditField={noop}
-        checkedIds={new Set([rows[0].doc_id])}
+        selectedIds={new Set([rows[0].doc_id])}
       />,
     );
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
@@ -539,6 +544,50 @@ describe("CollectionTable multi-select via Ctrl/Cmd+click (Story 7.2 fix request
     render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
     expect(row.hasAttribute("data-checked")).toBe(false);
+  });
+
+  it("a plain click on another row REPLACES a multi-selection (fix: was leaving stale rows highlighted)", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set([rows[0].doc_id, rows[1].doc_id])}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const thirdRow = screen.getByText("Untitled").closest("tr")!;
+    fireEvent.click(thirdRow);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([rows[2].doc_id]));
+  });
+
+  it("a plain click on the sole already-selected row clears the selection (toggle-off)", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set([rows[0].doc_id])}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set());
+  });
+
+  it("a single selected row is armed (size===1), enabling the same highlight a multi-selection uses", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set([rows[0].doc_id])}
+      />,
+    );
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    expect(row.getAttribute("aria-selected")).toBe("true");
   });
 });
 
@@ -568,13 +617,13 @@ describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () =>
   });
 
   it("dragging a CHECKED row carries the whole checked set", () => {
-    const checkedIds = new Set([rows[0].doc_id, rows[1].doc_id]);
-    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} checkedIds={checkedIds} />);
+    const selectedIds = new Set([rows[0].doc_id, rows[1].doc_id]);
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} selectedIds={selectedIds} />);
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(row, { dataTransfer });
     const ids = JSON.parse(dataTransfer.getData("application/x-papermate-move"));
-    expect(new Set(ids)).toEqual(checkedIds);
+    expect(new Set(ids)).toEqual(selectedIds);
   });
 
   it("uses a compact custom drag image instead of the browser default full-row snapshot", () => {
@@ -589,8 +638,8 @@ describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () =>
   });
 
   it("the drag preview shows a count badge when dragging multiple checked rows", () => {
-    const checkedIds = new Set([rows[0].doc_id, rows[1].doc_id]);
-    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} checkedIds={checkedIds} />);
+    const selectedIds = new Set([rows[0].doc_id, rows[1].doc_id]);
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} selectedIds={selectedIds} />);
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
     const setDragImage = vi.fn();
     fireEvent.dragStart(row, { dataTransfer: { ...dataTransferStub(), setDragImage } });

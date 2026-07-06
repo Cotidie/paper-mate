@@ -8,7 +8,7 @@ import "./CollectionTable.css";
 
 const SKELETON_ROW_COUNT = 6;
 const COLUMNS = ["Title", "Authors", "Added", "File type"] as const;
-const EMPTY_CHECKED: Set<string> = new Set();
+const EMPTY_SELECTED: Set<string> = new Set();
 
 /**
  * A compact custom HTML5 drag image (fix request), built fresh per
@@ -96,8 +96,8 @@ type CollectionTableProps =
       onOpenRow?: never;
       pendingRows?: never;
       onEditField?: never;
-      checkedIds?: never;
-      onToggleChecked?: never;
+      selectedIds?: never;
+      onSelectionChange?: never;
     }
   | {
       loading?: false;
@@ -105,11 +105,15 @@ type CollectionTableProps =
       onOpenRow: (docId: string) => void;
       pendingRows?: PendingUpload[];
       onEditField: (docId: string, field: EditableField, value: string | null) => void;
-      /** Ctrl/Cmd+click multi-select (Story 7.2 fix request) for the toolbar's
-       *  bulk Move + drag-to-folder; lifted to `LibraryPage` since the toolbar
-       *  needs it too. */
-      checkedIds?: Set<string>;
-      onToggleChecked?: (docId: string) => void;
+      /** The one selection set (fix request: unifies the old single-armed
+       *  `selectedId` and multi-select `checkedIds`, which never synced - see
+       *  the component doc comment). Controlled like `<input value onChange>`:
+       *  pass `selectedIds` to drive it from outside (LibraryPage does, so
+       *  the toolbar's Move button and drag-to-folder see it); omit it and
+       *  the table falls back to owning the set itself (used by isolated
+       *  arm/edit tests that don't care about the toolbar). */
+      selectedIds?: Set<string>;
+      onSelectionChange?: (ids: Set<string>) => void;
     };
 
 /**
@@ -118,30 +122,40 @@ type CollectionTableProps =
  * (client sort is Story 7.4), with optimistic `pendingRows` (Story 6.4) above
  * them, newest batch first. A pending row is not yet a stored paper: no
  * `doc_id`, so it is not selectable, openable, or editable (see `PendingRow`).
- * A plain row click arms/selects it (purely visual, `aria-selected`); opening
- * a paper is a dedicated Open button in the Title cell (it calls `onOpenRow`
- * directly, independent of arm state). Inline editing on the Title/Authors
- * cells of settled rows requires the row already armed: the table reports
- * `onEditField`, `LibraryPage` owns the `PATCH` + optimistic state (the same
- * split as `onOpenRow`). The single-row arm (`selectedId`) and the editing
- * cursor are local UI state, not lifted, since nothing outside the table
- * needs them. Ctrl/Cmd+click instead toggles `checkedIds` (lifted to
- * `LibraryPage`, controlled, default empty - the toolbar's bulk Move button
- * needs it too), intercepted at the row's CAPTURE phase so it never also
- * arms/edits/opens; a checked row's `dragstart` carries the whole checked set
- * (else just itself) for drag-to-folder.
+ *
+ * Selection is ONE set, `selectedIds` (fix request: this used to be two
+ * disjoint pieces of state - a table-local single `selectedId` for a
+ * plain-click arm, and a lifted `checkedIds` for Ctrl/Cmd+click multi-select -
+ * that never synced. A plain click after a multi-select only ever touched
+ * `selectedId`, so the old checked rows stayed highlighted; and the
+ * toolbar's Move button only ever read `checkedIds`, so a single armed row
+ * could never be moved). Two views derive from the one set per row: `armed`
+ * (`selectedIds.size === 1 && selectedIds.has(id)`) gates the Title/Authors
+ * inline-edit affordance and is exclusive to a lone selection; `checked`
+ * (`selectedIds.has(id)`) drives the highlight (shared CSS rule, both read as
+ * "this row is selected") and the drag-to-folder payload. A plain row click
+ * REPLACES the whole set with just that row (or clears it, if that row was
+ * already the sole selection - a toggle-off); opening a paper is a dedicated
+ * Open button in the Title cell (calls `onOpenRow` directly, independent of
+ * selection). Ctrl/Cmd+click instead toggles ONE row's membership,
+ * intercepted at the row's CAPTURE phase so it never also arms/edits/opens.
+ * Inline editing reports through `onEditField`; `LibraryPage` owns the
+ * `PATCH` + optimistic state (same split as `onOpenRow`). The editing cursor
+ * stays local UI state since nothing outside the table needs it.
  */
 export default function CollectionTable(props: CollectionTableProps) {
   if (props.loading) return <TableSkeleton />;
-  const {
-    rows,
-    onOpenRow,
-    pendingRows = [],
-    onEditField,
-    checkedIds = EMPTY_CHECKED,
-    onToggleChecked = () => {},
-  } = props;
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { rows, onOpenRow, pendingRows = [], onEditField } = props;
+  // Controlled-or-uncontrolled (like `<input value onChange>`): when the
+  // caller doesn't pass `selectedIds`, the table owns the set itself so
+  // isolated tests of the arm/edit flow don't need to wire a selection
+  // controller they don't care about.
+  const [internalSelected, setInternalSelected] = useState<Set<string>>(EMPTY_SELECTED);
+  const selectedIds = props.selectedIds ?? internalSelected;
+  function commitSelected(next: Set<string>) {
+    if (props.selectedIds === undefined) setInternalSelected(next);
+    props.onSelectionChange?.(next);
+  }
   const [editing, setEditing] = useState<{ docId: string; field: EditableField } | null>(null);
   // A click that lands elsewhere while a cell is being edited blurs the
   // InlineEditor (auto-committing it) BEFORE the click event itself is
@@ -168,9 +182,14 @@ export default function CollectionTable(props: CollectionTableProps) {
     return false;
   }
 
+  // A plain click always REPLACES the selection with just this row (fix
+  // request: previously this only updated a separate `selectedId`, leaving
+  // any Ctrl/Cmd-checked rows from a prior multi-select still highlighted).
+  // Clicking the row that is already the sole selection toggles it off.
   function handleRowClick(docId: string) {
     if (consumeSuppressedClick()) return;
-    setSelectedId((prev) => (prev === docId ? null : docId));
+    const isSoleSelected = selectedIds.size === 1 && selectedIds.has(docId);
+    commitSelected(isSoleSelected ? new Set() : new Set([docId]));
   }
 
   // Ctrl/Cmd+click toggles multi-select instead of arming/editing. Fires in
@@ -180,7 +199,10 @@ export default function CollectionTable(props: CollectionTableProps) {
   function handleRowClickCapture(e: React.MouseEvent<HTMLTableRowElement>, docId: string) {
     if (!e.ctrlKey && !e.metaKey) return;
     e.stopPropagation();
-    onToggleChecked(docId);
+    const next = new Set(selectedIds);
+    if (next.has(docId)) next.delete(docId);
+    else next.add(docId);
+    commitSelected(next);
   }
 
   function startEdit(docId: string, field: EditableField) {
@@ -202,7 +224,7 @@ export default function CollectionTable(props: CollectionTableProps) {
   }
 
   function handleDragStart(e: React.DragEvent<HTMLTableRowElement>, docId: string) {
-    const ids = checkedIds.has(docId) ? Array.from(checkedIds) : [docId];
+    const ids = selectedIds.has(docId) ? Array.from(selectedIds) : [docId];
     e.dataTransfer.setData(MOVE_DRAG_MIME, encodeDragIds(ids));
     e.dataTransfer.effectAllowed = "move";
     const preview = buildDragPreview(rows, ids);
@@ -223,12 +245,12 @@ export default function CollectionTable(props: CollectionTableProps) {
             <PaperRow
               key={row.doc_id}
               row={row}
-              armed={selectedId === row.doc_id}
+              armed={selectedIds.size === 1 && selectedIds.has(row.doc_id)}
               editingField={editing?.docId === row.doc_id ? editing.field : null}
-              checked={checkedIds.has(row.doc_id)}
+              checked={selectedIds.has(row.doc_id)}
               onRowClick={() => handleRowClick(row.doc_id)}
               onRowClickCapture={(e) => handleRowClickCapture(e, row.doc_id)}
-              onArm={() => setSelectedId(row.doc_id)}
+              onArm={() => commitSelected(new Set([row.doc_id]))}
               onOpen={() => openRow(row.doc_id)}
               onDragStart={(e) => handleDragStart(e, row.doc_id)}
               onStartEdit={(field) => startEdit(row.doc_id, field)}

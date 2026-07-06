@@ -748,6 +748,28 @@ describe("Folder filter + move (Story 7.2)", () => {
     expect(screen.queryByText("Foldered Paper")).toBeNull();
   });
 
+  it("the toolbar count reflects the SELECTED view, not the whole library (fix request)", async () => {
+    const uncategorized = libraryRow({ doc_id: "u".repeat(64), title: "Uncategorized Paper", order: 0 });
+    const inFolder = libraryRow({
+      doc_id: "f".repeat(64),
+      title: "Foldered Paper",
+      folder_id: folderA.id,
+      order: 1,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [uncategorized, inFolder], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("2 files in library")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Uncategorized"));
+    expect(screen.getByText("1 files in Uncategorized")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Folder A"));
+    expect(screen.getByText("1 files in Folder A")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("All"));
+    expect(screen.getByText("2 files in library")).toBeTruthy();
+  });
+
   it("Ctrl+click-checking a paper then using the toolbar Move button updates membership and it leaves the current (Uncategorized) view", async () => {
     const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
@@ -777,6 +799,54 @@ describe("Folder filter + move (Story 7.2)", () => {
     expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByText("Movable Paper").closest("tr")!, { ctrlKey: true });
     expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("a plain (non-Ctrl) single click also enables Move and moves that one file (fix request)", async () => {
+    const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
+    const movePapers = vi
+      .spyOn(api, "movePapers")
+      .mockResolvedValue({ papers: [{ ...paper, folder_id: folderA.id }], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Movable Paper")).toBeTruthy());
+
+    expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByText("Movable Paper").closest("tr")!);
+    expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Move" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Folder A" }));
+    expect(movePapers).toHaveBeenCalledWith([paper.doc_id], folderA.id);
+  });
+
+  it("a plain click on another row cancels a multi-selection down to just that row (fix: root-caused by two disjoint selection states)", async () => {
+    const first = libraryRow({ doc_id: "1".repeat(64), title: "First Paper", order: 0 });
+    const second = libraryRow({ doc_id: "2".repeat(64), title: "Second Paper", order: 1 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [first, second], folders: [folderA] });
+    const movePapers = vi
+      .spyOn(api, "movePapers")
+      .mockResolvedValue({ papers: [first, { ...second, folder_id: folderA.id }], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("First Paper")).toBeTruthy());
+
+    const firstRow = screen.getByText("First Paper").closest("tr")!;
+    const secondRow = screen.getByText("Second Paper").closest("tr")!;
+    fireEvent.click(firstRow, { ctrlKey: true });
+    fireEvent.click(secondRow, { ctrlKey: true });
+    expect(firstRow.hasAttribute("data-checked")).toBe(true);
+    expect(secondRow.hasAttribute("data-checked")).toBe(true);
+
+    // A plain click on the second row must cancel the multi-selection and
+    // leave only the clicked row selected - previously the first row stayed
+    // highlighted because the plain click only updated a separate, unlifted
+    // "armed" state that never touched the checked set.
+    fireEvent.click(secondRow);
+    expect(firstRow.hasAttribute("data-checked")).toBe(false);
+    expect(secondRow.getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Move" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Folder A" }));
+    expect(movePapers).toHaveBeenCalledWith([second.doc_id], folderA.id);
   });
 
   it("dragging a row onto a folder entry moves it (drag-to-folder fix request)", async () => {
@@ -813,7 +883,9 @@ describe("Folder filter + move (Story 7.2)", () => {
 
     expect(screen.getByText("No papers in this folder.")).toBeTruthy();
     expect(screen.queryByTestId("empty-dropzone")).toBeNull();
-    expect(screen.getByText("1 files in library")).toBeTruthy(); // toolbar stays: total count, unchanged
+    // Toolbar stays mounted (table layout persists) but now counts the
+    // SELECTED folder, not the whole library (fix request).
+    expect(screen.getByText("0 files in Folder A")).toBeTruthy();
   });
 
   it("a just-uploaded pending row does not show under an unrelated selected folder", async () => {

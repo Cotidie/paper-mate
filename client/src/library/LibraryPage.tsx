@@ -11,7 +11,7 @@ import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useMovePapers } from "@/library/useMovePapers";
 import { filterPapers, type FolderSelection } from "@/library/folderFilter";
-import { fetchHealth } from "@/api/client";
+import { fetchHealth, type Folder } from "@/api/client";
 
 const PDF_EXTENSION = /\.pdf$/i;
 
@@ -23,6 +23,15 @@ function emptySelectionMessage(selection: FolderSelection): string {
   if (selection.kind === "uncategorized") return "No uncategorized papers.";
   if (selection.kind === "folder") return "No papers in this folder.";
   return "No papers to show.";
+}
+
+/** The toolbar count's "in ___" target (fix request: it read "in library" for
+ *  every view, even a selected folder). Folders are a flat list keyed by id
+ *  (no tree walk needed - a name lookup is a plain find). */
+function selectionLabel(selection: FolderSelection, folders: Folder[]): string {
+  if (selection.kind === "uncategorized") return "Uncategorized";
+  if (selection.kind === "folder") return folders.find((f) => f.id === selection.id)?.name ?? "folder";
+  return "library";
 }
 
 /** A folder pick returns every file type in the directory tree; this filters
@@ -61,29 +70,28 @@ export default function LibraryPage() {
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
   const { movePapers } = useMovePapers({ setLibrary, onToast });
   const [selection, setSelection] = useState<FolderSelection>({ kind: "all" });
-  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  // The one selection set driving BOTH a plain-click single row and a
+  // Ctrl/Cmd+click multi-select (fix request: they were two disjoint pieces
+  // of state - a table-local `selectedId` and this lifted `checkedIds` -
+  // which never synced, so a plain click after a multi-select left the old
+  // rows highlighted, and the toolbar Move button never saw a single armed
+  // row at all. `CollectionTable` reports every change (plain click, toggle,
+  // arm) through its one `onSelectionChange` callback, so this is a plain
+  // mirror - see its own comment for how "armed"/"checked" derive from it.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // A folder switch clears the bulk-select: checked ids from a prior view
-  // could otherwise silently carry into a Move/drop the user can no longer see.
+  // A folder switch clears the selection: ids from a prior view could
+  // otherwise silently carry into a Move/drop the user can no longer see.
   const handleSelect = useCallback((next: FolderSelection) => {
     setSelection(next);
-    setCheckedIds(new Set());
-  }, []);
-
-  const toggleChecked = useCallback((docId: string) => {
-    setCheckedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(docId)) next.delete(docId);
-      else next.add(docId);
-      return next;
-    });
+    setSelectedIds(new Set());
   }, []);
 
   const handleMoveRequest = useCallback(
     (docIds: string[], folderId: string | null) => {
       if (docIds.length === 0) return;
       movePapers(docIds, folderId);
-      setCheckedIds(new Set());
+      setSelectedIds(new Set());
     },
     [movePapers],
   );
@@ -155,14 +163,16 @@ export default function LibraryPage() {
                   aria-hidden="true"
                 />
               ) : (
-                <p className="library-toolbar__count">{papers.length} files in library</p>
+                <p className="library-toolbar__count">
+                  {visiblePapers.length} files in {selectionLabel(selection, folders)}
+                </p>
               )}
               <div className="library-toolbar__actions">
                 <MoveMenu
                   folders={folders}
-                  onMove={(folderId) => handleMoveRequest(Array.from(checkedIds), folderId)}
+                  onMove={(folderId) => handleMoveRequest(Array.from(selectedIds), folderId)}
                   label="Move"
-                  disabled={checkedIds.size === 0}
+                  disabled={selectedIds.size === 0}
                 />
                 <AddMenu
                   onFileUpload={() => fileInputRef.current?.click()}
@@ -208,8 +218,8 @@ export default function LibraryPage() {
                 pendingRows={visiblePending}
                 onOpenRow={(docId) => navigate(`/reader/${docId}`)}
                 onEditField={handleEditField}
-                checkedIds={checkedIds}
-                onToggleChecked={toggleChecked}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
               />
             )
           ) : loadFailed ? null : (

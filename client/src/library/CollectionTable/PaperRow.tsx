@@ -10,22 +10,23 @@ import {
 import EditableCell from "./EditableCell";
 
 /**
- * One settled row of the collection table. A plain row click arms/selects it
- * (purely visual, `aria-selected`); the Title cell reveals an Open button on
- * hover/focus (independent of arm state). Title/Authors cells inline-edit once
- * the row is armed (see `EditableCell`). Ctrl/Cmd+click instead toggles this
- * row into the MULTI-select set (`checked`, no dedicated checkbox column - a
- * space-saving fix request) that drives the toolbar's bulk "Move" and
- * drag-to-folder: `onClickCapture` intercepts a Ctrl/Cmd+click BEFORE it
- * reaches the Title/Authors cells' own click handlers (capture fires first),
- * so it never also arms or opens an editor. A checked row gets the SAME
- * highlight as an armed row (left ink bar + `{colors.surface-strong}`, fix
- * request: no separate check-mark affordance - both states read as "this
- * row is the active one"). Dragging a CHECKED row carries the whole checked
- * set; dragging an unchecked row carries just itself. Every gesture is
- * reported up via a callback — `CollectionTable` owns the
- * selection/editing/checked state and the click-suppression discipline;
- * this component only renders and reports.
+ * One settled row of the collection table. A plain row click selects only
+ * this row (`armed`, purely visual, `aria-selected`); the Title cell reveals
+ * an Open button on hover/focus (independent of selection). Title/Authors
+ * cells inline-edit once the row is armed (see `EditableCell`) - armed is
+ * exclusive to a LONE selection (`CollectionTable` derives it as
+ * `selectedIds.size === 1`). Ctrl/Cmd+click instead toggles this row into the
+ * shared multi-select set (`checked`, no dedicated checkbox column - a
+ * space-saving fix request): `onClickCapture` intercepts a Ctrl/Cmd+click
+ * BEFORE it reaches the Title/Authors cells' own click handlers (capture
+ * fires first), so it never also arms or opens an editor. A checked row gets
+ * the SAME highlight as an armed row (left ink bar + `{colors.surface-strong}`,
+ * fix request: no separate check-mark affordance - both states read as "this
+ * row is selected"). Dragging a selected row carries the whole selection;
+ * dragging an unselected row carries just itself. Every gesture is reported
+ * up via a callback - `CollectionTable` owns the one selection set, the
+ * editing state, and the click-suppression discipline; this component only
+ * renders and reports.
  */
 export default function PaperRow({
   row,
