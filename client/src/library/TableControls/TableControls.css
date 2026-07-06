@@ -10,7 +10,7 @@
 
 .table-control__popover {
   position: fixed;
-  width: var(--table-control-popover-width);
+  width: max-content;
   display: flex;
   flex-direction: column;
   background: var(--color-surface-card);
@@ -24,7 +24,7 @@
 .table-control__item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-xs);
   width: 100%;
   font-family: var(--font-sans);

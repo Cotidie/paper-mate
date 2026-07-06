@@ -62,7 +62,7 @@ function ColumnGroup({ columns }: { columns: ColumnDef[] }) {
   );
 }
 
-/** A clickable header: opens a per-column dropdown (Sort ascending/descending,
+/** A clickable header: opens a per-column dropdown (Sort ASC/DESC,
  *  Hide) mirroring the reference product's column-header menu. Each instance
  *  owns its own `usePopover` so multiple headers can each have (only one at a
  *  time, per-instance) open state. Closes on pick - a one-shot action menu,
@@ -81,7 +81,7 @@ function ColumnHeaderCell({
   const { anchor, buttonRef, popoverRef, toggle, close } = usePopover();
   const active = sort?.column === col.key;
   return (
-    <th scope="col">
+    <th scope="col" className="collection-table__th--interactive">
       <button
         ref={buttonRef}
         type="button"
@@ -123,7 +123,7 @@ function ColumnHeaderCell({
               }}
             >
               <CaretUp aria-hidden />
-              Sort ascending
+              Sort ASC
             </button>
             <button
               type="button"
@@ -136,7 +136,7 @@ function ColumnHeaderCell({
               }}
             >
               <CaretDown aria-hidden />
-              Sort descending
+              Sort DESC
             </button>
             {col.hideable && (
               <button
@@ -256,7 +256,7 @@ type CollectionTableProps =
       onSelectionChange?: (ids: Set<string>) => void;
       visibleColumns?: ColumnDef[];
       sort?: SortState | null;
-      /** Column headers become clickable (Sort ascending/descending, Hide)
+      /** Column headers become clickable (Sort ASC/DESC, Hide)
        *  when both are supplied; omit for isolated tests that don't care. */
       onSortChange?: (next: SortState | null) => void;
       onToggleColumn?: (key: ColumnKey) => void;

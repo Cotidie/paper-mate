@@ -210,16 +210,16 @@ describe("CollectionTable status visuals (Story 6.5)", () => {
   it("renders enrich-skipped as a normal row (no status chip, shows PDF badge)", () => {
     render(<CollectionTable rows={[rowWith("enrich-skipped")]} onOpenRow={noop} onEditField={noop} />);
     expect(screen.queryByText("Extracting")).toBeNull();
-    expect(screen.queryByText("No metadata")).toBeNull();
+    expect(screen.queryByText("-")).toBeNull();
     expect(screen.getByText("PDF")).toBeTruthy();
   });
 
-  it("marks a parse-failed row with a subtle No metadata chip and the filename fallback; its Open button still works", () => {
+  it("marks a parse-failed row with a subtle '-' chip (fix request: 'No metadata' wrapped to two lines and grew the row) and the filename fallback; its Open button still works", () => {
     const onOpenRow = vi.fn();
     render(
       <CollectionTable rows={[rowWith("parse-failed", { title: null })]} onOpenRow={onOpenRow} onEditField={noop} />,
     );
-    const chip = screen.getByText("No metadata");
+    const chip = screen.getByText("-");
     expect(chip.className).toContain("badge-pill--muted");
     // Filename fallback (extension stripped) stands in for the missing title.
     expect(screen.getByText("a-title")).toBeTruthy();
@@ -870,13 +870,13 @@ describe("CollectionTable column header dropdown (fix request: clickable headers
     expect(screen.queryByRole("button", { name: "Title" })).toBeNull();
   });
 
-  it("opens a menu listing Sort ascending, Sort descending, and Hide", () => {
+  it("opens a menu listing Sort ASC, Sort DESC, and Hide", () => {
     render(
       <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Authors" }));
-    expect(screen.getByRole("menuitem", { name: "Sort ascending" })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: "Sort descending" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Sort ASC" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Sort DESC" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "Hide" })).toBeTruthy();
   });
 
@@ -888,7 +888,7 @@ describe("CollectionTable column header dropdown (fix request: clickable headers
     expect(screen.queryByRole("menuitem", { name: "Hide" })).toBeNull();
   });
 
-  it("Sort ascending calls onSortChange with the column and asc direction, then closes", () => {
+  it("Sort ASC calls onSortChange with the column and asc direction, then closes", () => {
     const onSortChange = vi.fn();
     render(
       <CollectionTable
@@ -900,12 +900,12 @@ describe("CollectionTable column header dropdown (fix request: clickable headers
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Added" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Sort ascending" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort ASC" }));
     expect(onSortChange).toHaveBeenCalledWith({ column: "added", direction: "asc" });
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("Sort descending calls onSortChange with the column and desc direction", () => {
+  it("Sort DESC calls onSortChange with the column and desc direction", () => {
     const onSortChange = vi.fn();
     render(
       <CollectionTable
@@ -917,7 +917,7 @@ describe("CollectionTable column header dropdown (fix request: clickable headers
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Added" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Sort descending" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort DESC" }));
     expect(onSortChange).toHaveBeenCalledWith({ column: "added", direction: "desc" });
   });
 
