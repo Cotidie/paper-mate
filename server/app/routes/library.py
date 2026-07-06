@@ -16,7 +16,7 @@ the doc-specific ``"Document not found"`` literal, via ``storage_errors``'s
 from fastapi import APIRouter
 
 from app import storage
-from app.models import Folder, FolderCreate, FolderRename, Library
+from app.models import Folder, FolderCreate, FolderRename, Library, MoveRequest
 from app.routes._errors import error_response, storage_errors
 
 router = APIRouter(tags=["library"])
@@ -96,3 +96,26 @@ async def delete_folder(folder_id: str) -> Library:
         "Could not update folders", not_found=storage.FolderNotFoundError, not_found_detail=_FOLDER_NOT_FOUND
     ):
         return storage.delete_folder(folder_id)
+
+
+@router.post(
+    "/library/move",
+    response_model=Library,
+    responses={
+        404: error_response("No folder with this id, or an unknown document id."),
+        422: error_response("doc_ids must be non-empty."),
+        500: error_response("Could not update the collection."),
+    },
+)
+async def move_papers(body: MoveRequest) -> Library:
+    """Set-based move (Story 7.2, AD-L6): assign every id in ``doc_ids`` to
+    ``folder_id`` (``None`` clears membership, i.e. Uncategorized). A move
+    replaces any prior folder, so a paper belongs to at most one folder.
+    Returns the whole updated ``Library`` in one round-trip. TWO distinct
+    404s: a bad ``folder_id`` -> ``"Folder not found"``, an unknown
+    ``doc_id`` -> ``"Document not found"``."""
+    with storage_errors(
+        "Could not update the collection",
+        extra_not_found=[(storage.FolderNotFoundError, _FOLDER_NOT_FOUND)],
+    ):
+        return storage.move_papers(body.doc_ids, body.folder_id)

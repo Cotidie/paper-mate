@@ -251,6 +251,29 @@ null`). **No paper is ever deleted** (ratifies PRD A1, Story 7.1).
 - **404** → `{ "detail": "Folder not found" }` — unknown `folder_id`.
 - **500** → `{ "detail": "Could not update folders" }`.
 
+### `POST /api/library/move` — move papers to a folder
+
+Set-based assignment (AD-L6, Story 7.2): the same `{doc_ids}` contract Story
+7.3's batch move and Story 7.5's batch trash/restore reuse. Assigns every id
+in `doc_ids` to `folder_id`; `folder_id: null` clears membership
+(Uncategorized). A move **replaces** any prior folder, so a paper belongs to
+at most one folder at a time. A single-paper move is just `doc_ids: [oneId]`.
+
+- **Body** → `MoveRequest`
+  ```json
+  { "doc_ids": ["3fae1c…"], "folder_id": "c3b2b7b0-…-9e2a" }
+  ```
+- **200** → `Library` (the same shape as `GET /api/library`: updated
+  membership + the unchanged folder tree), so the client reconciles from one
+  round-trip.
+- **404** → `{ "detail": "Folder not found" }` — `folder_id` does not
+  reference an existing folder — **or** `{ "detail": "Document not found" }`
+  — some id in `doc_ids` does not reference an existing paper. Either fault
+  aborts the whole move (all-or-nothing, no partial write).
+- **422** → `doc_ids` is empty, or an extra/forbidden field.
+- **500** → `{ "detail": "Could not update the collection" }` — an unreadable
+  or wrong-shape `library.json`.
+
 ## Reserved (not yet built)
 
 Declared by the architecture (AR-11), implemented in later stories. Do not
@@ -264,6 +287,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-06 (Story 7.2):** added `POST /api/library/move` — set-based paper→folder assignment (`MoveRequest`: `{doc_ids, folder_id}`, `extra="forbid"`, `doc_ids` non-empty). `folder_id: null` clears membership; a move replaces any prior folder (at most one). TWO distinct 404s: bad `folder_id` → `"Folder not found"`, unknown `doc_id` → `"Document not found"`; either aborts all-or-nothing. Contract shape change: one new path + one new schema (`MoveRequest`).
 - **2026-07-06 (Story 7.1):** added `/api/library/folders` folder CRUD — `POST` (create, optional `parent_id` nesting), `PATCH /{folder_id}` (rename, name-only), `DELETE /{folder_id}` (subtree delete: removes the folder and every descendant, re-homes every paper in the subtree to Uncategorized, returns the updated `Library` in one round-trip; never deletes a paper). New request models `FolderCreate`/`FolderRename` (`extra="forbid"`; a blank/whitespace `name` is a 422). A missing folder is 404 `"Folder not found"`, distinct from the doc-specific `"Document not found"` literal. Contract shape change: three new paths + two new schemas.
 - **2026-07-05 (Story 6.7):** added `POST /api/docs/{doc_id}/open` — advances `meta.last_opened` when a paper opens (200 `Doc`, 404 unknown doc, 500 storage failure). A mutation, not the pure `GET /api/docs/{doc_id}` read; reuses the existing `Doc` response model (no new schema). `ReaderPage` fires it as a best-effort, error-swallowed side effect on open; a failure never gates the reader rendering the paper. No UI surfaces `last_opened` (out-of-scope last-opened *tracking* feature, not built). Ratifies the already-shipped open path (hover Open button → `/reader/:docId`, doc-scoped hydrate/autosave/back-to-Library, atomic doc-switch isolation) with test coverage; no other endpoint changed.
 - **2026-07-05 (Story 6.6):** added `PATCH /api/docs/{doc_id}` — partial `title`/`authors` edit (new `DocPatch` request model, `extra="forbid"`, `exclude_unset` semantics; 200 `Doc`, 400 empty body, 404 unknown doc, 422 malformed/forbidden field, 500 storage failure). `meta.json`-authoritative; refreshes the `library.json` display cache through the same write-and-reindex core `apply_extraction` uses (`storage.update_doc_meta`). Editing never changes `status`/`page_count`/`added`/`last_opened`. Contract shape change: new path + `DocPatch` schema.

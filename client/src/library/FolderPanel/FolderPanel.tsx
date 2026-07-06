@@ -1,7 +1,16 @@
 import { Fragment, useState, type Dispatch, type SetStateAction } from "react";
-import { ClockCounterClockwise, Files, FolderDashed, Plus, TrashSimple } from "@phosphor-icons/react";
+import {
+  ClockCounterClockwise,
+  Files,
+  FolderDashed,
+  Plus,
+  Star,
+  TrashSimple,
+} from "@phosphor-icons/react";
 import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog";
 import type { Folder, Library } from "@/api/client";
+import { isSelected, type FolderSelection } from "@/library/folderFilter";
+import { MOVE_DRAG_MIME, decodeDragIds } from "@/library/moveDrag";
 import { useFolders } from "./useFolders";
 import FolderRow from "./FolderRow";
 import FolderNameEditor from "./FolderNameEditor";
@@ -40,21 +49,32 @@ function flattenTree(folders: Folder[]): Array<{ folder: Folder; depth: number }
  * owns only the local UI state (which folder is being renamed, which parent
  * has a new-folder draft open, which folder is pending a delete confirm).
  *
- * Selecting a nav item or folder to filter the table is Story 7.2 (`All`
- * stays the visually "active" resting default); `Recent`/`Trash` are visual
- * placeholders only (Trash's real lens is Story 7.5). Nothing here wires a
- * click to a filter.
+ * `All`/`Uncategorized`/a folder row are selectable (Story 7.2, LFR-14,
+ * L-UX-DR4): `selection` + `onSelect` are lifted to `LibraryPage` (shared with
+ * the table's filter), so this component only renders the highlight and
+ * forwards clicks/keyboard activation. `Recent`/`Starred`/`Trash` stay inert
+ * visual placeholders (`Starred` is an unimplemented mock per user request;
+ * Trash's real lens is Story 7.5). `Uncategorized` and every folder row are
+ * ALSO drop targets for drag-to-folder (fix request): a drag carrying the
+ * `MOVE_DRAG_MIME` payload (set by a `CollectionTable` row's `dragstart`)
+ * reports the dropped doc ids + target folder up via `onDropMove`.
  */
 export default function FolderPanel({
   folders,
   setLibrary,
   onToast,
   version,
+  selection,
+  onSelect,
+  onDropMove,
 }: {
   folders: Folder[];
   setLibrary: Dispatch<SetStateAction<Library | null>>;
   onToast: (message: string, variant: "error" | "info") => void;
   version: string | null;
+  selection: FolderSelection;
+  onSelect: (selection: FolderSelection) => void;
+  onDropMove: (docIds: string[], folderId: string | null) => void;
 }) {
   const { createFolder, renameFolder, deleteFolder } = useFolders({ folders, setLibrary, onToast });
 
@@ -63,6 +83,24 @@ export default function FolderPanel({
   // a folder id = a subfolder draft nested under that folder.
   const [draftParentId, setDraftParentId] = useState<string | null | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<Folder | null>(null);
+  // "uncategorized" | a folder id | null - which drop target is hovered.
+  const [dropHoverKey, setDropHoverKey] = useState<string | null>(null);
+
+  function handleDragOver(e: React.DragEvent, key: string) {
+    if (!e.dataTransfer.types.includes(MOVE_DRAG_MIME)) return;
+    e.preventDefault();
+    setDropHoverKey(key);
+  }
+  function handleDragLeave(key: string) {
+    setDropHoverKey((prev) => (prev === key ? null : prev));
+  }
+  function handleDrop(e: React.DragEvent, folderId: string | null) {
+    if (!e.dataTransfer.types.includes(MOVE_DRAG_MIME)) return;
+    e.preventDefault();
+    setDropHoverKey(null);
+    const ids = decodeDragIds(e.dataTransfer.getData(MOVE_DRAG_MIME));
+    if (ids.length > 0) onDropMove(ids, folderId);
+  }
 
   function startDraft(parentId: string | null) {
     setEditingId(null);
@@ -94,19 +132,45 @@ export default function FolderPanel({
       <span className="library-folder-panel__label">Library</span>
 
       <ul className="folder-panel__pseudo-list">
-        <li className="library-folder-panel__item library-folder-panel__item--active">
-          <Files aria-hidden />
-          All
+        <li>
+          <button
+            type="button"
+            className={
+              "library-folder-panel__item" +
+              (isSelected(selection, { kind: "all" }) ? " library-folder-panel__item--active" : "")
+            }
+            onClick={() => onSelect({ kind: "all" })}
+          >
+            <Files aria-hidden />
+            All
+          </button>
         </li>
-        <li className="library-folder-panel__item">
+        <li className="library-folder-panel__item" aria-disabled="true">
           <ClockCounterClockwise aria-hidden />
           Recent
         </li>
-        <li className="library-folder-panel__item">
-          <FolderDashed aria-hidden />
-          Uncategorized
+        <li>
+          <button
+            type="button"
+            className={
+              "library-folder-panel__item" +
+              (isSelected(selection, { kind: "uncategorized" }) ? " library-folder-panel__item--active" : "") +
+              (dropHoverKey === "uncategorized" ? " library-folder-panel__item--drop-hover" : "")
+            }
+            onClick={() => onSelect({ kind: "uncategorized" })}
+            onDragOver={(e) => handleDragOver(e, "uncategorized")}
+            onDragLeave={() => handleDragLeave("uncategorized")}
+            onDrop={(e) => handleDrop(e, null)}
+          >
+            <FolderDashed aria-hidden />
+            Uncategorized
+          </button>
         </li>
-        <li className="library-folder-panel__item">
+        <li className="library-folder-panel__item" aria-disabled="true">
+          <Star aria-hidden />
+          Starred
+        </li>
+        <li className="library-folder-panel__item" aria-disabled="true">
           <TrashSimple aria-hidden />
           Trash
         </li>
@@ -144,6 +208,12 @@ export default function FolderPanel({
               folder={folder}
               depth={depth}
               isEditing={editingId === folder.id}
+              isSelected={isSelected(selection, { kind: "folder", id: folder.id })}
+              isDropHover={dropHoverKey === folder.id}
+              onSelect={() => onSelect({ kind: "folder", id: folder.id })}
+              onDragOver={(e) => handleDragOver(e, folder.id)}
+              onDragLeave={() => handleDragLeave(folder.id)}
+              onDrop={(e) => handleDrop(e, folder.id)}
               onStartRename={setEditingId}
               onCommitRename={commitRename}
               onCancelRename={() => setEditingId(null)}

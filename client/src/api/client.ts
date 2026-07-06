@@ -14,6 +14,7 @@ export type Folder = components["schemas"]["Folder"];
 export type Library = components["schemas"]["Library"];
 export type FolderCreate = components["schemas"]["FolderCreate"];
 export type FolderRename = components["schemas"]["FolderRename"];
+export type MoveRequest = components["schemas"]["MoveRequest"];
 
 // Annotation entity (AD-5), generated from the Pydantic model — the store and
 // overlay import the shape from here, never hand-author it (AD-3). `Anchor` is
@@ -175,6 +176,23 @@ export async function renameFolder(id: string, name: string): Promise<Folder> {
  */
 export async function deleteFolder(id: string): Promise<Library> {
   const res = await fetch(`/api/library/folders/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Library;
+}
+
+/**
+ * Move a set of papers to a folder (`POST /api/library/move`, Story 7.2,
+ * AD-L6). `folderId: null` clears membership (Uncategorized); a move
+ * replaces any prior folder. The set-based `{doc_ids}` shape is reused as-is
+ * by Story 7.3's batch move - a single-paper move is just a one-element array.
+ */
+export async function movePapers(docIds: string[], folderId: string | null): Promise<Library> {
+  const body: MoveRequest = { doc_ids: docIds, folder_id: folderId };
+  const res = await fetch("/api/library/move", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) throw await envelopeError(res);
   return (await res.json()) as Library;
 }

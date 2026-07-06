@@ -2,6 +2,7 @@ import { useState } from "react";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import FolderPanel from "@/library/FolderPanel/FolderPanel";
+import type { FolderSelection } from "@/library/folderFilter";
 import * as api from "@/api/client";
 
 afterEach(() => {
@@ -20,17 +21,30 @@ function folder(id: string, name: string, parent_id: string | null = null): api.
 function Harness({
   initialFolders,
   onToast = () => {},
+  initialSelection = { kind: "all" },
+  onSelect,
+  onDropMove = () => {},
 }: {
   initialFolders: api.Folder[];
   onToast?: (message: string, variant: "error" | "info") => void;
+  initialSelection?: FolderSelection;
+  onSelect?: (selection: FolderSelection) => void;
+  onDropMove?: (docIds: string[], folderId: string | null) => void;
 }) {
   const [library, setLibrary] = useState<api.Library | null>({ papers: [], folders: initialFolders });
+  const [selection, setSelection] = useState<FolderSelection>(initialSelection);
   return (
     <FolderPanel
       folders={library?.folders ?? []}
       setLibrary={setLibrary}
       onToast={onToast}
       version="1.2.3"
+      selection={selection}
+      onSelect={(s) => {
+        setSelection(s);
+        onSelect?.(s);
+      }}
+      onDropMove={onDropMove}
     />
   );
 }
@@ -295,5 +309,87 @@ describe("Keyboard operability", () => {
     const renameButton = screen.getByLabelText("Rename A Folder");
     renameButton.focus();
     expect(document.activeElement).toBe(renameButton);
+  });
+});
+
+describe("Folder selection filter (Story 7.2, AC-1, AC-2, AC-5)", () => {
+  it("All is active by default (resting default, unchanged from 7.1)", () => {
+    render(<Harness initialFolders={[]} />);
+    expect(screen.getByText("All").closest("button")?.className).toContain(
+      "library-folder-panel__item--active",
+    );
+  });
+
+  it("clicking All calls onSelect with { kind: 'all' }", () => {
+    const onSelect = vi.fn();
+    render(
+      <Harness initialFolders={[]} initialSelection={{ kind: "uncategorized" }} onSelect={onSelect} />,
+    );
+    fireEvent.click(screen.getByText("All"));
+    expect(onSelect).toHaveBeenCalledWith({ kind: "all" });
+  });
+
+  it("clicking Uncategorized calls onSelect and highlights it", () => {
+    const onSelect = vi.fn();
+    render(<Harness initialFolders={[]} onSelect={onSelect} />);
+    fireEvent.click(screen.getByText("Uncategorized"));
+    expect(onSelect).toHaveBeenCalledWith({ kind: "uncategorized" });
+    expect(screen.getByText("Uncategorized").closest("button")?.className).toContain(
+      "library-folder-panel__item--active",
+    );
+    expect(screen.getByText("All").closest("button")?.className).not.toContain(
+      "library-folder-panel__item--active",
+    );
+  });
+
+  it("clicking a folder calls onSelect with its id and highlights the row", () => {
+    const onSelect = vi.fn();
+    render(<Harness initialFolders={[folder("f1", "A Folder")]} onSelect={onSelect} />);
+    fireEvent.click(screen.getByText("A Folder"));
+    expect(onSelect).toHaveBeenCalledWith({ kind: "folder", id: "f1" });
+    expect(screen.getByText("A Folder").closest("li")?.className).toContain("folder-panel__row--active");
+  });
+
+  it("clicking a rename action does NOT change the selection", () => {
+    const onSelect = vi.fn();
+    render(<Harness initialFolders={[folder("f1", "A Folder")]} onSelect={onSelect} />);
+    fireEvent.click(screen.getByLabelText("Rename A Folder"));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("clicking an add-subfolder action does NOT change the selection", () => {
+    const onSelect = vi.fn();
+    render(<Harness initialFolders={[folder("f1", "A Folder")]} onSelect={onSelect} />);
+    fireEvent.click(screen.getByLabelText("Add subfolder to A Folder"));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("clicking a delete action does NOT change the selection", () => {
+    const onSelect = vi.fn();
+    render(<Harness initialFolders={[folder("f1", "A Folder")]} onSelect={onSelect} />);
+    fireEvent.click(screen.getByLabelText("Delete A Folder"));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("Recent and Trash remain inert (no click handler, not selectable)", () => {
+    const onSelect = vi.fn();
+    render(<Harness initialFolders={[]} onSelect={onSelect} />);
+    fireEvent.click(screen.getByText("Recent"));
+    fireEvent.click(screen.getByText("Trash"));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByText("Recent").closest("button")).toBeNull();
+    expect(screen.getByText("Trash").closest("button")).toBeNull();
+  });
+
+  it("the All/Uncategorized/folder entries are real focusable buttons with Enter activation", () => {
+    const onSelect = vi.fn();
+    render(<Harness initialFolders={[folder("f1", "A Folder")]} onSelect={onSelect} />);
+
+    const folderButton = screen.getByText("A Folder").closest("button")!;
+    folderButton.focus();
+    expect(document.activeElement).toBe(folderButton);
+    fireEvent.keyDown(folderButton, { key: "Enter" });
+    fireEvent.click(folderButton); // jsdom keyDown doesn't auto-activate; assert real button semantics
+    expect(onSelect).toHaveBeenCalledWith({ kind: "folder", id: "f1" });
   });
 });

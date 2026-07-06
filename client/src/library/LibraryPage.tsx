@@ -6,13 +6,33 @@ import CollectionTable from "@/library/CollectionTable/CollectionTable";
 import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
 import AddMenu from "@/library/AddMenu/AddMenu";
 import FolderPanel from "@/library/FolderPanel/FolderPanel";
+import MoveMenu from "@/library/MoveMenu";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
-import { fetchHealth } from "@/api/client";
+import { useMovePapers } from "@/library/useMovePapers";
+import { filterPapers, type FolderSelection } from "@/library/folderFilter";
+import { fetchHealth, type Folder } from "@/api/client";
 
 const PDF_EXTENSION = /\.pdf$/i;
 
 type ToastState = { message: string; variant: "error" | "info" };
+
+/** The quiet empty-line copy for a filtered-to-nothing selection (Story 7.2:
+ *  a small SHOULD, distinct from `EmptyDropzone`'s zero-library state). */
+function emptySelectionMessage(selection: FolderSelection): string {
+  if (selection.kind === "uncategorized") return "No uncategorized papers.";
+  if (selection.kind === "folder") return "No papers in this folder.";
+  return "No papers to show.";
+}
+
+/** The toolbar count's "in ___" target (fix request: it read "in library" for
+ *  every view, even a selected folder). Folders are a flat list keyed by id
+ *  (no tree walk needed - a name lookup is a plain find). */
+function selectionLabel(selection: FolderSelection, folders: Folder[]): string {
+  if (selection.kind === "uncategorized") return "Uncategorized";
+  if (selection.kind === "folder") return folders.find((f) => f.id === selection.id)?.name ?? "folder";
+  return "library";
+}
 
 /** A folder pick returns every file type in the directory tree; this filters
  *  it down to PDFs before handing anything to `uploadFiles` (a folder upload
@@ -48,6 +68,33 @@ export default function LibraryPage() {
     onToast,
   });
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
+  const { movePapers } = useMovePapers({ setLibrary, onToast });
+  const [selection, setSelection] = useState<FolderSelection>({ kind: "all" });
+  // The one selection set driving BOTH a plain-click single row and a
+  // Ctrl/Cmd+click multi-select (fix request: they were two disjoint pieces
+  // of state - a table-local `selectedId` and this lifted `checkedIds` -
+  // which never synced, so a plain click after a multi-select left the old
+  // rows highlighted, and the toolbar Move button never saw a single armed
+  // row at all. `CollectionTable` reports every change (plain click, toggle,
+  // arm) through its one `onSelectionChange` callback, so this is a plain
+  // mirror - see its own comment for how "armed"/"checked" derive from it.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // A folder switch clears the selection: ids from a prior view could
+  // otherwise silently carry into a Move/drop the user can no longer see.
+  const handleSelect = useCallback((next: FolderSelection) => {
+    setSelection(next);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleMoveRequest = useCallback(
+    (docIds: string[], folderId: string | null) => {
+      if (docIds.length === 0) return;
+      movePapers(docIds, folderId);
+      setSelectedIds(new Set());
+    },
+    [movePapers],
+  );
 
   useEffect(() => {
     let live = true;
@@ -67,7 +114,12 @@ export default function LibraryPage() {
   }, []);
 
   const papers = library?.papers ?? [];
+  const folders = library?.folders ?? [];
   const isTableLayout = loading || papers.length > 0 || pending.length > 0;
+  const visiblePapers = filterPapers(papers, selection);
+  // A just-uploaded paper lands Uncategorized; it should not appear under an
+  // unrelated selected folder (Dev Notes: gate pending rows on selection kind).
+  const visiblePending = selection.kind === "folder" ? [] : pending;
   const mainClassName = [
     "library-main",
     isTableLayout && "library-main--table",
@@ -80,10 +132,13 @@ export default function LibraryPage() {
     <div className="library">
       <div className="library-body">
         <FolderPanel
-          folders={library?.folders ?? []}
+          folders={folders}
           setLibrary={setLibrary}
           onToast={onToast}
           version={version}
+          selection={selection}
+          onSelect={handleSelect}
+          onDropMove={handleMoveRequest}
         />
         <main
           className={mainClassName}
@@ -108,12 +163,22 @@ export default function LibraryPage() {
                   aria-hidden="true"
                 />
               ) : (
-                <p className="library-toolbar__count">{papers.length} files in library</p>
+                <p className="library-toolbar__count">
+                  {visiblePapers.length} files in {selectionLabel(selection, folders)}
+                </p>
               )}
-              <AddMenu
-                onFileUpload={() => fileInputRef.current?.click()}
-                onFolderUpload={() => folderInputRef.current?.click()}
-              />
+              <div className="library-toolbar__actions">
+                <MoveMenu
+                  folders={folders}
+                  onMove={(folderId) => handleMoveRequest(Array.from(selectedIds), folderId)}
+                  label="Move"
+                  disabled={selectedIds.size === 0}
+                />
+                <AddMenu
+                  onFileUpload={() => fileInputRef.current?.click()}
+                  onFolderUpload={() => folderInputRef.current?.click()}
+                />
+              </div>
             </div>
           )}
           <input
@@ -145,12 +210,18 @@ export default function LibraryPage() {
           {loading && papers.length === 0 && pending.length === 0 ? (
             <CollectionTable loading />
           ) : papers.length > 0 || pending.length > 0 ? (
-            <CollectionTable
-              rows={papers}
-              pendingRows={pending}
-              onOpenRow={(docId) => navigate(`/reader/${docId}`)}
-              onEditField={handleEditField}
-            />
+            visiblePapers.length === 0 && visiblePending.length === 0 ? (
+              <p className="library-empty-line">{emptySelectionMessage(selection)}</p>
+            ) : (
+              <CollectionTable
+                rows={visiblePapers}
+                pendingRows={visiblePending}
+                onOpenRow={(docId) => navigate(`/reader/${docId}`)}
+                onEditField={handleEditField}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+              />
+            )
           ) : loadFailed ? null : (
             <EmptyDropzone onFiles={uploadFiles} />
           )}

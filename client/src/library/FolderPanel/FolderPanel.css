@@ -77,6 +77,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-xxs);
+  width: 100%;
   font-family: var(--font-sans);
   font-size: var(--type-body-sm-size);
   font-weight: var(--type-body-sm-weight);
@@ -93,13 +94,32 @@
   color: var(--color-muted);
 }
 
-.library-folder-panel__item--active {
-  background: var(--color-ink);
-  color: var(--color-canvas);
+/* Recent/Trash stay plain <li>; All/Uncategorized/a folder are a real
+   <button> (Story 7.2, L-UX-DR12) — reset button chrome, keep the shared
+   look above. */
+button.library-folder-panel__item {
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
 }
 
-.library-folder-panel__item--active svg {
-  color: var(--color-canvas);
+button.library-folder-panel__item:hover {
+  background: var(--color-surface-strong);
+}
+
+.library-folder-panel__item--active {
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+}
+
+/* Drag-to-folder drop-hover (fix request): a dashed ink outline while a
+   dragged row is over a valid target (Uncategorized or a folder row). */
+.library-folder-panel__item--drop-hover,
+.folder-panel__row--drop-hover {
+  background: var(--color-surface-strong);
+  outline: var(--hairline-width) dashed var(--color-ink);
+  outline-offset: calc(-1 * var(--hairline-width));
 }
 
 .folder-panel__row {
@@ -111,7 +131,8 @@
   border-radius: var(--radius-sm);
 }
 
-.folder-panel__row:hover {
+.folder-panel__row:hover,
+.folder-panel__row--active {
   background: var(--color-surface-strong);
 }
 
@@ -120,6 +141,8 @@
   align-items: center;
   gap: var(--space-xxs);
   overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-sans);
@@ -127,6 +150,10 @@
   font-weight: var(--type-body-sm-weight);
   line-height: var(--type-body-sm-leading);
   color: var(--color-body);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
 }
 
 .folder-panel__name svg {

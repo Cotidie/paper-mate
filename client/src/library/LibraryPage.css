@@ -6,28 +6,40 @@
   flex-direction: column;
 }
 
-.library-add-button {
+/* Shared toolbar trigger-button chrome (fix request: unify Add + Move to one
+   look - the bordered chip, not the filled pill AddMenu used before). Used
+   by AddMenu's and MoveMenu's own trigger buttons; each of those files owns
+   only its popover + menu items. */
+.toolbar-button {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xxs);
+  background: var(--color-surface-card);
+  color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: var(--type-title-sm-size);
-  color: var(--color-body);
-  background: var(--color-canvas);
-  border: var(--hairline-width) solid var(--color-hairline);
-  border-radius: var(--radius-pill);
-  padding: var(--space-xxs) var(--space-sm);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) var(--space-xs);
   cursor: pointer;
 }
 
-.library-add-button svg {
+.toolbar-button svg {
   width: var(--pill-icon-size);
   height: var(--pill-icon-size);
   display: block;
 }
 
-.library-add-button:hover {
+.toolbar-button:hover {
   background: var(--color-surface-strong);
+}
+
+.toolbar-button:disabled {
+  color: var(--color-muted);
+  cursor: default;
+  opacity: 0.6;
 }
 
 .library-add-input {
@@ -54,6 +66,22 @@
 .library-toolbar__count-skeleton {
   width: var(--collection-table-file-type-width);
   height: calc(var(--type-caption-size) * var(--type-caption-leading));
+}
+
+.library-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.library-empty-line {
+  margin: var(--space-base) 0 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  color: var(--color-muted);
+  text-align: center;
 }
 
 .library-body {

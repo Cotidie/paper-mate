@@ -85,3 +85,14 @@ def test_openapi_contains_folder_models_and_paths() -> None:
     folder_path = schema["paths"]["/api/library/folders/{folder_id}"]
     assert "patch" in folder_path
     assert "delete" in folder_path
+
+
+def test_openapi_contains_move_request_model_and_path() -> None:
+    """Story 7.2: MoveRequest is generated, and POST /api/library/move is
+    registered - the set-based move/trash/restore contract (AD-L6)."""
+    schema = app.openapi()
+    schemas = schema["components"]["schemas"]
+    assert "MoveRequest" in schemas
+    assert "doc_ids" in schemas["MoveRequest"]["properties"]
+    assert "folder_id" in schemas["MoveRequest"]["properties"]
+    assert "post" in schema["paths"]["/api/library/move"]

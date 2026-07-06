@@ -48,7 +48,7 @@ export default function AddMenu({
       <button
         ref={buttonRef}
         type="button"
-        className="add-menu__button"
+        className="toolbar-button"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

@@ -1,31 +1,10 @@
-/* Add-button dropdown (Library layout redesign). Tokens only, no raw hex/px. */
+/* Add-button dropdown (Library layout redesign). Tokens only, no raw hex/px.
+   The trigger button's own look (icon + label chip) is the SHARED
+   `.toolbar-button` class in LibraryPage.css (fix request: unify with the
+   Move button) - this file only owns the popover + its menu items. */
 
 .add-menu {
   position: relative;
-}
-
-.add-menu__button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xxs);
-  font-family: var(--font-sans);
-  font-size: var(--type-title-sm-size);
-  color: var(--color-body);
-  background: var(--color-canvas);
-  border: var(--hairline-width) solid var(--color-hairline);
-  border-radius: var(--radius-pill);
-  padding: var(--space-xxs) var(--space-sm);
-  cursor: pointer;
-}
-
-.add-menu__button svg {
-  width: var(--pill-icon-size);
-  height: var(--pill-icon-size);
-  display: block;
-}
-
-.add-menu__button:hover {
-  background: var(--color-surface-strong);
 }
 
 .add-menu__popover {

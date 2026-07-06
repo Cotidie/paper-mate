@@ -136,3 +136,44 @@ def test_delete_missing_folder_returns_404(data_root):
     resp = client.delete("/api/library/folders/no-such-id")
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Folder not found"
+
+
+# --- Move route (Story 7.2, AD-L6) ------------------------------------------
+
+
+def test_move_papers_returns_updated_library(data_root):
+    folder = client.post("/api/library/folders", json={"name": "Papers"}).json()
+    raw = make_pdf_bytes(pages=1, title="Movable")
+    up = client.post("/api/docs", files={"file": ("m.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+
+    resp = client.post("/api/library/move", json={"doc_ids": [doc_id], "folder_id": folder["id"]})
+    assert resp.status_code == 200
+    row = next(p for p in resp.json()["papers"] if p["doc_id"] == doc_id)
+    assert row["folder_id"] == folder["id"]
+
+
+def test_move_papers_bad_folder_id_returns_404(data_root):
+    raw = make_pdf_bytes(pages=1)
+    up = client.post("/api/docs", files={"file": ("m.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+
+    resp = client.post("/api/library/move", json={"doc_ids": [doc_id], "folder_id": "no-such-id"})
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Folder not found"
+
+
+def test_move_papers_unknown_doc_id_returns_404(data_root):
+    resp = client.post("/api/library/move", json={"doc_ids": ["no-such-doc"]})
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Document not found"
+
+
+def test_move_papers_empty_doc_ids_returns_422(data_root):
+    resp = client.post("/api/library/move", json={"doc_ids": []})
+    assert resp.status_code == 422
+
+
+def test_move_papers_forbidden_extra_field_returns_422(data_root):
+    resp = client.post("/api/library/move", json={"doc_ids": ["x"], "extra": "nope"})
+    assert resp.status_code == 422

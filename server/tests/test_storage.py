@@ -899,3 +899,116 @@ def test_concurrent_create_and_delete_serialize_without_lost_folder(data_root):
     assert survivor.id not in {f.id for f in library.folders}
     assert set(created_ids) == {f.id for f in library.folders}
     assert len(created_ids) == 8
+
+
+def test_move_papers_sets_folder_id_for_one_id(data_root):
+    folder = storage.create_folder("Papers", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+
+    library = storage.move_papers([doc_id], folder.id)
+
+    paper = next(p for p in library.papers if p.doc_id == doc_id)
+    assert paper.folder_id == folder.id
+
+
+def test_move_papers_sets_folder_id_for_many_ids(data_root):
+    folder = storage.create_folder("Papers", None)
+    doc_a, _ = storage.import_pdf(make_pdf_bytes(pages=1, title="A"), "a.pdf")
+    doc_b, _ = storage.import_pdf(make_pdf_bytes(pages=1, title="B"), "b.pdf")
+
+    library = storage.move_papers([doc_a, doc_b], folder.id)
+
+    by_id = {p.doc_id: p for p in library.papers}
+    assert by_id[doc_a].folder_id == folder.id
+    assert by_id[doc_b].folder_id == folder.id
+
+
+def test_move_papers_to_none_clears_membership(data_root):
+    folder = storage.create_folder("Papers", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    storage.move_papers([doc_id], folder.id)
+
+    library = storage.move_papers([doc_id], None)
+
+    paper = next(p for p in library.papers if p.doc_id == doc_id)
+    assert paper.folder_id is None
+
+
+def test_move_papers_replaces_prior_folder(data_root):
+    first = storage.create_folder("First", None)
+    second = storage.create_folder("Second", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    storage.move_papers([doc_id], first.id)
+
+    library = storage.move_papers([doc_id], second.id)
+
+    paper = next(p for p in library.papers if p.doc_id == doc_id)
+    assert paper.folder_id == second.id
+
+
+def test_move_papers_bad_folder_id_raises_and_writes_nothing(data_root):
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+
+    with pytest.raises(storage.FolderNotFoundError):
+        storage.move_papers([doc_id], "does-not-exist")
+
+    paper = next(p for p in storage.read_library().papers if p.doc_id == doc_id)
+    assert paper.folder_id is None
+
+
+def test_move_papers_unknown_doc_id_raises_all_or_nothing(data_root):
+    """One valid id plus one unknown id in the SAME set must abort with no
+    partial write: the valid id must NOT move either (AL-6, all-or-nothing)."""
+    folder = storage.create_folder("Papers", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.move_papers([doc_id, "does-not-exist"], folder.id)
+
+    paper = next(p for p in storage.read_library().papers if p.doc_id == doc_id)
+    assert paper.folder_id is None
+
+
+def test_move_papers_never_touches_trashed_order_or_other_papers(data_root):
+    folder = storage.create_folder("Papers", None)
+    doc_a, _ = storage.import_pdf(make_pdf_bytes(pages=1, title="A"), "a.pdf")
+    doc_b, _ = storage.import_pdf(make_pdf_bytes(pages=1, title="B"), "b.pdf")
+    library_index.mutate_index(lambda index: _set_trashed(index, doc_a, True))
+    before = {p.doc_id: (p.trashed, p.order) for p in storage.read_library().papers}
+
+    library = storage.move_papers([doc_a], folder.id)
+
+    after = {p.doc_id: (p.trashed, p.order) for p in library.papers}
+    assert after == before
+    by_id = {p.doc_id: p for p in library.papers}
+    assert by_id[doc_a].folder_id == folder.id
+    assert by_id[doc_b].folder_id is None  # untouched, not in doc_ids
+
+
+def _set_trashed(index: dict, doc_id: str, trashed: bool) -> dict:
+    for paper in index["papers"]:
+        if paper["doc_id"] == doc_id:
+            paper["trashed"] = trashed
+    return index
+
+
+def test_move_papers_membership_survives_read_library_round_trip(data_root):
+    folder = storage.create_folder("Papers", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    storage.move_papers([doc_id], folder.id)
+
+    library = storage.read_library()
+
+    paper = next(p for p in library.papers if p.doc_id == doc_id)
+    assert paper.folder_id == folder.id
+
+
+def test_move_papers_into_same_folder_is_idempotent(data_root):
+    folder = storage.create_folder("Papers", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    storage.move_papers([doc_id], folder.id)
+
+    library = storage.move_papers([doc_id], folder.id)
+
+    paper = next(p for p in library.papers if p.doc_id == doc_id)
+    assert paper.folder_id == folder.id

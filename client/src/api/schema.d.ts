@@ -240,6 +240,31 @@ export interface paths {
         patch: operations["rename_folder_api_library_folders__folder_id__patch"];
         trace?: never;
     };
+    "/api/library/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move Papers
+         * @description Set-based move (Story 7.2, AD-L6): assign every id in ``doc_ids`` to
+         *     ``folder_id`` (``None`` clears membership, i.e. Uncategorized). A move
+         *     replaces any prior folder, so a paper belongs to at most one folder.
+         *     Returns the whole updated ``Library`` in one round-trip. TWO distinct
+         *     404s: a bad ``folder_id`` -> ``"Folder not found"``, an unknown
+         *     ``doc_id`` -> ``"Document not found"``.
+         */
+        post: operations["move_papers_api_library_move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -398,7 +423,7 @@ export interface components {
          * FolderRename
          * @description Request body for ``PATCH /api/library/folders/{folder_id}`` (Story 7.1):
          *     a name-only rename. Membership (``parent_id``, paper ``folder_id``) is
-         *     untouched — renaming never orphans a paper.
+         *     untouched: renaming never orphans a paper.
          */
         FolderRename: {
             /** Name */
@@ -429,6 +454,20 @@ export interface components {
             papers: components["schemas"]["CollectionRow"][];
             /** Folders */
             folders: components["schemas"]["Folder"][];
+        };
+        /**
+         * MoveRequest
+         * @description Request body for ``POST /api/library/move`` (Story 7.2, AD-L6): the
+         *     set-based organization contract every future move/trash/restore route
+         *     reuses. ``doc_ids`` must be non-empty (a move of nothing is a client
+         *     bug); ``folder_id=None`` clears membership (Uncategorized). A move
+         *     replaces any prior folder, so a paper belongs to at most one folder.
+         */
+        MoveRequest: {
+            /** Doc Ids */
+            doc_ids: string[];
+            /** Folder Id */
+            folder_id?: string | null;
         };
         /**
          * PathAnchor
@@ -1079,6 +1118,57 @@ export interface operations {
                 };
             };
             /** @description Could not update folders. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    move_papers_api_library_move_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description No folder with this id, or an unknown document id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description doc_ids must be non-empty. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Could not update the collection. */
             500: {
                 headers: {
                     [name: string]: unknown;

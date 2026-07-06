@@ -5,6 +5,13 @@ import { formatAdded } from "@/library/row";
 import type { CollectionRow } from "@/api/client";
 
 afterEach(cleanup);
+// The drag-preview node is appended directly to document.body (outside
+// React's tree, so RTL's cleanup() above doesn't remove it) and only
+// scheduled for removal via setTimeout(0) - sweep up any that a test's own
+// dragStart didn't wait a tick for, so it can't leak into the next test.
+afterEach(() => {
+  document.querySelectorAll(".collection-table__drag-preview").forEach((el) => el.remove());
+});
 
 const rows: CollectionRow[] = [
   {
@@ -467,6 +474,195 @@ describe("CollectionTable Open button", () => {
     // instead of letting the browser's native button-activation handle it.
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(row.getAttribute("aria-selected")).toBe("false");
+  });
+});
+
+describe("CollectionTable multi-select via Ctrl/Cmd+click (Story 7.2 fix request)", () => {
+  it("does not render a per-row Move to folder control", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    expect(screen.queryByRole("button", { name: "Move to folder" })).toBeNull();
+  });
+
+  it("Ctrl+click toggles a row into selectedIds without arming it", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.click(row, { ctrlKey: true });
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([rows[0].doc_id]));
+    expect(row.getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("Cmd (meta)+click also toggles selection", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!, { metaKey: true });
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([rows[0].doc_id]));
+  });
+
+  it("Ctrl+click on the Title cell does not enter edit mode", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    fireEvent.click(screen.getByText("Attention Is All You Need"), { ctrlKey: true });
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("a plain click still arms the row (Ctrl/Cmd+click did not break normal selection)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.click(row);
+    expect(row.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("a checked row carries data-checked (same highlight treatment as an armed row, no check-mark)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set([rows[0].doc_id])}
+      />,
+    );
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    expect(row.hasAttribute("data-checked")).toBe(true);
+  });
+
+  it("an unchecked row carries no data-checked", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    expect(row.hasAttribute("data-checked")).toBe(false);
+  });
+
+  it("a plain click on another row REPLACES a multi-selection (fix: was leaving stale rows highlighted)", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set([rows[0].doc_id, rows[1].doc_id])}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const thirdRow = screen.getByText("Untitled").closest("tr")!;
+    fireEvent.click(thirdRow);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([rows[2].doc_id]));
+  });
+
+  it("a plain click on the sole already-selected row clears the selection (toggle-off)", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set([rows[0].doc_id])}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set());
+  });
+
+  it("a single selected row is armed (size===1), enabling the same highlight a multi-selection uses", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set([rows[0].doc_id])}
+      />,
+    );
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    expect(row.getAttribute("aria-selected")).toBe("true");
+  });
+});
+
+describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () => {
+  function dataTransferStub() {
+    const store = new Map<string, string>();
+    return {
+      setData: (type: string, value: string) => store.set(type, value),
+      getData: (type: string) => store.get(type) ?? "",
+      get effectAllowed() {
+        return store.get("__effectAllowed") ?? "";
+      },
+      set effectAllowed(value: string) {
+        store.set("__effectAllowed", value);
+      },
+      types: [] as string[],
+      setDragImage: () => {},
+    };
+  }
+
+  it("a drag starting on the Open button is rejected, not treated as a row move (code-review fix: the whole <tr> is draggable, so a native button/input descendant doesn't block it by itself)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const openButton = screen.getAllByRole("button", { name: "Open" })[0];
+    const dataTransfer = dataTransferStub();
+    const event = fireEvent.dragStart(openButton, { dataTransfer, cancelable: true });
+    expect(event).toBe(false); // false return means preventDefault() was called
+    expect(dataTransfer.getData("application/x-papermate-move")).toBe("");
+  });
+
+  it("dragging an unchecked row carries just that row's doc_id", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(row, { dataTransfer });
+    expect(JSON.parse(dataTransfer.getData("application/x-papermate-move"))).toEqual([rows[0].doc_id]);
+  });
+
+  it("dragging a CHECKED row carries the whole checked set", () => {
+    const selectedIds = new Set([rows[0].doc_id, rows[1].doc_id]);
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} selectedIds={selectedIds} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(row, { dataTransfer });
+    const ids = JSON.parse(dataTransfer.getData("application/x-papermate-move"));
+    expect(new Set(ids)).toEqual(selectedIds);
+  });
+
+  it("uses a compact custom drag image instead of the browser default full-row snapshot", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    const setDragImage = vi.fn();
+    fireEvent.dragStart(row, { dataTransfer: { ...dataTransferStub(), setDragImage } });
+    expect(setDragImage).toHaveBeenCalledTimes(1);
+    const [previewEl] = setDragImage.mock.calls[0];
+    expect(previewEl.className).toBe("collection-table__drag-preview");
+    expect(previewEl.textContent).toBe("Attention Is All You Need");
+  });
+
+  it("the drag preview shows a count badge when dragging multiple checked rows", () => {
+    const selectedIds = new Set([rows[0].doc_id, rows[1].doc_id]);
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} selectedIds={selectedIds} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    const setDragImage = vi.fn();
+    fireEvent.dragStart(row, { dataTransfer: { ...dataTransferStub(), setDragImage } });
+    const [previewEl] = setDragImage.mock.calls[0];
+    const badge = previewEl.querySelector(".collection-table__drag-preview-badge");
+    expect(badge?.textContent).toBe("2");
+  });
+
+  it("removes the drag preview node from the DOM (does not leak elements)", async () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.dragStart(row, { dataTransfer: dataTransferStub() });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector(".collection-table__drag-preview")).toBeNull();
   });
 });
 

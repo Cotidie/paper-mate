@@ -1,0 +1,52 @@
+/* Folder-picker popover (Story 7.2), used by LibraryPage's toolbar Move
+   button. Tokens only, mirrors AddMenu.css - no raw hex/px (CLAUDE.md).
+   The trigger button's own look is the SHARED `.toolbar-button` class in
+   LibraryPage.css (fix request: unify Add/Move) - this file only owns the
+   popover + its menu items. */
+
+.move-menu {
+  position: relative;
+}
+
+/* `top`/`right` are set inline from the trigger button's own
+   `getBoundingClientRect()` (see MoveMenu.tsx) - `position: fixed` escapes
+   the table's own stacking/paint model, which otherwise routes clicks to a
+   sibling row's cell underneath a `position: absolute` popover regardless of
+   z-index (live-smoke caught bug). */
+.move-menu__popover {
+  position: fixed;
+  width: var(--add-menu-width);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  z-index: 4;
+  max-height: var(--move-menu-popover-max-height);
+  overflow-y: auto;
+}
+
+.move-menu__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  color: var(--color-body);
+  background: none;
+  border: 0;
+  border-bottom: var(--hairline-width) solid var(--color-hairline);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.move-menu__item:last-child {
+  border-bottom: 0;
+}
+
+.move-menu__item:hover {
+  background: var(--color-surface-strong);
+}
