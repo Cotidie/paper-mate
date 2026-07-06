@@ -9,13 +9,11 @@ import FolderPanel from "@/library/FolderPanel/FolderPanel";
 import MoveMenu from "@/library/MoveMenu";
 import DisplayMenu from "@/library/TableControls/DisplayMenu";
 import SortMenu from "@/library/TableControls/SortMenu";
-import FilterMenu from "@/library/TableControls/FilterMenu";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useMovePapers } from "@/library/useMovePapers";
 import { useTableView } from "@/library/useTableView";
 import { filterPapers, type FolderSelection } from "@/library/folderFilter";
-import type { ColumnFilter } from "@/library/tableView";
 import { fetchHealth, type Folder } from "@/api/client";
 
 const PDF_EXTENSION = /\.pdf$/i;
@@ -102,20 +100,6 @@ export default function LibraryPage() {
     [movePapers],
   );
 
-  // A column filter change clears the selection (AC-5, same rule as a folder
-  // switch): a filtered-out row keeps its doc_id in selectedIds but is no
-  // longer rendered, so a stale selection could silently ride into a Move
-  // the user can no longer see. A sort change does NOT clear it (every row
-  // stays visible, only reordered - CollectionTable's own setter handles it).
-  const { setFilter } = tableView;
-  const handleFilterChange = useCallback(
-    (next: ColumnFilter | null) => {
-      setFilter(next);
-      setSelectedIds(new Set());
-    },
-    [setFilter],
-  );
-
   useEffect(() => {
     let live = true;
     fetchHealth()
@@ -146,11 +130,7 @@ export default function LibraryPage() {
   );
   // A just-uploaded paper lands Uncategorized; it should not appear under an
   // unrelated selected folder (Dev Notes: gate pending rows on selection kind).
-  // A pending row has no settled metadata to test a column filter against
-  // (AC-4: "only rows whose column value matches remain") - hiding it while a
-  // filter is active avoids an unrelated in-flight upload appearing under a
-  // narrowed, seemingly-unrelated result set.
-  const visiblePending = selection.kind === "folder" || tableView.filter !== null ? [] : pending;
+  const visiblePending = selection.kind === "folder" ? [] : pending;
   const mainClassName = [
     "library-main",
     isTableLayout && "library-main--table",
@@ -201,7 +181,6 @@ export default function LibraryPage() {
               <div className="library-toolbar__actions">
                 <DisplayMenu hiddenColumns={tableView.hiddenColumns} onToggleColumn={tableView.toggleColumn} />
                 <SortMenu sort={tableView.sort} onChange={tableView.setSort} />
-                <FilterMenu filter={tableView.filter} onChange={handleFilterChange} />
                 <MoveMenu
                   folders={folders}
                   onMove={(folderId) => handleMoveRequest(Array.from(selectedIds), folderId)}

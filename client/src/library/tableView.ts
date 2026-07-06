@@ -1,9 +1,9 @@
 import type { CollectionRow } from "@/api/client";
-import { formatAdded, seedFieldValue, statusLabel } from "@/library/row";
+import { seedFieldValue } from "@/library/row";
 
 /**
- * The Library table's column model + client-only sort/filter transforms
- * (Story 7.4, AD-L3: view-state, never persisted, never a route). Mirrors
+ * The Library table's column model + client-only sort transform (Story 7.4,
+ * AD-L3: view-state, never persisted, never a route). Mirrors
  * `folderFilter.ts` - pure functions, no React, trivially unit-testable.
  */
 export type ColumnKey = "title" | "authors" | "added" | "file_type";
@@ -31,11 +31,6 @@ export interface SortState {
   direction: SortDirection;
 }
 
-export interface ColumnFilter {
-  column: ColumnKey;
-  query: string;
-}
-
 /** The DISPLAYED title (AC-3): reuse `row.ts`'s `seedFieldValue` (a null
  *  title falls back to the filename with its `.pdf` extension stripped) -
  *  single source with `PaperRow`'s own fallback, per CLAUDE.md (adopt stable
@@ -43,15 +38,6 @@ export interface ColumnFilter {
  *  fallback logic"). */
 function displayTitle(row: CollectionRow): string {
   return seedFieldValue(row, "title");
-}
-
-/** The displayed File-type cell text: a status chip ("Extracting", "No
- *  metadata") takes over the cell for those rows (`PaperRow`'s `label ? ... :
- *  PDF/Note`), so the filter must match THAT text, not always "PDF"/"Note" -
- *  otherwise filtering "no metadata" would find nothing despite it being
- *  literally on screen. */
-function displayFileType(row: CollectionRow): string {
-  return statusLabel(row.status) ?? (row.file_type === "note" ? "Note" : "PDF");
 }
 
 /** The underlying sort key per column (AC-3): `added` is chronological (the
@@ -97,29 +83,4 @@ export function sortRows(rows: CollectionRow[], sort: SortState | null): Collect
   if (sort === null) return rows;
   const { column, direction } = sort;
   return [...rows].sort((a, b) => compareForSort(sortKey(a, column), sortKey(b, column), direction));
-}
-
-/** The displayed text for a column (AC-4's filter matches against this, not
- *  the underlying value - e.g. File type matches "PDF"/"Note", not "pdf"/"note"). */
-function displayValue(row: CollectionRow, column: ColumnKey): string {
-  switch (column) {
-    case "title":
-      return displayTitle(row);
-    case "authors":
-      return row.authors ?? "";
-    case "added":
-      return formatAdded(row.added);
-    case "file_type":
-      return displayFileType(row);
-  }
-}
-
-/** Keep only rows whose displayed column text contains `filter.query`,
- *  case-insensitively (AC-4). Returns `rows` unchanged when `filter` is null
- *  or its query is empty/whitespace-only. */
-export function applyColumnFilter(rows: CollectionRow[], filter: ColumnFilter | null): CollectionRow[] {
-  if (filter === null) return rows;
-  const query = filter.query.trim().toLowerCase();
-  if (query === "") return rows;
-  return rows.filter((row) => displayValue(row, filter.column).toLowerCase().includes(query));
 }

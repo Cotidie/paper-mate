@@ -1011,7 +1011,7 @@ describe("Add dropdown (File upload / Folder upload)", () => {
   });
 });
 
-describe("Display, Sort, Filter controls (Story 7.4)", () => {
+describe("Display, Sort controls (Story 7.4)", () => {
   function libraryRow(overrides: Partial<api.CollectionRow>): api.CollectionRow {
     return {
       doc_id: "p".repeat(64),
@@ -1075,60 +1075,6 @@ describe("Display, Sort, Filter controls (Story 7.4)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Beta Paper")).toBeTruthy());
     expect(titleTexts()).toEqual(["Beta Paper", "Alpha Paper"]);
-  });
-
-  it("Filter: narrows the rows and updates the count line; clearing restores all", async () => {
-    const match = libraryRow({ doc_id: "1".repeat(64), title: "Attention Paper", order: 0 });
-    const other = libraryRow({ doc_id: "2".repeat(64), title: "Other Paper", order: 1 });
-    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [match, other], folders: [] });
-    renderLibrary();
-    await waitFor(() => expect(screen.getByText("2 files in library")).toBeTruthy());
-
-    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
-    fireEvent.change(screen.getByLabelText("Filter value"), { target: { value: "attention" } });
-
-    expect(screen.getByText("Attention Paper")).toBeTruthy();
-    expect(screen.queryByText("Other Paper")).toBeNull();
-    expect(screen.getByText("1 files in library")).toBeTruthy();
-
-    fireEvent.change(screen.getByLabelText("Filter value"), { target: { value: "" } });
-    expect(screen.getByText("Other Paper")).toBeTruthy();
-    expect(screen.getByText("2 files in library")).toBeTruthy();
-  });
-
-  it("Filter: an in-flight pending upload is hidden while a column filter is active (code-review fix: it has no settled metadata to match against)", async () => {
-    const existing = libraryRow({ doc_id: "1".repeat(64), title: "Attention Paper", order: 0 });
-    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [existing], folders: [] });
-    vi.spyOn(api, "uploadDoc").mockReturnValue(new Promise(() => {})); // never resolves in this test
-    renderLibrary();
-    await waitFor(() => expect(screen.getByText("Attention Paper")).toBeTruthy());
-
-    fireEvent.change(screen.getByTestId("library-add-input"), {
-      target: { files: [pdfFile("mid-filter.pdf")] },
-    });
-    await waitFor(() => expect(screen.getByText("mid-filter")).toBeTruthy());
-
-    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
-    fireEvent.change(screen.getByLabelText("Filter value"), { target: { value: "attention" } });
-
-    expect(screen.getByText("Attention Paper")).toBeTruthy();
-    expect(screen.queryByText("mid-filter")).toBeNull();
-  });
-
-  it("Filter: changing the filter clears a prior selection (AC-5)", async () => {
-    const first = libraryRow({ doc_id: "1".repeat(64), title: "First Paper", order: 0 });
-    const second = libraryRow({ doc_id: "2".repeat(64), title: "Second Paper", order: 1 });
-    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [first, second], folders: [] });
-    renderLibrary();
-    await waitFor(() => expect(screen.getByText("First Paper")).toBeTruthy());
-
-    fireEvent.click(screen.getByText("First Paper").closest("tr")!);
-    expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
-    fireEvent.change(screen.getByLabelText("Filter value"), { target: { value: "First" } });
-
-    expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("Sort does NOT clear a prior selection", async () => {
