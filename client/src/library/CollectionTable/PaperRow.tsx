@@ -16,10 +16,13 @@ import EditableCell from "./EditableCell";
  * cells inline-edit once the row is armed (see `EditableCell`) - armed is
  * exclusive to a LONE selection (`CollectionTable` derives it as
  * `selectedIds.size === 1`). Ctrl/Cmd+click instead toggles this row into the
- * shared multi-select set (`checked`, no dedicated checkbox column - a
- * space-saving fix request): `onClickCapture` intercepts a Ctrl/Cmd+click
- * BEFORE it reaches the Title/Authors cells' own click handlers (capture
- * fires first), so it never also arms or opens an editor. A checked row gets
+ * shared multi-select set, and Shift+click replaces the set with the
+ * contiguous range from the selection anchor to this row (`checked`, no
+ * dedicated checkbox column - a space-saving fix request): `onClickCapture`
+ * intercepts a Ctrl/Cmd+click or Shift+click BEFORE it reaches the
+ * Title/Authors cells' own click handlers (capture fires first), so neither
+ * ever arms or opens an editor (Shift+click also suppresses the browser's
+ * native text-selection sweep). A checked row gets
  * the SAME highlight as an armed row (left ink bar + `{colors.surface-strong}`,
  * fix request: no separate check-mark affordance - both states read as "this
  * row is selected"). Dragging a selected row carries the whole selection;

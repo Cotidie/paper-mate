@@ -520,6 +520,15 @@ describe("CollectionTable multi-select via Ctrl/Cmd+click (Story 7.2 fix request
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
+  it("Ctrl+click blurs a stray focus the browser's native mousedown left on the Title cell (bug fix: a lingering focus ring, and a later bare Enter would call onArm and collapse the selection)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    const titleCell = screen.getByText("Attention Is All You Need").closest("td")!;
+    titleCell.focus(); // simulate the browser's native focus-on-mousedown
+    expect(document.activeElement).toBe(titleCell);
+    fireEvent.click(titleCell, { ctrlKey: true });
+    expect(document.activeElement).not.toBe(titleCell);
+  });
+
   it("a plain click still arms the row (Ctrl/Cmd+click did not break normal selection)", () => {
     render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
@@ -588,6 +597,96 @@ describe("CollectionTable multi-select via Ctrl/Cmd+click (Story 7.2 fix request
     );
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
     expect(row.getAttribute("aria-selected")).toBe("true");
+  });
+});
+
+describe("CollectionTable Shift+click range selection (Story 7.3)", () => {
+  it("Shift+click selects the contiguous range from the anchor", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSelectionChange={onSelectionChange} />,
+    );
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!); // anchor = row A
+    fireEvent.click(screen.getByText("Untitled").closest("tr")!, { shiftKey: true }); // target = row C
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      new Set([rows[0].doc_id, rows[1].doc_id, rows[2].doc_id]),
+    );
+  });
+
+  it("Shift+click upward (anchor below target) also yields the inclusive range", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSelectionChange={onSelectionChange} />,
+    );
+    fireEvent.click(screen.getByText("no-title-paper").closest("tr")!); // anchor = row B
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!, { shiftKey: true }); // target = row A
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set([rows[0].doc_id, rows[1].doc_id]));
+  });
+
+  it("the anchor is stable across successive Shift+clicks (re-ranges from the same pivot)", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSelectionChange={onSelectionChange} />,
+    );
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!); // anchor = A
+    fireEvent.click(screen.getByText("Untitled").closest("tr")!, { shiftKey: true }); // range A..C
+    fireEvent.click(screen.getByText("no-title-paper").closest("tr")!, { shiftKey: true }); // re-ranges from A, not C
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set([rows[0].doc_id, rows[1].doc_id]));
+  });
+
+  it("a Shift+click with no prior anchor selects just that row and does not throw", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSelectionChange={onSelectionChange} />,
+    );
+    expect(() =>
+      fireEvent.click(screen.getByText("no-title-paper").closest("tr")!, { shiftKey: true }),
+    ).not.toThrow();
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set([rows[1].doc_id]));
+  });
+
+  it("a Shift+click degrades to a plain single-select when the anchor row is filtered out of the current view", () => {
+    const onSelectionChange = vi.fn();
+    const { rerender } = render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSelectionChange={onSelectionChange} />,
+    );
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!); // anchor = A
+    rerender(
+      <CollectionTable
+        rows={rows.slice(1)}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSelectionChange={onSelectionChange}
+      />,
+    ); // row A no longer rendered - the pivot fell out of the current view
+    fireEvent.click(screen.getByText("Untitled").closest("tr")!, { shiftKey: true });
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set([rows[2].doc_id]));
+  });
+
+  it("Shift+click never opens the reader or enters inline edit", () => {
+    const onOpenRow = vi.fn();
+    render(<CollectionTable rows={rows} onOpenRow={onOpenRow} onEditField={noop} />);
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!); // anchor
+    fireEvent.click(screen.getByText("no-title-paper").closest("tr")!, { shiftKey: true });
+    expect(onOpenRow).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("Shift+click on the Title cell does not enter edit mode", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!); // anchor = A, arms A
+    fireEvent.click(screen.getByText("Attention Is All You Need"), { shiftKey: true });
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("Shift+click blurs a stray focus the browser's native mousedown left on the Title cell (bug fix: a lingering focus ring, and a later bare Enter would call onArm and collapse the selection)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    fireEvent.click(screen.getByText("Attention Is All You Need").closest("tr")!); // anchor = A
+    const titleCell = screen.getByText("no-title-paper").closest("td")!;
+    titleCell.focus(); // simulate the browser's native focus-on-mousedown
+    expect(document.activeElement).toBe(titleCell);
+    fireEvent.click(titleCell, { shiftKey: true });
+    expect(document.activeElement).not.toBe(titleCell);
   });
 });
 
