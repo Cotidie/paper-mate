@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { CaretDown, CaretUp } from "@phosphor-icons/react";
 import type { CollectionRow } from "@/api/client";
 import { currentFieldValue, stripPdfExtension, type EditableField, type PendingUpload } from "@/library/row";
 import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
+import { COLUMNS, type ColumnDef, type ColumnKey, type SortState } from "@/library/tableView";
 import PaperRow from "./PaperRow";
 import PendingRow from "./PendingRow";
 import "./CollectionTable.css";
 
 const SKELETON_ROW_COUNT = 6;
-const COLUMNS = ["Title", "Authors", "Added", "File type"] as const;
 const EMPTY_SELECTED: Set<string> = new Set();
+
+/** `file_type`'s CSS class suffix drops the underscore (`col-file-type`);
+ *  every other key is already a valid class-name segment. */
+function columnClassSuffix(key: ColumnKey): string {
+  return key === "file_type" ? "file-type" : key;
+}
 
 /**
  * A compact custom HTML5 drag image (fix request), built fresh per
@@ -42,24 +49,32 @@ function buildDragPreview(rows: CollectionRow[], ids: string[]): HTMLElement {
   return el;
 }
 
-function ColumnGroup() {
+function ColumnGroup({ columns }: { columns: ColumnDef[] }) {
   return (
     <colgroup>
-      <col className="collection-table__col-title" />
-      <col className="collection-table__col-authors" />
-      <col className="collection-table__col-added" />
-      <col className="collection-table__col-file-type" />
+      {columns.map((col) => (
+        <col key={col.key} className={`collection-table__col-${columnClassSuffix(col.key)}`} />
+      ))}
     </colgroup>
   );
 }
 
-function TableHead() {
+/** Renders the active sort column's caret (AC-2); the header itself is not
+ *  interactive - the Sort control (a separate toolbar popover) picks the
+ *  column and direction. */
+function TableHead({ columns, sort }: { columns: ColumnDef[]; sort: SortState | null }) {
   return (
     <thead>
       <tr>
-        {COLUMNS.map((label) => (
-          <th key={label} scope="col">
-            {label}
+        {columns.map((col) => (
+          <th key={col.key} scope="col">
+            {col.label}
+            {sort?.column === col.key &&
+              (sort.direction === "asc" ? (
+                <CaretUp aria-hidden className="collection-table__sort-caret" />
+              ) : (
+                <CaretDown aria-hidden className="collection-table__sort-caret" />
+              ))}
           </th>
         ))}
       </tr>
@@ -67,17 +82,17 @@ function TableHead() {
   );
 }
 
-function TableSkeleton() {
+function TableSkeleton({ visibleColumns }: { visibleColumns: ColumnDef[] }) {
   return (
     <div className="collection-table-wrap">
       <table className="collection-table" aria-busy="true">
-        <ColumnGroup />
-        <TableHead />
+        <ColumnGroup columns={visibleColumns} />
+        <TableHead columns={visibleColumns} sort={null} />
         <tbody>
           {Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
             <tr key={i} className="collection-table__skeleton-row">
-              {COLUMNS.map((label) => (
-                <td key={label}>
+              {visibleColumns.map((col) => (
+                <td key={col.key}>
                   <span className="collection-table__skeleton-cell" />
                 </td>
               ))}
@@ -98,6 +113,10 @@ type CollectionTableProps =
       onEditField?: never;
       selectedIds?: never;
       onSelectionChange?: never;
+      /** Defaults to every column (all `COLUMNS`) when omitted - existing
+       *  isolated tests that don't care about Display/Sort keep working. */
+      visibleColumns?: ColumnDef[];
+      sort?: never;
     }
   | {
       loading?: false;
@@ -114,6 +133,8 @@ type CollectionTableProps =
        *  arm/edit tests that don't care about the toolbar). */
       selectedIds?: Set<string>;
       onSelectionChange?: (ids: Set<string>) => void;
+      visibleColumns?: ColumnDef[];
+      sort?: SortState | null;
     };
 
 /**
@@ -153,8 +174,10 @@ type CollectionTableProps =
  * both stay local UI state since nothing outside the table needs them.
  */
 export default function CollectionTable(props: CollectionTableProps) {
-  if (props.loading) return <TableSkeleton />;
-  const { rows, onOpenRow, pendingRows = [], onEditField } = props;
+  const visibleColumns = props.visibleColumns ?? COLUMNS;
+  if (props.loading) return <TableSkeleton visibleColumns={visibleColumns} />;
+  const { rows, onOpenRow, pendingRows = [], onEditField, sort = null } = props;
+  const visibleKeys = new Set(visibleColumns.map((c) => c.key));
   // Controlled-or-uncontrolled (like `<input value onChange>`): when the
   // caller doesn't pass `selectedIds`, the table owns the set itself so
   // isolated tests of the arm/edit flow don't need to wire a selection
@@ -316,16 +339,17 @@ export default function CollectionTable(props: CollectionTableProps) {
   return (
     <div className="collection-table-wrap">
       <table className="collection-table">
-        <ColumnGroup />
-        <TableHead />
+        <ColumnGroup columns={visibleColumns} />
+        <TableHead columns={visibleColumns} sort={sort} />
         <tbody>
           {pendingRows.map((pending) => (
-            <PendingRow key={pending.tempId} filename={pending.filename} />
+            <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={visibleKeys} />
           ))}
           {rows.map((row) => (
             <PaperRow
               key={row.doc_id}
               row={row}
+              visibleColumns={visibleKeys}
               armed={selectedIds.size === 1 && selectedIds.has(row.doc_id)}
               editingField={editing?.docId === row.doc_id ? editing.field : null}
               checked={selectedIds.has(row.doc_id)}

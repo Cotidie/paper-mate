@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import CollectionTable from "./CollectionTable";
 import { formatAdded } from "@/library/row";
+import { COLUMNS } from "@/library/tableView";
 import type { CollectionRow } from "@/api/client";
 
 afterEach(cleanup);
@@ -768,5 +769,69 @@ describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () =>
 describe("formatAdded", () => {
   it("returns the raw string for an unparseable date", () => {
     expect(formatAdded("not-a-date")).toBe("not-a-date");
+  });
+});
+
+describe("CollectionTable column visibility (Story 7.4, AC-1)", () => {
+  const visibleColumns = COLUMNS.filter((c) => c.key !== "authors");
+
+  it("omits a hidden column's header", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} visibleColumns={visibleColumns} />);
+    expect(screen.queryByRole("columnheader", { name: "Authors" })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Title" })).toBeTruthy();
+  });
+
+  it("omits a hidden column's cell in every row", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} visibleColumns={visibleColumns} />);
+    expect(screen.queryByText("Vaswani et al.")).toBeNull();
+    // Title still renders - it is never hideable.
+    expect(screen.getByText("Attention Is All You Need")).toBeTruthy();
+  });
+
+  it("honors the same visible-column set in the loading skeleton", () => {
+    render(<CollectionTable loading visibleColumns={visibleColumns} />);
+    expect(screen.queryByRole("columnheader", { name: "Authors" })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Title" })).toBeTruthy();
+  });
+
+  it("defaults to every column when visibleColumns is omitted", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    for (const label of ["Title", "Authors", "Added", "File type"]) {
+      expect(screen.getByRole("columnheader", { name: label })).toBeTruthy();
+    }
+  });
+});
+
+describe("CollectionTable sort indicator (Story 7.4, AC-2)", () => {
+  it("shows no caret on any header when sort is null", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} sort={null} />);
+    expect(document.querySelector(".collection-table__sort-caret")).toBeNull();
+  });
+
+  it("shows an ascending caret on the active sort column's header", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        sort={{ column: "added", direction: "asc" }}
+      />,
+    );
+    const header = screen.getByRole("columnheader", { name: /Added/ });
+    expect(header.querySelector(".collection-table__sort-caret")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Title" }).querySelector(".collection-table__sort-caret")).toBeNull();
+  });
+
+  it("shows a different caret when the direction is descending", () => {
+    const { container: ascContainer } = render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} sort={{ column: "added", direction: "asc" }} />,
+    );
+    const ascIcon = ascContainer.querySelector(".collection-table__sort-caret")!.outerHTML;
+    cleanup();
+    const { container: descContainer } = render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} sort={{ column: "added", direction: "desc" }} />,
+    );
+    const descIcon = descContainer.querySelector(".collection-table__sort-caret")!.outerHTML;
+    expect(ascIcon).not.toBe(descIcon);
   });
 });

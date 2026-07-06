@@ -249,4 +249,10 @@
   --folder-panel-icon-size: 16px;
   --folder-panel-indent-step: 16px;
   --folder-panel-action-size: 22px;
+
+  /* table-controls (Story 7.4): the Display/Sort/Filter toolbar popovers.
+     Mirrors move-menu's popover shape at a slightly wider column-name width. */
+  --table-control-popover-width: 200px;
+  --table-control-sort-caret-size: 14px;
+  --table-control-checkbox-size: 14px;
 }
