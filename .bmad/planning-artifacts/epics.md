@@ -1699,6 +1699,77 @@ So that the model and table are ready for notes even before authoring exists.
 **Given** this sprint
 **Then** nothing in the app CREATES a note (authoring is out of scope); the type is reserved and displayed only (LFR-17, spine Deferred: note identity)
 
+### Story 7.7: Move menu shows folder hierarchy
+
+As a reader,
+I want the Move menu's folder list to show nesting the way the sidebar tree does,
+So that I can tell which folder is which when several share similar names or sit under different parents.
+
+**Acceptance Criteria:**
+
+**Given** `MoveMenu` renders the folder list
+**When** folders are nested (LFR-12)
+**Then** each entry is indented by its depth in the tree, in the same pre-order the sidebar `FolderPanel` uses, not a flat alphabetical/insertion-order list
+
+**Given** the existing `flattenTree` depth-flattening logic in `FolderPanel.tsx`
+**Then** it is extracted to a shared module and reused by `MoveMenu`, not reimplemented (CLAUDE.md: don't reinvent wheels)
+
+**Given** this is a display-only fix
+**Then** no backend, contract, or `Folder`/`CollectionRow` model change is needed — `parent_id` already exists and is already fetched
+
+### Story 7.8: Resizable table columns
+
+As a reader,
+I want to drag-resize the Library table's column widths,
+So that I can see more of a long title or author list without the app dictating fixed proportions.
+
+**Acceptance Criteria:**
+
+**Given** the collection table header
+**Then** each column boundary (Title/Authors/Added/File type) has a drag handle that resizes the adjacent column, with a sane minimum width per column so a column can't be dragged to zero/overlap
+
+**Given** a user resizes a column
+**Then** the width is persisted to `localStorage` and restored on next load (survives a reload, not just the session)
+
+**Given** this is a client-only display preference
+**Then** no backend/contract change; widths are a client concern only, not part of `library.json`
+
+### Story 7.9: Author display shows "First Author et al."
+
+As a reader,
+I want the Authors column to show a compact "First Author et al." instead of the full comma list when there's more than one author,
+So that the column stays scannable instead of truncating mid-name.
+
+**Acceptance Criteria:**
+
+**Given** a paper's `authors` field has more than one name (comma-separated, e.g. "Bin Zhou, Shenghua Liu, Bryan Hooi")
+**When** the Authors cell renders
+**Then** it shows `"<first author> et al."` instead of the full list; a single-author paper shows that name unchanged; the full list stays available via the cell's hover `title` tooltip (unchanged)
+
+**Given** this is a pure display formatting change
+**Then** no backend change: the backend already flattens `authors` to one comma-joined string before it reaches the client (Story 6.5); inline-edit (Story 6.6) continues to seed/save the FULL string, only the settled read-view is reformatted
+
+### Story 7.10: Starred papers
+
+As a reader,
+I want to star important papers and filter the Library down to just those,
+So that I can keep track of a working set without creating a folder for it.
+
+**Acceptance Criteria:**
+
+**Given** the collection model
+**Then** `CollectionRow`/the `library.json` paper entry gains a `starred: bool` field (default `false`), additive alongside `trashed` — same pattern, no `schema_version` bump
+
+**Given** one or more rows selected in the table
+**When** the reader clicks a new toolbar Star button beside Move/+Add
+**Then** every selected row is starred (or, if every selected row is already starred, unstarred instead — a toggle, mirroring how Move acts on the current selection) via a new set-based `POST /api/library/star` endpoint mirroring `move_papers`'s `{doc_ids}` shape and serialized `mutate_index` write path (AL-7)
+
+**Given** a starred paper
+**Then** the table shows a minimal indicator (a small filled star mark) with no reserved column, in keeping with the existing "no separate check-mark affordance" principle for row state (Story 7.2)
+
+**Given** the sidebar's existing "Starred" entry (currently an inert placeholder, `FolderPanel.tsx`)
+**Then** it becomes a real filter view — selecting it shows only starred, non-trashed papers — completing the placeholder rather than adding a new UI surface
+
 ## Epic 8: Remote sync (DEFERRED)
 
 Not decomposed into stories this sprint. See the Library Epic List entry and the architecture spine's Deferred section. LFR-25..29 remain captured; the sync epic runs its own discovery (trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest) before any story is written.
