@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 export interface PopoverAnchor {
   top: number;
+  left: number;
   right: number;
 }
 
@@ -15,7 +16,11 @@ export interface PopoverAnchor {
  * document-level pointerdown/Escape dismiss, and focus return to the trigger
  * on close. The caller renders the trigger `<button ref={buttonRef}>` and,
  * when `anchor` is non-null, portals a popover `<div ref={popoverRef}>` to
- * `document.body` positioned at `{ top: anchor.top, right: anchor.right }`.
+ * `document.body`. Anchor carries both `left` and `right` (the trigger's own
+ * edges) - a narrow toolbar button positions its popover from `right` (stays
+ * clear of the viewport's right edge); a wide column header positions from
+ * `left` instead (fix request: `right`-anchoring a header spanning a whole
+ * column stranded the popover far from the label it belongs to).
  */
 export function usePopover() {
   const [anchor, setAnchor] = useState<PopoverAnchor | null>(null);
@@ -25,7 +30,7 @@ export function usePopover() {
 
   function openPopover() {
     const rect = buttonRef.current!.getBoundingClientRect();
-    setAnchor({ top: rect.bottom, right: window.innerWidth - rect.right });
+    setAnchor({ top: rect.bottom, left: rect.left, right: window.innerWidth - rect.right });
   }
 
   function close() {

@@ -110,7 +110,7 @@ function ColumnHeaderCell({
             ref={popoverRef}
             className="table-control__popover"
             role="menu"
-            style={{ top: anchor.top, right: anchor.right }}
+            style={{ top: anchor.top, left: anchor.left }}
           >
             <button
               type="button"
