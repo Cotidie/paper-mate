@@ -15,6 +15,7 @@ export type Library = components["schemas"]["Library"];
 export type FolderCreate = components["schemas"]["FolderCreate"];
 export type FolderRename = components["schemas"]["FolderRename"];
 export type MoveRequest = components["schemas"]["MoveRequest"];
+export type DocIdSet = components["schemas"]["DocIdSet"];
 
 // Annotation entity (AD-5), generated from the Pydantic model — the store and
 // overlay import the shape from here, never hand-author it (AD-3). `Anchor` is
@@ -193,6 +194,49 @@ export async function movePapers(docIds: string[], folderId: string | null): Pro
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Library;
+}
+
+/**
+ * Soft-delete a set of papers to Trash (`POST /api/library/trash`, Story 7.5
+ * AC-1, AD-L6). `folder_id`/`order`/annotations are untouched; the papers
+ * leave the current view and surface only in the Trash lens.
+ */
+export async function trashPapers(docIds: string[]): Promise<Library> {
+  const body: DocIdSet = { doc_ids: docIds };
+  const res = await fetch("/api/library/trash", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Library;
+}
+
+/**
+ * Restore a set of trashed papers (`POST /api/library/restore`, Story 7.5
+ * AC-3, AD-L6). Returns each to its retained `folder_id` (Uncategorized if
+ * that folder no longer exists).
+ */
+export async function restorePapers(docIds: string[]): Promise<Library> {
+  const body: DocIdSet = { doc_ids: docIds };
+  const res = await fetch("/api/library/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Library;
+}
+
+/**
+ * Permanently delete a document (`DELETE /api/docs/{doc_id}`, Story 7.5 AC-4,
+ * AL-5.3). Removes the whole `library/{doc_id}/` dir (source PDF +
+ * annotations + meta) and its `library.json` entry. Manual only, no undo.
+ */
+export async function purgeDoc(docId: string): Promise<Library> {
+  const res = await fetch(`/api/docs/${encodeURIComponent(docId)}`, { method: "DELETE" });
   if (!res.ok) throw await envelopeError(res);
   return (await res.json()) as Library;
 }

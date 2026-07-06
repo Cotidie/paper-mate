@@ -10,9 +10,11 @@ from app.main import app
 from app.models import (
     Annotation,
     CollectionRow,
+    DocIdSet,
     DocMeta,
     Folder,
     Library,
+    MoveRequest,
     PathAnchor,
     RectAnchor,
     Style,
@@ -223,3 +225,19 @@ def test_library_wraps_papers_and_folders() -> None:
     library = Library(papers=[row], folders=[])
     assert library.papers == [row]
     assert library.folders == []
+
+
+def test_doc_id_set_rejects_empty_doc_ids() -> None:
+    with pytest.raises(ValidationError):
+        DocIdSet(doc_ids=[])
+
+
+def test_doc_id_set_rejects_extra_field() -> None:
+    with pytest.raises(ValidationError):
+        DocIdSet(doc_ids=["d1"], folder_id="f1")
+
+
+def test_move_request_still_validates_doc_ids_and_folder_id() -> None:
+    move = MoveRequest(doc_ids=["d1", "d2"], folder_id="f1")
+    assert move.doc_ids == ["d1", "d2"]
+    assert move.folder_id == "f1"

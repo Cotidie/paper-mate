@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import "@/library/LibraryPage.css";
 import Toast from "@/components/Toast/Toast";
 import CollectionTable from "@/library/CollectionTable/CollectionTable";
+import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog";
 import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
 import AddMenu from "@/library/AddMenu/AddMenu";
 import FolderPanel from "@/library/FolderPanel/FolderPanel";
@@ -11,11 +12,13 @@ import DisplayMenu from "@/library/TableControls/DisplayMenu";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useMovePapers } from "@/library/useMovePapers";
+import { useTrashPapers } from "@/library/useTrashPapers";
 import { useColumnWidths } from "@/library/useColumnWidths";
 import { useResizablePanel } from "@/library/useResizablePanel";
 import { useTableView } from "@/library/useTableView";
 import { filterPapers, type FolderSelection } from "@/library/folderFilter";
-import { fetchHealth, type Folder } from "@/api/client";
+import { stripPdfExtension } from "@/library/row";
+import { fetchHealth, type CollectionRow, type Folder } from "@/api/client";
 
 const PDF_EXTENSION = /\.pdf$/i;
 
@@ -26,6 +29,7 @@ type ToastState = { message: string; variant: "error" | "info" };
 function emptySelectionMessage(selection: FolderSelection): string {
   if (selection.kind === "uncategorized") return "No uncategorized papers.";
   if (selection.kind === "folder") return "No papers in this folder.";
+  if (selection.kind === "trash") return "Trash is empty.";
   return "No papers to show.";
 }
 
@@ -35,6 +39,7 @@ function emptySelectionMessage(selection: FolderSelection): string {
 function selectionLabel(selection: FolderSelection, folders: Folder[]): string {
   if (selection.kind === "uncategorized") return "Uncategorized";
   if (selection.kind === "folder") return folders.find((f) => f.id === selection.id)?.name ?? "folder";
+  if (selection.kind === "trash") return "Trash";
   return "library";
 }
 
@@ -73,6 +78,8 @@ export default function LibraryPage() {
   });
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
   const { movePapers } = useMovePapers({ setLibrary, onToast });
+  const trash = useTrashPapers({ setLibrary, onToast });
+  const [purgeTarget, setPurgeTarget] = useState<CollectionRow | null>(null);
   const tableView = useTableView();
   const folderPanelResize = useResizablePanel();
   const columnWidths = useColumnWidths();
@@ -103,6 +110,18 @@ export default function LibraryPage() {
     [movePapers],
   );
 
+  const handleDeleteRequest = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    trash.trashPapers(Array.from(selectedIds));
+    setSelectedIds(new Set());
+  }, [trash, selectedIds]);
+
+  function confirmPurge() {
+    if (!purgeTarget) return;
+    trash.purge(purgeTarget.doc_id);
+    setPurgeTarget(null);
+  }
+
   useEffect(() => {
     let live = true;
     fetchHealth()
@@ -132,8 +151,9 @@ export default function LibraryPage() {
     [papers, selection, applyTableView],
   );
   // A just-uploaded paper lands Uncategorized; it should not appear under an
-  // unrelated selected folder (Dev Notes: gate pending rows on selection kind).
-  const visiblePending = selection.kind === "folder" ? [] : pending;
+  // unrelated selected folder or the Trash lens (Dev Notes: gate pending rows
+  // on selection kind - a just-uploaded paper is never trashed).
+  const visiblePending = selection.kind === "folder" || selection.kind === "trash" ? [] : pending;
   const mainClassName = [
     "library-main",
     isTableLayout && "library-main--table",
@@ -196,12 +216,24 @@ export default function LibraryPage() {
               )}
               <div className="library-toolbar__actions">
                 <DisplayMenu hiddenColumns={tableView.hiddenColumns} onToggleColumn={tableView.toggleColumn} />
-                <MoveMenu
-                  folders={folders}
-                  onMove={(folderId) => handleMoveRequest(Array.from(selectedIds), folderId)}
-                  label="Move"
-                  disabled={selectedIds.size === 0}
-                />
+                {selection.kind !== "trash" && (
+                  <>
+                    <MoveMenu
+                      folders={folders}
+                      onMove={(folderId) => handleMoveRequest(Array.from(selectedIds), folderId)}
+                      label="Move"
+                      disabled={selectedIds.size === 0}
+                    />
+                    <button
+                      type="button"
+                      className="toolbar-button"
+                      disabled={selectedIds.size === 0}
+                      onClick={handleDeleteRequest}
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
                 <AddMenu
                   onFileUpload={() => fileInputRef.current?.click()}
                   onFolderUpload={() => folderInputRef.current?.click()}
@@ -259,6 +291,14 @@ export default function LibraryPage() {
                 columnWidths={columnWidths.widths}
                 onResizeColumnStart={columnWidths.startResize}
                 onResizeColumnKeyDown={columnWidths.handleKeyDown}
+                onRestoreRow={
+                  selection.kind === "trash" ? (docId) => trash.restorePapers([docId]) : undefined
+                }
+                onRequestPurge={
+                  selection.kind === "trash"
+                    ? (docId) => setPurgeTarget(visiblePapers.find((p) => p.doc_id === docId) ?? null)
+                    : undefined
+                }
               />
             )
           ) : loadFailed ? null : (
@@ -269,6 +309,18 @@ export default function LibraryPage() {
       {toast && (
         <Toast message={toast.message} variant={toast.variant} onDismiss={() => setToast(null)} />
       )}
+      <ConfirmDialog
+        open={purgeTarget !== null}
+        title={
+          purgeTarget
+            ? `Purge "${purgeTarget.title ?? (purgeTarget.filename ? stripPdfExtension(purgeTarget.filename) : "Untitled")}"`
+            : ""
+        }
+        message="This permanently deletes the paper and its annotations. This cannot be undone."
+        confirmLabel="Purge"
+        onConfirm={confirmPurge}
+        onCancel={() => setPurgeTarget(null)}
+      />
     </div>
   );
 }

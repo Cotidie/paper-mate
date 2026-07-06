@@ -46,6 +46,8 @@ export default function PaperRow({
   onStartEdit,
   onCommit,
   onCancel,
+  onRestore,
+  onPurge,
 }: {
   row: CollectionRow;
   visibleColumns: Set<ColumnKey>;
@@ -60,12 +62,21 @@ export default function PaperRow({
   onStartEdit: (field: EditableField) => void;
   onCommit: (field: EditableField, value: string, viaBlur: boolean) => void;
   onCancel: () => void;
+  /** Present only in the Trash lens (Story 7.5, AC-2): a trashed row is not
+   *  opened, so the Title cell's Open button is replaced with these two. */
+  onRestore?: () => void;
+  onPurge?: () => void;
 }) {
   // A null title falls back to the filename, extension stripped (still
   // recognizable); `Untitled` is the last resort when neither is known.
   const displayTitle = row.title ?? (row.filename ? stripPdfExtension(row.filename) : null);
   const label = statusLabel(row.status);
   const editable = row.status !== "extracting";
+  // Trash lens (Story 7.5 scope: "Moving a trashed paper into a folder" is
+  // out of scope) - a trashed row must not be draggable onto a folder-panel
+  // drop target, so drag is disabled at the source whenever Restore/Purge
+  // are present (the same signal PaperRow already uses to detect the lens).
+  const dragDisabled = Boolean(onRestore || onPurge);
   return (
     <tr
       aria-selected={armed}
@@ -73,8 +84,8 @@ export default function PaperRow({
       onClickCapture={onRowClickCapture}
       onClick={onRowClick}
       className={rowStatusClass(row.status)}
-      draggable
-      onDragStart={onDragStart}
+      draggable={!dragDisabled}
+      onDragStart={dragDisabled ? undefined : onDragStart}
     >
       {visibleColumns.has("title") && (
         <EditableCell
@@ -93,17 +104,44 @@ export default function PaperRow({
           <span className="collection-table__title-text">
             {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
           </span>
-          <button
-            type="button"
-            className="collection-table__open-button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpen();
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            Open
-          </button>
+          {onRestore && onPurge ? (
+            <span className="collection-table__trash-actions">
+              <button
+                type="button"
+                className="collection-table__row-action-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRestore();
+                }}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                Restore
+              </button>
+              <button
+                type="button"
+                className="collection-table__row-action-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPurge();
+                }}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                Purge
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="collection-table__open-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen();
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              Open
+            </button>
+          )}
         </EditableCell>
       )}
       {visibleColumns.has("authors") && (

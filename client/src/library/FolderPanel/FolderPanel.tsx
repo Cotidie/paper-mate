@@ -49,15 +49,16 @@ function flattenTree(folders: Folder[]): Array<{ folder: Folder; depth: number }
  * owns only the local UI state (which folder is being renamed, which parent
  * has a new-folder draft open, which folder is pending a delete confirm).
  *
- * `All`/`Uncategorized`/a folder row are selectable (Story 7.2, LFR-14,
- * L-UX-DR4): `selection` + `onSelect` are lifted to `LibraryPage` (shared with
- * the table's filter), so this component only renders the highlight and
- * forwards clicks/keyboard activation. `Recent`/`Starred`/`Trash` stay inert
- * visual placeholders (`Starred` is an unimplemented mock per user request;
- * Trash's real lens is Story 7.5). `Uncategorized` and every folder row are
- * ALSO drop targets for drag-to-folder (fix request): a drag carrying the
- * `MOVE_DRAG_MIME` payload (set by a `CollectionTable` row's `dragstart`)
- * reports the dropped doc ids + target folder up via `onDropMove`.
+ * `All`/`Uncategorized`/a folder row/`Trash` are selectable (Story 7.2/7.5,
+ * LFR-14, L-UX-DR4): `selection` + `onSelect` are lifted to `LibraryPage`
+ * (shared with the table's filter), so this component only renders the
+ * highlight and forwards clicks/keyboard activation. `Recent`/`Starred` stay
+ * inert visual placeholders (`Starred` is an unimplemented mock per user
+ * request). `Uncategorized` and every folder row are ALSO drop targets for
+ * drag-to-folder (fix request): a drag carrying the `MOVE_DRAG_MIME` payload
+ * (set by a `CollectionTable` row's `dragstart`) reports the dropped doc ids
+ * + target folder up via `onDropMove`. `Trash` is NOT a drop target (Story
+ * 7.5 scope: drag-to-Trash is out of scope).
  */
 export default function FolderPanel({
   folders,
@@ -173,9 +174,18 @@ export default function FolderPanel({
           <Star aria-hidden />
           Starred
         </li>
-        <li className="library-folder-panel__item" aria-disabled="true">
-          <TrashSimple aria-hidden />
-          Trash
+        <li>
+          <button
+            type="button"
+            className={
+              "library-folder-panel__item" +
+              (isSelected(selection, { kind: "trash" }) ? " library-folder-panel__item--active" : "")
+            }
+            onClick={() => onSelect({ kind: "trash" })}
+          >
+            <TrashSimple aria-hidden />
+            Trash
+          </button>
         </li>
       </ul>
 

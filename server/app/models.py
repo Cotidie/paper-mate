@@ -152,16 +152,22 @@ class FolderRename(BaseModel):
         return stripped
 
 
-class MoveRequest(BaseModel):
-    """Request body for ``POST /api/library/move`` (Story 7.2, AD-L6): the
-    set-based organization contract every future move/trash/restore route
-    reuses. ``doc_ids`` must be non-empty (a move of nothing is a client
-    bug); ``folder_id=None`` clears membership (Uncategorized). A move
-    replaces any prior folder, so a paper belongs to at most one folder."""
+class DocIdSet(BaseModel):
+    """Base request body for a set-based library organization op (AD-L6):
+    ``doc_ids`` must be non-empty (an op on nothing is a client bug). Bare
+    for trash/restore (``POST /api/library/trash|restore``); ``MoveRequest``
+    subclasses it to add a target ``folder_id``."""
 
     model_config = ConfigDict(extra="forbid")
 
     doc_ids: list[str] = Field(min_length=1)
+
+
+class MoveRequest(DocIdSet):
+    """Request body for ``POST /api/library/move`` (Story 7.2, AD-L6):
+    ``folder_id=None`` clears membership (Uncategorized). A move replaces
+    any prior folder, so a paper belongs to at most one folder."""
+
     folder_id: str | None = None
 
 

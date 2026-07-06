@@ -13,9 +13,10 @@ overwrites an existing ``annotations.json`` or resets ``meta.json`` — only
 """
 
 import hashlib
+import shutil
 from pathlib import Path
 
-from app.models import DocMeta, DocStatus
+from app.models import DocMeta, DocStatus, Library
 from app.storage import library_index, meta_store, paths
 from app.storage.atomic import atomic_write
 from app.storage.errors import DocumentNotFoundError, StorageError
@@ -71,7 +72,9 @@ def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
 
     Validates before writing anything. Idempotent by ``doc_id``: an existing
     document keeps its ``annotations.json``/``meta.json`` and only updates
-    ``last_opened``.
+    ``last_opened``. If the existing document was trashed, the re-import also
+    restores it (clears ``trashed``, keeps its retained ``folder_id`` --
+    Story 7.5 AC-5), rather than creating a duplicate row.
     """
     page_count, title = parse_pdf(raw_bytes)  # validate FIRST — no write on failure
     doc_id = hashlib.sha256(raw_bytes).hexdigest()
@@ -87,7 +90,7 @@ def import_pdf(raw_bytes: bytes, original_filename: str) -> tuple[str, DocMeta]:
         updated = existing.model_copy(update={"last_opened": now})
         meta_store.write(doc_dir, updated)
         library_index.mutate_index(
-            lambda index: library_index.upsert_paper_entry(index, doc_id, updated)
+            lambda index: library_index.upsert_paper_entry(index, doc_id, updated, restore=True)
         )
         return doc_id, updated
 
@@ -156,3 +159,27 @@ def touch_last_opened(doc_id: str) -> DocMeta:
     open path needs its own touch — this is that touch.
     """
     return library_index.update_meta_and_reindex(doc_id, {"last_opened": paths.now_iso()})
+
+
+def purge_document(doc_id: str) -> Library:
+    """Permanently delete a document (AL-5.3, AL-6): remove its whole
+    ``library/{doc_id}/`` dir AND its ``library.json`` entry. Manual only, no
+    auto-purge, no undo.
+
+    Crash-safe order (do not invert): ``rmtree`` the dir FIRST, then prune the
+    index entry, both under ``library_index._index_lock``. ``reconcile_library``
+    treats an on-disk dir absent from the index as prunable, and an index
+    entry whose dir vanished as a fresh Uncategorized add -- so pruning the
+    entry before removing the dir would let a crash in between resurrect the
+    purged paper on the next boot's reconcile. An unresolvable or already-gone
+    doc_id raises ``DocumentNotFoundError``.
+    """
+    try:
+        doc_dir = paths.doc_dir(doc_id)
+    except StorageError as exc:
+        raise DocumentNotFoundError(f"unresolvable doc_id {doc_id!r}") from exc
+    with library_index._index_lock:
+        if not doc_dir.is_dir():
+            raise DocumentNotFoundError(f"no document with id {doc_id!r}")
+        shutil.rmtree(doc_dir)
+        return library_index.purge_entry(doc_id)

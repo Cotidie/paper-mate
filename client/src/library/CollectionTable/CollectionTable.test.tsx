@@ -747,6 +747,23 @@ describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () =>
     expect(previewEl.textContent).toBe("Attention Is All You Need");
   });
 
+  it("a Trash-lens row is not draggable (Story 7.5 scope: moving a trashed paper into a folder is out of scope, code-review fix)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onRestoreRow={noop}
+        onRequestPurge={noop}
+      />,
+    );
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    expect(row.getAttribute("draggable")).toBe("false");
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(row, { dataTransfer });
+    expect(dataTransfer.getData("application/x-papermate-move")).toBe("");
+  });
+
   it("the drag preview shows a count badge when dragging multiple checked rows", () => {
     const selectedIds = new Set([rows[0].doc_id, rows[1].doc_id]);
     render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} selectedIds={selectedIds} />);

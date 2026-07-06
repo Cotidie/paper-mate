@@ -23,7 +23,7 @@ from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app import storage
-from app.models import Annotation, Doc, DocPatch
+from app.models import Annotation, Doc, DocPatch, Library
 from app.routes._errors import error_response, storage_errors
 from app.routes.extraction import run_extraction
 
@@ -101,6 +101,24 @@ async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
     with storage_errors("Could not update document"):
         meta = storage.update_doc_meta(doc_id, updates)
     return Doc(doc_id=doc_id, **meta.model_dump())
+
+
+@router.delete(
+    "/docs/{doc_id}",
+    response_model=Library,
+    responses={
+        404: error_response("No document with this id."),
+        500: error_response("Could not purge document."),
+    },
+)
+async def purge_doc(doc_id: str) -> Library:
+    """Permanently delete a document (Story 7.5 AC-4, AL-5.3, AL-6): removes
+    the whole ``library/{doc_id}/`` dir (source PDF + annotations + meta) AND
+    its ``library.json`` entry. Manual only -- no auto-purge, no undo. Unknown
+    or already-purged id -> 404 ``"Document not found"``. Returns the whole
+    updated ``Library`` in one round-trip."""
+    with storage_errors("Could not purge document"):
+        return storage.purge_document(doc_id)
 
 
 @router.post(

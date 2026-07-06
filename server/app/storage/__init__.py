@@ -31,6 +31,7 @@ from app.storage.annotations_store import (
 from app.storage.documents import (
     apply_extraction,
     import_pdf,
+    purge_document,
     read_meta,
     source_path,
     touch_last_opened,
@@ -54,6 +55,8 @@ from app.storage.library_index import (
     read_library,
     reconcile_library,
     rename_folder,
+    restore_papers,
+    trash_papers,
 )
 from app.storage.meta_store import META_SCHEMA_VERSION
 
@@ -78,6 +81,8 @@ __all__ = [
     "rename_folder",
     "delete_folder",
     "move_papers",
+    "trash_papers",
+    "restore_papers",
     # Per-document operations.
     "source_path",
     "read_meta",
@@ -85,6 +90,7 @@ __all__ = [
     "apply_extraction",
     "update_doc_meta",
     "touch_last_opened",
+    "purge_document",
     # Annotations store.
     "write_annotations",
     "read_annotations",

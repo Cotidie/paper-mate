@@ -342,6 +342,10 @@ type CollectionTableProps =
        *  both are supplied; omit for isolated tests that don't care. */
       onResizeColumnStart?: (key: ColumnKey, e: React.PointerEvent) => void;
       onResizeColumnKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+      /** Present only in the Trash lens (Story 7.5, AC-2): supplying both
+       *  swaps every row's Open button for per-row Restore/Purge. */
+      onRestoreRow?: (docId: string) => void;
+      onRequestPurge?: (docId: string) => void;
     };
 
 /**
@@ -396,6 +400,8 @@ export default function CollectionTable(props: CollectionTableProps) {
     columnWidths,
     onResizeColumnStart,
     onResizeColumnKeyDown,
+    onRestoreRow,
+    onRequestPurge,
   } = props;
   const visibleKeys = new Set(visibleColumns.map((c) => c.key));
   // Controlled-or-uncontrolled (like `<input value onChange>`): when the
@@ -588,6 +594,8 @@ export default function CollectionTable(props: CollectionTableProps) {
               onStartEdit={(field) => startEdit(row.doc_id, field)}
               onCommit={(field, value, viaBlur) => commitEdit(row, field, value, viaBlur)}
               onCancel={() => setEditing(null)}
+              onRestore={onRestoreRow ? () => onRestoreRow(row.doc_id) : undefined}
+              onPurge={onRequestPurge ? () => onRequestPurge(row.doc_id) : undefined}
             />
           ))}
         </tbody>

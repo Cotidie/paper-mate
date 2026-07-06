@@ -289,6 +289,43 @@
   pointer-events: auto;
 }
 
+/* Trash lens (Story 7.5, AC-2): Restore + Purge replace the Open button in
+   the same hover/focus-revealed slot. */
+.collection-table__trash-actions {
+  position: absolute;
+  top: 50%;
+  right: var(--space-xs);
+  transform: translateY(-50%);
+  display: flex;
+  gap: var(--space-xxs);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease-out;
+}
+
+.collection-table tbody tr:hover .collection-table__trash-actions,
+.collection-table__trash-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.collection-table__row-action-button {
+  background: var(--color-surface-card);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) var(--space-xs);
+}
+
+.collection-table__row-action-button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--color-ink);
+}
+
 /* Status-driven row treatment (Story 6.4 introduces the seam for optimistic
    rows; Story 6.5 reuses it for real settled `extracting` rows). Muted text
    only. Real rows stay interactive at every status — the pointer/hover kill

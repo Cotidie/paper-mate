@@ -104,6 +104,30 @@ def test_reimport_is_idempotent(data_root):
     assert second.added == first.added
 
 
+def test_reimport_of_trashed_paper_restores_it(data_root):
+    raw = make_pdf_bytes(pages=1, title="Orig")
+    doc_id, _ = storage.import_pdf(raw, "orig.pdf")
+    folder = storage.create_folder("Papers", None)
+    storage.move_papers([doc_id], folder.id)
+    storage.trash_papers([doc_id])
+
+    storage.import_pdf(raw, "orig.pdf")
+
+    paper = next(p for p in storage.read_library().papers if p.doc_id == doc_id)
+    assert paper.trashed is False
+    assert paper.folder_id == folder.id
+
+
+def test_apply_extraction_does_not_restore_trashed_paper(data_root):
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    storage.trash_papers([doc_id])
+
+    storage.apply_extraction(doc_id, title="T", authors="A", status="ready")
+
+    paper = next(p for p in storage.read_library().papers if p.doc_id == doc_id)
+    assert paper.trashed is True
+
+
 def test_invalid_bytes_raise_and_write_nothing(data_root):
     with pytest.raises(storage.InvalidPDFError):
         storage.import_pdf(b"this is not a pdf", "bad.pdf")
@@ -1012,3 +1036,107 @@ def test_move_papers_into_same_folder_is_idempotent(data_root):
 
     paper = next(p for p in library.papers if p.doc_id == doc_id)
     assert paper.folder_id == folder.id
+
+
+def test_trash_papers_flips_trashed_leaves_folder_and_order(data_root):
+    folder = storage.create_folder("Papers", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    storage.move_papers([doc_id], folder.id)
+    before = next(p for p in storage.read_library().papers if p.doc_id == doc_id)
+
+    library = storage.trash_papers([doc_id])
+
+    paper = next(p for p in library.papers if p.doc_id == doc_id)
+    assert paper.trashed is True
+    assert paper.folder_id == folder.id
+    assert paper.order == before.order
+
+
+def test_trash_papers_unknown_doc_id_raises_all_or_nothing(data_root):
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.trash_papers([doc_id, "does-not-exist"])
+
+    paper = next(p for p in storage.read_library().papers if p.doc_id == doc_id)
+    assert paper.trashed is False
+
+
+def test_restore_papers_clears_trashed_keeps_folder_id(data_root):
+    folder = storage.create_folder("Papers", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    storage.move_papers([doc_id], folder.id)
+    storage.trash_papers([doc_id])
+
+    library = storage.restore_papers([doc_id])
+
+    paper = next(p for p in library.papers if p.doc_id == doc_id)
+    assert paper.trashed is False
+    assert paper.folder_id == folder.id
+
+
+def test_restore_papers_unknown_doc_id_raises(data_root):
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.restore_papers(["does-not-exist"])
+
+
+def test_restore_after_folder_delete_lands_uncategorized(data_root):
+    """Locks the AC-3 'else Uncategorized' invariant: a paper trashed while in
+    folder F, whose folder F is then deleted, already has folder_id cleared
+    to None (delete_folder re-homes trashed papers too) -- so restoring it
+    finds it already in Uncategorized, not a dangling folder id."""
+    folder = storage.create_folder("Papers", None)
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    storage.move_papers([doc_id], folder.id)
+    storage.trash_papers([doc_id])
+    storage.delete_folder(folder.id)
+    trashed = next(p for p in storage.read_library().papers if p.doc_id == doc_id)
+    assert trashed.folder_id is None
+
+    library = storage.restore_papers([doc_id])
+
+    paper = next(p for p in library.papers if p.doc_id == doc_id)
+    assert paper.trashed is False
+    assert paper.folder_id is None
+
+
+def test_trash_does_not_touch_annotations(data_root):
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    ann = make_annotation(doc_id)
+    storage.write_annotations(doc_id, [ann])
+
+    storage.trash_papers([doc_id])
+
+    annotations = storage.read_annotations(doc_id)
+    assert annotations == [ann]
+
+
+def test_purge_document_removes_dir_and_index_entry(data_root):
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    doc_dir = data_root / "library" / doc_id
+
+    library = storage.purge_document(doc_id)
+
+    assert not doc_dir.exists()
+    assert all(p.doc_id != doc_id for p in library.papers)
+
+
+def test_purge_document_unknown_doc_id_raises_not_found(data_root):
+    with pytest.raises(storage.DocumentNotFoundError):
+        storage.purge_document("does-not-exist")
+
+
+def test_purge_then_reconcile_does_not_resurrect(data_root):
+    """Locks the crash-safe ordering rationale: rmtree-then-prune means a dir
+    removed by rmtree (simulating the purge's first step) is never re-added
+    by reconcile, because prune already happened atomically alongside it in
+    purge_document. This test isolates just the rmtree half to prove
+    reconcile treats a vanished dir as prunable, not as a resurrection
+    candidate."""
+    doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
+    doc_dir = data_root / "library" / doc_id
+    shutil.rmtree(doc_dir)
+
+    storage.reconcile_library()
+
+    assert all(p.doc_id != doc_id for p in storage.read_library().papers)

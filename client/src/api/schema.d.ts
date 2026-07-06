@@ -66,7 +66,15 @@ export interface paths {
         get: operations["get_doc_api_docs__doc_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Purge Doc
+         * @description Permanently delete a document (Story 7.5 AC-4, AL-5.3, AL-6): removes
+         *     the whole ``library/{doc_id}/`` dir (source PDF + annotations + meta) AND
+         *     its ``library.json`` entry. Manual only -- no auto-purge, no undo. Unknown
+         *     or already-purged id -> 404 ``"Document not found"``. Returns the whole
+         *     updated ``Library`` in one round-trip.
+         */
+        delete: operations["purge_doc_api_docs__doc_id__delete"];
         options?: never;
         head?: never;
         /**
@@ -265,6 +273,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trash Papers
+         * @description Set-based soft-delete (Story 7.5 AC-1, AL-5.1, AD-L6): flip ``trashed``
+         *     to ``True`` for every id in ``doc_ids``. ``folder_id``/``order`` and
+         *     ``annotations.json``/``meta.json``/``source.pdf`` are untouched -- this is
+         *     organizational only. Returns the whole updated ``Library`` in one
+         *     round-trip. Unknown ``doc_id`` -> 404 ``"Document not found"``.
+         */
+        post: operations["trash_papers_api_library_trash_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Papers
+         * @description Set-based restore (Story 7.5 AC-3, AL-5.2, AD-L6): flip ``trashed`` to
+         *     ``False`` for every id in ``doc_ids``, returning it to its retained
+         *     ``folder_id`` (Uncategorized if that folder is gone -- already guaranteed
+         *     by ``delete_folder``'s re-home, no extra guard needed here). Returns the
+         *     whole updated ``Library`` in one round-trip. Unknown ``doc_id`` -> 404
+         *     ``"Document not found"``.
+         */
+        post: operations["restore_papers_api_library_restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -375,6 +432,17 @@ export interface components {
             doc_id: string;
         };
         /**
+         * DocIdSet
+         * @description Base request body for a set-based library organization op (AD-L6):
+         *     ``doc_ids`` must be non-empty (an op on nothing is a client bug). Bare
+         *     for trash/restore (``POST /api/library/trash|restore``); ``MoveRequest``
+         *     subclasses it to add a target ``folder_id``.
+         */
+        DocIdSet: {
+            /** Doc Ids */
+            doc_ids: string[];
+        };
+        /**
          * DocPatch
          * @description Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6): a partial
          *     title/authors edit. Request-only (no route returns it) — surfaced into
@@ -457,11 +525,9 @@ export interface components {
         };
         /**
          * MoveRequest
-         * @description Request body for ``POST /api/library/move`` (Story 7.2, AD-L6): the
-         *     set-based organization contract every future move/trash/restore route
-         *     reuses. ``doc_ids`` must be non-empty (a move of nothing is a client
-         *     bug); ``folder_id=None`` clears membership (Uncategorized). A move
-         *     replaces any prior folder, so a paper belongs to at most one folder.
+         * @description Request body for ``POST /api/library/move`` (Story 7.2, AD-L6):
+         *     ``folder_id=None`` clears membership (Uncategorized). A move replaces
+         *     any prior folder, so a paper belongs to at most one folder.
          */
         MoveRequest: {
             /** Doc Ids */
@@ -674,6 +740,55 @@ export interface operations {
                 };
             };
             /** @description The stored document is unreadable. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    purge_doc_api_docs__doc_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description No document with this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Could not purge document. */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1151,6 +1266,108 @@ export interface operations {
                 };
             };
             /** @description No folder with this id, or an unknown document id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description doc_ids must be non-empty. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Could not update the collection. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    trash_papers_api_library_trash_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocIdSet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description An unknown document id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description doc_ids must be non-empty. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Could not update the collection. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    restore_papers_api_library_restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocIdSet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description An unknown document id. */
             404: {
                 headers: {
                     [name: string]: unknown;

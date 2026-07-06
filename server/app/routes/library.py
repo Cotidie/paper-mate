@@ -16,7 +16,7 @@ the doc-specific ``"Document not found"`` literal, via ``storage_errors``'s
 from fastapi import APIRouter
 
 from app import storage
-from app.models import Folder, FolderCreate, FolderRename, Library, MoveRequest
+from app.models import DocIdSet, Folder, FolderCreate, FolderRename, Library, MoveRequest
 from app.routes._errors import error_response, storage_errors
 
 router = APIRouter(tags=["library"])
@@ -119,3 +119,42 @@ async def move_papers(body: MoveRequest) -> Library:
         extra_not_found=[(storage.FolderNotFoundError, _FOLDER_NOT_FOUND)],
     ):
         return storage.move_papers(body.doc_ids, body.folder_id)
+
+
+@router.post(
+    "/library/trash",
+    response_model=Library,
+    responses={
+        404: error_response("An unknown document id."),
+        422: error_response("doc_ids must be non-empty."),
+        500: error_response("Could not update the collection."),
+    },
+)
+async def trash_papers(body: DocIdSet) -> Library:
+    """Set-based soft-delete (Story 7.5 AC-1, AL-5.1, AD-L6): flip ``trashed``
+    to ``True`` for every id in ``doc_ids``. ``folder_id``/``order`` and
+    ``annotations.json``/``meta.json``/``source.pdf`` are untouched -- this is
+    organizational only. Returns the whole updated ``Library`` in one
+    round-trip. Unknown ``doc_id`` -> 404 ``"Document not found"``."""
+    with storage_errors("Could not update the collection"):
+        return storage.trash_papers(body.doc_ids)
+
+
+@router.post(
+    "/library/restore",
+    response_model=Library,
+    responses={
+        404: error_response("An unknown document id."),
+        422: error_response("doc_ids must be non-empty."),
+        500: error_response("Could not update the collection."),
+    },
+)
+async def restore_papers(body: DocIdSet) -> Library:
+    """Set-based restore (Story 7.5 AC-3, AL-5.2, AD-L6): flip ``trashed`` to
+    ``False`` for every id in ``doc_ids``, returning it to its retained
+    ``folder_id`` (Uncategorized if that folder is gone -- already guaranteed
+    by ``delete_folder``'s re-home, no extra guard needed here). Returns the
+    whole updated ``Library`` in one round-trip. Unknown ``doc_id`` -> 404
+    ``"Document not found"``."""
+    with storage_errors("Could not update the collection"):
+        return storage.restore_papers(body.doc_ids)
