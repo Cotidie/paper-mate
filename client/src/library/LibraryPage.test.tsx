@@ -849,6 +849,37 @@ describe("Folder filter + move (Story 7.2)", () => {
     expect(movePapers).toHaveBeenCalledWith([second.doc_id], folderA.id);
   });
 
+  it("Shift+click range-selects then toolbar Move moves the whole range and clears the selection (Story 7.3, AC-4/AC-5)", async () => {
+    const first = libraryRow({ doc_id: "1".repeat(64), title: "First Paper", order: 0 });
+    const second = libraryRow({ doc_id: "2".repeat(64), title: "Second Paper", order: 1 });
+    const third = libraryRow({ doc_id: "3".repeat(64), title: "Third Paper", order: 2 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [first, second, third], folders: [folderA] });
+    const movePapers = vi.spyOn(api, "movePapers").mockResolvedValue({
+      papers: [
+        { ...first, folder_id: folderA.id },
+        { ...second, folder_id: folderA.id },
+        { ...third, folder_id: folderA.id },
+      ],
+      folders: [folderA],
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("First Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Uncategorized"));
+    fireEvent.click(screen.getByText("First Paper").closest("tr")!); // anchor = first row
+    fireEvent.click(screen.getByText("Third Paper").closest("tr")!, { shiftKey: true }); // range first..third
+
+    fireEvent.click(screen.getByRole("button", { name: "Move" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Folder A" }));
+
+    expect(movePapers).toHaveBeenCalledTimes(1);
+    expect(new Set(movePapers.mock.calls[0][0])).toEqual(
+      new Set([first.doc_id, second.doc_id, third.doc_id]),
+    );
+    await waitFor(() => expect(screen.queryByText("First Paper")).toBeNull());
+    expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("dragging a row onto a folder entry moves it (drag-to-folder fix request)", async () => {
     const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
