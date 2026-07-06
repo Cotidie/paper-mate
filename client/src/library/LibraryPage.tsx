@@ -8,7 +8,6 @@ import AddMenu from "@/library/AddMenu/AddMenu";
 import FolderPanel from "@/library/FolderPanel/FolderPanel";
 import MoveMenu from "@/library/MoveMenu";
 import DisplayMenu from "@/library/TableControls/DisplayMenu";
-import SortMenu from "@/library/TableControls/SortMenu";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useMovePapers } from "@/library/useMovePapers";
@@ -180,7 +179,6 @@ export default function LibraryPage() {
               )}
               <div className="library-toolbar__actions">
                 <DisplayMenu hiddenColumns={tableView.hiddenColumns} onToggleColumn={tableView.toggleColumn} />
-                <SortMenu sort={tableView.sort} onChange={tableView.setSort} />
                 <MoveMenu
                   folders={folders}
                   onMove={(folderId) => handleMoveRequest(Array.from(selectedIds), folderId)}
@@ -235,6 +233,8 @@ export default function LibraryPage() {
                 onSelectionChange={setSelectedIds}
                 visibleColumns={tableView.visibleColumns}
                 sort={tableView.sort}
+                onSortChange={tableView.setSort}
+                onToggleColumn={tableView.toggleColumn}
               />
             )
           ) : loadFailed ? null : (

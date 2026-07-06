@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { CaretDown, CaretUp } from "@phosphor-icons/react";
+import { createPortal } from "react-dom";
+import { CaretDown, CaretUp, EyeSlash } from "@phosphor-icons/react";
 import type { CollectionRow } from "@/api/client";
 import { currentFieldValue, stripPdfExtension, type EditableField, type PendingUpload } from "@/library/row";
 import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
 import { COLUMNS, type ColumnDef, type ColumnKey, type SortState } from "@/library/tableView";
+import { usePopover } from "@/library/usePopover";
 import PaperRow from "./PaperRow";
 import PendingRow from "./PendingRow";
 import "./CollectionTable.css";
+import "@/library/TableControls/TableControls.css";
 
 const SKELETON_ROW_COUNT = 6;
 const EMPTY_SELECTED: Set<string> = new Set();
@@ -59,24 +62,142 @@ function ColumnGroup({ columns }: { columns: ColumnDef[] }) {
   );
 }
 
-/** Renders the active sort column's caret (AC-2); the header itself is not
- *  interactive - the Sort control (a separate toolbar popover) picks the
- *  column and direction. */
-function TableHead({ columns, sort }: { columns: ColumnDef[]; sort: SortState | null }) {
+/** A clickable header: opens a per-column dropdown (Sort ascending/descending,
+ *  Hide) mirroring the reference product's column-header menu. Each instance
+ *  owns its own `usePopover` so multiple headers can each have (only one at a
+ *  time, per-instance) open state. Closes on pick - a one-shot action menu,
+ *  like `MoveMenu`, not a stays-open toggle panel like `DisplayMenu`. */
+function ColumnHeaderCell({
+  col,
+  sort,
+  onSortChange,
+  onToggleColumn,
+}: {
+  col: ColumnDef;
+  sort: SortState | null;
+  onSortChange: (next: SortState | null) => void;
+  onToggleColumn: (key: ColumnKey) => void;
+}) {
+  const { anchor, buttonRef, popoverRef, toggle, close } = usePopover();
+  const active = sort?.column === col.key;
+  return (
+    <th scope="col">
+      <button
+        ref={buttonRef}
+        type="button"
+        className="collection-table__header-button"
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggle();
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") e.stopPropagation();
+        }}
+      >
+        {col.label}
+        {active &&
+          (sort!.direction === "asc" ? (
+            <CaretUp aria-hidden className="collection-table__sort-caret" />
+          ) : (
+            <CaretDown aria-hidden className="collection-table__sort-caret" />
+          ))}
+      </button>
+      {anchor &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            className="table-control__popover"
+            role="menu"
+            style={{ top: anchor.top, right: anchor.right }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="table-control__item"
+              onClick={(e) => {
+                e.stopPropagation();
+                close();
+                onSortChange({ column: col.key, direction: "asc" });
+              }}
+            >
+              <CaretUp aria-hidden />
+              Sort ascending
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="table-control__item"
+              onClick={(e) => {
+                e.stopPropagation();
+                close();
+                onSortChange({ column: col.key, direction: "desc" });
+              }}
+            >
+              <CaretDown aria-hidden />
+              Sort descending
+            </button>
+            {col.hideable && (
+              <button
+                type="button"
+                role="menuitem"
+                className="table-control__item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                  onToggleColumn(col.key);
+                }}
+              >
+                <EyeSlash aria-hidden />
+                Hide
+              </button>
+            )}
+          </div>,
+          document.body,
+        )}
+    </th>
+  );
+}
+
+/** Renders the active sort column's caret. Headers are clickable
+ *  (`ColumnHeaderCell`) when `onSortChange`/`onToggleColumn` are supplied;
+ *  otherwise (the loading skeleton) they render as plain static text. */
+function TableHead({
+  columns,
+  sort,
+  onSortChange,
+  onToggleColumn,
+}: {
+  columns: ColumnDef[];
+  sort: SortState | null;
+  onSortChange?: (next: SortState | null) => void;
+  onToggleColumn?: (key: ColumnKey) => void;
+}) {
   return (
     <thead>
       <tr>
-        {columns.map((col) => (
-          <th key={col.key} scope="col">
-            {col.label}
-            {sort?.column === col.key &&
-              (sort.direction === "asc" ? (
-                <CaretUp aria-hidden className="collection-table__sort-caret" />
-              ) : (
-                <CaretDown aria-hidden className="collection-table__sort-caret" />
-              ))}
-          </th>
-        ))}
+        {columns.map((col) =>
+          onSortChange && onToggleColumn ? (
+            <ColumnHeaderCell
+              key={col.key}
+              col={col}
+              sort={sort}
+              onSortChange={onSortChange}
+              onToggleColumn={onToggleColumn}
+            />
+          ) : (
+            <th key={col.key} scope="col">
+              {col.label}
+              {sort?.column === col.key &&
+                (sort.direction === "asc" ? (
+                  <CaretUp aria-hidden className="collection-table__sort-caret" />
+                ) : (
+                  <CaretDown aria-hidden className="collection-table__sort-caret" />
+                ))}
+            </th>
+          ),
+        )}
       </tr>
     </thead>
   );
@@ -135,6 +256,10 @@ type CollectionTableProps =
       onSelectionChange?: (ids: Set<string>) => void;
       visibleColumns?: ColumnDef[];
       sort?: SortState | null;
+      /** Column headers become clickable (Sort ascending/descending, Hide)
+       *  when both are supplied; omit for isolated tests that don't care. */
+      onSortChange?: (next: SortState | null) => void;
+      onToggleColumn?: (key: ColumnKey) => void;
     };
 
 /**
@@ -176,7 +301,7 @@ type CollectionTableProps =
 export default function CollectionTable(props: CollectionTableProps) {
   const visibleColumns = props.visibleColumns ?? COLUMNS;
   if (props.loading) return <TableSkeleton visibleColumns={visibleColumns} />;
-  const { rows, onOpenRow, pendingRows = [], onEditField, sort = null } = props;
+  const { rows, onOpenRow, pendingRows = [], onEditField, sort = null, onSortChange, onToggleColumn } = props;
   const visibleKeys = new Set(visibleColumns.map((c) => c.key));
   // Controlled-or-uncontrolled (like `<input value onChange>`): when the
   // caller doesn't pass `selectedIds`, the table owns the set itself so
@@ -367,7 +492,12 @@ export default function CollectionTable(props: CollectionTableProps) {
     <div className="collection-table-wrap">
       <table className="collection-table">
         <ColumnGroup columns={visibleColumns} />
-        <TableHead columns={visibleColumns} sort={sort} />
+        <TableHead
+          columns={visibleColumns}
+          sort={sort}
+          onSortChange={onSortChange}
+          onToggleColumn={onToggleColumn}
+        />
         <tbody>
           {pendingRows.map((pending) => (
             <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={visibleKeys} />

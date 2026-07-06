@@ -121,7 +121,7 @@ describe("Library shell (Story 6.1, AC-3)", () => {
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
     renderLibrary();
     await waitFor(() => expect(screen.getByText("1 files in library")).toBeTruthy());
-    expect(screen.getByRole("button", { name: /add/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add" })).toBeTruthy();
   });
 
   it("shows a count skeleton (not the real count) while the library is still loading", async () => {
@@ -954,7 +954,7 @@ describe("Add dropdown (File upload / Folder upload)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Existing Paper")).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /file upload/i }));
 
     fireEvent.change(screen.getByTestId("library-add-input"), {
@@ -978,7 +978,7 @@ describe("Add dropdown (File upload / Folder upload)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Existing Paper")).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /folder upload/i }));
 
     const readme = new File(["not a pdf"], "README.txt", { type: "text/plain" });
@@ -997,7 +997,7 @@ describe("Add dropdown (File upload / Folder upload)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /folder upload/i }));
 
     const readme = new File(["not a pdf"], "README.txt", { type: "text/plain" });
@@ -1046,6 +1046,32 @@ describe("Display, Sort controls (Story 7.4)", () => {
     expect(screen.getByText("Only Paper")).toBeTruthy();
   });
 
+  it("Column header dropdown: Hide from a header's own menu omits that column (fix request: clickable headers)", async () => {
+    const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide" }));
+
+    expect(screen.queryByRole("columnheader", { name: "Authors" })).toBeNull();
+    expect(screen.queryByText("Some Author")).toBeNull();
+  });
+
+  it("Column header dropdown: Sort descending from a header's own menu reorders rows", async () => {
+    const alpha = libraryRow({ doc_id: "1".repeat(64), title: "Alpha Paper", order: 0 });
+    const beta = libraryRow({ doc_id: "2".repeat(64), title: "Beta Paper", order: 1 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [alpha, beta], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Alpha Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort descending" }));
+
+    expect(titleTexts()).toEqual(["Beta Paper", "Alpha Paper"]);
+  });
+
   it("Sort: reorders the rendered rows by the chosen column and direction", async () => {
     const alpha = libraryRow({ doc_id: "1".repeat(64), title: "Beta Paper", order: 0 });
     const beta = libraryRow({ doc_id: "2".repeat(64), title: "Alpha Paper", order: 1 });
@@ -1054,8 +1080,8 @@ describe("Display, Sort controls (Story 7.4)", () => {
     await waitFor(() => expect(screen.getByText("Beta Paper")).toBeTruthy());
     expect(titleTexts()).toEqual(["Beta Paper", "Alpha Paper"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Sort" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Title/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort ascending" }));
 
     expect(titleTexts()).toEqual(["Alpha Paper", "Beta Paper"]);
   });
@@ -1067,8 +1093,8 @@ describe("Display, Sort controls (Story 7.4)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Beta Paper")).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: "Sort" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Title/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort ascending" }));
     expect(titleTexts()).toEqual(["Alpha Paper", "Beta Paper"]);
 
     cleanup();
@@ -1087,8 +1113,8 @@ describe("Display, Sort controls (Story 7.4)", () => {
     fireEvent.click(screen.getByText("First Paper").closest("tr")!);
     expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "Sort" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Title/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort ascending" }));
 
     expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -1110,8 +1136,8 @@ describe("Display, Sort controls (Story 7.4)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Charlie Paper")).toBeTruthy());
     // Response order: Charlie, Alpha, Beta. Sort by Title asc -> Alpha, Beta, Charlie.
-    fireEvent.click(screen.getByRole("button", { name: "Sort" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Title/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort ascending" }));
     expect(titleTexts()).toEqual(["Alpha Paper", "Beta Paper", "Charlie Paper"]);
 
     // Visually-contiguous range Alpha..Beta (NOT the response-order neighbors).

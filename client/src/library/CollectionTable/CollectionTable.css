@@ -40,6 +40,28 @@
   border-bottom: var(--hairline-width) solid var(--color-hairline);
 }
 
+/* A header's Sort/Hide dropdown trigger (reset button chrome, inherits the
+   `<th>`'s own type). A small negative-margin/padding pair widens the
+   hover/focus hit box a few px beyond the label without shifting the
+   surrounding `<th>` padding (fix request: clickable column headers). */
+.collection-table__header-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  margin: calc(-1 * var(--space-xxs));
+  padding: var(--space-xxs);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.collection-table__header-button:hover {
+  background: var(--color-surface-strong);
+}
+
 /* The active sort column's caret (Story 7.4, AC-2). */
 .collection-table__sort-caret {
   width: var(--table-control-sort-caret-size);

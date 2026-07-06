@@ -863,3 +863,104 @@ describe("CollectionTable sort indicator (Story 7.4, AC-2)", () => {
     expect(ascIcon).not.toBe(descIcon);
   });
 });
+
+describe("CollectionTable column header dropdown (fix request: clickable headers)", () => {
+  it("is not clickable (plain <th>, no popover) when onSortChange/onToggleColumn are omitted", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} />);
+    expect(screen.queryByRole("button", { name: "Title" })).toBeNull();
+  });
+
+  it("opens a menu listing Sort ascending, Sort descending, and Hide", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
+    expect(screen.getByRole("menuitem", { name: "Sort ascending" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Sort descending" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Hide" })).toBeTruthy();
+  });
+
+  it("omits Hide for the Title column (never hideable)", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    expect(screen.queryByRole("menuitem", { name: "Hide" })).toBeNull();
+  });
+
+  it("Sort ascending calls onSortChange with the column and asc direction, then closes", () => {
+    const onSortChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={onSortChange}
+        onToggleColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Added" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort ascending" }));
+    expect(onSortChange).toHaveBeenCalledWith({ column: "added", direction: "asc" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("Sort descending calls onSortChange with the column and desc direction", () => {
+    const onSortChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={onSortChange}
+        onToggleColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Added" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort descending" }));
+    expect(onSortChange).toHaveBeenCalledWith({ column: "added", direction: "desc" });
+  });
+
+  it("Hide calls onToggleColumn with the column key", () => {
+    const onToggleColumn = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={onToggleColumn}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide" }));
+    expect(onToggleColumn).toHaveBeenCalledWith("authors");
+  });
+
+  it("Escape closes the menu and returns focus to the header trigger", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    const button = screen.getByRole("button", { name: "Authors" });
+    fireEvent.click(button);
+    fireEvent.keyDown(button, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("opening a different header's menu closes the previous one (document-level outside-pointerdown dismiss)", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    const titleButton = screen.getByRole("button", { name: "Title" });
+    const authorsButton = screen.getByRole("button", { name: "Authors" });
+    fireEvent.click(titleButton);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    // A real click is preceded by a pointerdown; usePopover's outside-dismiss
+    // listens for that, so simulate both (RTL's fireEvent.click alone does
+    // not synthesize a pointerdown).
+    fireEvent.pointerDown(authorsButton);
+    fireEvent.click(authorsButton);
+    expect(screen.getAllByRole("menu").length).toBe(1);
+  });
+});
