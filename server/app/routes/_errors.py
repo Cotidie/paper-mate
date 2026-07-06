@@ -13,7 +13,7 @@ envelope. Two pieces of that were copy-pasted across ``docs.py``/``library.py``:
 keeps each handler a thin controller (AD-9) and the envelope defined once.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
 from fastapi import HTTPException
@@ -45,6 +45,7 @@ def storage_errors(
     *,
     not_found: type[storage.StorageError] = storage.DocumentNotFoundError,
     not_found_detail: str = _NOT_FOUND_DETAIL,
+    extra_not_found: Sequence[tuple[type[storage.StorageError], str]] = (),
 ) -> Iterator[None]:
     """Map storage faults to the ``{ detail }`` envelope inside a handler body.
 
@@ -54,10 +55,19 @@ def storage_errors(
     route-specific ``server_error`` message. A route whose "not found" fault is
     a different taxonomy member (e.g. ``FolderNotFoundError`` -> ``"Folder not
     found"``) passes both kwargs rather than duplicating this try/except.
+
+    ``extra_not_found`` handles a route with MORE THAN ONE distinct 404 fault
+    (e.g. the move route: a bad ``folder_id`` AND an unknown ``doc_id`` are
+    siblings under ``StorageError``, neither subclassing the other) - each
+    ``(exc_type, detail)`` pair is checked, in order, before the default
+    ``not_found``/500 fallthrough, so none of them leaks to a 500.
     """
     try:
         yield
     except not_found as exc:
         raise HTTPException(status_code=404, detail=not_found_detail) from exc
     except storage.StorageError as exc:
+        for exc_type, detail in extra_not_found:
+            if isinstance(exc, exc_type):
+                raise HTTPException(status_code=404, detail=detail) from exc
         raise HTTPException(status_code=500, detail=server_error) from exc

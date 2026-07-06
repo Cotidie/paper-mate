@@ -223,6 +223,11 @@
   /* add-menu (Library toolbar Add dropdown): File upload / Folder upload. */
   --add-menu-width: 180px;
 
+  /* move-menu (Story 7.2): per-row "Move to folder" popover; caps the list
+     height once a library has many folders, scrolling internally instead of
+     overflowing off-screen. */
+  --move-menu-popover-max-height: 240px;
+
   /* confirm-dialog (Story 7.1): a minimal, reusable Esc-dismissable confirm
      (folder delete now; Trash purge, Story 7.5, later). Mirrors
      settings-modal's centered-over-scrim shape at a smaller width. */

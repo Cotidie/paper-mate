@@ -1,4 +1,5 @@
-import type { CollectionRow } from "@/api/client";
+import { useState } from "react";
+import type { CollectionRow, Folder } from "@/api/client";
 import {
   formatAdded,
   rowStatusClass,
@@ -8,6 +9,7 @@ import {
   type EditableField,
 } from "@/library/row";
 import EditableCell from "./EditableCell";
+import MoveMenu from "./MoveMenu";
 
 /**
  * One settled row of the collection table. A row click arms/selects it (purely
@@ -21,9 +23,11 @@ export default function PaperRow({
   row,
   armed,
   editingField,
+  folders,
   onRowClick,
   onArm,
   onOpen,
+  onMove,
   onStartEdit,
   onCommit,
   onCancel,
@@ -31,9 +35,11 @@ export default function PaperRow({
   row: CollectionRow;
   armed: boolean;
   editingField: EditableField | null;
+  folders: Folder[];
   onRowClick: () => void;
   onArm: () => void;
   onOpen: () => void;
+  onMove: (folderId: string | null) => void;
   onStartEdit: (field: EditableField) => void;
   onCommit: (field: EditableField, value: string, viaBlur: boolean) => void;
   onCancel: () => void;
@@ -43,6 +49,7 @@ export default function PaperRow({
   const displayTitle = row.title ?? (row.filename ? stripPdfExtension(row.filename) : null);
   const label = statusLabel(row.status);
   const editable = row.status !== "extracting";
+  const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   return (
     <tr aria-selected={armed} onClick={onRowClick} className={rowStatusClass(row.status)}>
       <EditableCell
@@ -61,17 +68,25 @@ export default function PaperRow({
         <span className="collection-table__title-text">
           {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
         </span>
-        <button
-          type="button"
-          className="collection-table__open-button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen();
-          }}
-          onKeyDown={(e) => e.stopPropagation()}
+        <div
+          className={
+            "collection-table__row-actions" +
+            (moveMenuOpen ? " collection-table__row-actions--menu-open" : "")
+          }
         >
-          Open
-        </button>
+          <MoveMenu folders={folders} onMove={onMove} onOpenChange={setMoveMenuOpen} />
+          <button
+            type="button"
+            className="collection-table__open-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen();
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            Open
+          </button>
+        </div>
       </EditableCell>
       <EditableCell
         className="collection-table__authors"

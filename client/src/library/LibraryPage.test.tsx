@@ -670,6 +670,133 @@ describe("Folder panel wiring (Story 7.1)", () => {
   });
 });
 
+describe("Folder filter + move (Story 7.2)", () => {
+  const folderA = { id: "folder-a", name: "Folder A", parent_id: null };
+
+  function libraryRow(overrides: Partial<api.CollectionRow>): api.CollectionRow {
+    return {
+      doc_id: "p".repeat(64),
+      title: "A Paper",
+      authors: null,
+      added: "2026-07-06T00:00:00+00:00",
+      file_type: "pdf",
+      status: "ready",
+      folder_id: null,
+      trashed: false,
+      order: 0,
+      ...overrides,
+    };
+  }
+
+  it("REGRESSION: selecting a folder filters visible rows to that folder's papers only", async () => {
+    const uncategorized = libraryRow({ doc_id: "u".repeat(64), title: "Uncategorized Paper", order: 0 });
+    const inFolder = libraryRow({
+      doc_id: "f".repeat(64),
+      title: "Foldered Paper",
+      folder_id: folderA.id,
+      order: 1,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [uncategorized, inFolder], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
+    expect(screen.getByText("Foldered Paper")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Folder A"));
+
+    expect(screen.getByText("Foldered Paper")).toBeTruthy();
+    expect(screen.queryByText("Uncategorized Paper")).toBeNull();
+  });
+
+  it("All shows every non-trashed paper regardless of folder", async () => {
+    const uncategorized = libraryRow({ doc_id: "u".repeat(64), title: "Uncategorized Paper", order: 0 });
+    const inFolder = libraryRow({
+      doc_id: "f".repeat(64),
+      title: "Foldered Paper",
+      folder_id: folderA.id,
+      order: 1,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [uncategorized, inFolder], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Folder A"));
+    fireEvent.click(screen.getByText("All"));
+
+    expect(screen.getByText("Uncategorized Paper")).toBeTruthy();
+    expect(screen.getByText("Foldered Paper")).toBeTruthy();
+  });
+
+  it("Uncategorized shows only papers with no folder", async () => {
+    const uncategorized = libraryRow({ doc_id: "u".repeat(64), title: "Uncategorized Paper", order: 0 });
+    const inFolder = libraryRow({
+      doc_id: "f".repeat(64),
+      title: "Foldered Paper",
+      folder_id: folderA.id,
+      order: 1,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [uncategorized, inFolder], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Uncategorized"));
+
+    expect(screen.getByText("Uncategorized Paper")).toBeTruthy();
+    expect(screen.queryByText("Foldered Paper")).toBeNull();
+  });
+
+  it("moving a paper via the row menu updates membership and it leaves the current (Uncategorized) view", async () => {
+    const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
+    const movePapers = vi
+      .spyOn(api, "movePapers")
+      .mockResolvedValue({ papers: [{ ...paper, folder_id: folderA.id }], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Movable Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Uncategorized"));
+    expect(screen.getByText("Movable Paper")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Move to folder" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Folder A" }));
+
+    expect(movePapers).toHaveBeenCalledWith([paper.doc_id], folderA.id);
+    await waitFor(() => expect(screen.queryByText("Movable Paper")).toBeNull());
+  });
+
+  it("entering an empty folder in a non-empty library keeps the table layout (no EmptyDropzone flash) and shows the empty-folder line", async () => {
+    const uncategorized = libraryRow({ doc_id: "u".repeat(64), title: "Uncategorized Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [uncategorized], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Folder A"));
+
+    expect(screen.getByText("No papers in this folder.")).toBeTruthy();
+    expect(screen.queryByTestId("empty-dropzone")).toBeNull();
+    expect(screen.getByText("1 files in library")).toBeTruthy(); // toolbar stays: total count, unchanged
+  });
+
+  it("a just-uploaded pending row does not show under an unrelated selected folder", async () => {
+    const uncategorized = libraryRow({ doc_id: "u".repeat(64), title: "Uncategorized Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [uncategorized], folders: [folderA] });
+    vi.spyOn(api, "uploadDoc").mockReturnValue(new Promise(() => {})); // never resolves in this test
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
+
+    // Folder A is empty; select it (table layout stays, since total papers > 0).
+    fireEvent.click(screen.getByText("Folder A"));
+    expect(screen.getByText("No papers in this folder.")).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile("mid-upload.pdf")] },
+    });
+
+    // The pending row lands Uncategorized visually — must not appear under Folder A.
+    expect(screen.queryByText("mid-upload")).toBeNull();
+    expect(screen.getByText("No papers in this folder.")).toBeTruthy();
+  });
+});
+
 describe("Add dropdown (File upload / Folder upload)", () => {
   it("opens the Add menu and uploads via the File upload item", async () => {
     // The Add control lives in the toolbar row, which only shows once the

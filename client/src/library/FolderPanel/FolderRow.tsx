@@ -6,14 +6,18 @@ import FolderNameEditor from "./FolderNameEditor";
  * One row of the folder tree (Story 7.1): the static name, or (while this
  * folder is the one being renamed) the inline `FolderNameEditor`. The three
  * per-folder affordances (rename / add-subfolder / delete) are hover/focus-
- * revealed icon buttons, mirroring `CollectionTable`'s Open-button reveal:
- * the name itself stays a plain, non-interactive label so Story 7.2's
- * click-to-select can be added later without colliding with rename.
+ * revealed icon buttons, mirroring `CollectionTable`'s Open-button reveal.
+ * The name is a real `<button>` (Story 7.2, L-UX-DR12): clicking or
+ * Enter/Space-activating it selects this folder, filtering the table. It is
+ * a SIBLING of the action buttons (not a wrapping element), so clicking
+ * rename/add-subfolder/delete can never also fire a select.
  */
 export default function FolderRow({
   folder,
   depth,
   isEditing,
+  isSelected,
+  onSelect,
   onStartRename,
   onCommitRename,
   onCancelRename,
@@ -23,6 +27,8 @@ export default function FolderRow({
   folder: Folder;
   depth: number;
   isEditing: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
   onStartRename: (id: string) => void;
   onCommitRename: (id: string, name: string) => void;
   onCancelRename: () => void;
@@ -31,7 +37,7 @@ export default function FolderRow({
 }) {
   return (
     <li
-      className="folder-panel__row"
+      className={"folder-panel__row" + (isSelected ? " folder-panel__row--active" : "")}
       style={{ paddingInlineStart: `calc(var(--folder-panel-indent-step) * ${depth})` }}
     >
       {isEditing ? (
@@ -42,17 +48,20 @@ export default function FolderRow({
         />
       ) : (
         <>
-          <span className="folder-panel__name">
+          <button type="button" className="folder-panel__name" onClick={onSelect}>
             <FolderIcon aria-hidden />
             {folder.name}
-          </span>
+          </button>
           <div className="folder-panel__row-actions">
             <button
               type="button"
               className="folder-panel__action"
               aria-label={`Rename ${folder.name}`}
               title="Rename"
-              onClick={() => onStartRename(folder.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartRename(folder.id);
+              }}
             >
               <PencilSimple aria-hidden />
             </button>
@@ -61,7 +70,10 @@ export default function FolderRow({
               className="folder-panel__action"
               aria-label={`Add subfolder to ${folder.name}`}
               title="Add subfolder"
-              onClick={() => onStartSubfolder(folder.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartSubfolder(folder.id);
+              }}
             >
               <FolderPlus aria-hidden />
             </button>
@@ -70,7 +82,10 @@ export default function FolderRow({
               className="folder-panel__action"
               aria-label={`Delete ${folder.name}`}
               title="Delete"
-              onClick={() => onRequestDelete(folder)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestDelete(folder);
+              }}
             >
               <TrashSimple aria-hidden />
             </button>

@@ -111,20 +111,36 @@
   border-color: var(--color-ink);
 }
 
-/* Hover/focus-revealed Open button (replaces click-to-open on the row). A
-   real <button>, so Tab reaches it and Enter/Space activates it natively;
-   the reveal itself is CSS-only, no JS hover-state tracking. Absolutely
-   positioned (not a flex sibling), overlaying the title text rather than
-   reserving space for it (user fix request 2026-07-06): the title keeps its
-   full column width when idle, at the cost of the button's own opaque chip
-   covering whatever text sits under it while hovered. */
-.collection-table__open-button {
+/* Hover/focus-revealed row actions - Move-to-folder + Open (Story 7.2 adds
+   Move alongside 6.x's Open). A real <button> each, so Tab reaches them and
+   Enter/Space activates natively; the reveal itself is CSS-only, no JS
+   hover-state tracking. The wrapper is absolutely positioned (not a flex
+   sibling), overlaying the title text rather than reserving space for it
+   (user fix request 2026-07-06): the title keeps its full column width when
+   idle, at the cost of the buttons' own opaque chips covering whatever text
+   sits under them while revealed. `--menu-open` keeps the group visible when
+   the Move popover is open even if the pointer has left the row. */
+.collection-table__row-actions {
   position: absolute;
   top: 50%;
   right: var(--space-xs);
   transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
   opacity: 0;
   pointer-events: none;
+  transition: opacity 0.1s ease-out;
+}
+
+.collection-table tbody tr:hover .collection-table__row-actions,
+.collection-table__row-actions:focus-within,
+.collection-table__row-actions--menu-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.collection-table__open-button {
   background: var(--color-surface-card);
   color: var(--color-ink);
   font-family: var(--font-sans);
@@ -134,13 +150,6 @@
   border: var(--hairline-width) solid var(--color-hairline-strong);
   border-radius: var(--radius-sm);
   padding: var(--space-xxs) var(--space-xs);
-  transition: opacity 0.1s ease-out;
-}
-
-.collection-table tbody tr:hover .collection-table__open-button,
-.collection-table__open-button:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 /* Status-driven row treatment (Story 6.4 introduces the seam for optimistic

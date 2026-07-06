@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import CollectionTable from "./CollectionTable";
 import { formatAdded } from "@/library/row";
-import type { CollectionRow } from "@/api/client";
+import type { CollectionRow, Folder } from "@/api/client";
 
 afterEach(cleanup);
 
@@ -467,6 +467,58 @@ describe("CollectionTable Open button", () => {
     // instead of letting the browser's native button-activation handle it.
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(row.getAttribute("aria-selected")).toBe("false");
+  });
+});
+
+describe("CollectionTable Move-to-folder menu (Story 7.2, AC-3)", () => {
+  const folders: Folder[] = [
+    { id: "f1", name: "Reading list", parent_id: null },
+    { id: "f2", name: "Archive", parent_id: null },
+  ];
+
+  it("lists Uncategorized plus every folder", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} folders={folders} onMovePaper={noop} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
+    expect(screen.getByRole("menuitem", { name: "Uncategorized" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Reading list" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Archive" })).toBeTruthy();
+  });
+
+  it("choosing a folder calls onMovePaper(docId, folderId)", () => {
+    const onMovePaper = vi.fn();
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} folders={folders} onMovePaper={onMovePaper} />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reading list" }));
+    expect(onMovePaper).toHaveBeenCalledWith(rows[0].doc_id, "f1");
+  });
+
+  it("choosing Uncategorized calls onMovePaper(docId, null)", () => {
+    const onMovePaper = vi.fn();
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} folders={folders} onMovePaper={onMovePaper} />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Uncategorized" }));
+    expect(onMovePaper).toHaveBeenCalledWith(rows[0].doc_id, null);
+  });
+
+  it("opening the menu does not arm/select the row", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} folders={folders} onMovePaper={noop} />);
+    const row = screen.getByText("Attention Is All You Need").closest("tr")!;
+    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
+    expect(row.getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("choosing a folder does not open the row", () => {
+    const onOpenRow = vi.fn();
+    render(
+      <CollectionTable rows={rows} onOpenRow={onOpenRow} onEditField={noop} folders={folders} onMovePaper={noop} />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Move to folder" })[0]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reading list" }));
+    expect(onOpenRow).not.toHaveBeenCalled();
   });
 });
 

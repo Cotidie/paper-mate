@@ -222,6 +222,32 @@ def delete_folder(folder_id: str) -> Library:
     return read_library()
 
 
+def move_papers(doc_ids: list[str], folder_id: str | None) -> Library:
+    """Set-based move (AL-5, AL-6, AD-L6): assign every id in ``doc_ids`` to
+    ``folder_id`` (``None`` clears membership, i.e. Uncategorized). A move
+    replaces any prior folder, so a paper belongs to at most one folder.
+
+    Validation runs BEFORE any mutation inside the one ``mutate_index``
+    mutator: a bad ``folder_id`` -> ``FolderNotFoundError``, any unknown id in
+    ``doc_ids`` -> ``DocumentNotFoundError`` — either aborts with no partial
+    write (all-or-nothing). ``trashed``, ``order``, and every other paper are
+    untouched. Moving into the same folder is an idempotent no-op write."""
+
+    def _move(index: dict) -> dict:
+        if folder_id is not None and _find_folder(index["folders"], folder_id) is None:
+            raise FolderNotFoundError(f"no folder with id {folder_id!r}")
+        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
+        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
+        if missing:
+            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
+        for doc_id in doc_ids:
+            papers_by_id[doc_id]["folder_id"] = folder_id
+        return index
+
+    mutate_index(_move)
+    return read_library()
+
+
 def reconcile_library() -> None:
     """Align ``library.json`` with what is actually on disk (AC-4).
 

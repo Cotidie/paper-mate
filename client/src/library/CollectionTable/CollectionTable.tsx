@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { CollectionRow } from "@/api/client";
+import type { CollectionRow, Folder } from "@/api/client";
 import { currentFieldValue, type EditableField, type PendingUpload } from "@/library/row";
 import PaperRow from "./PaperRow";
 import PendingRow from "./PendingRow";
@@ -56,13 +56,24 @@ function TableSkeleton() {
 }
 
 type CollectionTableProps =
-  | { loading: true; rows?: never; onOpenRow?: never; pendingRows?: never; onEditField?: never }
+  | {
+      loading: true;
+      rows?: never;
+      onOpenRow?: never;
+      pendingRows?: never;
+      onEditField?: never;
+      folders?: never;
+      onMovePaper?: never;
+    }
   | {
       loading?: false;
       rows: CollectionRow[];
       onOpenRow: (docId: string) => void;
       pendingRows?: PendingUpload[];
       onEditField: (docId: string, field: EditableField, value: string | null) => void;
+      /** Move-to-folder menu targets (Story 7.2); empty until `LibraryPage` wires folders. */
+      folders?: Folder[];
+      onMovePaper?: (docId: string, folderId: string | null) => void;
     };
 
 /**
@@ -83,7 +94,14 @@ type CollectionTableProps =
  */
 export default function CollectionTable(props: CollectionTableProps) {
   if (props.loading) return <TableSkeleton />;
-  const { rows, onOpenRow, pendingRows = [], onEditField } = props;
+  const {
+    rows,
+    onOpenRow,
+    pendingRows = [],
+    onEditField,
+    folders = [],
+    onMovePaper = () => {},
+  } = props;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ docId: string; field: EditableField } | null>(null);
   // A click that lands elsewhere while a cell is being edited blurs the
@@ -149,9 +167,11 @@ export default function CollectionTable(props: CollectionTableProps) {
               row={row}
               armed={selectedId === row.doc_id}
               editingField={editing?.docId === row.doc_id ? editing.field : null}
+              folders={folders}
               onRowClick={() => handleRowClick(row.doc_id)}
               onArm={() => setSelectedId(row.doc_id)}
               onOpen={() => openRow(row.doc_id)}
+              onMove={(folderId) => onMovePaper(row.doc_id, folderId)}
               onStartEdit={(field) => startEdit(row.doc_id, field)}
               onCommit={(field, value, viaBlur) => commitEdit(row, field, value, viaBlur)}
               onCancel={() => setEditing(null)}

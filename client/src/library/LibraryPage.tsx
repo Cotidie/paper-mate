@@ -8,11 +8,21 @@ import AddMenu from "@/library/AddMenu/AddMenu";
 import FolderPanel from "@/library/FolderPanel/FolderPanel";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
+import { useMovePapers } from "@/library/useMovePapers";
+import { filterPapers, type FolderSelection } from "@/library/folderFilter";
 import { fetchHealth } from "@/api/client";
 
 const PDF_EXTENSION = /\.pdf$/i;
 
 type ToastState = { message: string; variant: "error" | "info" };
+
+/** The quiet empty-line copy for a filtered-to-nothing selection (Story 7.2:
+ *  a small SHOULD, distinct from `EmptyDropzone`'s zero-library state). */
+function emptySelectionMessage(selection: FolderSelection): string {
+  if (selection.kind === "uncategorized") return "No uncategorized papers.";
+  if (selection.kind === "folder") return "No papers in this folder.";
+  return "No papers to show.";
+}
 
 /** A folder pick returns every file type in the directory tree; this filters
  *  it down to PDFs before handing anything to `uploadFiles` (a folder upload
@@ -48,6 +58,8 @@ export default function LibraryPage() {
     onToast,
   });
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
+  const { movePapers } = useMovePapers({ setLibrary, onToast });
+  const [selection, setSelection] = useState<FolderSelection>({ kind: "all" });
 
   useEffect(() => {
     let live = true;
@@ -67,7 +79,12 @@ export default function LibraryPage() {
   }, []);
 
   const papers = library?.papers ?? [];
+  const folders = library?.folders ?? [];
   const isTableLayout = loading || papers.length > 0 || pending.length > 0;
+  const visiblePapers = filterPapers(papers, selection);
+  // A just-uploaded paper lands Uncategorized; it should not appear under an
+  // unrelated selected folder (Dev Notes: gate pending rows on selection kind).
+  const visiblePending = selection.kind === "folder" ? [] : pending;
   const mainClassName = [
     "library-main",
     isTableLayout && "library-main--table",
@@ -80,10 +97,12 @@ export default function LibraryPage() {
     <div className="library">
       <div className="library-body">
         <FolderPanel
-          folders={library?.folders ?? []}
+          folders={folders}
           setLibrary={setLibrary}
           onToast={onToast}
           version={version}
+          selection={selection}
+          onSelect={setSelection}
         />
         <main
           className={mainClassName}
@@ -145,12 +164,18 @@ export default function LibraryPage() {
           {loading && papers.length === 0 && pending.length === 0 ? (
             <CollectionTable loading />
           ) : papers.length > 0 || pending.length > 0 ? (
-            <CollectionTable
-              rows={papers}
-              pendingRows={pending}
-              onOpenRow={(docId) => navigate(`/reader/${docId}`)}
-              onEditField={handleEditField}
-            />
+            visiblePapers.length === 0 && visiblePending.length === 0 ? (
+              <p className="library-empty-line">{emptySelectionMessage(selection)}</p>
+            ) : (
+              <CollectionTable
+                rows={visiblePapers}
+                pendingRows={visiblePending}
+                folders={folders}
+                onOpenRow={(docId) => navigate(`/reader/${docId}`)}
+                onEditField={handleEditField}
+                onMovePaper={(docId, folderId) => movePapers([docId], folderId)}
+              />
+            )
           ) : loadFailed ? null : (
             <EmptyDropzone onFiles={uploadFiles} />
           )}

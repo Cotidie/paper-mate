@@ -50,6 +50,7 @@ from app.storage.library_index import (
     LIBRARY_SCHEMA_VERSION,
     create_folder,
     delete_folder,
+    move_papers,
     read_library,
     reconcile_library,
     rename_folder,
@@ -76,6 +77,7 @@ __all__ = [
     "create_folder",
     "rename_folder",
     "delete_folder",
+    "move_papers",
     # Per-document operations.
     "source_path",
     "read_meta",

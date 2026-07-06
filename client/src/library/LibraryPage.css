@@ -56,6 +56,16 @@
   height: calc(var(--type-caption-size) * var(--type-caption-leading));
 }
 
+.library-empty-line {
+  margin: var(--space-base) 0 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  color: var(--color-muted);
+  text-align: center;
+}
+
 .library-body {
   flex: 1 1 auto;
   display: flex;
