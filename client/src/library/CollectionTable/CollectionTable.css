@@ -35,7 +35,23 @@
 
 /* Recent lens date-bucket header row (Today/Yesterday/Last week/Last month,
    post-review scope): mirrors the folder panel's own uppercase section-label
-   type (`.library-folder-panel__label`) rather than inventing new type. */
+   type (`.library-folder-panel__label`) rather than inventing new type.
+   Fix request: the first pass (a faint `-soft` tint) still read too close to
+   a plain data row. `-strong` (the SAME tone already used for hover/selected)
+   gives real contrast against white rows; a header never looking
+   "interactive" is handled below by neutralizing hover/cursor instead of by
+   picking a fainter, harder-to-see color. A top hairline caps the PREVIOUS
+   group off before the band starts, so each section reads as a bounded
+   region, not just a tinted row. */
+.collection-table tbody tr.collection-table__group-header {
+  background: var(--color-surface-strong);
+  border-top: var(--hairline-width) solid var(--color-hairline-strong);
+}
+
+.collection-table tbody tr.collection-table__group-header:first-child {
+  border-top: none;
+}
+
 .collection-table__group-header td {
   font-family: var(--font-sans);
   font-size: var(--type-caption-uppercase-size);
@@ -43,8 +59,17 @@
   line-height: var(--type-caption-uppercase-leading);
   letter-spacing: var(--type-caption-uppercase-letter-spacing);
   text-transform: uppercase;
-  color: var(--color-muted);
-  padding: var(--space-sm) var(--space-sm) var(--space-xxs);
+  color: var(--color-ink);
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: var(--hairline-width) solid var(--color-hairline-strong);
+}
+
+/* Never reads as clickable/selectable (fix request): overrides the generic
+   tbody row hover tint + pointer cursor with the SAME resting background and
+   the default cursor - a header row has no click handler. */
+.collection-table tbody tr.collection-table__group-header:hover {
+  background: var(--color-surface-strong);
+  cursor: default;
 }
 
 .collection-table th {
