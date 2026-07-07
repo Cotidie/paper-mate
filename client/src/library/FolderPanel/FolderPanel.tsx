@@ -5,6 +5,7 @@ import {
   FolderDashed,
   Plus,
   Star,
+  Trash,
   TrashSimple,
 } from "@phosphor-icons/react";
 import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog";
@@ -58,7 +59,11 @@ function flattenTree(folders: Folder[]): Array<{ folder: Folder; depth: number }
  * drag-to-folder (fix request): a drag carrying the `MOVE_DRAG_MIME` payload
  * (set by a `CollectionTable` row's `dragstart`) reports the dropped doc ids
  * + target folder up via `onDropMove`. `Trash` is NOT a drop target (Story
- * 7.5 scope: drag-to-Trash is out of scope).
+ * 7.5 scope: drag-to-Trash is out of scope). The `Trash` entry also reveals
+ * an Empty Trash icon on hover/focus (fix request), mirroring `FolderRow`'s
+ * action reveal - shown only when the trash holds papers, gated behind its
+ * own confirm (`onRequestEmptyTrash` opens it; this component owns neither
+ * the count nor the purge call, both live in `LibraryPage`).
  */
 export default function FolderPanel({
   folders,
@@ -69,6 +74,8 @@ export default function FolderPanel({
   onSelect,
   onDropMove,
   width,
+  trashCount,
+  onRequestEmptyTrash,
 }: {
   folders: Folder[];
   setLibrary: Dispatch<SetStateAction<Library | null>>;
@@ -79,6 +86,9 @@ export default function FolderPanel({
   onDropMove: (docIds: string[], folderId: string | null) => void;
   /** Drag-to-resize (fix request): overrides the CSS default `--toc-panel-width`. */
   width: number;
+  /** How many papers are currently trashed - gates the Empty Trash reveal. */
+  trashCount: number;
+  onRequestEmptyTrash: () => void;
 }) {
   const { createFolder, renameFolder, deleteFolder } = useFolders({ folders, setLibrary, onToast });
 
@@ -174,7 +184,7 @@ export default function FolderPanel({
           <Star aria-hidden />
           Starred
         </li>
-        <li>
+        <li className="library-folder-panel__trash-row">
           <button
             type="button"
             className={
@@ -186,6 +196,20 @@ export default function FolderPanel({
             <TrashSimple aria-hidden />
             Trash
           </button>
+          {trashCount > 0 && (
+            <button
+              type="button"
+              className="library-folder-panel__trash-action"
+              aria-label="Empty Trash"
+              title="Empty Trash"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestEmptyTrash();
+              }}
+            >
+              <Trash aria-hidden />
+            </button>
+          )}
         </li>
       </ul>
 

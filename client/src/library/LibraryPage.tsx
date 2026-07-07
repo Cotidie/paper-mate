@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { ArrowCounterClockwise, Trash, TrashSimple } from "@phosphor-icons/react";
 import "@/library/LibraryPage.css";
 import Toast from "@/components/Toast/Toast";
 import CollectionTable from "@/library/CollectionTable/CollectionTable";
@@ -51,6 +52,18 @@ function isPdfFile(file: File): boolean {
   return file.type === "application/pdf" || PDF_EXTENSION.test(file.name);
 }
 
+/** Purge confirm title: names the one paper, or counts a bulk selection /
+ *  Empty Trash (both funnel through the same dialog). */
+function purgeDialogTitle(targets: CollectionRow[]): string {
+  if (targets.length === 0) return "";
+  if (targets.length === 1) {
+    const target = targets[0];
+    const name = target.title ?? (target.filename ? stripPdfExtension(target.filename) : "Untitled");
+    return `Purge "${name}"`;
+  }
+  return `Purge ${targets.length} papers`;
+}
+
 /**
  * Library route (`/`, Story 6.1 shell + Story 6.3 table + Story 6.4 bulk
  * upload + Story 7.1 folder tree): the app's front door. Composition only —
@@ -79,7 +92,10 @@ export default function LibraryPage() {
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
   const { movePapers } = useMovePapers({ setLibrary, onToast });
   const trash = useTrashPapers({ setLibrary, onToast });
-  const [purgeTarget, setPurgeTarget] = useState<CollectionRow | null>(null);
+  // Bulk purge target (fix request: toolbar Purge over the selection, and
+  // the sidebar's Empty Trash both funnel here) - one or many rows, the
+  // ConfirmDialog copy adapts to the count. Empty = closed.
+  const [purgeTargets, setPurgeTargets] = useState<CollectionRow[]>([]);
   const tableView = useTableView();
   const folderPanelResize = useResizablePanel();
   const columnWidths = useColumnWidths();
@@ -116,10 +132,16 @@ export default function LibraryPage() {
     setSelectedIds(new Set());
   }, [trash, selectedIds]);
 
+  const handleRestoreRequest = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    trash.restorePapers(Array.from(selectedIds));
+    setSelectedIds(new Set());
+  }, [trash, selectedIds]);
+
   function confirmPurge() {
-    if (!purgeTarget) return;
-    trash.purge(purgeTarget.doc_id);
-    setPurgeTarget(null);
+    for (const target of purgeTargets) trash.purge(target.doc_id);
+    setPurgeTargets([]);
+    setSelectedIds(new Set());
   }
 
   useEffect(() => {
@@ -141,6 +163,11 @@ export default function LibraryPage() {
 
   const papers = library?.papers ?? [];
   const folders = library?.folders ?? [];
+  const trashedPapers = useMemo(() => papers.filter((p) => p.trashed), [papers]);
+  const handleEmptyTrashRequest = useCallback(() => {
+    if (trashedPapers.length === 0) return;
+    setPurgeTargets(trashedPapers);
+  }, [trashedPapers]);
   const isTableLayout = loading || papers.length > 0 || pending.length > 0;
   // The column filter + sort (Story 7.4) fold onto the folder-filtered array
   // HERE, so the same array CollectionTable paints is the one Story 7.3's
@@ -174,6 +201,8 @@ export default function LibraryPage() {
           onSelect={handleSelect}
           onDropMove={handleMoveRequest}
           width={folderPanelResize.width}
+          trashCount={trashedPapers.length}
+          onRequestEmptyTrash={handleEmptyTrashRequest}
         />
         <div
           className="library-resize-handle"
@@ -216,7 +245,30 @@ export default function LibraryPage() {
               )}
               <div className="library-toolbar__actions">
                 <DisplayMenu hiddenColumns={tableView.hiddenColumns} onToggleColumn={tableView.toggleColumn} />
-                {selection.kind !== "trash" && (
+                {selection.kind === "trash" ? (
+                  <>
+                    <button
+                      type="button"
+                      className="toolbar-button"
+                      disabled={selectedIds.size === 0}
+                      onClick={handleRestoreRequest}
+                    >
+                      <ArrowCounterClockwise aria-hidden />
+                      Restore
+                    </button>
+                    <button
+                      type="button"
+                      className="toolbar-button"
+                      disabled={selectedIds.size === 0}
+                      onClick={() =>
+                        setPurgeTargets(visiblePapers.filter((p) => selectedIds.has(p.doc_id)))
+                      }
+                    >
+                      <Trash aria-hidden />
+                      Purge
+                    </button>
+                  </>
+                ) : (
                   <>
                     <MoveMenu
                       folders={folders}
@@ -230,6 +282,7 @@ export default function LibraryPage() {
                       disabled={selectedIds.size === 0}
                       onClick={handleDeleteRequest}
                     >
+                      <TrashSimple aria-hidden />
                       Delete
                     </button>
                   </>
@@ -291,14 +344,7 @@ export default function LibraryPage() {
                 columnWidths={columnWidths.widths}
                 onResizeColumnStart={columnWidths.startResize}
                 onResizeColumnKeyDown={columnWidths.handleKeyDown}
-                onRestoreRow={
-                  selection.kind === "trash" ? (docId) => trash.restorePapers([docId]) : undefined
-                }
-                onRequestPurge={
-                  selection.kind === "trash"
-                    ? (docId) => setPurgeTarget(visiblePapers.find((p) => p.doc_id === docId) ?? null)
-                    : undefined
-                }
+                trashLens={selection.kind === "trash"}
               />
             )
           ) : loadFailed ? null : (
@@ -310,16 +356,16 @@ export default function LibraryPage() {
         <Toast message={toast.message} variant={toast.variant} onDismiss={() => setToast(null)} />
       )}
       <ConfirmDialog
-        open={purgeTarget !== null}
-        title={
-          purgeTarget
-            ? `Purge "${purgeTarget.title ?? (purgeTarget.filename ? stripPdfExtension(purgeTarget.filename) : "Untitled")}"`
-            : ""
+        open={purgeTargets.length > 0}
+        title={purgeDialogTitle(purgeTargets)}
+        message={
+          purgeTargets.length === 1
+            ? "This permanently deletes the paper and its annotations. This cannot be undone."
+            : "This permanently deletes these papers and their annotations. This cannot be undone."
         }
-        message="This permanently deletes the paper and its annotations. This cannot be undone."
         confirmLabel="Purge"
         onConfirm={confirmPurge}
-        onCancel={() => setPurgeTarget(null)}
+        onCancel={() => setPurgeTargets([])}
       />
     </div>
   );

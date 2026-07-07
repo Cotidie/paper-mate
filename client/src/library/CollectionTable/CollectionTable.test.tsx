@@ -441,6 +441,11 @@ describe("CollectionTable Open button", () => {
     expect(screen.getAllByRole("button", { name: "Open" }).length).toBe(rows.length);
   });
 
+  it("the Trash lens hides the Open button entirely (fix request: Restore/Purge moved to the toolbar, not a per-row replacement)", () => {
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} trashLens />);
+    expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
+  });
+
   it("clicking Open calls onOpenRow and does not enter edit mode or toggle selection", () => {
     const onOpenRow = vi.fn();
     render(<CollectionTable rows={rows} onOpenRow={onOpenRow} onEditField={noop} />);
@@ -748,15 +753,7 @@ describe("CollectionTable drag-to-folder payload (Story 7.2 fix request)", () =>
   });
 
   it("a Trash-lens row is not draggable (Story 7.5 scope: moving a trashed paper into a folder is out of scope, code-review fix)", () => {
-    render(
-      <CollectionTable
-        rows={rows}
-        onOpenRow={noop}
-        onEditField={noop}
-        onRestoreRow={noop}
-        onRequestPurge={noop}
-      />,
-    );
+    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} trashLens />);
     const row = screen.getByText("Attention Is All You Need").closest("tr")!;
     expect(row.getAttribute("draggable")).toBe("false");
     const dataTransfer = dataTransferStub();

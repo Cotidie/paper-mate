@@ -30,7 +30,7 @@ Three new API surfaces + one changed behavior:
 
 1. **(Soft-delete) Delete goes to Trash, annotations kept.** Given a paper or a multi-selection, when I delete it, then it soft-deletes: `trashed` flips to `true` in `library.json`, its `annotations.json`/`meta.json`/`source.pdf` are **untouched**, it leaves the normal and folder views (still excluded by `filterPapers`), it shows **only** in the Trash lens, and it **retains its `folder_id`** while trashed. (LFR-22, AL-5.1)
 
-2. **(Trash lens) A view-state filter, not a route, with per-row Restore + Purge.** Given the Trash lens (selecting the folder-panel Trash entry, `{ kind: "trash" }` — **not** a URL route, AD-L3), then it lists only trashed papers, each row exposing a **Restore** and a **Purge** action; empty copy reads exactly "Trash is empty." (AL-3/AD-L3, L-UX-DR8)
+2. **(Trash lens) A view-state filter, not a route, with toolbar Restore + Purge.** Given the Trash lens (selecting the folder-panel Trash entry, `{ kind: "trash" }`, **not** a URL route, AD-L3), then it lists only trashed papers (no per-row action button; a row carries no Open either), and the toolbar's **Restore**/**Purge** buttons act on the current selection (post-review fix request, superseding the original per-row design - see Change Log 2026-07-07); empty copy reads exactly "Trash is empty." (AL-3/AD-L3, L-UX-DR8)
 
 3. **(Restore) Returns to remembered folder, else Uncategorized, with a notice.** Given a trashed paper, when I restore it, then `trashed` clears and it returns to its remembered folder (its retained `folder_id`); if that folder no longer exists it lands in Uncategorized (`folder_id = null`); a non-error "restored from Trash" notice shows. (LFR-23, AL-5.2, L-UX-DR9)
 
@@ -42,7 +42,7 @@ Three new API surfaces + one changed behavior:
 
 7. **(Copy) No em-dash anywhere.** Given any Trash label, action label, confirm copy, or notice, then no string contains an em-dash (`—`). (L-UX-DR9, L-UX-DR13, CLAUDE.md)
 
-8. **(A11y) Every control keyboard-operable with visible focus.** Given the Trash lens entry, the per-row Restore/Purge buttons, the toolbar Delete button, and the purge confirm, then each is a real focusable `<button>`, keyboard-operable, with a visible 2px `{colors.ink}` focus ring; the confirm is Esc-dismissable and returns focus to its trigger (reuse `ConfirmDialog`). (L-UX-DR12)
+8. **(A11y) Every control keyboard-operable with visible focus.** Given the Trash lens entry, the toolbar Restore/Purge/Delete buttons, the sidebar Empty Trash icon, and the purge confirm, then each is a real focusable `<button>`, keyboard-operable, with a visible 2px `{colors.ink}` focus ring; the confirm is Esc-dismissable and returns focus to its trigger (reuse `ConfirmDialog`). (L-UX-DR12)
 
 ## Scope boundary (read first, prevents scope creep)
 
@@ -59,9 +59,10 @@ Three new API surfaces + one changed behavior:
 **Out of scope (do NOT build):**
 
 - **Trash as a route.** It is `{ kind: "trash" }` view-state inside `/`, NOT `/trash` (AD-L3). No router change.
-- **Auto-purge / retention timers / "empty Trash all" bulk purge.** Purge is manual, per-item, confirmed (AL-5.3, AC-4). A single "empty all" is NOT asked; do not add it.
+- **Auto-purge / retention timers.** Purge is manual and confirmed (AL-5.3, AC-4). No timer-based auto-purge.
 - **A confirm on soft-delete.** Trash is the safety net; delete-to-Trash is immediate and reversible (only PURGE confirms, AC-4).
-- **Batch/toolbar restore or purge in the Trash lens.** AC-2 asks for **per-row** Restore/Purge; that is the smallest correct structure. Do not add a set-based restore/purge toolbar action (note it as a future if it comes up).
+
+~~**Batch/toolbar restore or purge in the Trash lens** / **"empty Trash all" bulk purge**~~ (superseded 2026-07-07): both were originally out of scope in favor of per-row Restore/Purge, but a post-review fix request reversed this - see AC-2 and the Change Log. Restore/Purge now live in the toolbar (bulk over the selection) and the sidebar Trash entry reveals an Empty Trash icon (purges every trashed paper, gated behind the same `ConfirmDialog`).
 - **Drag-to-Trash.** Delete is a toolbar/row action, not a drop target; the Trash panel entry is NOT a drop target (unlike folders/Uncategorized).
 - **Moving a trashed paper into a folder.** Move does not apply in the Trash lens; hide the Move + Delete toolbar actions there.
 - **Note authoring / a new file type** → Story 7.6.
@@ -106,6 +107,7 @@ Three new API surfaces + one changed behavior:
   - [x] Pending/upload rows: `visiblePending` is already `[]` for a folder selection; also make it `[]` in the Trash lens (a just-uploaded paper is never trashed).
 
 - [x] **Task 8 — CollectionTable / PaperRow: trash-lens row actions (AC: 2, 8)**
+  - **Superseded 2026-07-07** (see Change Log): the per-row `onRestore`/`onPurge` design below shipped, then a post-review fix request moved Restore/Purge to the toolbar (bulk over the selection). `PaperRow` now takes a single `trashLens?: boolean` that only hides the Open button (and disables drag); it carries no action button of its own. Left here as the historical record of what Task 8 originally built.
   - [x] `PaperRow` takes an optional lens/trash-actions prop (smallest shape: `onRestore?: () => void; onPurge?: () => void`). When present (Trash lens), the Title cell renders **Restore** + **Purge** buttons instead of **Open** (a trashed paper is not opened). Keep the same hover/focus-reveal + `e.stopPropagation()` + `onKeyDown` stop pattern the Open button uses (`PaperRow.tsx:96-106`) so a row click still selects and the buttons stay keyboard-reachable with the 2px focus ring. Title/Authors inline edit is irrelevant here but need not be actively disabled (a trashed row is transient); keep the change minimal.
   - [x] `CollectionTable` threads the lens/trash callbacks from `LibraryPage` down to each `PaperRow` (per `row.doc_id`). Do NOT change the 7.3 selection/range math or the sort/column-visibility props — this is additive.
   - [x] Any new button label/aria-label plain and em-dash-free.
@@ -136,6 +138,13 @@ Three new API surfaces + one changed behavior:
   - [x] Bump `server/pyproject.toml` `[project].version` `0.5.4` → `0.5.5`; sync `server/uv.lock`'s `paper-mate-server` version field (line ~184) to match (7.4 confirmed the lock records it); `cd server && uv lock --check`.
   - [x] Update `docs/API.md`: add the `POST /api/library/trash`, `POST /api/library/restore`, and `DELETE /api/docs/{doc_id}` resource entries + a `DocIdSet` note, and note `POST /api/docs`'s new "re-import restores a trashed paper" behavior; add a `2026-07-07 (Story 7.5)` changelog line (contract shape change: three new paths + one new `DocIdSet` schema).
   - [x] After dev-story, run the cross-model Codex `bmad-code-review` (AE-6) on the diff. Resolve High/Med before done. Backend pytest is run-it-yourself on the host (CLAUDE.md Sandbox note).
+
+- [x] **Task 13 — Post-review fix requests: toolbar Restore/Purge, Delete icon, sidebar Empty Trash (AC: 2, 8)**
+  - [x] Reverses Task 8's per-row design (see its supersession note): `PaperRow` drops `onRestore`/`onPurge` for a single `trashLens?: boolean` that hides Open + disables drag; `CollectionTable` threads `trashLens` instead of two per-row callbacks.
+  - [x] `LibraryPage`'s toolbar grows **Restore**/**Purge** buttons (icons: `ArrowCounterClockwise`/`Trash`) in the Trash lens, disabled until `selectedIds` is non-empty; Purge opens the existing purge `ConfirmDialog`, now generalized from one `CollectionRow | null` target to a `CollectionRow[]` list (title reads `Purge "X"` for one, `Purge N papers` for many). The normal-lens **Delete** button gets a `TrashSimple` icon to match.
+  - [x] `FolderPanel`'s Trash sidebar entry reveals an **Empty Trash** icon on hover/focus (only when the library has any trashed paper), mirroring `FolderRow`'s action-reveal pattern; it funnels into the same toolbar purge `ConfirmDialog` via `onRequestEmptyTrash`, purging every trashed paper.
+  - [x] Tests updated: `PaperRow`'s row-overlay tests replaced with `trashLens`-based ones in `CollectionTable.test.tsx`; `LibraryPage.test.tsx`'s Trash describe block rewritten for the toolbar flow, plus new bulk-purge and Empty-Trash tests; `FolderPanel.test.tsx` gained Empty Trash reveal/callback tests. No backend or contract changes (UI only).
+  - [x] Grepped every new UI string for `—`: none found.
 
 ## Dev Notes
 
@@ -227,7 +236,7 @@ Sonnet 5 (xHigh)
 ### Debug Log References
 
 - Backend: `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`: 221 passed (was 207 at story start).
-- Client: `npm run typecheck` clean; `npm test`: 1170 passed, 61 files (one Reader hold-Space timing test flaked once in the full-suite run, reproduced green in isolation; pre-existing, unrelated to this story's scope).
+- Client: `npm run typecheck` clean; `npm test`: 1170 passed, 61 files (one Reader hold-Space timing test flaked once in the full-suite run, reproduced green in isolation; pre-existing, unrelated to this story's scope). After Task 13's post-review fix requests: `npm run typecheck` clean; `npm test`: 1176 passed, 61 files.
 - Contract: `python -m app.export_openapi` + `npm run gen:api` regenerated `openapi.json`/`schema.d.ts`; diffed to confirm `MoveRequest`'s emitted schema is unchanged (docstring only) and the only delta is the new `DocIdSet` schema + three new paths.
 - Live smoke (Task 11): own fresh `uvicorn` (port 8010) + `vite dev` (port 5183) against an isolated scratch data dir, seeded with real `fixtures/sample-pdfs/` PDFs via `POST /api/docs`. Verified via curl (backend) and Playwright (UI, substituting for the unavailable Chrome extension in this session): batch delete → Trash with retained `folder_id`; Restore → returns to folder + "restored from Trash" toast; Purge → Esc cancels + returns focus to trigger, confirm removes row + deletes `library/{doc_id}/` dir + prunes the index entry; re-upload of a trashed paper restores it (one row, no duplicate dir, annotations intact); Tab reaches the Trash entry with a visible focus ring, Enter activates it. Both servers torn down after.
 
@@ -243,6 +252,7 @@ Sonnet 5 (xHigh)
   - **Fixed (Medium):** a Trash-lens row was still `draggable`, so dragging a trashed paper onto a `FolderPanel` folder (drop targets stay active regardless of lens) silently moved it via `handleMoveRequest`/`movePapers` while trashed, violating this story's own explicit scope exclusion ("Moving a trashed paper into a folder. Move does not apply in the Trash lens"). Fixed by disabling `draggable`/`onDragStart` at the row source whenever `onRestore`/`onPurge` are present (`PaperRow.tsx`), the same signal already used to detect the lens. Added a regression test (`CollectionTable.test.tsx`).
   - **Verified and NOT changed (accepted design):** `useTrashPapers`'s three verbs share one monotonic `opSeqRef` (not per-doc), so a slow op on paper A can be silently superseded by a faster unrelated op on paper B, skipping A's revert/error-toast on a later failure. This is not a new defect: `useMovePapers` has the IDENTICAL single-global-seq property (unchanged, pre-existing), and this story's own Dev Notes explicitly directed `useTrashPapers` to "reuse the `useMovePapers` stale-response `seqRef` guard" as-is. Making it per-doc would be a scope expansion beyond what the story asked for (CLAUDE.md: smallest correct structure).
   - Client suite re-verified green after the fix: 1171 passed (61 files), typecheck clean.
+- **Task 13, post-review fix requests (user-directed, reverses part of the original scope boundary):** the user asked, after seeing the shipped UI, to (1) move Restore/Purge off the per-row hover overlay onto the toolbar as bulk actions over the selection, with icons, (2) add an icon to the normal-lens Delete button, and (3) add a sidebar Empty Trash icon (hover-reveal on the Trash entry) that purges every trashed paper at once. This directly reverses two lines this story's own Scope Boundary had marked out of scope ("batch/toolbar restore or purge" and "empty Trash all bulk purge") and loosens AC-2's "per-row" wording; both were updated in place (with a superseded-note left on Task 8 and the Scope Boundary bullet) rather than silently diverging from the story text. No backend or contract change was needed - this is UI-only, so no version bump.
 
 ### File List
 
@@ -267,15 +277,16 @@ Sonnet 5 (xHigh)
 - `client/src/library/useTrashPapers.test.ts` (new)
 - `client/src/library/folderFilter.ts` (modified: `{ kind: "trash" }` lens)
 - `client/src/library/folderFilter.test.ts` (modified)
-- `client/src/library/FolderPanel/FolderPanel.tsx` (modified: real Trash button)
-- `client/src/library/FolderPanel/FolderPanel.test.tsx` (modified)
-- `client/src/library/LibraryPage.tsx` (modified: toolbar Delete, purge confirm, lens copy)
-- `client/src/library/LibraryPage.test.tsx` (modified)
+- `client/src/library/FolderPanel/FolderPanel.tsx` (modified: real Trash button; Task 13 fix request: `trashCount`/`onRequestEmptyTrash` props + hover-reveal Empty Trash icon on the Trash entry)
+- `client/src/library/FolderPanel/FolderPanel.test.tsx` (modified; Task 13: Empty Trash reveal/callback tests)
+- `client/src/library/FolderPanel/FolderPanel.css` (Task 13 fix request: `.library-folder-panel__trash-row`/`__trash-action` hover-reveal styles)
+- `client/src/library/LibraryPage.tsx` (modified: toolbar Delete, purge confirm, lens copy; Task 13 fix request: toolbar Restore/Purge over the selection replacing the per-row design, icons on Delete/Restore/Purge, `purgeTargets: CollectionRow[]` generalized from a single target, Empty Trash wiring)
+- `client/src/library/LibraryPage.test.tsx` (modified; Task 13: Trash describe block rewritten for the toolbar flow + bulk-purge + Empty-Trash tests)
 - `client/src/library/useCollection.ts` (modified: restored-from-Trash toast on re-upload)
-- `client/src/library/CollectionTable/CollectionTable.tsx` (modified: trash-lens callback threading)
-- `client/src/library/CollectionTable/CollectionTable.css` (modified: trash-action button styles)
-- `client/src/library/CollectionTable/CollectionTable.test.tsx` (modified: trash-lens drag-disabled regression, code-review fix)
-- `client/src/library/CollectionTable/PaperRow.tsx` (modified: Restore/Purge in place of Open; drag disabled in Trash lens, code-review fix)
+- `client/src/library/CollectionTable/CollectionTable.tsx` (modified: trash-lens callback threading; Task 13 fix request: two per-row callbacks collapsed into one `trashLens` boolean)
+- `client/src/library/CollectionTable/CollectionTable.css` (modified: trash-action button styles; Task 13 fix request: removed, dead after the per-row overlay was dropped)
+- `client/src/library/CollectionTable/CollectionTable.test.tsx` (modified: trash-lens drag-disabled regression, code-review fix; Task 13: updated for `trashLens`, added Open-hidden-in-Trash-lens test)
+- `client/src/library/CollectionTable/PaperRow.tsx` (modified: Restore/Purge in place of Open; drag disabled in Trash lens, code-review fix; Task 13 fix request: reverted to a single Open button, gated by `trashLens` instead of `onRestore`/`onPurge`)
 
 **Docs:**
 - `docs/API.md` (modified: trash/restore/purge resource entries + changelog)
@@ -301,3 +312,4 @@ Sonnet 5 (xHigh)
 - 2026-07-07: Live-smoked on own fresh servers (port 8010/5183, isolated data dir, real sample PDFs): batch delete, restore, purge (confirm + Esc + focus-return), re-upload-restores-trashed edge, and keyboard reachability all verified (Task 11).
 - 2026-07-07: Bumped `server/pyproject.toml`/`server/uv.lock` version `0.5.4` → `0.5.5`; updated `docs/API.md` with the three new resource entries + changelog (Task 12).
 - 2026-07-07: Cross-model Codex `bmad-code-review` (AE-6): fixed 1 Medium (Trash-lens rows stayed draggable onto folder drop targets, silently moving a trashed paper; out of scope per this story). Verified and accepted 1 design candidate (the shared `useTrashPapers` seq-guard mirrors `useMovePapers`'s pre-existing identical behavior, per Dev Notes instruction). Client suite re-verified green (1171 tests), typecheck clean.
+- 2026-07-07: Post-review fix requests (Task 13, user-directed): moved Restore/Purge from a per-row hover overlay to bulk toolbar buttons (icons added), added an icon to the normal-lens Delete button, and added a sidebar Empty Trash icon (hover-reveal on the Trash entry) that purges every trashed paper. Reverses the "batch/toolbar restore or purge" and "empty Trash all" out-of-scope lines from this story's original Scope Boundary and AC-2's "per-row" wording (both updated in place, with a superseded-note on Task 8). UI-only, no backend/contract change, no version bump. Client suite re-verified green: 1176 passed (61 files), typecheck clean.

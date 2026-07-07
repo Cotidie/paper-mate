@@ -46,8 +46,7 @@ export default function PaperRow({
   onStartEdit,
   onCommit,
   onCancel,
-  onRestore,
-  onPurge,
+  trashLens = false,
 }: {
   row: CollectionRow;
   visibleColumns: Set<ColumnKey>;
@@ -62,21 +61,16 @@ export default function PaperRow({
   onStartEdit: (field: EditableField) => void;
   onCommit: (field: EditableField, value: string, viaBlur: boolean) => void;
   onCancel: () => void;
-  /** Present only in the Trash lens (Story 7.5, AC-2): a trashed row is not
-   *  opened, so the Title cell's Open button is replaced with these two. */
-  onRestore?: () => void;
-  onPurge?: () => void;
+  /** Trash lens (fix request: Restore/Purge moved to the toolbar, bulk over
+   *  the selection - a row itself carries no action button). A trashed row
+   *  still isn't opened, and isn't draggable onto a folder drop target. */
+  trashLens?: boolean;
 }) {
   // A null title falls back to the filename, extension stripped (still
   // recognizable); `Untitled` is the last resort when neither is known.
   const displayTitle = row.title ?? (row.filename ? stripPdfExtension(row.filename) : null);
   const label = statusLabel(row.status);
   const editable = row.status !== "extracting";
-  // Trash lens (Story 7.5 scope: "Moving a trashed paper into a folder" is
-  // out of scope) - a trashed row must not be draggable onto a folder-panel
-  // drop target, so drag is disabled at the source whenever Restore/Purge
-  // are present (the same signal PaperRow already uses to detect the lens).
-  const dragDisabled = Boolean(onRestore || onPurge);
   return (
     <tr
       aria-selected={armed}
@@ -84,8 +78,8 @@ export default function PaperRow({
       onClickCapture={onRowClickCapture}
       onClick={onRowClick}
       className={rowStatusClass(row.status)}
-      draggable={!dragDisabled}
-      onDragStart={dragDisabled ? undefined : onDragStart}
+      draggable={!trashLens}
+      onDragStart={trashLens ? undefined : onDragStart}
     >
       {visibleColumns.has("title") && (
         <EditableCell
@@ -104,32 +98,7 @@ export default function PaperRow({
           <span className="collection-table__title-text">
             {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
           </span>
-          {onRestore && onPurge ? (
-            <span className="collection-table__trash-actions">
-              <button
-                type="button"
-                className="collection-table__row-action-button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRestore();
-                }}
-                onKeyDown={(e) => e.stopPropagation()}
-              >
-                Restore
-              </button>
-              <button
-                type="button"
-                className="collection-table__row-action-button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPurge();
-                }}
-                onKeyDown={(e) => e.stopPropagation()}
-              >
-                Purge
-              </button>
-            </span>
-          ) : (
+          {!trashLens && (
             <button
               type="button"
               className="collection-table__open-button"
