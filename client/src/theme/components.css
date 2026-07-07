@@ -214,7 +214,7 @@
 
   /* collection-table (Story 6.3): row/column dims for the Library table + its
      loading skeleton, which must reserve the same layout. */
-  --collection-table-row-height: 44px;
+  --collection-table-row-height: 34px;
   --collection-table-title-width: 320px;
   --collection-table-authors-width: 220px;
   --collection-table-added-width: 120px;

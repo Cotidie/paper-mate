@@ -36,8 +36,8 @@
   font-weight: var(--type-title-sm-weight);
   line-height: var(--type-title-sm-leading);
   color: var(--color-ink);
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: var(--hairline-width) solid var(--color-hairline);
+  padding: var(--space-xxs) var(--space-sm);
+  border-bottom: var(--hairline-width) solid var(--color-hairline-strong);
 }
 
 /* An interactive header's `<th>` hands its own padding to the button inside
@@ -96,7 +96,7 @@
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  padding: var(--space-xs) var(--space-sm);
+  padding: var(--space-xxs) var(--space-sm);
   background: none;
   border: 0;
   font: inherit;
@@ -124,8 +124,8 @@
   font-weight: var(--type-body-sm-weight);
   line-height: var(--type-body-sm-leading);
   color: var(--color-body);
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: var(--hairline-width) solid var(--color-hairline);
+  padding: var(--space-xxs) var(--space-sm);
+  border-bottom: var(--hairline-width) solid var(--color-hairline-strong);
 }
 
 .collection-table tbody tr {
