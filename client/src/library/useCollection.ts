@@ -79,16 +79,26 @@ export function useCollection({ onToast }: UseCollectionOptions) {
     // fetch rather than re-fetching the whole library on every render.
   }, [onToast]);
 
-  const handleResolved = useCallback((doc: Doc) => {
-    setLibrary((prev) => {
-      const papers = prev?.papers ?? [];
-      const row = docToRow(doc, papers);
-      const existingIndex = papers.findIndex((p) => p.doc_id === doc.doc_id);
-      const nextPapers =
-        existingIndex >= 0 ? papers.map((p, i) => (i === existingIndex ? row : p)) : [...papers, row];
-      return { papers: nextPapers, folders: prev?.folders ?? [] };
-    });
-  }, []);
+  const handleResolved = useCallback(
+    (doc: Doc) => {
+      setLibrary((prev) => {
+        const papers = prev?.papers ?? [];
+        const row = docToRow(doc, papers);
+        const existingIndex = papers.findIndex((p) => p.doc_id === doc.doc_id);
+        const nextPapers =
+          existingIndex >= 0 ? papers.map((p, i) => (i === existingIndex ? row : p)) : [...papers, row];
+        // A re-upload of a trashed paper restores it (Story 7.5 AC-5, backend
+        // `import_pdf`'s re-import branch clears `trashed`) - the pre-upload
+        // snapshot in `prev.papers` still carries the `trashed` flag, so no
+        // contract change is needed to detect it here.
+        if (existingIndex >= 0 && papers[existingIndex].trashed) {
+          onToast("restored from Trash", "info");
+        }
+        return { papers: nextPapers, folders: prev?.folders ?? [] };
+      });
+    },
+    [onToast],
+  );
 
   // Apply a freshly-fetched library, superseding any older in-flight fetch.
   const applyLibrary = useCallback((lib: Library) => {

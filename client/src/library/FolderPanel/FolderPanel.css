@@ -122,6 +122,51 @@ button.library-folder-panel__item:hover {
   outline-offset: calc(-1 * var(--hairline-width));
 }
 
+/* Trash sidebar entry: an Empty Trash icon reveals on hover/focus (fix
+   request), mirroring FolderRow's own row-actions overlay. A leaf button
+   (not a container of actions), so the reveal keys off its own
+   :focus-visible rather than a :focus-within on a wrapper. */
+.library-folder-panel__trash-row {
+  position: relative;
+}
+
+.library-folder-panel__trash-action {
+  position: absolute;
+  top: 50%;
+  right: var(--space-xs);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--folder-panel-action-size);
+  height: var(--folder-panel-action-size);
+  background: var(--color-surface-strong);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease-out;
+}
+
+.library-folder-panel__trash-row:hover .library-folder-panel__trash-action,
+.library-folder-panel__trash-action:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.library-folder-panel__trash-action:hover {
+  background: var(--color-hairline-strong);
+  color: var(--color-ink);
+}
+
+.library-folder-panel__trash-action svg {
+  width: var(--folder-panel-icon-size);
+  height: var(--folder-panel-icon-size);
+  display: block;
+}
+
 .folder-panel__row {
   position: relative;
   display: flex;

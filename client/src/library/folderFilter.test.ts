@@ -41,7 +41,7 @@ describe("filterPapers", () => {
     expect(result.map((p) => p.doc_id)).toEqual(["in-folder-a"]);
   });
 
-  it("excludes trashed papers in every selection kind", () => {
+  it("excludes trashed papers in every non-trash selection kind", () => {
     for (const selection of [
       { kind: "all" } as const,
       { kind: "uncategorized" } as const,
@@ -50,6 +50,11 @@ describe("filterPapers", () => {
       const result = filterPapers(papers, selection);
       expect(result.some((p) => p.trashed)).toBe(false);
     }
+  });
+
+  it("trash: only trashed papers, regardless of folder", () => {
+    const result = filterPapers(papers, { kind: "trash" });
+    expect(result.map((p) => p.doc_id)).toEqual(["trashed-uncategorized", "trashed-in-folder-a"]);
   });
 });
 
@@ -70,5 +75,10 @@ describe("isSelected", () => {
 
   it("does not match folder against all/uncategorized", () => {
     expect(isSelected({ kind: "folder", id: "x" }, { kind: "all" })).toBe(false);
+  });
+
+  it("matches trash by kind alone", () => {
+    expect(isSelected({ kind: "trash" }, { kind: "trash" })).toBe(true);
+    expect(isSelected({ kind: "trash" }, { kind: "all" })).toBe(false);
   });
 });

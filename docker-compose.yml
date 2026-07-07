@@ -33,10 +33,11 @@ services:
       # Library storage. Long syntax with create_host_path:false: if the host
       # data dir does NOT exist, fail loudly at `up` instead of letting the
       # daemon auto-create it as root:root (which the non-root `user:` above then
-      # can't write; see README "Development"). Pre-create the dir as the host
-      # user first.
+      # can't write; see README "Development"). Default is the repo-root
+      # ./.paper-mate dir, tracked via .gitkeep so it pre-exists on a fresh
+      # clone with no manual mkdir.
       - type: bind
-        source: "${PAPER_MATE_DATA:-${HOME}/.paper-mate}"
+        source: "${PAPER_MATE_DATA:-./.paper-mate}"
         target: /data
         bind:
           create_host_path: false

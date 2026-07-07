@@ -342,6 +342,10 @@ type CollectionTableProps =
        *  both are supplied; omit for isolated tests that don't care. */
       onResizeColumnStart?: (key: ColumnKey, e: React.PointerEvent) => void;
       onResizeColumnKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+      /** True in the Trash lens (Story 7.5): every row drops its Open button
+       *  and its drag-to-folder affordance. Restore/Purge live in the
+       *  toolbar, bulk over the selection (fix request), not per row. */
+      trashLens?: boolean;
     };
 
 /**
@@ -396,6 +400,7 @@ export default function CollectionTable(props: CollectionTableProps) {
     columnWidths,
     onResizeColumnStart,
     onResizeColumnKeyDown,
+    trashLens = false,
   } = props;
   const visibleKeys = new Set(visibleColumns.map((c) => c.key));
   // Controlled-or-uncontrolled (like `<input value onChange>`): when the
@@ -588,6 +593,7 @@ export default function CollectionTable(props: CollectionTableProps) {
               onStartEdit={(field) => startEdit(row.doc_id, field)}
               onCommit={(field, value, viaBlur) => commitEdit(row, field, value, viaBlur)}
               onCancel={() => setEditing(null)}
+              trashLens={trashLens}
             />
           ))}
         </tbody>

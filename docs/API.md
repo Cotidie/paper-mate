@@ -43,7 +43,10 @@ degrading to a non-error skip when offline). Storage then settles the row to
 external correction), or `parse-failed` (nothing found: a never-lost
 filename-title row). The client **polls `GET /api/library`** until every row
 settles. An **idempotent re-import** of an already-settled paper does **not**
-re-extract; it keeps its stored `status` and only advances `last_opened`.
+re-extract; it keeps its stored `status` and only advances `last_opened`. If
+the existing paper was **trashed**, the re-import also **restores** it
+(clears `trashed`, keeps its retained `folder_id`, Story 7.5 AC-5), rather
+than creating a duplicate row or a second `library/{doc_id}/` dir.
 
 - **Request:** `multipart/form-data`, field `file` = the PDF.
 - **200** → `Doc`
@@ -118,6 +121,24 @@ never changes `status`, `page_count`, `added`, or `last_opened`.
 - **404** → `{ "detail": "Document not found" }` — no `meta.json` for `doc_id`.
 - **422** → `{ "detail": string }` — a malformed or forbidden field (AR-11 envelope).
 - **500** → `{ "detail": "Could not update document" }` — a storage failure.
+
+### `DELETE /api/docs/{doc_id}`: purge a document
+
+Permanently delete a document (Story 7.5 AC-4, AL-5.3, AL-6): removes the
+whole `library/{doc_id}/` dir (`source.pdf` + `meta.json` + `annotations.json`)
+**and** its `library.json` entry. Manual only: no auto-purge, no retention
+timer, no undo. Crash-safe ordering: the on-disk dir is removed **before** the
+index entry is pruned (both under the same serialized lock), so a crash
+between the two steps never resurrects the purged paper on the next boot's
+reconcile.
+
+- **Request body:** none.
+- **200** → `Library` (the same shape as `GET /api/library`: the purged paper
+  is absent, every other paper/folder unchanged), so the client reconciles
+  from one round-trip.
+- **404** → `{ "detail": "Document not found" }`: unknown or already-purged
+  `doc_id`.
+- **500** → `{ "detail": "Could not purge document" }`: a storage failure.
 
 ### `GET /api/docs/{doc_id}/file` — stream the stored PDF
 
@@ -274,6 +295,50 @@ at most one folder at a time. A single-paper move is just `doc_ids: [oneId]`.
 - **500** → `{ "detail": "Could not update the collection" }` — an unreadable
   or wrong-shape `library.json`.
 
+> `MoveRequest` subclasses a base `DocIdSet` (`{ "doc_ids": [...] }`,
+> `extra="forbid"`, `doc_ids` non-empty): the shared set-based org-op
+> contract every trash/restore/move route reuses (AD-L6, Story 7.5). `trash`
+> and `restore` below take a bare `DocIdSet` (no target field); `MoveRequest`
+> adds only `folder_id`.
+
+### `POST /api/library/trash`: soft-delete papers
+
+Set-based soft-delete (AD-L6, Story 7.5 AC-1, AL-5.1): flips `trashed` to
+`true` for every id in `doc_ids`. `folder_id`, `order`, and every stored
+per-document file (`annotations.json`/`meta.json`/`source.pdf`) are
+**untouched**: this is organizational only. A trashed paper leaves the
+normal/folder views (excluded by the client's folder filter) and surfaces
+only in the Trash lens, retaining its `folder_id` while trashed.
+
+- **Body** → `DocIdSet`
+  ```json
+  { "doc_ids": ["3fae1c…"] }
+  ```
+- **200** → `Library` (the same shape as `GET /api/library`).
+- **404** → `{ "detail": "Document not found" }`: some id in `doc_ids` does
+  not reference an existing paper (all-or-nothing, no partial write).
+- **422** → `doc_ids` is empty, or an extra/forbidden field.
+- **500** → `{ "detail": "Could not update the collection" }`.
+
+### `POST /api/library/restore`: restore trashed papers
+
+Set-based restore (AD-L6, Story 7.5 AC-3, AL-5.2): flips `trashed` to `false`
+for every id in `doc_ids`. `folder_id` is left as-is: it is the remembered
+folder; if that folder was deleted while the paper was trashed, `delete_folder`
+already re-homed it to Uncategorized (`folder_id: null`) regardless of
+`trashed`, so restoring always lands on a live folder or Uncategorized, never
+a dangling id.
+
+- **Body** → `DocIdSet`
+  ```json
+  { "doc_ids": ["3fae1c…"] }
+  ```
+- **200** → `Library` (the same shape as `GET /api/library`).
+- **404** → `{ "detail": "Document not found" }`: some id in `doc_ids` does
+  not reference an existing paper (all-or-nothing, no partial write).
+- **422** → `doc_ids` is empty, or an extra/forbidden field.
+- **500** → `{ "detail": "Could not update the collection" }`.
+
 ## Reserved (not yet built)
 
 Declared by the architecture (AR-11), implemented in later stories. Do not
@@ -287,6 +352,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-07 (Story 7.5):** added `POST /api/library/trash`, `POST /api/library/restore` (set-based `DocIdSet`: `{doc_ids}`, `extra="forbid"`, `doc_ids` non-empty) and `DELETE /api/docs/{doc_id}` (purge: removes the whole `library/{doc_id}/` dir and its `library.json` entry, crash-safe rmtree-then-prune order). New base schema `DocIdSet`, which `MoveRequest` now subclasses (adds only `folder_id`; `MoveRequest`'s emitted shape is unchanged). `POST /api/docs`'s idempotent re-import branch now also restores a trashed paper (clears `trashed`, keeps its retained `folder_id`), rather than creating a duplicate row. Trash/restore 404 on an unknown `doc_id` (all-or-nothing); purge 404s on an unknown or already-purged `doc_id`. Contract shape change: three new paths + one new schema (`DocIdSet`).
 - **2026-07-06 (Story 7.2):** added `POST /api/library/move` — set-based paper→folder assignment (`MoveRequest`: `{doc_ids, folder_id}`, `extra="forbid"`, `doc_ids` non-empty). `folder_id: null` clears membership; a move replaces any prior folder (at most one). TWO distinct 404s: bad `folder_id` → `"Folder not found"`, unknown `doc_id` → `"Document not found"`; either aborts all-or-nothing. Contract shape change: one new path + one new schema (`MoveRequest`).
 - **2026-07-06 (Story 7.1):** added `/api/library/folders` folder CRUD — `POST` (create, optional `parent_id` nesting), `PATCH /{folder_id}` (rename, name-only), `DELETE /{folder_id}` (subtree delete: removes the folder and every descendant, re-homes every paper in the subtree to Uncategorized, returns the updated `Library` in one round-trip; never deletes a paper). New request models `FolderCreate`/`FolderRename` (`extra="forbid"`; a blank/whitespace `name` is a 422). A missing folder is 404 `"Folder not found"`, distinct from the doc-specific `"Document not found"` literal. Contract shape change: three new paths + two new schemas.
 - **2026-07-05 (Story 6.7):** added `POST /api/docs/{doc_id}/open` — advances `meta.last_opened` when a paper opens (200 `Doc`, 404 unknown doc, 500 storage failure). A mutation, not the pure `GET /api/docs/{doc_id}` read; reuses the existing `Doc` response model (no new schema). `ReaderPage` fires it as a best-effort, error-swallowed side effect on open; a failure never gates the reader rendering the paper. No UI surfaces `last_opened` (out-of-scope last-opened *tracking* feature, not built). Ratifies the already-shipped open path (hover Open button → `/reader/:docId`, doc-scoped hydrate/autosave/back-to-Library, atomic doc-switch isolation) with test coverage; no other endpoint changed.

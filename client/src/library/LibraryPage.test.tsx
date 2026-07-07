@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent, act, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import LibraryPage from "@/library/LibraryPage";
 import * as api from "@/api/client";
@@ -1148,5 +1148,200 @@ describe("Display, Sort controls (Story 7.4)", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Folder A" }));
 
     expect(new Set(movePapers.mock.calls[0][0])).toEqual(new Set([beta.doc_id, gamma.doc_id]));
+  });
+});
+
+describe("Trash (Story 7.5)", () => {
+  function libraryRow(overrides: Partial<api.CollectionRow>): api.CollectionRow {
+    return {
+      doc_id: "p".repeat(64),
+      title: "A Paper",
+      authors: null,
+      added: "2026-07-06T00:00:00+00:00",
+      file_type: "pdf",
+      status: "ready",
+      folder_id: null,
+      trashed: false,
+      order: 0,
+      ...overrides,
+    };
+  }
+
+  it("toolbar Delete trashes the checked selection and clears it", async () => {
+    const paper = libraryRow({ doc_id: "d".repeat(64), title: "Doomed Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    const trashPapers = vi
+      .spyOn(api, "trashPapers")
+      .mockResolvedValue({ papers: [{ ...paper, trashed: true }], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Doomed Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Doomed Paper").closest("tr")!);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(trashPapers).toHaveBeenCalledWith([paper.doc_id]);
+    await waitFor(() => expect(screen.queryByText("Doomed Paper")).toBeNull());
+    // Selection cleared: Move/Delete disable again once nothing is checked
+    // (there is nothing left visible to check, but the toolbar buttons
+    // reflect an empty selectedIds set either way).
+    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("the toolbar Delete button is disabled with nothing checked, enabled once a row is checked", async () => {
+    const paper = libraryRow({ doc_id: "d".repeat(64), title: "Doomed Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Doomed Paper")).toBeTruthy());
+
+    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByText("Doomed Paper").closest("tr")!);
+    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("selecting Trash shows trashed rows with no Open button, a disabled toolbar Restore/Purge, and hides Move/Delete", async () => {
+    const trashedPaper = libraryRow({ doc_id: "t".repeat(64), title: "Trashed Paper", trashed: true });
+    const liveePaper = libraryRow({ doc_id: "l".repeat(64), title: "Live Paper", trashed: false, order: 1 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [trashedPaper, liveePaper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Live Paper")).toBeTruthy());
+    expect(screen.queryByText("Trashed Paper")).toBeNull();
+
+    fireEvent.click(screen.getByText("Trash"));
+
+    expect(screen.getByText("Trashed Paper")).toBeTruthy();
+    expect(screen.queryByText("Live Paper")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
+    expect((screen.getByRole("button", { name: "Restore" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Purge" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Move" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+
+    fireEvent.click(screen.getByText("Trashed Paper").closest("tr")!);
+    expect((screen.getByRole("button", { name: "Restore" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Purge" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("Trash lens empty copy reads exactly 'Trash is empty.'", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({
+      papers: [libraryRow({ doc_id: "l".repeat(64), title: "Live Paper" })],
+      folders: [],
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Live Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Trash"));
+
+    expect(screen.getByText("Trash is empty.")).toBeTruthy();
+  });
+
+  it("toolbar Restore acts on the selection, removes the row from the Trash view, and fires the restored-from-Trash notice", async () => {
+    const trashedPaper = libraryRow({ doc_id: "t".repeat(64), title: "Trashed Paper", trashed: true });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [trashedPaper], folders: [] });
+    const restorePapers = vi
+      .spyOn(api, "restorePapers")
+      .mockResolvedValue({ papers: [{ ...trashedPaper, trashed: false }], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("No papers to show.")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Trash"));
+    await waitFor(() => expect(screen.getByText("Trashed Paper")).toBeTruthy());
+    fireEvent.click(screen.getByText("Trashed Paper").closest("tr")!);
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+
+    expect(restorePapers).toHaveBeenCalledWith([trashedPaper.doc_id]);
+    await waitFor(() => expect(screen.queryByText("Trashed Paper")).toBeNull());
+    expect(screen.getByText("restored from Trash")).toBeTruthy();
+  });
+
+  it("toolbar Purge opens a confirm over the selection; confirming calls purgeDoc and removes the row; Esc cancels", async () => {
+    const trashedPaper = libraryRow({ doc_id: "t".repeat(64), title: "Trashed Paper", trashed: true });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [trashedPaper], folders: [] });
+    const purgeDoc = vi.spyOn(api, "purgeDoc").mockResolvedValue({ papers: [], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Trash")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Trash"));
+    await waitFor(() => expect(screen.getByText("Trashed Paper")).toBeTruthy());
+    fireEvent.click(screen.getByText("Trashed Paper").closest("tr")!);
+    fireEvent.click(screen.getByRole("button", { name: "Purge" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeTruthy();
+    expect(within(dialog).getByText('Purge "Trashed Paper"')).toBeTruthy();
+    expect(purgeDoc).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(purgeDoc).not.toHaveBeenCalled();
+    expect(screen.getByText("Trashed Paper")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Purge" }));
+    const confirmButton = within(screen.getByRole("dialog")).getByRole("button", { name: "Purge" });
+    fireEvent.click(confirmButton);
+
+    expect(purgeDoc).toHaveBeenCalledWith(trashedPaper.doc_id);
+    await waitFor(() => expect(screen.queryByText("Trashed Paper")).toBeNull());
+  });
+
+  it("toolbar Purge purges every selected row (bulk, fix request)", async () => {
+    const paperA = libraryRow({ doc_id: "a".repeat(64), title: "Trashed A", trashed: true, order: 0 });
+    const paperB = libraryRow({ doc_id: "b".repeat(64), title: "Trashed B", trashed: true, order: 1 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paperA, paperB], folders: [] });
+    const purgeDoc = vi.spyOn(api, "purgeDoc").mockResolvedValue({ papers: [], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Trash")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Trash"));
+    await waitFor(() => expect(screen.getByText("Trashed B")).toBeTruthy());
+    fireEvent.click(screen.getByText("Trashed A").closest("tr")!, { shiftKey: true });
+    fireEvent.click(screen.getByText("Trashed B").closest("tr")!, { ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Purge" }));
+
+    expect(within(screen.getByRole("dialog")).getByText("Purge 2 papers")).toBeTruthy();
+    const confirmButton = within(screen.getByRole("dialog")).getByRole("button", { name: "Purge" });
+    fireEvent.click(confirmButton);
+
+    expect(purgeDoc).toHaveBeenCalledWith(paperA.doc_id);
+    expect(purgeDoc).toHaveBeenCalledWith(paperB.doc_id);
+  });
+
+  it("the sidebar Empty Trash icon purges every trashed paper (fix request)", async () => {
+    const paperA = libraryRow({ doc_id: "a".repeat(64), title: "Trashed A", trashed: true, order: 0 });
+    const paperB = libraryRow({ doc_id: "b".repeat(64), title: "Trashed B", trashed: true, order: 1 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paperA, paperB], folders: [] });
+    const purgeDoc = vi.spyOn(api, "purgeDoc").mockResolvedValue({ papers: [], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Trash")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Empty Trash" }));
+    expect(within(screen.getByRole("dialog")).getByText("Purge 2 papers")).toBeTruthy();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Purge" }));
+
+    expect(purgeDoc).toHaveBeenCalledWith(paperA.doc_id);
+    expect(purgeDoc).toHaveBeenCalledWith(paperB.doc_id);
+  });
+
+  it("a re-upload whose doc_id was trashed fires the restored-from-Trash notice", async () => {
+    const doc_id = "r".repeat(64);
+    const trashedPaper = libraryRow({ doc_id, title: "Old Title", trashed: true, folder_id: null });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [trashedPaper], folders: [] });
+    vi.spyOn(api, "uploadDoc").mockResolvedValue({
+      doc_id,
+      filename: "old.pdf",
+      title: "Old Title",
+      page_count: 1,
+      added: "2026-07-06T00:00:00+00:00",
+      last_opened: "2026-07-07T00:00:00+00:00",
+      file_type: "pdf",
+      status: "ready",
+      schema_version: 1,
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Trash")).toBeTruthy());
+
+    const input = screen.getByTestId("library-add-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [pdfFile("old.pdf")] } });
+
+    await waitFor(() => expect(screen.getByText("restored from Trash")).toBeTruthy());
   });
 });

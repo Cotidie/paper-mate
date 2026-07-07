@@ -309,6 +309,64 @@ def test_patch_doc_does_not_change_other_fields(data_root):
     assert body["added"] == before["added"]
 
 
+# --- Purge route (Story 7.5 AC-4, AL-5.3, AL-6) -----------------------------
+
+
+def test_purge_removes_dir_and_library_entry(data_root):
+    raw = make_pdf_bytes(pages=1, title="Purge me")
+    doc_id = client.post("/api/docs", files={"file": ("p.pdf", raw, "application/pdf")}).json()["doc_id"]
+
+    resp = client.delete(f"/api/docs/{doc_id}")
+
+    assert resp.status_code == 200
+    assert not (data_root / "library" / doc_id).exists()
+    library = client.get("/api/library").json()
+    assert all(p["doc_id"] != doc_id for p in library["papers"])
+
+
+def test_purge_unknown_doc_returns_404_detail(data_root):
+    resp = client.delete(f"/api/docs/{'0' * 64}")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Document not found"
+
+
+def test_reimport_of_trashed_paper_restores_it_no_duplicate(data_root):
+    raw = make_pdf_bytes(pages=1, title="Restorable")
+    doc_id = client.post("/api/docs", files={"file": ("r.pdf", raw, "application/pdf")}).json()["doc_id"]
+    folder = client.post("/api/library/folders", json={"name": "Papers"}).json()
+    client.post("/api/library/move", json={"doc_ids": [doc_id], "folder_id": folder["id"]})
+    client.post("/api/library/trash", json={"doc_ids": [doc_id]})
+    ann = {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "doc_id": doc_id,
+        "type": "highlight",
+        "group_id": None,
+        "anchor": {
+            "kind": "text",
+            "page_index": 0,
+            "rects": [{"x0": 0, "y0": 0, "x1": 1, "y1": 1}],
+            "text": "hi",
+        },
+        "style": {"color": "annotation-default"},
+        "body": None,
+        "created_at": "2026-07-07T00:00:00+00:00",
+        "updated_at": "2026-07-07T00:00:00+00:00",
+    }
+    client.put(f"/api/docs/{doc_id}/annotations", json=[ann])
+    before_annotations = client.get(f"/api/docs/{doc_id}/annotations").json()
+
+    reimport = client.post("/api/docs", files={"file": ("r.pdf", raw, "application/pdf")})
+    assert reimport.status_code == 200
+    assert reimport.json()["doc_id"] == doc_id
+
+    library = client.get("/api/library").json()
+    rows = [p for p in library["papers"] if p["doc_id"] == doc_id]
+    assert len(rows) == 1
+    assert rows[0]["trashed"] is False
+    assert rows[0]["folder_id"] == folder["id"]
+    assert client.get(f"/api/docs/{doc_id}/annotations").json() == before_annotations
+
+
 def test_mark_doc_opened_advances_last_opened(data_root):
     """AC-4/7/9: POST .../open -> 200 Doc with last_opened advanced; every
     other meta field (status/added/title/authors/page_count) is unchanged."""

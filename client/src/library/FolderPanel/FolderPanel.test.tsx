@@ -24,12 +24,16 @@ function Harness({
   initialSelection = { kind: "all" },
   onSelect,
   onDropMove = () => {},
+  trashCount = 0,
+  onRequestEmptyTrash = () => {},
 }: {
   initialFolders: api.Folder[];
   onToast?: (message: string, variant: "error" | "info") => void;
   initialSelection?: FolderSelection;
   onSelect?: (selection: FolderSelection) => void;
   onDropMove?: (docIds: string[], folderId: string | null) => void;
+  trashCount?: number;
+  onRequestEmptyTrash?: () => void;
 }) {
   const [library, setLibrary] = useState<api.Library | null>({ papers: [], folders: initialFolders });
   const [selection, setSelection] = useState<FolderSelection>(initialSelection);
@@ -46,6 +50,8 @@ function Harness({
         onSelect?.(s);
       }}
       onDropMove={onDropMove}
+      trashCount={trashCount}
+      onRequestEmptyTrash={onRequestEmptyTrash}
     />
   );
 }
@@ -372,14 +378,44 @@ describe("Folder selection filter (Story 7.2, AC-1, AC-2, AC-5)", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("Recent and Trash remain inert (no click handler, not selectable)", () => {
+  it("Recent remains inert (no click handler, not selectable)", () => {
     const onSelect = vi.fn();
     render(<Harness initialFolders={[]} onSelect={onSelect} />);
     fireEvent.click(screen.getByText("Recent"));
-    fireEvent.click(screen.getByText("Trash"));
     expect(onSelect).not.toHaveBeenCalled();
     expect(screen.getByText("Recent").closest("button")).toBeNull();
-    expect(screen.getByText("Trash").closest("button")).toBeNull();
+  });
+
+  it("Trash is a real selectable button (Story 7.5)", () => {
+    const onSelect = vi.fn();
+    render(<Harness initialFolders={[]} onSelect={onSelect} />);
+    const trashButton = screen.getByText("Trash").closest("button");
+    expect(trashButton).not.toBeNull();
+    fireEvent.click(trashButton!);
+    expect(onSelect).toHaveBeenCalledWith({ kind: "trash" });
+  });
+
+  it("Trash is active-highlighted when selected", () => {
+    render(<Harness initialFolders={[]} initialSelection={{ kind: "trash" }} />);
+    const trashButton = screen.getByText("Trash").closest("button")!;
+    expect(trashButton.className).toContain("library-folder-panel__item--active");
+  });
+
+  it("Empty Trash icon is absent when the trash is empty (fix request)", () => {
+    render(<Harness initialFolders={[]} trashCount={0} />);
+    expect(screen.queryByRole("button", { name: "Empty Trash" })).toBeNull();
+  });
+
+  it("Empty Trash icon appears on the Trash row when the trash holds papers, and fires its own callback without selecting Trash", () => {
+    const onSelect = vi.fn();
+    const onRequestEmptyTrash = vi.fn();
+    render(
+      <Harness initialFolders={[]} trashCount={2} onSelect={onSelect} onRequestEmptyTrash={onRequestEmptyTrash} />,
+    );
+    const emptyButton = screen.getByRole("button", { name: "Empty Trash" });
+    fireEvent.click(emptyButton);
+    expect(onRequestEmptyTrash).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it("the All/Uncategorized/folder entries are real focusable buttons with Enter activation", () => {

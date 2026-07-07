@@ -5,6 +5,7 @@ import {
   FolderDashed,
   Plus,
   Star,
+  Trash,
   TrashSimple,
 } from "@phosphor-icons/react";
 import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog";
@@ -49,15 +50,20 @@ function flattenTree(folders: Folder[]): Array<{ folder: Folder; depth: number }
  * owns only the local UI state (which folder is being renamed, which parent
  * has a new-folder draft open, which folder is pending a delete confirm).
  *
- * `All`/`Uncategorized`/a folder row are selectable (Story 7.2, LFR-14,
- * L-UX-DR4): `selection` + `onSelect` are lifted to `LibraryPage` (shared with
- * the table's filter), so this component only renders the highlight and
- * forwards clicks/keyboard activation. `Recent`/`Starred`/`Trash` stay inert
- * visual placeholders (`Starred` is an unimplemented mock per user request;
- * Trash's real lens is Story 7.5). `Uncategorized` and every folder row are
- * ALSO drop targets for drag-to-folder (fix request): a drag carrying the
- * `MOVE_DRAG_MIME` payload (set by a `CollectionTable` row's `dragstart`)
- * reports the dropped doc ids + target folder up via `onDropMove`.
+ * `All`/`Uncategorized`/a folder row/`Trash` are selectable (Story 7.2/7.5,
+ * LFR-14, L-UX-DR4): `selection` + `onSelect` are lifted to `LibraryPage`
+ * (shared with the table's filter), so this component only renders the
+ * highlight and forwards clicks/keyboard activation. `Recent`/`Starred` stay
+ * inert visual placeholders (`Starred` is an unimplemented mock per user
+ * request). `Uncategorized` and every folder row are ALSO drop targets for
+ * drag-to-folder (fix request): a drag carrying the `MOVE_DRAG_MIME` payload
+ * (set by a `CollectionTable` row's `dragstart`) reports the dropped doc ids
+ * + target folder up via `onDropMove`. `Trash` is NOT a drop target (Story
+ * 7.5 scope: drag-to-Trash is out of scope). The `Trash` entry also reveals
+ * an Empty Trash icon on hover/focus (fix request), mirroring `FolderRow`'s
+ * action reveal - shown only when the trash holds papers, gated behind its
+ * own confirm (`onRequestEmptyTrash` opens it; this component owns neither
+ * the count nor the purge call, both live in `LibraryPage`).
  */
 export default function FolderPanel({
   folders,
@@ -68,6 +74,8 @@ export default function FolderPanel({
   onSelect,
   onDropMove,
   width,
+  trashCount,
+  onRequestEmptyTrash,
 }: {
   folders: Folder[];
   setLibrary: Dispatch<SetStateAction<Library | null>>;
@@ -78,6 +86,9 @@ export default function FolderPanel({
   onDropMove: (docIds: string[], folderId: string | null) => void;
   /** Drag-to-resize (fix request): overrides the CSS default `--toc-panel-width`. */
   width: number;
+  /** How many papers are currently trashed - gates the Empty Trash reveal. */
+  trashCount: number;
+  onRequestEmptyTrash: () => void;
 }) {
   const { createFolder, renameFolder, deleteFolder } = useFolders({ folders, setLibrary, onToast });
 
@@ -173,9 +184,32 @@ export default function FolderPanel({
           <Star aria-hidden />
           Starred
         </li>
-        <li className="library-folder-panel__item" aria-disabled="true">
-          <TrashSimple aria-hidden />
-          Trash
+        <li className="library-folder-panel__trash-row">
+          <button
+            type="button"
+            className={
+              "library-folder-panel__item" +
+              (isSelected(selection, { kind: "trash" }) ? " library-folder-panel__item--active" : "")
+            }
+            onClick={() => onSelect({ kind: "trash" })}
+          >
+            <TrashSimple aria-hidden />
+            Trash
+          </button>
+          {trashCount > 0 && (
+            <button
+              type="button"
+              className="library-folder-panel__trash-action"
+              aria-label="Empty Trash"
+              title="Empty Trash"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestEmptyTrash();
+              }}
+            >
+              <Trash aria-hidden />
+            </button>
+          )}
         </li>
       </ul>
 

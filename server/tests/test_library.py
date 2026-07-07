@@ -177,3 +177,110 @@ def test_move_papers_empty_doc_ids_returns_422(data_root):
 def test_move_papers_forbidden_extra_field_returns_422(data_root):
     resp = client.post("/api/library/move", json={"doc_ids": ["x"], "extra": "nope"})
     assert resp.status_code == 422
+
+
+# --- Trash / restore routes (Story 7.5, AD-L6) ------------------------------
+
+
+def test_trash_papers_flips_trashed_leaves_folder_id(data_root):
+    folder = client.post("/api/library/folders", json={"name": "Papers"}).json()
+    raw = make_pdf_bytes(pages=1, title="Trashable")
+    up = client.post("/api/docs", files={"file": ("t.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+    client.post("/api/library/move", json={"doc_ids": [doc_id], "folder_id": folder["id"]})
+
+    resp = client.post("/api/library/trash", json={"doc_ids": [doc_id]})
+
+    assert resp.status_code == 200
+    row = next(p for p in resp.json()["papers"] if p["doc_id"] == doc_id)
+    assert row["trashed"] is True
+    assert row["folder_id"] == folder["id"]
+
+
+def test_trash_papers_unknown_doc_id_returns_404(data_root):
+    resp = client.post("/api/library/trash", json={"doc_ids": ["no-such-doc"]})
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Document not found"
+
+
+def test_trash_papers_empty_doc_ids_returns_422(data_root):
+    resp = client.post("/api/library/trash", json={"doc_ids": []})
+    assert resp.status_code == 422
+
+
+def test_trash_papers_forbidden_extra_field_returns_422(data_root):
+    resp = client.post("/api/library/trash", json={"doc_ids": ["x"], "folder_id": "nope"})
+    assert resp.status_code == 422
+
+
+def test_trash_leaves_annotations_untouched(data_root):
+    raw = make_pdf_bytes(pages=1)
+    up = client.post("/api/docs", files={"file": ("t.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+    ann = {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "doc_id": doc_id,
+        "type": "highlight",
+        "group_id": None,
+        "anchor": {
+            "kind": "text",
+            "page_index": 0,
+            "rects": [{"x0": 0, "y0": 0, "x1": 1, "y1": 1}],
+            "text": "hi",
+        },
+        "style": {"color": "annotation-default"},
+        "body": None,
+        "created_at": "2026-07-07T00:00:00+00:00",
+        "updated_at": "2026-07-07T00:00:00+00:00",
+    }
+    client.put(f"/api/docs/{doc_id}/annotations", json=[ann])
+    before = client.get(f"/api/docs/{doc_id}/annotations").json()
+
+    client.post("/api/library/trash", json={"doc_ids": [doc_id]})
+
+    after = client.get(f"/api/docs/{doc_id}/annotations").json()
+    assert after == before
+
+
+def test_restore_papers_clears_trashed_keeps_folder_id(data_root):
+    folder = client.post("/api/library/folders", json={"name": "Papers"}).json()
+    raw = make_pdf_bytes(pages=1)
+    up = client.post("/api/docs", files={"file": ("t.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+    client.post("/api/library/move", json={"doc_ids": [doc_id], "folder_id": folder["id"]})
+    client.post("/api/library/trash", json={"doc_ids": [doc_id]})
+
+    resp = client.post("/api/library/restore", json={"doc_ids": [doc_id]})
+
+    assert resp.status_code == 200
+    row = next(p for p in resp.json()["papers"] if p["doc_id"] == doc_id)
+    assert row["trashed"] is False
+    assert row["folder_id"] == folder["id"]
+
+
+def test_restore_after_folder_delete_lands_uncategorized(data_root):
+    folder = client.post("/api/library/folders", json={"name": "Papers"}).json()
+    raw = make_pdf_bytes(pages=1)
+    up = client.post("/api/docs", files={"file": ("t.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+    client.post("/api/library/move", json={"doc_ids": [doc_id], "folder_id": folder["id"]})
+    client.post("/api/library/trash", json={"doc_ids": [doc_id]})
+    client.delete(f"/api/library/folders/{folder['id']}")
+
+    resp = client.post("/api/library/restore", json={"doc_ids": [doc_id]})
+
+    assert resp.status_code == 200
+    row = next(p for p in resp.json()["papers"] if p["doc_id"] == doc_id)
+    assert row["trashed"] is False
+    assert row["folder_id"] is None
+
+
+def test_restore_papers_unknown_doc_id_returns_404(data_root):
+    resp = client.post("/api/library/restore", json={"doc_ids": ["no-such-doc"]})
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Document not found"
+
+
+def test_restore_papers_empty_doc_ids_returns_422(data_root):
+    resp = client.post("/api/library/restore", json={"doc_ids": []})
+    assert resp.status_code == 422

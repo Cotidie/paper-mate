@@ -104,17 +104,25 @@ def _next_order(papers: list[dict]) -> int:
     return max((p["order"] for p in papers), default=-1) + 1
 
 
-def upsert_paper_entry(index: dict, doc_id: str, meta: DocMeta) -> dict:
+def upsert_paper_entry(index: dict, doc_id: str, meta: DocMeta, *, restore: bool = False) -> dict:
     """Insert or refresh a paper's ``library.json`` entry from its meta.
 
     A new import appends an Uncategorized/untrashed entry at the next order.
     An idempotent re-import only refreshes the cache, leaving an existing
-    ``folder_id``/``trashed``/``order`` untouched.
+    ``folder_id``/``trashed``/``order`` untouched -- UNLESS ``restore=True``
+    (Story 7.5 AC-5: a user re-upload of a trashed paper restores it), in
+    which case ``trashed`` also clears while ``folder_id``/``order`` still
+    stay intact (restore to the remembered folder). Only ``import_pdf``'s
+    re-import branch passes ``restore=True``; a background extraction settle
+    (``apply_extraction``) or ``reconcile_library`` must never resurrect a
+    paper the user trashed mid-extraction, so they keep the default.
     """
     papers = index["papers"]
     for entry in papers:
         if entry["doc_id"] == doc_id:
             entry.update(_cache_from_meta(meta))
+            if restore:
+                entry["trashed"] = False
             return index
     papers.append(
         {
@@ -245,6 +253,69 @@ def move_papers(doc_ids: list[str], folder_id: str | None) -> Library:
         return index
 
     mutate_index(_move)
+    return read_library()
+
+
+def trash_papers(doc_ids: list[str]) -> Library:
+    """Set-based soft-delete (AL-5.1, AL-6, AD-L6): flip ``trashed`` to
+    ``True`` for every id in ``doc_ids``. Mirrors ``move_papers``'s
+    validate-before-mutate shape: any unknown id -> ``DocumentNotFoundError``,
+    all-or-nothing, no partial write. ``folder_id``, ``order``, and every
+    other paper are untouched (a trashed paper keeps its remembered folder)."""
+
+    def _trash(index: dict) -> dict:
+        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
+        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
+        if missing:
+            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
+        for doc_id in doc_ids:
+            papers_by_id[doc_id]["trashed"] = True
+        return index
+
+    mutate_index(_trash)
+    return read_library()
+
+
+def restore_papers(doc_ids: list[str]) -> Library:
+    """Set-based restore (AL-5.2, AL-6, AD-L6): flip ``trashed`` to ``False``
+    for every id in ``doc_ids``. Same validate-before-mutate shape as
+    ``move_papers``/``trash_papers``. ``folder_id`` is left as-is: it is the
+    remembered folder, and a folder deleted while a paper was trashed already
+    re-homed it to Uncategorized (``delete_folder`` re-homes every paper in
+    the removed subtree regardless of ``trashed``), so no dangling-folder
+    guard is needed here."""
+
+    def _restore(index: dict) -> dict:
+        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
+        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
+        if missing:
+            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
+        for doc_id in doc_ids:
+            papers_by_id[doc_id]["trashed"] = False
+        return index
+
+    mutate_index(_restore)
+    return read_library()
+
+
+def purge_entry(doc_id: str) -> Library:
+    """Drop a paper's ``library.json`` entry (AL-5.3, AL-7).
+
+    Thin helper so ``documents.purge_document`` can prune the index entry
+    under the same ``_index_lock`` it holds for the on-disk ``rmtree`` --
+    without exposing the lock object itself across the module boundary.
+    Caller MUST have already removed the on-disk dir (crash-safe order: dir
+    first, then entry -- see ``documents.purge_document``). Unknown id ->
+    ``DocumentNotFoundError``."""
+
+    def _purge(index: dict) -> dict:
+        before = len(index["papers"])
+        index["papers"] = [p for p in index["papers"] if p["doc_id"] != doc_id]
+        if len(index["papers"]) == before:
+            raise DocumentNotFoundError(f"no document with id {doc_id!r}")
+        return index
+
+    mutate_index(_purge)
     return read_library()
 
 

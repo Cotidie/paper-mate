@@ -71,15 +71,10 @@ The current version is the viewer and annotator. Local AI-assisted reading is pl
 ```sh
 git clone https://github.com/Cotidie/paper-mate.git
 cd paper-mate
-
-cp .env.example .env
-set -a; [ -f .env ] && . ./.env; set +a
-mkdir -p "${PAPER_MATE_DATA:-$HOME/.paper-mate}"
-
 docker compose up --build
 ```
 
-Open `http://localhost:8000` after the container starts.
+Open `http://localhost:8000` after the container starts. Your library is stored in `./.paper-mate` (see `.env.example` to point it elsewhere).
 
 ### Develop locally
 

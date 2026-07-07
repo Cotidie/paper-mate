@@ -46,6 +46,7 @@ export default function PaperRow({
   onStartEdit,
   onCommit,
   onCancel,
+  trashLens = false,
 }: {
   row: CollectionRow;
   visibleColumns: Set<ColumnKey>;
@@ -60,6 +61,10 @@ export default function PaperRow({
   onStartEdit: (field: EditableField) => void;
   onCommit: (field: EditableField, value: string, viaBlur: boolean) => void;
   onCancel: () => void;
+  /** Trash lens (fix request: Restore/Purge moved to the toolbar, bulk over
+   *  the selection - a row itself carries no action button). A trashed row
+   *  still isn't opened, and isn't draggable onto a folder drop target. */
+  trashLens?: boolean;
 }) {
   // A null title falls back to the filename, extension stripped (still
   // recognizable); `Untitled` is the last resort when neither is known.
@@ -73,8 +78,8 @@ export default function PaperRow({
       onClickCapture={onRowClickCapture}
       onClick={onRowClick}
       className={rowStatusClass(row.status)}
-      draggable
-      onDragStart={onDragStart}
+      draggable={!trashLens}
+      onDragStart={trashLens ? undefined : onDragStart}
     >
       {visibleColumns.has("title") && (
         <EditableCell
@@ -93,17 +98,19 @@ export default function PaperRow({
           <span className="collection-table__title-text">
             {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
           </span>
-          <button
-            type="button"
-            className="collection-table__open-button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpen();
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            Open
-          </button>
+          {!trashLens && (
+            <button
+              type="button"
+              className="collection-table__open-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen();
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              Open
+            </button>
+          )}
         </EditableCell>
       )}
       {visibleColumns.has("authors") && (
