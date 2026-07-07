@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowCounterClockwise, Trash, TrashSimple } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Star, Trash, TrashSimple } from "@phosphor-icons/react";
 import "@/library/LibraryPage.css";
 import Toast from "@/components/Toast/Toast";
 import CollectionTable from "@/library/CollectionTable/CollectionTable";
@@ -14,6 +14,7 @@ import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useMovePapers } from "@/library/useMovePapers";
 import { useTrashPapers } from "@/library/useTrashPapers";
+import { useStarPapers } from "@/library/useStarPapers";
 import { useColumnWidths } from "@/library/useColumnWidths";
 import { useResizablePanel } from "@/library/useResizablePanel";
 import { useTableView } from "@/library/useTableView";
@@ -37,6 +38,7 @@ function emptySelectionMessage(selection: FolderSelection): string {
   if (selection.kind === "folder") return "No papers in this folder.";
   if (selection.kind === "trash") return "Trash is empty.";
   if (selection.kind === "recent") return "No recent papers.";
+  if (selection.kind === "starred") return "No starred papers.";
   return "No papers to show.";
 }
 
@@ -48,6 +50,7 @@ function selectionLabel(selection: FolderSelection, folders: Folder[]): string {
   if (selection.kind === "folder") return folders.find((f) => f.id === selection.id)?.name ?? "folder";
   if (selection.kind === "trash") return "Trash";
   if (selection.kind === "recent") return "Recent";
+  if (selection.kind === "starred") return "Starred";
   return "library";
 }
 
@@ -111,6 +114,7 @@ export default function LibraryPage() {
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
   const { movePapers } = useMovePapers({ setLibrary, onToast });
   const trash = useTrashPapers({ setLibrary, onToast });
+  const star = useStarPapers({ setLibrary, onToast });
   // Bulk purge target (fix request: toolbar Purge over the selection, and
   // the sidebar's Empty Trash both funnel here) - one or many rows, the
   // ConfirmDialog copy adapts to the count. Empty = closed.
@@ -195,6 +199,19 @@ export default function LibraryPage() {
     () => applyTableView(filterPapers(papers, selection, recentNow)),
     [papers, selection, applyTableView, recentNow],
   );
+  // Toolbar Star state derives from the selection (AC-6): a mixed selection
+  // toggles all -> starred; a fully-starred selection toggles all -> unstarred.
+  const selectedRows = useMemo(
+    () => visiblePapers.filter((p) => selectedIds.has(p.doc_id)),
+    [visiblePapers, selectedIds],
+  );
+  const allStarred = selectedRows.length > 0 && selectedRows.every((p) => p.starred);
+  const handleStarRequest = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    if (allStarred) star.unstarPapers(Array.from(selectedIds));
+    else star.starPapers(Array.from(selectedIds));
+    setSelectedIds(new Set());
+  }, [star, selectedIds, allStarred]);
   // Recent lens date-bucket headers (post-review scope): only meaningful in
   // the default recency order - a manual column sort scrambles it, so no
   // headers render then (same "sort still works, membership/order doesn't
@@ -214,7 +231,9 @@ export default function LibraryPage() {
   // landing view (see the initial `selection`), so its pending "Extracting" row
   // is the user's only upload feedback on the front door.
   const visiblePending =
-    selection.kind === "folder" || selection.kind === "trash" ? [] : pending;
+    selection.kind === "folder" || selection.kind === "trash" || selection.kind === "starred"
+      ? []
+      : pending;
   const mainClassName = [
     "library-main",
     isTableLayout && "library-main--table",
@@ -310,6 +329,16 @@ export default function LibraryPage() {
                       label="Move"
                       disabled={selectedIds.size === 0}
                     />
+                    <button
+                      type="button"
+                      className="toolbar-button"
+                      disabled={selectedIds.size === 0}
+                      aria-pressed={allStarred}
+                      onClick={handleStarRequest}
+                    >
+                      <Star aria-hidden weight={allStarred ? "fill" : "regular"} />
+                      {allStarred ? "Unstar" : "Star"}
+                    </button>
                     <button
                       type="button"
                       className="toolbar-button"

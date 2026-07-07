@@ -194,13 +194,26 @@
 
 .collection-table__title {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
 }
 
 .collection-table__title-text {
-  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The filled-star marker (Story 7.8 AC-2): holds its own space so the title
+   text shrinks/ellipsizes first and the star is never clipped. Display
+   marker only (aria-label, not a button) - toggling is the toolbar Star
+   button over the selection. */
+.collection-table__star {
+  flex: 0 0 auto;
+  color: var(--color-ink);
 }
 
 .collection-table__authors {

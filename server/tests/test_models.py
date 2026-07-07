@@ -244,6 +244,40 @@ def test_collection_row_defaults_last_opened_when_missing() -> None:
     assert row.last_opened is None
 
 
+def test_collection_row_accepts_and_round_trips_starred() -> None:
+    """Story 7.8, AC-4: additive org-state field, mirrors `trashed`."""
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        starred=True,
+        order=0,
+    )
+    assert row.starred is True
+
+
+def test_collection_row_defaults_starred_when_missing() -> None:
+    """A dict missing `starred` (a pre-existing library.json entry cached
+    before the field existed) still validates as unstarred."""
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+    )
+    assert row.starred is False
+
+
 def test_library_wraps_papers_and_folders() -> None:
     row = CollectionRow(
         doc_id="d1",

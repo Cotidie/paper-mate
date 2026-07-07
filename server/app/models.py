@@ -188,6 +188,11 @@ class CollectionRow(BaseModel):
     status: DocStatus
     folder_id: str | None
     trashed: bool
+    # Additive (Star lens, no schema_version bump): org state authoritative in
+    # library.json (peer of `trashed`), not meta-derived. Optional so a
+    # pre-existing library.json entry cached before this field existed still
+    # validates as unstarred; a star mutation writes the key.
+    starred: bool = False
     order: int
     # Additive (fix, no schema_version bump): the client falls back to this
     # when `title` is null. Optional so a pre-existing library.json entry

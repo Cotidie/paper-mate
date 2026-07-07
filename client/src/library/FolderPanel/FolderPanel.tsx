@@ -50,12 +50,11 @@ function flattenTree(folders: Folder[]): Array<{ folder: Folder; depth: number }
  * owns only the local UI state (which folder is being renamed, which parent
  * has a new-folder draft open, which folder is pending a delete confirm).
  *
- * `All`/`Recent`/`Uncategorized`/a folder row/`Trash` are selectable (Story
- * 7.2/7.5/7.7, LFR-14, L-UX-DR4): `selection` + `onSelect` are lifted to
- * `LibraryPage` (shared with the table's filter), so this component only
- * renders the highlight and forwards clicks/keyboard activation. `Starred`
- * stays an inert visual placeholder (unimplemented mock per user request,
- * Story 7.8). `Uncategorized` and every folder row are ALSO drop targets for
+ * `All`/`Recent`/`Uncategorized`/`Starred`/a folder row/`Trash` are selectable
+ * (Story 7.2/7.5/7.7/7.8, LFR-14, L-UX-DR4): `selection` + `onSelect` are
+ * lifted to `LibraryPage` (shared with the table's filter), so this
+ * component only renders the highlight and forwards clicks/keyboard
+ * activation. `Uncategorized` and every folder row are ALSO drop targets for
  * drag-to-folder (fix request): a drag carrying the `MOVE_DRAG_MIME` payload
  * (set by a `CollectionTable` row's `dragstart`) reports the dropped doc ids
  * + target folder up via `onDropMove`. `Trash` is NOT a drop target (Story
@@ -189,9 +188,18 @@ export default function FolderPanel({
             Uncategorized
           </button>
         </li>
-        <li className="library-folder-panel__item" aria-disabled="true">
-          <Star aria-hidden />
-          Starred
+        <li>
+          <button
+            type="button"
+            className={
+              "library-folder-panel__item" +
+              (isSelected(selection, { kind: "starred" }) ? " library-folder-panel__item--active" : "")
+            }
+            onClick={() => onSelect({ kind: "starred" })}
+          >
+            <Star aria-hidden />
+            Starred
+          </button>
         </li>
         <li className="library-folder-panel__trash-row">
           <button

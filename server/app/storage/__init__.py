@@ -56,7 +56,9 @@ from app.storage.library_index import (
     reconcile_library,
     rename_folder,
     restore_papers,
+    star_papers,
     trash_papers,
+    unstar_papers,
 )
 from app.storage.meta_store import META_SCHEMA_VERSION
 
@@ -83,6 +85,8 @@ __all__ = [
     "move_papers",
     "trash_papers",
     "restore_papers",
+    "star_papers",
+    "unstar_papers",
     # Per-document operations.
     "source_path",
     "read_meta",

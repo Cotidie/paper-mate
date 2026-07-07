@@ -24,6 +24,7 @@ const rows: CollectionRow[] = [
     status: "ready",
     folder_id: null,
     trashed: false,
+    starred: false,
     order: 0,
   },
   {
@@ -35,6 +36,7 @@ const rows: CollectionRow[] = [
     status: "ready",
     folder_id: null,
     trashed: false,
+    starred: false,
     order: 1,
     filename: "no-title-paper.pdf",
   },
@@ -47,6 +49,7 @@ const rows: CollectionRow[] = [
     status: "ready",
     folder_id: null,
     trashed: false,
+    starred: false,
     order: 2,
     filename: null,
   },
@@ -183,6 +186,7 @@ describe("CollectionTable status visuals (Story 6.5)", () => {
       status,
       folder_id: null,
       trashed: false,
+      starred: false,
       order: 0,
       filename: "a-title.pdf",
       ...overrides,
@@ -341,6 +345,7 @@ describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
         status,
         folder_id: null,
         trashed: false,
+        starred: false,
         order: 0,
       };
     }
@@ -1084,6 +1089,7 @@ describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", 
     status: "ready",
     folder_id: "folder-a",
     trashed: false,
+    starred: false,
     order: 0,
   };
   const uncategorized: CollectionRow = {
@@ -1095,6 +1101,7 @@ describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", 
     status: "ready",
     folder_id: null,
     trashed: false,
+    starred: false,
     order: 1,
   };
   const folders = [{ id: "folder-a", name: "Folder A", parent_id: null }];
@@ -1126,5 +1133,44 @@ describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", 
     const uncategorizedCell = screen.getByText("Uncategorized").closest("td")!;
     expect(folderedCell.querySelector(".collection-table__location-icon")).toBeTruthy();
     expect(uncategorizedCell.querySelector(".collection-table__location-icon")).toBeNull();
+  });
+});
+
+describe("CollectionTable star marker (Story 7.8, AC-2)", () => {
+  const starred: CollectionRow = {
+    doc_id: "s".repeat(64),
+    title: "Starred Paper",
+    authors: null,
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    starred: true,
+    order: 0,
+  };
+  const unstarred: CollectionRow = {
+    doc_id: "u".repeat(64),
+    title: "Unstarred Paper",
+    authors: null,
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    starred: false,
+    order: 1,
+  };
+
+  it("renders the star marker for a starred row", () => {
+    render(<CollectionTable rows={[starred]} onOpenRow={noop} onEditField={noop} />);
+    const titleCell = screen.getByText("Starred Paper").closest("td")!;
+    expect(titleCell.querySelector('[aria-label="Starred"]')).toBeTruthy();
+  });
+
+  it("renders no marker for an unstarred row", () => {
+    render(<CollectionTable rows={[unstarred]} onOpenRow={noop} onEditField={noop} />);
+    const titleCell = screen.getByText("Unstarred Paper").closest("td")!;
+    expect(titleCell.querySelector('[aria-label="Starred"]')).toBeNull();
   });
 });

@@ -158,3 +158,40 @@ async def restore_papers(body: DocIdSet) -> Library:
     ``"Document not found"``."""
     with storage_errors("Could not update the collection"):
         return storage.restore_papers(body.doc_ids)
+
+
+@router.post(
+    "/library/star",
+    response_model=Library,
+    responses={
+        404: error_response("An unknown document id."),
+        422: error_response("doc_ids must be non-empty."),
+        500: error_response("Could not update the collection."),
+    },
+)
+async def star_papers(body: DocIdSet) -> Library:
+    """Set-based star (Story 7.8 AC-1, AL-5, AD-L6): flip ``starred`` to
+    ``True`` for every id in ``doc_ids``. ``folder_id``/``order``/``trashed``
+    and ``annotations.json``/``meta.json``/``source.pdf`` are untouched -- this
+    is organizational only. Returns the whole updated ``Library`` in one
+    round-trip. Unknown ``doc_id`` -> 404 ``"Document not found"``."""
+    with storage_errors("Could not update the collection"):
+        return storage.star_papers(body.doc_ids)
+
+
+@router.post(
+    "/library/unstar",
+    response_model=Library,
+    responses={
+        404: error_response("An unknown document id."),
+        422: error_response("doc_ids must be non-empty."),
+        500: error_response("Could not update the collection."),
+    },
+)
+async def unstar_papers(body: DocIdSet) -> Library:
+    """Set-based unstar (Story 7.8 AC-1, AL-5, AD-L6): flip ``starred`` to
+    ``False`` for every id in ``doc_ids``. Returns the whole updated
+    ``Library`` in one round-trip. Unknown ``doc_id`` -> 404
+    ``"Document not found"``."""
+    with storage_errors("Could not update the collection"):
+        return storage.unstar_papers(body.doc_ids)

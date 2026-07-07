@@ -382,6 +382,7 @@ def test_import_indexes_paper_as_uncategorized(data_root):
     assert row.doc_id == doc_id
     assert row.folder_id is None
     assert row.trashed is False
+    assert row.starred is False
     assert row.order == 0
     # Cache matches meta (AC-2).
     assert row.title == meta.title == "Indexed"
@@ -421,6 +422,7 @@ def test_reconcile_adds_dir_missing_from_index(data_root):
     assert library.papers[0].doc_id == doc_id
     assert library.papers[0].folder_id is None
     assert library.papers[0].trashed is False
+    assert library.papers[0].starred is False
 
 
 def test_reconcile_backfills_filename_for_pre_existing_entry(data_root):
