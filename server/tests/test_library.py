@@ -284,3 +284,88 @@ def test_restore_papers_unknown_doc_id_returns_404(data_root):
 def test_restore_papers_empty_doc_ids_returns_422(data_root):
     resp = client.post("/api/library/restore", json={"doc_ids": []})
     assert resp.status_code == 422
+
+
+# --- Star / unstar routes (Story 7.8, AD-L6) --------------------------------
+
+
+def test_star_papers_flips_starred_leaves_other_fields(data_root):
+    folder = client.post("/api/library/folders", json={"name": "Papers"}).json()
+    raw = make_pdf_bytes(pages=1, title="Starable")
+    up = client.post("/api/docs", files={"file": ("s.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+    client.post("/api/library/move", json={"doc_ids": [doc_id], "folder_id": folder["id"]})
+
+    resp = client.post("/api/library/star", json={"doc_ids": [doc_id]})
+
+    assert resp.status_code == 200
+    row = next(p for p in resp.json()["papers"] if p["doc_id"] == doc_id)
+    assert row["starred"] is True
+    assert row["folder_id"] == folder["id"]
+    assert row["trashed"] is False
+
+
+def test_star_papers_unknown_doc_id_returns_404_no_partial_write(data_root):
+    raw = make_pdf_bytes(pages=1)
+    up = client.post("/api/docs", files={"file": ("s.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+
+    resp = client.post("/api/library/star", json={"doc_ids": [doc_id, "no-such-doc"]})
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Document not found"
+    row = next(p for p in client.get("/api/library").json()["papers"] if p["doc_id"] == doc_id)
+    assert row["starred"] is False
+
+
+def test_star_papers_empty_doc_ids_returns_422(data_root):
+    resp = client.post("/api/library/star", json={"doc_ids": []})
+    assert resp.status_code == 422
+
+
+def test_star_papers_forbidden_extra_field_returns_422(data_root):
+    resp = client.post("/api/library/star", json={"doc_ids": ["x"], "folder_id": "nope"})
+    assert resp.status_code == 422
+
+
+def test_unstar_papers_flips_starred_false(data_root):
+    raw = make_pdf_bytes(pages=1)
+    up = client.post("/api/docs", files={"file": ("s.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+    client.post("/api/library/star", json={"doc_ids": [doc_id]})
+
+    resp = client.post("/api/library/unstar", json={"doc_ids": [doc_id]})
+
+    assert resp.status_code == 200
+    row = next(p for p in resp.json()["papers"] if p["doc_id"] == doc_id)
+    assert row["starred"] is False
+
+
+def test_unstar_papers_unknown_doc_id_returns_404(data_root):
+    resp = client.post("/api/library/unstar", json={"doc_ids": ["no-such-doc"]})
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Document not found"
+
+
+def test_unstar_papers_mixed_known_unknown_no_partial_write(data_root):
+    raw = make_pdf_bytes(pages=1)
+    up = client.post("/api/docs", files={"file": ("s.pdf", raw, "application/pdf")})
+    doc_id = up.json()["doc_id"]
+    client.post("/api/library/star", json={"doc_ids": [doc_id]})
+
+    resp = client.post("/api/library/unstar", json={"doc_ids": [doc_id, "no-such-doc"]})
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Document not found"
+    row = next(p for p in client.get("/api/library").json()["papers"] if p["doc_id"] == doc_id)
+    assert row["starred"] is True
+
+
+def test_unstar_papers_forbidden_extra_field_returns_422(data_root):
+    resp = client.post("/api/library/unstar", json={"doc_ids": ["x"], "folder_id": "nope"})
+    assert resp.status_code == 422
+
+
+def test_unstar_papers_empty_doc_ids_returns_422(data_root):
+    resp = client.post("/api/library/unstar", json={"doc_ids": []})
+    assert resp.status_code == 422

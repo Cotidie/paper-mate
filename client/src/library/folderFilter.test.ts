@@ -24,6 +24,7 @@ function row(overrides: Partial<CollectionRow>): CollectionRow {
     status: "ready",
     folder_id: null,
     trashed: false,
+    starred: false,
     order: 0,
     ...overrides,
   };
@@ -192,6 +193,28 @@ describe("isSelected", () => {
   it("matches recent by kind alone", () => {
     expect(isSelected({ kind: "recent" }, { kind: "recent" })).toBe(true);
     expect(isSelected({ kind: "recent" }, { kind: "all" })).toBe(false);
+  });
+
+  it("matches starred by kind alone", () => {
+    expect(isSelected({ kind: "starred" }, { kind: "starred" })).toBe(true);
+    expect(isSelected({ kind: "starred" }, { kind: "all" })).toBe(false);
+  });
+});
+
+describe("filterPapers: starred", () => {
+  it("returns only starred, non-trashed rows; other lenses are unaffected", () => {
+    const papers: CollectionRow[] = [
+      row({ doc_id: "starred-a", starred: true }),
+      row({ doc_id: "unstarred", starred: false }),
+      row({ doc_id: "starred-trashed", starred: true, trashed: true }),
+    ];
+    expect(filterPapers(papers, { kind: "starred" }).map((p) => p.doc_id)).toEqual(["starred-a"]);
+    expect(filterPapers(papers, { kind: "all" }).map((p) => p.doc_id)).toEqual(["starred-a", "unstarred"]);
+  });
+
+  it("a starred-but-trashed paper does not appear in Starred", () => {
+    const papers: CollectionRow[] = [row({ doc_id: "t", starred: true, trashed: true })];
+    expect(filterPapers(papers, { kind: "starred" })).toEqual([]);
   });
 });
 

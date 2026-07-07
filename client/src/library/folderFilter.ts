@@ -10,7 +10,8 @@ export type FolderSelection =
   | { kind: "uncategorized" }
   | { kind: "folder"; id: string }
   | { kind: "trash" }
-  | { kind: "recent" };
+  | { kind: "recent" }
+  | { kind: "starred" };
 
 /** Sort key for the Recent lens: `last_opened`'s epoch millis, falling back
  * to `added` for a legacy row not yet reconciled (AC-4). Parsed, not raw
@@ -92,6 +93,7 @@ export function filterPapers(
   const untrashed = papers.filter((p) => !p.trashed);
   if (selection.kind === "all") return untrashed;
   if (selection.kind === "uncategorized") return untrashed.filter((p) => p.folder_id === null);
+  if (selection.kind === "starred") return untrashed.filter((p) => p.starred);
   if (selection.kind === "recent") {
     return untrashed
       .filter((p) => recentBucket(p.last_opened ?? p.added, now) !== null)

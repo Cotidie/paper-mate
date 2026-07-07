@@ -322,6 +322,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/star": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Star Papers
+         * @description Set-based star (Story 7.8 AC-1, AL-5, AD-L6): flip ``starred`` to
+         *     ``True`` for every id in ``doc_ids``. ``folder_id``/``order``/``trashed``
+         *     and ``annotations.json``/``meta.json``/``source.pdf`` are untouched -- this
+         *     is organizational only. Returns the whole updated ``Library`` in one
+         *     round-trip. Unknown ``doc_id`` -> 404 ``"Document not found"``.
+         */
+        post: operations["star_papers_api_library_star_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/unstar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unstar Papers
+         * @description Set-based unstar (Story 7.8 AC-1, AL-5, AD-L6): flip ``starred`` to
+         *     ``False`` for every id in ``doc_ids``. Returns the whole updated
+         *     ``Library`` in one round-trip. Unknown ``doc_id`` -> 404
+         *     ``"Document not found"``.
+         */
+        post: operations["unstar_papers_api_library_unstar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -391,6 +438,11 @@ export interface components {
             folder_id: string | null;
             /** Trashed */
             trashed: boolean;
+            /**
+             * Starred
+             * @default false
+             */
+            starred: boolean;
             /** Order */
             order: number;
             /** Filename */
@@ -1348,6 +1400,108 @@ export interface operations {
         };
     };
     restore_papers_api_library_restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocIdSet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description An unknown document id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description doc_ids must be non-empty. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Could not update the collection. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    star_papers_api_library_star_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocIdSet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Library"];
+                };
+            };
+            /** @description An unknown document id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description doc_ids must be non-empty. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Could not update the collection. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    unstar_papers_api_library_unstar_post: {
         parameters: {
             query?: never;
             header?: never;

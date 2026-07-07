@@ -206,6 +206,7 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
         "status": "ready",
         "folder_id": null,
         "trashed": false,
+        "starred": false,
         "order": 0,
         "filename": "a-paper.pdf"
       }
@@ -217,7 +218,7 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
   wrong-shape `library.json` (unknown `schema_version`, invalid JSON/shape).
 
 > `library.json` is the authoritative index for **cross-doc** state: the
-> folder tree, membership (paper → ≤1 folder), trash, and paper order. A
+> folder tree, membership (paper → ≤1 folder), trash, star, and paper order. A
 > paper's **own** fields (title/authors/added/last_opened/file_type/status/
 > filename) stay authoritative in its `meta.json`; `CollectionRow`'s display
 > fields are a non-authoritative cache of that projection, refreshed from
@@ -230,7 +231,10 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 > `last_opened` (Story 7.7, drives the client Recent lens) are optional
 > (`null` on a pre-existing row cached before the field existed) and backfill
 > on the next reconcile; the client falls back to `filename` when `title` is
-> null.
+> null. `starred` (Story 7.8) is org state authoritative in `library.json`
+> itself (like `trashed`), not meta-derived: `bool = False` default so a
+> pre-existing row cached before the field existed still validates as
+> unstarred, with no forced backfill.
 
 ### `POST /api/library/folders` — create a folder
 
@@ -342,6 +346,38 @@ a dangling id.
 - **422** → `doc_ids` is empty, or an extra/forbidden field.
 - **500** → `{ "detail": "Could not update the collection" }`.
 
+### `POST /api/library/star`: star papers
+
+Set-based star (AD-L6, Story 7.8 AC-1, AL-5): flips `starred` to `true` for
+every id in `doc_ids`. `folder_id`, `order`, `trashed`, and every stored
+per-document file (`annotations.json`/`meta.json`/`source.pdf`) are
+**untouched**: this is organizational only.
+
+- **Body** → `DocIdSet`
+  ```json
+  { "doc_ids": ["3fae1c…"] }
+  ```
+- **200** → `Library` (the same shape as `GET /api/library`).
+- **404** → `{ "detail": "Document not found" }`: some id in `doc_ids` does
+  not reference an existing paper (all-or-nothing, no partial write).
+- **422** → `doc_ids` is empty, or an extra/forbidden field.
+- **500** → `{ "detail": "Could not update the collection" }`.
+
+### `POST /api/library/unstar`: unstar papers
+
+Set-based unstar (AD-L6, Story 7.8 AC-1, AL-5): flips `starred` to `false`
+for every id in `doc_ids`.
+
+- **Body** → `DocIdSet`
+  ```json
+  { "doc_ids": ["3fae1c…"] }
+  ```
+- **200** → `Library` (the same shape as `GET /api/library`).
+- **404** → `{ "detail": "Document not found" }`: some id in `doc_ids` does
+  not reference an existing paper (all-or-nothing, no partial write).
+- **422** → `doc_ids` is empty, or an extra/forbidden field.
+- **500** → `{ "detail": "Could not update the collection" }`.
+
 ## Reserved (not yet built)
 
 Declared by the architecture (AR-11), implemented in later stories. Do not
@@ -355,6 +391,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-07 (Story 7.8):** added `POST /api/library/star`, `POST /api/library/unstar` (set-based `DocIdSet`: `{doc_ids}`, reused verbatim, no new schema). `CollectionRow` gains `starred: bool = False` (additive, org state authoritative in `library.json`, peer of `trashed`, not meta-derived; the key being absent on a pre-existing row cached before the field existed defaults to unstarred, no forced backfill). Star/unstar 404 on an unknown `doc_id` (all-or-nothing, no partial write). Contract shape change: two new paths + `CollectionRow.starred`.
 - **2026-07-07 (Story 7.7):** `CollectionRow` gains `last_opened: str | null` (additive, default `null`; `GET /api/library`'s `Library` response), projected from `meta.json` (already advanced on open by `POST /api/docs/{doc_id}/open`, Story 6.7). Populated on every index write through the existing `_cache_from_meta` projection; `reconcile_library()` backfills a pre-existing row cached before the field existed on the next server start. Drives the client's Recent lens (order by `last_opened` desc, grouped under Today/Yesterday/Last week/Last month date buckets, dropping anything older than 30 days - no numeric cap); no new endpoint.
 - **2026-07-07 (Story 7.5):** added `POST /api/library/trash`, `POST /api/library/restore` (set-based `DocIdSet`: `{doc_ids}`, `extra="forbid"`, `doc_ids` non-empty) and `DELETE /api/docs/{doc_id}` (purge: removes the whole `library/{doc_id}/` dir and its `library.json` entry, crash-safe rmtree-then-prune order). New base schema `DocIdSet`, which `MoveRequest` now subclasses (adds only `folder_id`; `MoveRequest`'s emitted shape is unchanged). `POST /api/docs`'s idempotent re-import branch now also restores a trashed paper (clears `trashed`, keeps its retained `folder_id`), rather than creating a duplicate row. Trash/restore 404 on an unknown `doc_id` (all-or-nothing); purge 404s on an unknown or already-purged `doc_id`. Contract shape change: three new paths + one new schema (`DocIdSet`).
 - **2026-07-06 (Story 7.2):** added `POST /api/library/move` — set-based paper→folder assignment (`MoveRequest`: `{doc_ids, folder_id}`, `extra="forbid"`, `doc_ids` non-empty). `folder_id: null` clears membership; a move replaces any prior folder (at most one). TWO distinct 404s: bad `folder_id` → `"Folder not found"`, unknown `doc_id` → `"Document not found"`; either aborts all-or-nothing. Contract shape change: one new path + one new schema (`MoveRequest`).

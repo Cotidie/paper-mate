@@ -52,6 +52,7 @@ function rowFromDoc(doc: api.Doc, order: number): api.CollectionRow {
     status: doc.status,
     folder_id: null,
     trashed: false,
+    starred: false,
     order,
     filename: doc.filename,
   };
@@ -85,6 +86,7 @@ const fakeRow: api.CollectionRow = {
   status: "ready",
   folder_id: null,
   trashed: false,
+  starred: false,
   order: 0,
 };
 
@@ -432,6 +434,7 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
       status,
       folder_id: null,
       trashed: false,
+      starred: false,
       order: 0,
       filename,
     };
@@ -687,6 +690,7 @@ describe("Folder filter + move (Story 7.2)", () => {
       status: "ready",
       folder_id: null,
       trashed: false,
+      starred: false,
       order: 0,
       ...overrides,
     };
@@ -1022,6 +1026,7 @@ describe("Display, Sort controls (Story 7.4)", () => {
       status: "ready",
       folder_id: null,
       trashed: false,
+      starred: false,
       order: 0,
       ...overrides,
     };
@@ -1162,6 +1167,7 @@ describe("Trash (Story 7.5)", () => {
       status: "ready",
       folder_id: null,
       trashed: false,
+      starred: false,
       order: 0,
       ...overrides,
     };
@@ -1358,6 +1364,7 @@ describe("Recent (Story 7.7)", () => {
       status: "ready",
       folder_id: null,
       trashed: false,
+      starred: false,
       order: 0,
       ...overrides,
     };
@@ -1543,5 +1550,133 @@ describe("Recent (Story 7.7)", () => {
 
     expect(screen.getByText("Live Paper")).toBeTruthy();
     expect(screen.queryByText("Trashed Paper")).toBeNull();
+  });
+});
+
+describe("Star (Story 7.8)", () => {
+  function libraryRow(overrides: Partial<api.CollectionRow>): api.CollectionRow {
+    return {
+      doc_id: "p".repeat(64),
+      title: "A Paper",
+      authors: null,
+      added: "2026-07-06T00:00:00+00:00",
+      file_type: "pdf",
+      status: "ready",
+      folder_id: null,
+      trashed: false,
+      starred: false,
+      order: 0,
+      ...overrides,
+    };
+  }
+
+  it("toolbar Star stars the checked selection and clears it", async () => {
+    const paper = libraryRow({ doc_id: "d".repeat(64), title: "Unstarred Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    const starPapers = vi
+      .spyOn(api, "starPapers")
+      .mockResolvedValue({ papers: [{ ...paper, starred: true }], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Unstarred Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Unstarred Paper").closest("tr")!);
+    fireEvent.click(screen.getByRole("button", { name: "Star" }));
+
+    expect(starPapers).toHaveBeenCalledWith([paper.doc_id]);
+    // Selection cleared: the Star button disables again once nothing is checked.
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "Star" }) as HTMLButtonElement).disabled).toBe(true),
+    );
+  });
+
+  it("the toolbar Star button is disabled with nothing checked, enabled once a row is checked", async () => {
+    const paper = libraryRow({ doc_id: "d".repeat(64), title: "A Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("A Paper")).toBeTruthy());
+
+    expect((screen.getByRole("button", { name: "Star" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByText("A Paper").closest("tr")!);
+    expect((screen.getByRole("button", { name: "Star" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("a fully-starred selection shows 'Unstar' and unstars on click", async () => {
+    const paper = libraryRow({ doc_id: "d".repeat(64), title: "Starred Paper", starred: true, order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    const unstarPapers = vi
+      .spyOn(api, "unstarPapers")
+      .mockResolvedValue({ papers: [{ ...paper, starred: false }], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Starred Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Starred Paper").closest("tr")!);
+    expect(screen.getByRole("button", { name: "Unstar" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unstar" }));
+    expect(unstarPapers).toHaveBeenCalledWith([paper.doc_id]);
+  });
+
+  it("a mixed selection stars all (toggles to Star, not Unstar)", async () => {
+    const starred = libraryRow({ doc_id: "s".repeat(64), title: "Already Starred", starred: true, order: 0 });
+    const unstarred = libraryRow({ doc_id: "u".repeat(64), title: "Not Starred", starred: false, order: 1 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [starred, unstarred], folders: [] });
+    const starPapers = vi
+      .spyOn(api, "starPapers")
+      .mockResolvedValue({ papers: [{ ...starred, starred: true }, { ...unstarred, starred: true }], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Not Starred")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Already Starred").closest("tr")!, { shiftKey: true });
+    fireEvent.click(screen.getByText("Not Starred").closest("tr")!, { ctrlKey: true });
+    expect(screen.getByRole("button", { name: "Star" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Star" }));
+    expect(starPapers).toHaveBeenCalledWith([starred.doc_id, unstarred.doc_id]);
+  });
+
+  it("selecting Starred shows only starred, non-trashed rows and labels the toolbar count", async () => {
+    const starred = libraryRow({ doc_id: "s".repeat(64), title: "Starred Paper", starred: true, order: 0 });
+    const unstarred = libraryRow({ doc_id: "u".repeat(64), title: "Unstarred Paper", order: 1 });
+    const starredTrashed = libraryRow({
+      doc_id: "t".repeat(64),
+      title: "Starred Trashed Paper",
+      starred: true,
+      trashed: true,
+      order: 2,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [starred, unstarred, starredTrashed], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Unstarred Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Starred"));
+
+    expect(screen.getByText("Starred Paper")).toBeTruthy();
+    expect(screen.queryByText("Unstarred Paper")).toBeNull();
+    expect(screen.queryByText("Starred Trashed Paper")).toBeNull();
+    expect(screen.getByText("1 files in Starred")).toBeTruthy();
+  });
+
+  it("Starred lens empty copy reads exactly 'No starred papers.'", async () => {
+    const paper = libraryRow({ doc_id: "d".repeat(64), title: "Unstarred Paper" });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Starred")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Starred"));
+
+    expect(screen.getByText("No starred papers.")).toBeTruthy();
+  });
+
+  it("the Star button is absent in the Trash lens", async () => {
+    const trashedPaper = libraryRow({ doc_id: "t".repeat(64), title: "Trashed Paper", trashed: true });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [trashedPaper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Trash")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Trash"));
+    await waitFor(() => expect(screen.getByText("Trashed Paper")).toBeTruthy());
+
+    expect(screen.queryByRole("button", { name: "Star" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Unstar" })).toBeNull();
   });
 });

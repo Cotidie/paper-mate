@@ -4,7 +4,7 @@ baseline_commit: dd82fe094fbe7dbfa5dc66308db47dc52ea9bd72
 
 # Story 7.8: Star / unstar papers (filled-star marker + Starred view)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -69,65 +69,65 @@ The **one genuinely new UI piece** is the filled-star marker in the Title cell (
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Backend field: `CollectionRow.starred` + seed on creation (AC-4)**
-  - [ ] `server/app/models.py`: add `starred: bool = False` to `CollectionRow`, right after `trashed: bool` (models.py:190). Comment it as additive/optional, mirroring the `last_opened` (models.py:183-186) and `filename` (models.py:192-195) precedent: `bool = False` default so a pre-existing `library.json` entry cached before this field existed still validates as unstarred; no `schema_version` bump.
-  - [ ] `server/app/storage/library_index.py`: seed `"starred": False` in the **new-entry append** dict in `upsert_paper_entry` (library_index.py:128-136, next to `"trashed": False`) AND in `reconcile_library`'s append dict (library_index.py:361-369, next to `"trashed": False`). This persists the flag for every newly-imported or reconciled paper. **Do NOT** add it to `_cache_from_meta` — `starred` is org state, not a meta-derived cache field (unlike `last_opened`/`filename`). Old entries missing the key read fine via the model default (AC-4); a star mutation writes the key. No forced reconcile-backfill is needed (the Pydantic default covers reads; less-is-more, CLAUDE.md).
+- [x] **Task 1 — Backend field: `CollectionRow.starred` + seed on creation (AC-4)**
+  - [x] `server/app/models.py`: add `starred: bool = False` to `CollectionRow`, right after `trashed: bool` (models.py:190). Comment it as additive/optional, mirroring the `last_opened` (models.py:183-186) and `filename` (models.py:192-195) precedent: `bool = False` default so a pre-existing `library.json` entry cached before this field existed still validates as unstarred; no `schema_version` bump.
+  - [x] `server/app/storage/library_index.py`: seed `"starred": False` in the **new-entry append** dict in `upsert_paper_entry` (library_index.py:128-136, next to `"trashed": False`) AND in `reconcile_library`'s append dict (library_index.py:361-369, next to `"trashed": False`). This persists the flag for every newly-imported or reconciled paper. **Do NOT** add it to `_cache_from_meta` — `starred` is org state, not a meta-derived cache field (unlike `last_opened`/`filename`). Old entries missing the key read fine via the model default (AC-4); a star mutation writes the key. No forced reconcile-backfill is needed (the Pydantic default covers reads; less-is-more, CLAUDE.md).
 
-- [ ] **Task 2 — Backend storage: star / unstar (AC-1)**
-  - [ ] `server/app/storage/library_index.py`: add `star_papers(doc_ids: list[str]) -> Library` and `unstar_papers(doc_ids: list[str]) -> Library`, each a single `mutate_index` mutator mirroring `trash_papers` / `restore_papers` (library_index.py:260-299) **exactly**: build `papers_by_id`, raise `DocumentNotFoundError(missing[0])` if any id is unknown (all-or-nothing, no partial write), then set `papers_by_id[doc_id]["starred"]` to `True` (star) / `False` (unstar). `folder_id`/`order`/`trashed` and every other paper untouched. Return `read_library()`.
-  - [ ] Re-export `star_papers`, `unstar_papers` from `server/app/storage/__init__.py` (`__all__` + imports), so they are reachable as `storage.star_papers` (nothing outside the package imports a submodule). Place them next to `trash_papers`/`restore_papers` (__init__.py:58-59, 84-85).
+- [x] **Task 2 — Backend storage: star / unstar (AC-1)**
+  - [x] `server/app/storage/library_index.py`: add `star_papers(doc_ids: list[str]) -> Library` and `unstar_papers(doc_ids: list[str]) -> Library`, each a single `mutate_index` mutator mirroring `trash_papers` / `restore_papers` (library_index.py:260-299) **exactly**: build `papers_by_id`, raise `DocumentNotFoundError(missing[0])` if any id is unknown (all-or-nothing, no partial write), then set `papers_by_id[doc_id]["starred"]` to `True` (star) / `False` (unstar). `folder_id`/`order`/`trashed` and every other paper untouched. Return `read_library()`.
+  - [x] Re-export `star_papers`, `unstar_papers` from `server/app/storage/__init__.py` (`__all__` + imports), so they are reachable as `storage.star_papers` (nothing outside the package imports a submodule). Place them next to `trash_papers`/`restore_papers` (__init__.py:58-59, 84-85).
 
-- [ ] **Task 3 — Backend routes: star / unstar (AC-1)**
-  - [ ] `server/app/routes/library.py`: add `POST /library/star` and `POST /library/unstar`, each taking a `DocIdSet` body (already imported — reused, no new request model), `response_model=Library`, wrapped in `storage_errors("Could not update the collection")` (unknown `doc_id` → 404 `"Document not found"`; empty `doc_ids` → 422 from the model). **Mirror `trash_papers`/`restore_papers` (library.py:133-160) exactly** (they have no folder-404 branch, same as star). Add the same `responses=` map (404 + 500) those two use.
-  - [ ] Regenerate the contract: `cd server && PYTHONPATH= uv run python -m app.export_openapi` → `server/openapi.json`; then `cd client && npm run gen:api` → `client/src/api/schema.d.ts` (committed). Never hand-author the TS type. Diff `openapi.json` to confirm the only delta is the two new paths + `CollectionRow.starred` (no `DocIdSet`/`MoveRequest` churn).
+- [x] **Task 3 — Backend routes: star / unstar (AC-1)**
+  - [x] `server/app/routes/library.py`: add `POST /library/star` and `POST /library/unstar`, each taking a `DocIdSet` body (already imported — reused, no new request model), `response_model=Library`, wrapped in `storage_errors("Could not update the collection")` (unknown `doc_id` → 404 `"Document not found"`; empty `doc_ids` → 422 from the model). **Mirror `trash_papers`/`restore_papers` (library.py:133-160) exactly** (they have no folder-404 branch, same as star). Add the same `responses=` map (404 + 500) those two use.
+  - [x] Regenerate the contract: `cd server && PYTHONPATH= uv run python -m app.export_openapi` → `server/openapi.json`; then `cd client && npm run gen:api` → `client/src/api/schema.d.ts` (committed). Never hand-author the TS type. Diff `openapi.json` to confirm the only delta is the two new paths + `CollectionRow.starred` (no `DocIdSet`/`MoveRequest` churn).
 
-- [ ] **Task 4 — Client API layer (AC-1)**
-  - [ ] `client/src/api/client.ts`: add `starPapers(docIds)` and `unstarPapers(docIds)` — POST the `DocIdSet` shape (`{ doc_ids: docIds }`) → `Library`, mirroring `trashPapers`/`restorePapers` (client.ts:206-231) verbatim (only the path + docstring differ). Reuse `envelopeError`.
+- [x] **Task 4 — Client API layer (AC-1)**
+  - [x] `client/src/api/client.ts`: add `starPapers(docIds)` and `unstarPapers(docIds)` — POST the `DocIdSet` shape (`{ doc_ids: docIds }`) → `Library`, mirroring `trashPapers`/`restorePapers` (client.ts:206-231) verbatim (only the path + docstring differ). Reuse `envelopeError`.
 
-- [ ] **Task 5 — Client lens filter + panel entry (AC-3)**
-  - [ ] `client/src/library/folderFilter.ts`: add `| { kind: "starred" }` to the `FolderSelection` union (folderFilter.ts:8-13). Add the branch to `filterPapers` AFTER `const untrashed` (so it excludes trashed, like every non-trash lens): `if (selection.kind === "starred") return untrashed.filter((p) => p.starred);`. `isSelected` (folderFilter.ts:104) needs no change (kind-only match already covers `starred`).
-  - [ ] `client/src/library/FolderPanel/FolderPanel.tsx`: replace the inert `Starred` `<li className="library-folder-panel__item" aria-disabled="true">` (FolderPanel.tsx:192-195) with a real `<button className="library-folder-panel__item ...">` mirroring the `Recent` entry (FolderPanel.tsx:162-174): `onClick={() => onSelect({ kind: "starred" })}`, active-highlight via `isSelected(selection, { kind: "starred" })`, keeping the `Star aria-hidden` icon (already imported, FolderPanel.tsx:7). Wrap in an `<li>`. Update the component docstring (FolderPanel.tsx:57-58: `Starred` is no longer "an inert visual placeholder"; it is now a selectable lens like Recent). NOT a drop target (no `onDragOver`/`onDrop`), same as `All`/`Recent`.
+- [x] **Task 5 — Client lens filter + panel entry (AC-3)**
+  - [x] `client/src/library/folderFilter.ts`: add `| { kind: "starred" }` to the `FolderSelection` union (folderFilter.ts:8-13). Add the branch to `filterPapers` AFTER `const untrashed` (so it excludes trashed, like every non-trash lens): `if (selection.kind === "starred") return untrashed.filter((p) => p.starred);`. `isSelected` (folderFilter.ts:104) needs no change (kind-only match already covers `starred`).
+  - [x] `client/src/library/FolderPanel/FolderPanel.tsx`: replace the inert `Starred` `<li className="library-folder-panel__item" aria-disabled="true">` (FolderPanel.tsx:192-195) with a real `<button className="library-folder-panel__item ...">` mirroring the `Recent` entry (FolderPanel.tsx:162-174): `onClick={() => onSelect({ kind: "starred" })}`, active-highlight via `isSelected(selection, { kind: "starred" })`, keeping the `Star aria-hidden` icon (already imported, FolderPanel.tsx:7). Wrap in an `<li>`. Update the component docstring (FolderPanel.tsx:57-58: `Starred` is no longer "an inert visual placeholder"; it is now a selectable lens like Recent). NOT a drop target (no `onDragOver`/`onDrop`), same as `All`/`Recent`.
 
-- [ ] **Task 6 — Client operations hook: `useStarPapers` (AC-1)**
-  - [ ] Add `client/src/library/useStarPapers.ts` mirroring `useTrashPapers.ts`'s two-verb skeleton (drop `purge`; keep the `mountedRef` StrictMode reset + monotonic `opSeqRef` stale-response guard). Expose `starPapers(docIds)` and `unstarPapers(docIds)`:
+- [x] **Task 6 — Client operations hook: `useStarPapers` (AC-1)**
+  - [x] Add `client/src/library/useStarPapers.ts` mirroring `useTrashPapers.ts`'s two-verb skeleton (drop `purge`; keep the `mountedRef` StrictMode reset + monotonic `opSeqRef` stale-response guard). Expose `starPapers(docIds)` and `unstarPapers(docIds)`:
     - `starPapers`: optimistically set `starred: true` on the matching rows, call `apiStarPapers`, reconcile from the returned `Library`, revert (restore `priorStarred`) + `onToast("Couldn't star that paper.", "error")` on failure.
     - `unstarPapers`: optimistically set `starred: false`, call `apiUnstarPapers`, reconcile, revert + `onToast("Couldn't unstar that paper.", "error")` on failure.
     - No success toast (unlike restore's "restored from Trash" notice — starring is silent and self-evident from the marker). Both go through `setLibrary` (owned by `useCollection`); no new authoritative state. Both share one `opSeqRef` (a slow star can't clobber a faster later unstar of the same paper), exactly like `useTrashPapers`.
 
-- [ ] **Task 7 — Wire LibraryPage: toolbar Star button + lens copy (AC-1, AC-5, AC-6, AC-7)**
-  - [ ] `LibraryPage.tsx`: instantiate `const star = useStarPapers({ setLibrary, onToast });` next to `const trash = useTrashPapers(...)` (LibraryPage.tsx:113).
-  - [ ] Derive the toolbar Star state from the selection: `const selectedRows = visiblePapers.filter((p) => selectedIds.has(p.doc_id));` and `const allStarred = selectedRows.length > 0 && selectedRows.every((p) => p.starred);`. The button label is `allStarred ? "Unstar" : "Star"`; on click it calls `star.unstarPapers(Array.from(selectedIds))` when `allStarred` else `star.starPapers(...)`, then clears the selection (`setSelectedIds(new Set())`), mirroring `handleDeleteRequest` (LibraryPage.tsx:148-152). A mixed selection (`allStarred === false`) stars all (AC-6). Set `aria-pressed={allStarred}`.
-  - [ ] Add the **Star** button to the toolbar's **non-trash** branch (LibraryPage.tsx:305-323), alongside `MoveMenu` + Delete, as a `.toolbar-button` with `disabled={selectedIds.size === 0}` and a phosphor `Star` icon (`weight="fill"` when `allStarred`, outline otherwise — signals current state at a glance). Do NOT add it to the trash branch (AC-6: hidden in the Trash lens).
-  - [ ] `emptySelectionMessage` (LibraryPage.tsx:35): add `if (selection.kind === "starred") return "No starred papers.";`
-  - [ ] `selectionLabel` (LibraryPage.tsx:46): add `if (selection.kind === "starred") return "Starred";` so the toolbar count reads `N files in Starred`.
-  - [ ] `visiblePending` gate (LibraryPage.tsx:216-217): keep a just-uploaded (optimistic, pre-settle) paper OUT of the Starred lens (a fresh upload is never starred) — extend the guard `selection.kind === "folder" || selection.kind === "trash"` to also include `"starred"`.
-  - [ ] Grep the diff for `—` (em-dash) in any new string (labels "Star"/"Unstar", "No starred papers.", the error toasts).
+- [x] **Task 7 — Wire LibraryPage: toolbar Star button + lens copy (AC-1, AC-5, AC-6, AC-7)**
+  - [x] `LibraryPage.tsx`: instantiate `const star = useStarPapers({ setLibrary, onToast });` next to `const trash = useTrashPapers(...)` (LibraryPage.tsx:113).
+  - [x] Derive the toolbar Star state from the selection: `const selectedRows = visiblePapers.filter((p) => selectedIds.has(p.doc_id));` and `const allStarred = selectedRows.length > 0 && selectedRows.every((p) => p.starred);`. The button label is `allStarred ? "Unstar" : "Star"`; on click it calls `star.unstarPapers(Array.from(selectedIds))` when `allStarred` else `star.starPapers(...)`, then clears the selection (`setSelectedIds(new Set())`), mirroring `handleDeleteRequest` (LibraryPage.tsx:148-152). A mixed selection (`allStarred === false`) stars all (AC-6). Set `aria-pressed={allStarred}`.
+  - [x] Add the **Star** button to the toolbar's **non-trash** branch (LibraryPage.tsx:305-323), alongside `MoveMenu` + Delete, as a `.toolbar-button` with `disabled={selectedIds.size === 0}` and a phosphor `Star` icon (`weight="fill"` when `allStarred`, outline otherwise — signals current state at a glance). Do NOT add it to the trash branch (AC-6: hidden in the Trash lens).
+  - [x] `emptySelectionMessage` (LibraryPage.tsx:35): add `if (selection.kind === "starred") return "No starred papers.";`
+  - [x] `selectionLabel` (LibraryPage.tsx:46): add `if (selection.kind === "starred") return "Starred";` so the toolbar count reads `N files in Starred`.
+  - [x] `visiblePending` gate (LibraryPage.tsx:216-217): keep a just-uploaded (optimistic, pre-settle) paper OUT of the Starred lens (a fresh upload is never starred) — extend the guard `selection.kind === "folder" || selection.kind === "trash"` to also include `"starred"`.
+  - [x] Grep the diff for `—` (em-dash) in any new string (labels "Star"/"Unstar", "No starred papers.", the error toasts).
 
-- [ ] **Task 8 — Client marker: filled star in the Title cell (AC-2)**
-  - [ ] `client/src/library/CollectionTable/PaperRow.tsx`: in the Title `EditableCell`, after `<span className="collection-table__title-text">…</span>` (PaperRow.tsx:105-107) and BEFORE the Open button, render the star marker when `row.starred`: `{row.starred && <Star weight="fill" aria-label="Starred" className="collection-table__star" />}` (import `Star` from `@phosphor-icons/react`). The Open button stays as-is (it is `position: absolute` overlay, unaffected — see the CSS note below). No new prop: `PaperRow` already receives the full `row`.
-  - [ ] `client/src/library/CollectionTable/CollectionTable.css`: make the star **hold its own space so the title truncates first** (AC-2, the load-bearing requirement). The Title cell (`.collection-table__title`, css:195) is currently `position: relative` with a `display: block` truncating `.collection-table__title-text` (css:199-204). Add a flex row: give `.collection-table__title` (or a light inner wrapper) `display: flex; align-items: center; gap: var(--space-xxs);`, make `.collection-table__title-text` `flex: 0 1 auto; min-width: 0;` (KEEP its `overflow: hidden; text-overflow: ellipsis; white-space: nowrap;` so it still ellipsizes), and give `.collection-table__star` `flex: 0 0 auto;` (never shrinks → never clipped; the title-text shrinks first). Follow the existing `.collection-table__location`/`-icon`/`-text` flex+truncation pattern (css:212-229) — it is the exact same shape. Star color: a token (`{colors.*}`, e.g. `--color-ink` or an accent); NO raw hex/px (`no-raw-values.test.ts` enforces `src/theme/**`-only). Verify the `position: absolute` Open-button overlay (css:325-349) still centers over the title on hover and is not disturbed by the flex change (it is out of flow, so it should not be — but confirm in the live smoke).
+- [x] **Task 8 — Client marker: filled star in the Title cell (AC-2)**
+  - [x] `client/src/library/CollectionTable/PaperRow.tsx`: in the Title `EditableCell`, after `<span className="collection-table__title-text">…</span>` (PaperRow.tsx:105-107) and BEFORE the Open button, render the star marker when `row.starred`: `{row.starred && <Star weight="fill" aria-label="Starred" className="collection-table__star" />}` (import `Star` from `@phosphor-icons/react`). The Open button stays as-is (it is `position: absolute` overlay, unaffected — see the CSS note below). No new prop: `PaperRow` already receives the full `row`.
+  - [x] `client/src/library/CollectionTable/CollectionTable.css`: make the star **hold its own space so the title truncates first** (AC-2, the load-bearing requirement). The Title cell (`.collection-table__title`, css:195) is currently `position: relative` with a `display: block` truncating `.collection-table__title-text` (css:199-204). Add a flex row: give `.collection-table__title` (or a light inner wrapper) `display: flex; align-items: center; gap: var(--space-xxs);`, make `.collection-table__title-text` `flex: 0 1 auto; min-width: 0;` (KEEP its `overflow: hidden; text-overflow: ellipsis; white-space: nowrap;` so it still ellipsizes), and give `.collection-table__star` `flex: 0 0 auto;` (never shrinks → never clipped; the title-text shrinks first). Follow the existing `.collection-table__location`/`-icon`/`-text` flex+truncation pattern (css:212-229) — it is the exact same shape. Star color: a token (`{colors.*}`, e.g. `--color-ink` or an accent); NO raw hex/px (`no-raw-values.test.ts` enforces `src/theme/**`-only). Verify the `position: absolute` Open-button overlay (css:325-349) still centers over the title on hover and is not disturbed by the flex change (it is out of flow, so it should not be — but confirm in the live smoke).
 
-- [ ] **Task 9 — Tests (all ACs)**
-  - [ ] **Backend** (`PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`):
+- [x] **Task 9 — Tests (all ACs)**
+  - [x] **Backend** (`PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`):
     - `server/tests/test_library.py`: star flips `starred` True, leaves `folder_id`/`order`/`trashed`; unstar flips it False; unknown `doc_id` → 404 `"Document not found"` (all-or-nothing, no partial write — star `[known, unknown]` leaves the known one unstarred); empty `doc_ids` → 422; extra field → 422. Mirror the `trash_papers`/`restore_papers` cases.
     - `server/tests/test_models.py`: `CollectionRow` accepts and round-trips `starred`; a dict **missing** `starred` still validates and defaults to `False` (the additive-optional guarantee, AC-4). Mirror the `last_opened`-missing case.
     - `server/tests/test_storage.py`: a newly `upsert`ed / reconciled entry carries `starred: False` (Task 1 seeding).
-  - [ ] **Client** (`npm test` + `npm run typecheck`):
+  - [x] **Client** (`npm test` + `npm run typecheck`):
     - `client/src/library/folderFilter.test.ts`: the `{ kind: "starred" }` branch returns only starred, non-trashed rows; other lenses are unaffected; a starred-but-trashed paper does NOT appear in Starred (it is trashed → filtered by the untrashed base).
     - `client/src/library/useStarPapers.test.ts` (mirror `useTrashPapers.test.ts`): optimistic star/unstar, reconcile from the returned `Library`, revert + error toast on failure, stale-response guard (a slow star superseded by a later unstar).
     - `client/src/library/FolderPanel/FolderPanel.test.tsx`: `Starred` is now a real button (no longer `aria-disabled`), selecting it calls `onSelect({ kind: "starred" })`, carries the active-highlight class when selected, keyboard-operable (native `<button>` — assert role/name).
     - `client/src/library/LibraryPage.test.tsx`: toolbar Star stars the selection and clears it; a fully-starred selection shows "Unstar" and unstars; selecting Starred shows only starred rows; empty Starred shows `No starred papers.`; the count label reads `... in Starred`; the Star button is absent in the Trash lens. Keep `getLibrary`/`starPapers`/`unstarPapers` mocked; touch no `render/` mock barrel (Library, not Reader).
     - `client/src/library/CollectionTable/CollectionTable.test.tsx` (or `PaperRow` coverage there): a `row.starred` row renders the star marker (`aria-label="Starred"`); an unstarred row does not.
     - `no-raw-values.test.ts` stays green (the new `.collection-table__star` uses tokens only).
-  - [ ] Grep every new UI string for `—` before committing (AC-7).
+  - [x] Grep every new UI string for `—` before committing (AC-7).
 
-- [ ] **Task 10 — Version, live smoke, review, done (AC: all)**
-  - [ ] Bump `[project].version` in `server/pyproject.toml` `0.5.6` → `0.5.7` and sync `server/uv.lock`'s `paper-mate-server` version (line ~184) to match; `cd server && uv lock --check` clean. Single version source (→ `/api/health` → top-bar badge); do not hard-code the version elsewhere.
-  - [ ] Frontend `npm run typecheck` + `npm test` green; backend `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` green.
-  - [ ] Update `docs/API.md`: add the `POST /api/library/star` and `POST /api/library/unstar` resource entries (mirror the trash/restore entries at API.md:307-343, both `DocIdSet` bodies → `Library`); add `starred` to the `CollectionRow` field list + the example `GET /api/library` row JSON (API.md:196-230); add a `2026-07-07 (Story 7.8)` changelog line (two new paths + `CollectionRow.starred` additive field, no new schema). Grep the new prose for `—` first.
-  - [ ] **Live smoke on your OWN fresh servers** (never a user-launched one — CLAUDE.md): fresh `uvicorn` + `vite dev` on alternate ports against a scratch data dir with several real PDFs (reuse `fixtures/sample-pdfs/`). Verify: select rows + toolbar **Star** → the marker appears at the end of each title in All AND in a folder view; the `Starred` entry lists exactly them; a **fully-starred** selection's button reads **Unstar** and clears the star; **star a paper with a very long title in a narrow Title column** → the title ellipsizes and the star stays fully visible (never clipped, AC-2 — this is the one non-mechanical piece); state **survives a server restart** (`GET /api/library` shows `starred: true`); empty Starred shows `No starred papers.`; the Star button is **absent in Trash**; Tab reaches the Starred entry + the Star button with a visible focus ring and Enter/Space activates them. Normal DPR is fine (no coordinate/anchor geometry). Tear both servers down after.
-  - [ ] **Cross-model Codex `bmad-code-review` (AE-6)** on the diff. Resolve High/Med before done. Backend pytest is run-it-yourself on the host (CLAUDE.md Sandbox note).
-  - [ ] Flip `sprint-status.yaml` `7-8-starred-papers` → `done` at PR merge (AE3-1); fill the Dev Agent Record first (AE3-2). This is the last non-blocked story in Epic 7 (7.9 is the only other backlog item) — do not close the epic here.
+- [x] **Task 10 — Version, live smoke, review, done (AC: all)**
+  - [x] Bump `[project].version` in `server/pyproject.toml` `0.5.6` → `0.5.7` and sync `server/uv.lock`'s `paper-mate-server` version (line ~184) to match; `cd server && uv lock --check` clean. Single version source (→ `/api/health` → top-bar badge); do not hard-code the version elsewhere.
+  - [x] Frontend `npm run typecheck` + `npm test` green; backend `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` green.
+  - [x] Update `docs/API.md`: add the `POST /api/library/star` and `POST /api/library/unstar` resource entries (mirror the trash/restore entries at API.md:307-343, both `DocIdSet` bodies → `Library`); add `starred` to the `CollectionRow` field list + the example `GET /api/library` row JSON (API.md:196-230); add a `2026-07-07 (Story 7.8)` changelog line (two new paths + `CollectionRow.starred` additive field, no new schema). Grep the new prose for `—` first.
+  - [x] **Live smoke on your OWN fresh servers** (never a user-launched one — CLAUDE.md): fresh `uvicorn` + `vite dev` on alternate ports against a scratch data dir with several real PDFs (reuse `fixtures/sample-pdfs/`). Verify: select rows + toolbar **Star** → the marker appears at the end of each title in All AND in a folder view; the `Starred` entry lists exactly them; a **fully-starred** selection's button reads **Unstar** and clears the star; **star a paper with a very long title in a narrow Title column** → the title ellipsizes and the star stays fully visible (never clipped, AC-2 — this is the one non-mechanical piece); state **survives a server restart** (`GET /api/library` shows `starred: true`); empty Starred shows `No starred papers.`; the Star button is **absent in Trash**; Tab reaches the Starred entry + the Star button with a visible focus ring and Enter/Space activates them. Normal DPR is fine (no coordinate/anchor geometry). Tear both servers down after.
+  - [x] **Cross-model Codex `bmad-code-review` (AE-6)** on the diff. Resolve High/Med before done. Backend pytest is run-it-yourself on the host (CLAUDE.md Sandbox note).
+  - [x] Flip `sprint-status.yaml` `7-8-starred-papers` → `done` at PR merge (AE3-1); fill the Dev Agent Record first (AE3-2). This is the last non-blocked story in Epic 7 (7.9 is the only other backlog item) — do not close the epic here.
 
 ## Dev Notes
 
@@ -229,6 +229,58 @@ New strings, all plain and em-dash-free: "Star", "Unstar", "No starred papers.",
 
 ### Debug Log References
 
+- Backend: `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` → 236 passed.
+- Client: `npm run typecheck` clean; `npm test -- --run` → 1236 passed across 62 files (includes `no-raw-values.test.ts`).
+- Contract regen: `uv run python -m app.export_openapi` + `npm run gen:api`; `git diff client/src/api/schema.d.ts` confirmed the only delta is the two new paths (`/api/library/star`, `/api/library/unstar`) + `CollectionRow.starred` (no `DocIdSet`/`MoveRequest` churn). `server/openapi.json` is a gitignored build artifact (unchanged project convention, not new to this story).
+- `cd server && uv lock --check` clean after the `0.5.6` → `0.5.7` bump.
+- Live smoke: fresh `uvicorn` (port 8123) + `vite dev` (port 5193) against a scratch `PAPER_MATE_DATA` dir with real PDFs from `fixtures/sample-pdfs/`. Curl-verified the full backend contract (star flips `starred`, unstar reverts, mixed known/unknown id → 404 all-or-nothing no partial write, empty `doc_ids` → 422, state survives a server restart). Browser-verified via chrome-devtools-mcp (the claude-in-chrome extension was not connected in this background session): star marker renders at the end of the title in the default Recent/All view; selecting Starred shows exactly the starred, non-trashed paper and the toolbar count reads "1 files in Starred"; a fully-starred selection's toolbar button reads "Unstar" with `aria-pressed`, unstarring clears the row and the empty copy reads exactly "No starred papers."; the Star/Unstar button is absent from the Trash toolbar (only Restore/Purge). For AC-2 (title truncates before the star clips), a resize-handle drag proved unreliable to automate in headless mode, so verified the underlying CSS mechanism directly via computed styles: `.collection-table__title-text` has `flex-shrink:1; min-width:0; text-overflow:ellipsis` and `.collection-table__star` has `flex-shrink:0` — the text is guaranteed to shrink/truncate before the star, which never shrinks. This is the identical pattern already shipped and proven for the Location column (`.collection-table__location-text`/`-icon`).
+- Cross-model Codex `bmad-code-review` (AE-6) ran via `codex exec` (full adversarial workflow: Blind Hunter, Edge Case Hunter, Acceptance Auditor). Result: 0 High, 5 Med/Low findings, 1 decision-needed. Triaged:
+  - Dismissed as false positives (verified against precedent in this same codebase): (1) shared `opSeqRef` across star/unstar dropping a stale response — this is the exact, story-mandated mirror of the already-shipped `useTrashPapers` pattern, not a new risk; (2) `display:flex` applied directly to the `.collection-table__title` `<td>` — identical to the already-shipped `.collection-table__location` `<td>`; (3) `server/openapi.json` gitignored while `schema.d.ts` is committed — this is the standing, CLAUDE.md-documented project convention (every prior story follows it), not something this story introduced.
+  - Fixed: (4) `docs/API.md` changelog wording overclaimed explicit JSON `null` compatibility for `starred` (the Pydantic field is `bool = False`, not `bool | None`, so an explicit `null` would fail validation — only an *absent* key defaults) — reworded to say "absent" only. (5) `unstar` route test coverage was asymmetric with `star`'s (missing a mixed known/unknown all-or-nothing case and a forbidden-extra-field case) — added `test_unstar_papers_mixed_known_unknown_no_partial_write` and `test_unstar_papers_forbidden_extra_field_returns_422`.
+
 ### Completion Notes List
 
+- Implemented Star/Unstar end to end by mirroring the Story 7.5 Trash seam exactly (per the story's own mapping table): `star_papers`/`unstar_papers` storage mutators, `POST /api/library/star`/`unstar` routes, `starPapers`/`unstarPapers` client API, `useStarPapers` hook (2-verb, no purge), `{ kind: "starred" }` lens, and a toolbar Star/Unstar button whose label/action/icon derive from whether the current selection is fully starred (AC-6).
+- `CollectionRow.starred: bool = False` added as additive org state (peer of `trashed`, not meta-derived): seeded in both `upsert_paper_entry`'s new-entry append and `reconcile_library`'s append dict; deliberately NOT added to `_cache_from_meta`.
+- The one non-mechanical piece (AC-2, the filled-star marker never clipping) reuses the exact flex+ellipsis pattern already shipped for the Location column: title-text `flex: 0 1 auto; min-width: 0` (shrinks/truncates first), star `flex: 0 0 auto` (never shrinks).
+- All 10 tasks and every acceptance criterion (AC-1 through AC-7) satisfied; no em-dash in any new UI string (grepped the diff).
+- Post-implementation Codex review (AE-6) surfaced 2 real low/med findings (docs wording, test parity), both fixed; 3 findings were false positives that matched pre-existing, already-shipped precedent in this codebase and were dismissed with justification (see Debug Log References).
+
 ### File List
+
+**New:**
+- `client/src/library/useStarPapers.ts`
+- `client/src/library/useStarPapers.test.ts`
+
+**Modified:**
+- `server/app/models.py`
+- `server/app/storage/library_index.py`
+- `server/app/storage/__init__.py`
+- `server/app/routes/library.py`
+- `server/openapi.json` (regenerated build artifact, gitignored)
+- `client/src/api/schema.d.ts` (regenerated)
+- `client/src/api/client.ts`
+- `client/src/library/folderFilter.ts`
+- `client/src/library/FolderPanel/FolderPanel.tsx`
+- `client/src/library/LibraryPage.tsx`
+- `client/src/library/CollectionTable/PaperRow.tsx`
+- `client/src/library/CollectionTable/CollectionTable.css`
+- `client/src/library/row.ts` (seed `starred: false` in `docToRow`)
+- `server/pyproject.toml` (version `0.5.6` → `0.5.7`)
+- `server/uv.lock` (version sync)
+- `docs/API.md`
+- `server/tests/test_library.py`
+- `server/tests/test_models.py`
+- `server/tests/test_storage.py`
+- `client/src/library/folderFilter.test.ts`
+- `client/src/library/FolderPanel/FolderPanel.test.tsx`
+- `client/src/library/LibraryPage.test.tsx`
+- `client/src/library/CollectionTable/CollectionTable.test.tsx`
+- `client/src/library/tableView.test.ts` (test-helper `starred` default)
+- `client/src/library/useMovePapers.test.ts` (test-helper `starred` default)
+- `client/src/library/useTrashPapers.test.ts` (test-helper `starred` default)
+- `.bmad/implementation-artifacts/sprint-status.yaml`
+
+## Change Log
+
+- **2026-07-07:** Story 7.8 implemented (Tasks 1-10, AC-1 through AC-7). Full-stack Star/Unstar mirroring the Story 7.5 Trash seam. Version bumped `0.5.6` → `0.5.7`. Codex `bmad-code-review` (AE-6) run; 2 real findings fixed (docs wording, unstar test parity), 3 dismissed as false positives matching shipped precedent.

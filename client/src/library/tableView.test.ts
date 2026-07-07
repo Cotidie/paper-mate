@@ -12,6 +12,7 @@ function row(overrides: Partial<CollectionRow>): CollectionRow {
     status: "ready",
     folder_id: null,
     trashed: false,
+    starred: false,
     order: 0,
     ...overrides,
   };

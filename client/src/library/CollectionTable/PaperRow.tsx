@@ -1,4 +1,4 @@
-import { Folder as FolderIcon } from "@phosphor-icons/react";
+import { Folder as FolderIcon, Star } from "@phosphor-icons/react";
 import type { CollectionRow } from "@/api/client";
 import {
   formatAdded,
@@ -105,6 +105,9 @@ export default function PaperRow({
           <span className="collection-table__title-text">
             {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
           </span>
+          {row.starred && (
+            <Star weight="fill" aria-label="Starred" className="collection-table__star" />
+          )}
           {!trashLens && (
             <button
               type="button"

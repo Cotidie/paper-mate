@@ -400,6 +400,29 @@ describe("Folder selection filter (Story 7.2, AC-1, AC-2, AC-5)", () => {
     expect(document.activeElement).toBe(recentButton);
   });
 
+  it("Starred is a real selectable button, no longer aria-disabled (Story 7.8)", () => {
+    const onSelect = vi.fn();
+    render(<Harness initialFolders={[]} onSelect={onSelect} />);
+    const starredButton = screen.getByText("Starred").closest("button");
+    expect(starredButton).not.toBeNull();
+    expect(starredButton!.getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(starredButton!);
+    expect(onSelect).toHaveBeenCalledWith({ kind: "starred" });
+  });
+
+  it("Starred is active-highlighted when selected", () => {
+    render(<Harness initialFolders={[]} initialSelection={{ kind: "starred" }} />);
+    const starredButton = screen.getByText("Starred").closest("button")!;
+    expect(starredButton.className).toContain("library-folder-panel__item--active");
+  });
+
+  it("Starred is keyboard-focusable with a role/name of button 'Starred'", () => {
+    render(<Harness initialFolders={[]} />);
+    const starredButton = screen.getByRole("button", { name: "Starred" });
+    starredButton.focus();
+    expect(document.activeElement).toBe(starredButton);
+  });
+
   it("Trash is a real selectable button (Story 7.5)", () => {
     const onSelect = vi.fn();
     render(<Harness initialFolders={[]} onSelect={onSelect} />);

@@ -231,6 +231,35 @@ export async function restorePapers(docIds: string[]): Promise<Library> {
 }
 
 /**
+ * Star a set of papers (`POST /api/library/star`, Story 7.8 AC-1, AD-L6).
+ * `folder_id`/`order`/`trashed` and annotations are untouched.
+ */
+export async function starPapers(docIds: string[]): Promise<Library> {
+  const body: DocIdSet = { doc_ids: docIds };
+  const res = await fetch("/api/library/star", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Library;
+}
+
+/**
+ * Unstar a set of papers (`POST /api/library/unstar`, Story 7.8 AC-1, AD-L6).
+ */
+export async function unstarPapers(docIds: string[]): Promise<Library> {
+  const body: DocIdSet = { doc_ids: docIds };
+  const res = await fetch("/api/library/unstar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as Library;
+}
+
+/**
  * Permanently delete a document (`DELETE /api/docs/{doc_id}`, Story 7.5 AC-4,
  * AL-5.3). Removes the whole `library/{doc_id}/` dir (source PDF +
  * annotations + meta) and its `library.json` entry. Manual only, no undo.

@@ -130,6 +130,7 @@ def upsert_paper_entry(index: dict, doc_id: str, meta: DocMeta, *, restore: bool
             "doc_id": doc_id,
             "folder_id": None,
             "trashed": False,
+            "starred": False,
             "order": _next_order(papers),
             **_cache_from_meta(meta),
         }
@@ -299,6 +300,43 @@ def restore_papers(doc_ids: list[str]) -> Library:
     return read_library()
 
 
+def star_papers(doc_ids: list[str]) -> Library:
+    """Set-based star (AL-5, AL-6, AD-L6): flip ``starred`` to ``True`` for
+    every id in ``doc_ids``. Same validate-before-mutate shape as
+    ``trash_papers``/``restore_papers``. ``folder_id``, ``order``, ``trashed``,
+    and every other paper are untouched."""
+
+    def _star(index: dict) -> dict:
+        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
+        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
+        if missing:
+            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
+        for doc_id in doc_ids:
+            papers_by_id[doc_id]["starred"] = True
+        return index
+
+    mutate_index(_star)
+    return read_library()
+
+
+def unstar_papers(doc_ids: list[str]) -> Library:
+    """Set-based unstar (AL-5, AL-6, AD-L6): flip ``starred`` to ``False`` for
+    every id in ``doc_ids``. Same validate-before-mutate shape as
+    ``trash_papers``/``restore_papers``."""
+
+    def _unstar(index: dict) -> dict:
+        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
+        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
+        if missing:
+            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
+        for doc_id in doc_ids:
+            papers_by_id[doc_id]["starred"] = False
+        return index
+
+    mutate_index(_unstar)
+    return read_library()
+
+
 def purge_entry(doc_id: str) -> Library:
     """Drop a paper's ``library.json`` entry (AL-5.3, AL-7).
 
@@ -363,6 +401,7 @@ def reconcile_library() -> None:
                     "doc_id": doc_id,
                     "folder_id": None,
                     "trashed": False,
+                    "starred": False,
                     "order": _next_order(papers),
                     **_cache_from_meta(meta),
                 }

@@ -81,6 +81,7 @@ export function docToRow(doc: Doc, papers: CollectionRow[]): CollectionRow {
     status: doc.status,
     folder_id: null,
     trashed: false,
+    starred: false,
     order: maxOrder + 1,
     filename: doc.filename,
   };
