@@ -25,3 +25,8 @@ server/openapi.json
 
 # Superpowers brainstorming visual-companion scratch (mockups/session state)
 .superpowers/
+
+# Default library data root (docker compose bind mount, AD-8). Folder itself
+# is tracked (.gitkeep) so a fresh clone has it pre-created; contents aren't.
+.paper-mate/*
+!.paper-mate/.gitkeep
