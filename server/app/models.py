@@ -44,10 +44,16 @@ class ExtractedMeta(BaseModel):
     title: str | None = None
     authors: list[str] = []
     doi: str | None = None
-    # Captured from Crossref (`container-title` / `issued`); the domain's
-    # honest shape before storage projects them.
+    # Captured from Crossref (`container-title` / `issued`), or the arXiv
+    # fallback (fix request) when Crossref has no venue; the domain's honest
+    # shape before storage projects them.
     venue: str | None = None
     year: int | None = None
+    # A new-style arXiv id (e.g. "2103.12345") found in the PDF text (fix
+    # request), NOT projected to DocMeta/CollectionRow: it's a transient
+    # lookup key `enrich()` uses to route the arXiv venue/year fallback,
+    # never displayed or persisted itself.
+    arxiv_id: str | None = None
 
 
 class DocMeta(BaseModel):

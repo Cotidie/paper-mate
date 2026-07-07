@@ -17,6 +17,9 @@ dependencies = [
     # background extract(); httpx is the runtime HTTP client for Crossref enrich().
     "pymupdf==1.26.7",
     "httpx==0.28.1",
+    # arXiv venue/year fallback (fix request): the maintained client library
+    # (lukasschwab/arxiv.py) over hand-rolled Atom-XML parsing.
+    "arxiv==4.0.0",
 ]
 
 [dependency-groups]

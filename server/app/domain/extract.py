@@ -20,6 +20,12 @@ _DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+", re.IGNORECASE)
 #: Trailing punctuation the greedy DOI suffix charset over-captures from prose.
 _DOI_TRAILING = ".,;)"
 
+#: The common new-style arXiv id stamp PDFs carry, e.g. the left-margin
+#: "arXiv:2103.12345v2 [cs.CV] 1 Jan 2026" footer (fix request, LFR-32 follow-up):
+#: routes a preprint Crossref has no record of to the arXiv venue/year fallback.
+#: Old-style ids (``subject-class/YYMMNNN``) are out of scope.
+_ARXIV_ID_RE = re.compile(r"arxiv:\s*(\d{4}\.\d{4,5})(?:v\d+)?", re.IGNORECASE)
+
 #: A title is only trusted from the font heuristic if it sits in the top of the
 #: page (titles do; a large mid-page section header does not).
 _TITLE_TOP_FRACTION = 0.5
@@ -122,14 +128,26 @@ def _find_doi(*texts: str | None) -> str | None:
     return None
 
 
+def _find_arxiv_id(*texts: str | None) -> str | None:
+    """First new-style arXiv id found across the given text sources."""
+    for text in texts:
+        if not text:
+            continue
+        match = _ARXIV_ID_RE.search(text)
+        if match:
+            return match.group(1)
+    return None
+
+
 def extract(pdf_bytes: bytes) -> ExtractedMeta:
     """Resolve Title + Authors + DOI from PDF bytes, best-effort (LFR-8, AD-L2).
 
     Rung 1 = embedded ``/Info`` (``doc.metadata``) + XMP (``dc:title`` /
     ``dc:creator``); rung 2 = a font-size heuristic on page 0 for the title
-    when rung 1 gives none. A DOI is pulled from ``/Info`` + XMP + first-page
-    text for ``enrich`` to key on. **Total**: any PyMuPDF failure on a
-    pathological PDF returns an empty ``ExtractedMeta()`` — it never raises.
+    when rung 1 gives none. A DOI, and separately an arXiv id (fix request),
+    are each pulled from ``/Info`` + XMP + first-page text for ``enrich`` to
+    key on. **Total**: any PyMuPDF failure on a pathological PDF returns an
+    empty ``ExtractedMeta()`` — it never raises.
     """
     try:
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
@@ -161,7 +179,8 @@ def extract(pdf_bytes: bytes) -> ExtractedMeta:
                 page0_text = ""
 
         doi = _find_doi(info.get("title"), info.get("subject"), xmp, page0_text)
-        return ExtractedMeta(title=title, authors=authors, doi=doi)
+        arxiv_id = _find_arxiv_id(info.get("title"), info.get("subject"), xmp, page0_text)
+        return ExtractedMeta(title=title, authors=authors, doi=doi, arxiv_id=arxiv_id)
     except Exception:
         return ExtractedMeta()
     finally:

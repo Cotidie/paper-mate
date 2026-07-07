@@ -250,7 +250,8 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 > imported before this feature, or with no Crossref match, keeps `null`
 > until it is re-imported; `doi` is sourced from the PDF extraction (not the
 > matched Crossref work), `venue`/`year` from Crossref's `container-title` /
-> `issued` date.
+> `issued` date, falling back to arXiv's own record (fix request) when
+> Crossref has no venue and the PDF carries an arXiv id.
 
 ### `POST /api/library/folders` — create a folder
 
@@ -407,6 +408,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-08 (Story 7.9 fix request):** venue/year/doi/authors gain an arXiv fallback during the existing background enrichment: when Crossref leaves `venue` unset AND the PDF carries an arXiv id (a stamp like `arXiv:2103.12345v2` found in the extracted text), arXiv's own record (via the `arxiv` client library) fills `venue` (its `journal_ref` if the preprint was later formally published, else the literal `"arXiv"`) and `year` (the submission year); when the PDF/Crossref left `doi`/`authors` empty too, arXiv's own self-assigned DOI (the deterministic `10.48550/arXiv.<id>` pattern) and its author list fill those in as well. Crossref, when it does have an answer, stays authoritative; the fallback only fires on a Crossref miss, and never overwrites a real extraction/Crossref-sourced value. No contract change (still the same `DocMeta`/`CollectionRow` fields from Story 7.9), no new path.
 - **2026-07-08 (Story 7.9 fix request):** `DocPatch` gains `venue: str | null`, `year: int | null` (additive; `PATCH /api/docs/{doc_id}` now edits Venue/Year inline alongside Title/Authors). `doi` stays NOT patchable (link-only cell). No new path, no `schema_version` bump.
 - **2026-07-08 (Story 7.9):** `CollectionRow` gains `doi: str | null`, `venue: str | null`, `year: int | null` (additive, all default `null`; `GET /api/library`'s `Library` response); `DocMeta` gains the same three fields (its `meta.json`-authoritative source); `ExtractedMeta` (internal, not in the OpenAPI schema) gains `venue`/`year` alongside its existing `doi`. Meta-derived cache (like `filename`/`last_opened`), projected through `_cache_from_meta` so it auto-seeds new imports and backfills a pre-existing row on the next reconcile. `venue`/`year` are captured from Crossref (`container-title[0]`, and the first of `issued`/`published-print`/`published-online`/`published` `date-parts[0][0]`) during the existing enrichment; `doi` stays the PDF-extraction-sourced value (not the matched Crossref work's `DOI`). Crossref new-imports-only: no backfill/re-enrich pass over the existing library. No new path, no `schema_version` bump.
 - **2026-07-07 (Story 7.8):** added `POST /api/library/star`, `POST /api/library/unstar` (set-based `DocIdSet`: `{doc_ids}`, reused verbatim, no new schema). `CollectionRow` gains `starred: bool = False` (additive, org state authoritative in `library.json`, peer of `trashed`, not meta-derived; the key being absent on a pre-existing row cached before the field existed defaults to unstarred, no forced backfill). Star/unstar 404 on an unknown `doc_id` (all-or-nothing, no partial write). Contract shape change: two new paths + `CollectionRow.starred`.

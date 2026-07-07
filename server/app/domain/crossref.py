@@ -1,4 +1,6 @@
-"""The Crossref enricher: the ONLY network call in the whole backend (AD-L2).
+"""The Crossref enricher: the primary bibliographic network call (AD-L2).
+``arxiv_enrich.py`` (fix request) is the other, a conditional fallback
+``enrich.py`` layers on top when this one leaves ``venue`` unset.
 
 ``enrich`` (the domain surface, in ``enrich.py``) delegates to an ``Enricher``
 port; ``CrossrefEnricher`` is its default implementation. Abstracting Crossref

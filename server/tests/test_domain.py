@@ -1,15 +1,18 @@
 """Pure domain layer tests (AD-L2, Story 6.5).
 
 ``extract`` is exercised against PDFs built in-code with PyMuPDF (no committed
-binaries); ``enrich`` is exercised with a fake ``httpx.Client`` (patched on the
-``crossref`` module) and with an injected fake enricher — these tests NEVER hit
-the real network.
+binaries); ``enrich`` is exercised with a fake ``httpx.Client`` (patched on
+``crossref``), a fake arXiv client (patched on ``arxiv_enrich``), and with
+injected fake enrichers — these tests NEVER hit the real network.
 """
+
+import datetime
 
 import pymupdf
 import pytest
 
-from app.domain import crossref
+from app.domain import arxiv_enrich, crossref
+from app.domain.arxiv_enrich import ArxivEnricher
 from app.domain.crossref import CrossrefEnricher
 from app.domain.enrich import enrich
 from app.domain.extract import extract
@@ -132,6 +135,16 @@ def test_extract_doi_from_info_subject():
     assert extract(data).doi == "10.5555/xyz123"
 
 
+def test_extract_finds_arxiv_id_in_page_text():
+    meta = extract(_pdf(title="Has ArXiv Stamp", body="arXiv:2103.12345v2 [cs.CV] 1 Jan 2026"))
+    assert meta.arxiv_id == "2103.12345"
+
+
+def test_extract_arxiv_id_none_without_a_stamp():
+    meta = extract(_pdf(title="No ArXiv Stamp"))
+    assert meta.arxiv_id is None
+
+
 def test_extract_empty_on_blank_document():
     meta = extract(_pdf())  # no metadata, no text
     assert meta == ExtractedMeta()
@@ -146,11 +159,18 @@ def test_extract_is_total_on_garbage_bytes():
 
 
 class _FakeResponse:
-    def __init__(self, status_code: int, payload: dict):
+    """A response stub: ``.json()`` for Crossref's JSON payloads, ``.text``
+    for arXiv's raw Atom XML string payloads."""
+
+    def __init__(self, status_code: int, payload: dict | str):
         self.status_code = status_code
         self._payload = payload
 
     def json(self) -> dict:
+        return self._payload
+
+    @property
+    def text(self) -> str:
         return self._payload
 
 
@@ -390,6 +410,212 @@ def test_meta_from_work_no_container_title_yields_venue_none():
     assert meta is not None
     assert meta.venue is None
     assert meta.year is None
+
+
+# --- arxiv_enrich (fix request): venue/year fallback for a Crossref-less preprint --
+
+
+class _FakeArxivClient:
+    """Stands in for ``arxiv.Client``: ``.results(search)`` replays a fixed
+    list of ``arxiv.Result``s, or raises to simulate a network failure."""
+
+    def __init__(self, results: list | None = None, error: Exception | None = None):
+        self._results = results or []
+        self._error = error
+
+    def results(self, search):
+        if self._error:
+            raise self._error
+        return iter(self._results)
+
+
+def _fake_result(
+    *, journal_ref: str = "", year: int = 2019, authors: list[str] | None = None
+) -> arxiv_enrich.arxiv.Result:
+    return arxiv_enrich.arxiv.Result(
+        entry_id="http://arxiv.org/abs/2103.12345",
+        journal_ref=journal_ref,
+        published=datetime.datetime(year, 3, 8, tzinfo=datetime.timezone.utc),
+        authors=[arxiv_enrich.arxiv.Result.Author(name) for name in (authors or [])],
+    )
+
+
+@pytest.fixture
+def fake_arxiv_client(monkeypatch):
+    """Install a fake arXiv client on ``arxiv_enrich._client``, mirroring
+    ``fake_httpx`` above (a separate module, a separate patch target)."""
+
+    def install(results: list | None = None, error: Exception | None = None):
+        monkeypatch.setattr(arxiv_enrich, "_client", _FakeArxivClient(results, error))
+
+    return install
+
+
+def test_arxiv_enricher_fetch_defaults_to_arxiv_venue_without_a_journal_ref(fake_arxiv_client):
+    fake_arxiv_client(results=[_fake_result(year=2019)])
+    assert ArxivEnricher().fetch("2103.12345") == ("arXiv", 2019, [])
+
+
+def test_arxiv_enricher_fetch_uses_journal_ref_when_present(fake_arxiv_client):
+    fake_arxiv_client(results=[_fake_result(journal_ref="IEEE Access, vol. 7, 2019", year=2019)])
+    assert ArxivEnricher().fetch("2103.12345") == ("IEEE Access, vol. 7, 2019", 2019, [])
+
+
+def test_arxiv_enricher_fetch_returns_authors(fake_arxiv_client):
+    fake_arxiv_client(results=[_fake_result(year=2019, authors=["Yi Zhu", "Shawn Newsam"])])
+    venue, year, authors = ArxivEnricher().fetch("2103.12345")
+    assert authors == ["Yi Zhu", "Shawn Newsam"]
+
+
+def test_arxiv_enricher_fetch_none_on_no_results(fake_arxiv_client):
+    fake_arxiv_client(results=[])
+    assert ArxivEnricher().fetch("2103.12345") == (None, None, [])
+
+
+def test_arxiv_enricher_fetch_none_on_failure(fake_arxiv_client):
+    fake_arxiv_client(error=RuntimeError("offline"))
+    assert ArxivEnricher().fetch("2103.12345") == (None, None, [])
+
+
+# --- enrich composition: Crossref then the arXiv fallback (fix request) ----
+
+
+class _RaisingArxivFetcher:
+    """A fetcher that fails the test if called - proves Crossref, when it
+    already has a venue, is authoritative and the arXiv fallback never fires."""
+
+    def fetch(self, arxiv_id: str) -> tuple[str | None, int | None, list[str]]:
+        raise AssertionError("arXiv fallback must not fire when Crossref already has a venue")
+
+
+def test_enrich_arxiv_fallback_fires_when_crossref_skips_entirely(fake_httpx):
+    def handler(url, params):
+        raise crossref.httpx.ConnectError("offline")
+
+    fake_httpx(handler)
+
+    class FakeArxiv:
+        def fetch(self, arxiv_id: str) -> tuple[str | None, int | None, list[str]]:
+            assert arxiv_id == "2103.12345"
+            return "arXiv", 2021, ["Ada Lovelace"]
+
+    result = enrich(
+        ExtractedMeta(title="A Preprint", arxiv_id="2103.12345"),
+        arxiv_fetcher=FakeArxiv(),
+    )
+    assert result != "skipped"
+    assert result.title == "A Preprint"  # Crossref skipped: original title kept
+    assert result.venue == "arXiv"
+    assert result.year == 2021
+    # PDF carried no DOI/authors either: arXiv-only, so its own record fills both in.
+    assert result.doi == "10.48550/arXiv.2103.12345"
+    assert result.authors == ["Ada Lovelace"]
+
+
+def test_enrich_arxiv_fallback_fires_when_crossref_has_no_venue(fake_httpx):
+    def handler(url, params):
+        return _FakeResponse(200, {"message": {"title": ["A Paper"], "author": []}})
+
+    fake_httpx(handler)
+
+    class FakeArxiv:
+        def fetch(self, arxiv_id: str) -> tuple[str | None, int | None, list[str]]:
+            return "arXiv", 2020, ["Grace Hopper"]
+
+    result = enrich(
+        ExtractedMeta(title="A Paper", doi="10.1/x", arxiv_id="2103.12345"),
+        arxiv_fetcher=FakeArxiv(),
+    )
+    assert result != "skipped"
+    assert result.title == "A Paper"
+    assert result.doi == "10.1/x"  # untouched: DOI stays extraction-sourced
+    assert result.venue == "arXiv"
+    assert result.year == 2020
+    # Crossref's own author list came back empty: arXiv's fills in.
+    assert result.authors == ["Grace Hopper"]
+
+
+def test_enrich_arxiv_fallback_never_fires_when_crossref_already_has_a_venue(fake_httpx):
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {
+                "message": {
+                    "title": ["A Paper"],
+                    "author": [],
+                    "container-title": ["Journal of Foo"],
+                    "issued": {"date-parts": [[2017]]},
+                }
+            },
+        )
+
+    fake_httpx(handler)
+    result = enrich(
+        ExtractedMeta(title="A Paper", doi="10.1/x", arxiv_id="2103.12345"),
+        arxiv_fetcher=_RaisingArxivFetcher(),
+    )
+    assert result != "skipped"
+    assert result.venue == "Journal of Foo"  # Crossref's own venue, untouched
+    assert result.year == 2017
+
+
+def test_enrich_arxiv_fallback_never_fires_without_an_arxiv_id(fake_httpx):
+    fake_httpx(lambda url, params: _FakeResponse(200, {"message": {"items": []}}))
+    result = enrich(ExtractedMeta(title="No ArXiv Id"), arxiv_fetcher=_RaisingArxivFetcher())
+    assert result == "skipped"  # no arxiv_id to route the fallback on
+
+
+def test_enrich_arxiv_fallback_failure_leaves_crossref_result_unchanged(fake_httpx):
+    def handler(url, params):
+        raise crossref.httpx.ConnectError("offline")
+
+    fake_httpx(handler)
+
+    class FailingArxiv:
+        def fetch(self, arxiv_id: str) -> tuple[str | None, int | None, list[str]]:
+            return None, None, []
+
+    result = enrich(
+        ExtractedMeta(title="A Preprint", arxiv_id="2103.12345"),
+        arxiv_fetcher=FailingArxiv(),
+    )
+    assert result == "skipped"  # arXiv found nothing either: still a total skip
+
+
+def test_arxiv_doi_is_the_deterministic_datacite_pattern():
+    assert arxiv_enrich.arxiv_doi("2103.12345") == "10.48550/arXiv.2103.12345"
+
+
+def test_enrich_arxiv_doi_fill_only_fires_alongside_a_successful_venue_fallback(fake_httpx):
+    """Fix request: arXiv's self-assigned DOI is a bonus fill on the SAME
+    arXiv-only branch as venue/year, never fired on its own (there is no
+    'DOI missing but venue present' path to key it off, per Crossref
+    already being authoritative once it has an answer)."""
+
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {
+                "message": {
+                    "items": [
+                        {
+                            "title": ["A Paper"],
+                            "author": [],
+                            "container-title": ["Journal of Foo"],
+                            "issued": {"date-parts": [[2017]]},
+                        }
+                    ]
+                }
+            },
+        )
+
+    fake_httpx(handler)
+    result = enrich(
+        ExtractedMeta(title="A Paper", arxiv_id="2103.12345"),  # doi=None, but Crossref has a venue
+        arxiv_fetcher=_RaisingArxivFetcher(),
+    )
+    assert result != "skipped"
+    assert result.doi is None  # Crossref found no DOI; arXiv fallback never ran to fill one either
 
 
 _FORBIDDEN_IMPORTS = {"os", "pathlib", "app.storage"}
