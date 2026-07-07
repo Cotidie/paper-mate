@@ -109,18 +109,21 @@ aborts an otherwise-readable open.
 - **404** → `{ "detail": "Document not found" }` — no `meta.json` for `doc_id`.
 - **500** → `{ "detail": "Could not update document" }` — a storage failure.
 
-### `PATCH /api/docs/{doc_id}` — partially update title/authors
+### `PATCH /api/docs/{doc_id}` — partially update title/authors/venue/year
 
-Correct a wrong `title` or `authors` in place (Story 6.6, AD-L6). `meta.json`
+Correct a wrong `title`, `authors`, `venue`, or `year` in place (Story 6.6;
+`venue`/`year` added by a Story 7.9 fix request, AD-L6). `meta.json`
 is authoritative; the write also refreshes the `library.json` display cache
 (`GET /api/library` reflects the change with no separate read path). Editing
-never changes `status`, `page_count`, `added`, or `last_opened`.
+never changes `status`, `page_count`, `added`, or `last_opened`. `doi` is
+NOT patchable here (link-only cell, Story 7.9's scope boundary).
 
-- **Request body:** `DocPatch` — `{ "title"?: string | null, "authors"?: string | null }`.
+- **Request body:** `DocPatch` — `{ "title"?: string | null, "authors"?: string | null, "venue"?: string | null, "year"?: int | null }`.
   Only fields present in the body change (`exclude_unset` partial semantics);
-  a present empty/whitespace string normalizes to `null` (Title falls back to
-  the filename display fallback; Authors renders empty). `extra="forbid"`: a
-  non-editable field (e.g. `status`) is rejected, not silently dropped.
+  a present empty/whitespace `title`/`authors`/`venue` normalizes to `null`
+  (Title falls back to the filename display fallback; Authors/Venue render
+  empty). `extra="forbid"`: a non-editable field (e.g. `status`, `doi`) is
+  rejected, not silently dropped.
 - **200** → `Doc` (the full updated document, same shape as `GET /api/docs/{doc_id}`).
 - **400** → `{ "detail": "No fields to update" }` — empty body.
 - **404** → `{ "detail": "Document not found" }` — no `meta.json` for `doc_id`.
@@ -404,6 +407,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-08 (Story 7.9 fix request):** `DocPatch` gains `venue: str | null`, `year: int | null` (additive; `PATCH /api/docs/{doc_id}` now edits Venue/Year inline alongside Title/Authors). `doi` stays NOT patchable (link-only cell). No new path, no `schema_version` bump.
 - **2026-07-08 (Story 7.9):** `CollectionRow` gains `doi: str | null`, `venue: str | null`, `year: int | null` (additive, all default `null`; `GET /api/library`'s `Library` response); `DocMeta` gains the same three fields (its `meta.json`-authoritative source); `ExtractedMeta` (internal, not in the OpenAPI schema) gains `venue`/`year` alongside its existing `doi`. Meta-derived cache (like `filename`/`last_opened`), projected through `_cache_from_meta` so it auto-seeds new imports and backfills a pre-existing row on the next reconcile. `venue`/`year` are captured from Crossref (`container-title[0]`, and the first of `issued`/`published-print`/`published-online`/`published` `date-parts[0][0]`) during the existing enrichment; `doi` stays the PDF-extraction-sourced value (not the matched Crossref work's `DOI`). Crossref new-imports-only: no backfill/re-enrich pass over the existing library. No new path, no `schema_version` bump.
 - **2026-07-07 (Story 7.8):** added `POST /api/library/star`, `POST /api/library/unstar` (set-based `DocIdSet`: `{doc_ids}`, reused verbatim, no new schema). `CollectionRow` gains `starred: bool = False` (additive, org state authoritative in `library.json`, peer of `trashed`, not meta-derived; the key being absent on a pre-existing row cached before the field existed defaults to unstarred, no forced backfill). Star/unstar 404 on an unknown `doc_id` (all-or-nothing, no partial write). Contract shape change: two new paths + `CollectionRow.starred`.
 - **2026-07-07 (Story 7.7):** `CollectionRow` gains `last_opened: str | null` (additive, default `null`; `GET /api/library`'s `Library` response), projected from `meta.json` (already advanced on open by `POST /api/docs/{doc_id}/open`, Story 6.7). Populated on every index write through the existing `_cache_from_meta` projection; `reconcile_library()` backfills a pre-existing row cached before the field existed on the next server start. Drives the client's Recent lens (order by `last_opened` desc, grouped under Today/Yesterday/Last week/Last month date buckets, dropping anything older than 30 days - no numeric cap); no new endpoint.

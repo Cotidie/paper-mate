@@ -87,21 +87,25 @@ class Doc(DocMeta):
 
 
 class DocPatch(BaseModel):
-    """Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6): a partial
-    title/authors edit. Request-only (no route returns it) — surfaced into
+    """Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6; ``venue``/
+    ``year`` added by a Story 7.9 fix request): a partial title/authors/
+    venue/year edit. Request-only (no route returns it) — surfaced into
     OpenAPI by the route's body parameter, not by a model injection.
 
-    Both fields default unset so ``model_dump(exclude_unset=True)`` yields
+    All fields default unset so ``model_dump(exclude_unset=True)`` yields
     only what the client actually sent (true PATCH semantics: a title-only
-    edit leaves authors untouched). ``extra="forbid"`` turns an attempt to
+    edit leaves the rest untouched). ``extra="forbid"`` turns an attempt to
     patch a non-editable field (e.g. ``status``) into a loud 422 instead of a
-    silently-ignored no-op.
+    silently-ignored no-op. ``doi`` is deliberately NOT editable here (it
+    stays a link-only cell, per Story 7.9's scope boundary).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = None
     authors: str | None = None
+    venue: str | None = None
+    year: int | None = None
 
 
 # --- Library / collection index (AD-L1, Story 6.2) --------------------------

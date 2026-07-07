@@ -140,6 +140,45 @@ export default function PaperRow({
           {row.authors ?? ""}
         </EditableCell>
       )}
+      {visibleColumns.has("venue") && (
+        <EditableCell
+          className="collection-table__venue"
+          title={row.venue ?? undefined}
+          field="venue"
+          editable={editable}
+          armed={armed}
+          isEditing={editingField === "venue"}
+          seedValue={seedFieldValue(row, "venue")}
+          onStartEdit={() => onStartEdit("venue")}
+          onArm={onArm}
+          onCommit={(value, viaBlur) => onCommit("venue", value, viaBlur)}
+          onCancel={onCancel}
+        >
+          {row.venue ?? ""}
+        </EditableCell>
+      )}
+      {visibleColumns.has("year") && (
+        <EditableCell
+          className="collection-table__year"
+          field="year"
+          editable={editable}
+          armed={armed}
+          isEditing={editingField === "year"}
+          seedValue={seedFieldValue(row, "year")}
+          onStartEdit={() => onStartEdit("year")}
+          onArm={onArm}
+          onCommit={(value, viaBlur) => onCommit("year", value, viaBlur)}
+          onCancel={onCancel}
+        >
+          {row.year ?? ""}
+        </EditableCell>
+      )}
+      {visibleColumns.has("location") && (
+        <td className="collection-table__location" title={locationLabel}>
+          {row.folder_id && <FolderIcon aria-hidden className="collection-table__location-icon" />}
+          <span className="collection-table__location-text">{locationLabel}</span>
+        </td>
+      )}
       {visibleColumns.has("added") && (
         <td className="collection-table__added">{formatAdded(row.added)}</td>
       )}
@@ -158,18 +197,6 @@ export default function PaperRow({
           )}
         </td>
       )}
-      {visibleColumns.has("location") && (
-        <td className="collection-table__location" title={locationLabel}>
-          {row.folder_id && <FolderIcon aria-hidden className="collection-table__location-icon" />}
-          <span className="collection-table__location-text">{locationLabel}</span>
-        </td>
-      )}
-      {visibleColumns.has("venue") && (
-        <td className="collection-table__venue" title={row.venue ?? undefined}>
-          {row.venue ?? ""}
-        </td>
-      )}
-      {visibleColumns.has("year") && <td className="collection-table__year">{row.year ?? ""}</td>}
       {visibleColumns.has("doi") && (
         <td className="collection-table__doi">
           {row.doi && (

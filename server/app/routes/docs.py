@@ -83,19 +83,20 @@ async def get_doc(doc_id: str) -> Doc:
     },
 )
 async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
-    """Partially update a document's ``title``/``authors`` (Story 6.6, AD-L6).
+    """Partially update a document's ``title``/``authors``/``venue``/``year``
+    (Story 6.6; ``venue``/``year`` added by a Story 7.9 fix request, AD-L6).
 
     Only fields present in the request body change (``exclude_unset``); an
-    empty body -> 400. A malformed/forbidden field (e.g. ``status``) is
-    rejected by ``DocPatch`` itself as FastAPI's standard 422. Unknown id ->
-    404; a storage failure -> 500. Both use the single ``{ "detail" }``
+    empty body -> 400. A malformed/forbidden field (e.g. ``status``, ``doi``)
+    is rejected by ``DocPatch`` itself as FastAPI's standard 422. Unknown id
+    -> 404; a storage failure -> 500. Both use the single ``{ "detail" }``
     envelope (AR-11). Editing never touches ``status``/``page_count``/
     ``added``/``last_opened``.
     """
     updates = patch.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
-    for field in ("title", "authors"):
+    for field in ("title", "authors", "venue"):
         if field in updates and updates[field] is not None:
             updates[field] = updates[field].strip() or None
     with storage_errors("Could not update document"):

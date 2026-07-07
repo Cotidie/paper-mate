@@ -327,6 +327,59 @@ def test_patch_doc_does_not_change_other_fields(data_root):
     assert body["added"] == before["added"]
 
 
+def test_patch_doc_updates_venue_and_year(data_root):
+    """Fix request: Venue/Year are inline-editable, mirroring title/authors."""
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("g.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"venue": "Journal of Foo", "year": 2019})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["venue"] == "Journal of Foo"
+    assert body["year"] == 2019
+    assert storage.read_meta(doc_id).venue == "Journal of Foo"
+    row = storage.read_library().papers[0]
+    assert row.venue == "Journal of Foo"
+    assert row.year == 2019
+
+
+def test_patch_doc_blank_venue_clears_to_null(data_root):
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("h.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    client.patch(f"/api/docs/{doc_id}", json={"venue": "Some Venue"})
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"venue": "   "})
+    assert resp.status_code == 200
+    assert resp.json()["venue"] is None
+
+
+def test_patch_doc_null_year_clears_it(data_root):
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("i.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    client.patch(f"/api/docs/{doc_id}", json={"year": 2019})
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"year": None})
+    assert resp.status_code == 200
+    assert resp.json()["year"] is None
+
+
+def test_patch_doc_doi_is_rejected_422(data_root):
+    """Scope boundary: DOI stays a link-only cell, never patchable."""
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("j.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"doi": "10.1/x"})
+    assert resp.status_code == 422
+
+
 # --- Purge route (Story 7.5 AC-4, AL-5.3, AL-6) -----------------------------
 
 

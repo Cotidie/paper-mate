@@ -1,6 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { sortRows, type SortState } from "@/library/tableView";
+import { COLUMNS, sortRows, type SortState } from "@/library/tableView";
 import type { CollectionRow } from "@/api/client";
+
+describe("COLUMNS order (fix request)", () => {
+  it("Title, Authors, Venue, Year, Location, Added, File type, DOI", () => {
+    expect(COLUMNS.map((c) => c.key)).toEqual([
+      "title",
+      "authors",
+      "venue",
+      "year",
+      "location",
+      "added",
+      "file_type",
+      "doi",
+    ]);
+  });
+});
 
 function row(overrides: Partial<CollectionRow>): CollectionRow {
   return {

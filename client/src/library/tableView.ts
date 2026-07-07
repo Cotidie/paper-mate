@@ -17,14 +17,19 @@ export interface ColumnDef {
   sortable: boolean;
 }
 
+// Order (fix request): Title -> Authors -> Venue -> Year -> Location ->
+// Added -> File type -> DOI (DOI last, unlisted in the request; it's hidden
+// by default anyway, AC-7). Position here is display order only - it has no
+// bearing on `visibleColumns`/hidden-state or the Location per-lens
+// suppression in `LibraryPage.tsx`, which filter this array, not reorder it.
 export const COLUMNS: ColumnDef[] = [
   { key: "title", label: "Title", hideable: false, sortable: true },
   { key: "authors", label: "Authors", hideable: true, sortable: true },
-  { key: "added", label: "Added", hideable: true, sortable: true },
-  { key: "file_type", label: "File type", hideable: true, sortable: true },
-  { key: "location", label: "Location", hideable: true, sortable: true },
   { key: "venue", label: "Venue", hideable: true, sortable: true },
   { key: "year", label: "Year", hideable: true, sortable: true },
+  { key: "location", label: "Location", hideable: true, sortable: true },
+  { key: "added", label: "Added", hideable: true, sortable: true },
+  { key: "file_type", label: "File type", hideable: true, sortable: true },
   { key: "doi", label: "DOI", hideable: true, sortable: true },
 ];
 

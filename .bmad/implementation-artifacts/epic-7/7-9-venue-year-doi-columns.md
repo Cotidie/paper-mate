@@ -281,6 +281,7 @@ Sonnet 5 xHigh (dev-story, per CLAUDE.md model-per-job)
 - server/app/models.py
 - server/app/domain/crossref.py
 - server/app/routes/extraction.py
+- server/app/routes/docs.py
 - server/app/storage/documents.py
 - server/app/storage/library_index.py
 - server/pyproject.toml
@@ -295,14 +296,18 @@ Sonnet 5 xHigh (dev-story, per CLAUDE.md model-per-job)
 - client/src/library/tableView.ts
 - client/src/library/useColumnWidths.ts
 - client/src/library/useTableView.ts
+- client/src/library/useInlineEdit.ts
+- client/src/library/row.ts
 - client/src/library/CollectionTable/PaperRow.tsx
+- client/src/library/CollectionTable/PendingRow.tsx
+- client/src/library/CollectionTable/EditableCell.tsx
 - client/src/library/CollectionTable/CollectionTable.tsx
 - client/src/library/CollectionTable/CollectionTable.css
 - client/src/theme/components.css
-- client/src/library/row.ts
 - client/src/library/tableView.test.ts
 - client/src/library/useColumnWidths.test.ts
 - client/src/library/useTableView.test.ts (new)
+- client/src/library/useInlineEdit.test.ts (new)
 - client/src/library/CollectionTable/CollectionTable.test.tsx
 - client/src/library/LibraryPage.test.tsx
 
@@ -314,3 +319,5 @@ Sonnet 5 xHigh (dev-story, per CLAUDE.md model-per-job)
 - **2026-07-08:** Story 7.9 created (ready-for-dev). Full-stack additive Venue/Year/DOI columns: `DocMeta`/`ExtractedMeta`/`CollectionRow` fields + Crossref `container-title`/`issued` capture + `_cache_from_meta` projection (auto-seeds + backfills) + three client columns (DOI as a stopPropagation link, hidden by default). Crossref new-imports-only; DOI extraction-sourced. Version bump planned `0.5.7` → `0.5.8`.
 - **2026-07-08:** Story 7.9 implemented. All 13 tasks complete; backend (247 tests) and client (1249 tests) green; typecheck clean; live smoke passed on fresh servers with a real DOI-bearing PDF. Version bumped `0.5.7` → `0.5.8`. Status set to review.
 - **2026-07-08:** Cross-model Codex `bmad-code-review` (AE-6) run. 7 findings: 1 High (false positive, `server/openapi.json` is gitignored/never tracked, no action), 2 Med (real bugs, fixed: modifier-click on the DOI link no longer toggles row multi-select; row drag-start now excludes anchors so dragging the DOI link doesn't start a paper-move drag), 1 Med (docs gap, fixed: `docs/API.md`'s `POST /api/docs` example + field list now include `doi`/`venue`/`year`), 3 Low (all fixed: DOI-sort test now asserts both directions; `_year_from_work` hardened against non-dict/non-list malformed Crossref payloads; the DOI-scope-guard test's fake work now carries a `DOI` key to actually prove it's ignored). 2 new client regression tests added. Backend (247) and client (1251) suites re-verified green; typecheck clean. Status set to review.
+- **2026-07-08 (user fix request, post-review):** Venue and Year are now inline-editable, mirroring Title/Authors (Story 6.6). `DocPatch` gains `venue`/`year` (additive; `doi` deliberately stays NOT patchable, link-only per this story's own scope boundary). `EditableField` widens to `"title" | "authors" | "venue" | "year"`; `useInlineEdit` is the one boundary that parses Year's UI string into the `int | null` `DocPatch`/`CollectionRow` type (an unparseable or non-integer year is silently discarded, the editor already closed on commit, so the cell just reverts). `docs/API.md`'s `PATCH /api/docs/{doc_id}` section updated. New tests: backend PATCH venue/year/blank/null/DOI-rejected cases; client `useInlineEdit.test.ts` (new, unit-tests the year parse boundary directly) + `CollectionTable.test.tsx`/`LibraryPage.test.tsx` inline-edit cases. Live-smoked (fresh servers): edited Venue and Year on a real Crossref-enriched row, confirmed persistence via `GET /api/library`, confirmed a malformed Year input ("abc") is silently ignored (no PATCH, cell unchanged).
+- **2026-07-08 (user fix request, post-review):** Default column order changed to Title, Authors, Venue, Year, Location, Added, File type, DOI (DOI last, unlisted in the request; stays hidden by default per AC-7). Reordered `COLUMNS` in `tableView.ts` AND the actual `<td>` sequence in `PaperRow.tsx` (the two must move together: `COLUMNS` drives `<th>`/`<colgroup>` order, but `PaperRow`'s cells are hardcoded JSX, not derived from `COLUMNS`). Found and fixed a pre-existing bug surfaced while doing this: `PendingRow.tsx` (the optimistic upload row) never gained `venue`/`year`/`doi` cells when those columns shipped earlier in this story, undercounting its `<td>`s against the header whenever an upload was in flight with Venue/Year visible (the default) - added the three cells in the new order. New tests: `tableView.test.ts` locks the `COLUMNS` order; a `CollectionTable.test.tsx` regression test asserts a pending row's cell count matches the header's. Live-smoked: confirmed the header renders in the new order and the DeepAnT row's cells align under the correct columns.

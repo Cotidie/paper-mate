@@ -26,13 +26,18 @@ export default function PendingRow({
         </td>
       )}
       {visibleColumns.has("authors") && <td className="collection-table__authors" />}
+      {/* A fresh upload has no Crossref-enriched metadata yet (it settles via
+          the background pipeline, Story 7.9) - empty cells, no lookup. */}
+      {visibleColumns.has("venue") && <td className="collection-table__venue" />}
+      {visibleColumns.has("year") && <td className="collection-table__year" />}
+      {/* A fresh upload always lands Uncategorized (Dev Notes) - no folder
+          lookup needed while it's still pending. */}
+      {visibleColumns.has("location") && <td className="collection-table__location">Uncategorized</td>}
       {visibleColumns.has("added") && <td className="collection-table__added" />}
       {visibleColumns.has("file_type") && (
         <td>{label && <span className="badge-pill">{label}</span>}</td>
       )}
-      {/* A fresh upload always lands Uncategorized (Dev Notes) - no folder
-          lookup needed while it's still pending. */}
-      {visibleColumns.has("location") && <td className="collection-table__location">Uncategorized</td>}
+      {visibleColumns.has("doi") && <td className="collection-table__doi" />}
     </tr>
   );
 }
