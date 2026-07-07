@@ -66,8 +66,8 @@ The **one genuinely new UI piece** is the DOI cell: a clickable `https://doi.org
 - **Any Crossref capture beyond `container-title` / `issued`.** In particular, do NOT start persisting `work["DOI"]`: DOI stays the extraction-sourced value (`extract()`'s regex). A title-matched paper with no PDF-embedded DOI keeps a blank DOI cell even though Crossref knew it. (A future story can source DOI from the matched `work`; flag it, don't build it.)
 - **Inline-editing Venue/Year/DOI.** Display-only this story. Do NOT extend `useInlineEdit`/`DocPatch`/`EditableCell` to them (that is a follow-up).
 - **A `schema_version` bump / any migration.** All three fields are additive-optional; existing files validate via defaults.
-- **Column reordering to slot Venue/Year "nicely" among the existing columns.** Append them; reorder-and-persist is Story 7.11. Do not reshuffle the existing `COLUMNS` order.
-- **A structural refactor of `CollectionTable`/`LibraryPage`/`library_index.py`.** That is Story 7.10. This story is additive against the current seams; reuse them, do not reshape them.
+- **Column reordering to slot Venue/Year "nicely" among the existing columns.** Append them; reorder-and-persist is Story 7.10. Do not reshuffle the existing `COLUMNS` order.
+- **A structural refactor of `CollectionTable`/`LibraryPage`/`library_index.py`.** That is Story 7.12 (the Epic 7 refactor, now the last story). This story is additive against the current seams; reuse them, do not reshape them.
 
 ## Tasks / Subtasks
 
@@ -95,7 +95,7 @@ The **one genuinely new UI piece** is the DOI cell: a clickable `https://doi.org
   - [ ] `docs/API.md`: add `doi`/`venue`/`year` to the `CollectionRow` field list + the example `GET /api/library` row JSON (API.md:196-237); update the "own fields" projection note (API.md:222-237) to include them; add a `2026-07-08 (Story 7.9)` changelog line (three additive `CollectionRow` fields, meta-derived, Crossref-sourced venue/year + extraction-sourced doi, new-imports-only, no new path/schema). Grep the new prose for `—` (em-dash) first.
 
 - [ ] **Task 6, Client column model + sort (AC-5)**
-  - [ ] `client/src/library/tableView.ts`: `ColumnKey` (tableView.ts:9) += `| "venue" | "year" | "doi"`. `COLUMNS` (tableView.ts:20) += three entries **appended after `location`** (do not reorder existing columns, Story 7.11 owns reorder): `{ key: "venue", label: "Venue", hideable: true, sortable: true }`, `{ key: "year", label: "Year", hideable: true, sortable: true }`, `{ key: "doi", label: "DOI", hideable: true, sortable: true }`.
+  - [ ] `client/src/library/tableView.ts`: `ColumnKey` (tableView.ts:9) += `| "venue" | "year" | "doi"`. `COLUMNS` (tableView.ts:20) += three entries **appended after `location`** (do not reorder existing columns, Story 7.10 owns reorder): `{ key: "venue", label: "Venue", hideable: true, sortable: true }`, `{ key: "year", label: "Year", hideable: true, sortable: true }`, `{ key: "doi", label: "DOI", hideable: true, sortable: true }`.
   - [ ] `sortKey` (tableView.ts:52) += cases: `case "venue": return row.venue ?? "";`, `case "year": return row.year ?? "";` (numeric when present → numeric compare; `""` when null → sorts last, via `compareForSort`), `case "doi": return row.doi ?? "";`. `row.year` is `number | null`, so `row.year ?? ""` is `number | ""`, `compareForSort` already handles number-vs-number numerically and empty-string-last. Do NOT add a stray `default` (the switch is exhaustive over `ColumnKey`; a `default` would defeat TS's exhaustiveness check).
 
 - [ ] **Task 7, Client column widths (AC-5)**
@@ -137,7 +137,7 @@ The **one genuinely new UI piece** is the DOI cell: a clickable `https://doi.org
   - [ ] Frontend `npm run typecheck` + `npm test` green; backend `PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` green.
   - [ ] **Live smoke on your OWN fresh servers** (never a user-launched one, CLAUDE.md): fresh `uvicorn` + `vite dev` on alternate ports against a scratch `PAPER_MATE_DATA` dir. Import a **real paper with a resolvable DOI** from `fixtures/sample-pdfs/` (e.g. an arXiv PDF whose DOI/title Crossref knows) via `POST /api/docs`, let the background extraction settle, then verify: Venue + Year cells populate for the Crossref-matched paper and stay blank for a no-match one; Year sorts numerically (not lexically) and Venue/DOI sort as strings with blanks last; the **DOI column is hidden by default** and appears when toggled via Display; the DOI cell is a link to `https://doi.org/{doi}` and **clicking it opens the resolver without arming/opening the row** (AC-6, the one non-mechanical check); values **survive a server restart** (`GET /api/library` still shows them). Normal DPR is fine (no coordinate/anchor geometry). Tear both servers down after.
   - [ ] **Cross-model Codex `bmad-code-review` (AE-6)** on the diff. Resolve High/Med before done. Backend pytest is run-it-yourself on the host (CLAUDE.md Sandbox note).
-  - [ ] Branch `story-7-9-venue-year-doi-columns` off `main` before implementing. Flip `sprint-status.yaml` `7-9-venue-year-doi-columns` → `done` at PR merge (AE3-1); fill the Dev Agent Record first (AE3-2). **Do NOT close Epic 7**, 7.10 (refactor), 7.11, 7.12 remain backlog.
+  - [ ] Branch `story-7-9-venue-year-doi-columns` off `main` before implementing. Flip `sprint-status.yaml` `7-9-venue-year-doi-columns` → `done` at PR merge (AE3-1); fill the Dev Agent Record first (AE3-2). **Do NOT close Epic 7**, 7.10 (reorder), 7.11 (author-tag), 7.12 (refactor) remain backlog.
 
 ## Dev Notes
 
@@ -214,7 +214,7 @@ New strings, all plain and em-dash-free: "Venue", "Year", "DOI", the DOI link te
 ### Project Structure Notes
 
 - Aligns with the established Library module layout (`client/src/library/` leaves + colocated `CollectionTable/`; backend `domain`/`storage`/`routes` split). One backend helper pair (`_venue_from_work`/`_year_from_work` in `crossref.py`); no new module either side, all edits land in existing files. Smallest correct structure: an additive-field + column slice, not a subsystem.
-- No structural refactor is bundled (that is Story 7.10). The seams (`_cache_from_meta` projection, `ColumnKey`/`COLUMNS`/`sortKey` model, `useColumnWidths` total record, the `apply_extraction`/`update_meta_and_reindex` write path, `DisplayMenu`'s `COLUMNS.filter`) are already the right shape for additive columns. Reuse them; do not reshape.
+- No structural refactor is bundled (that is Story 7.12, the Epic 7 refactor). The seams (`_cache_from_meta` projection, `ColumnKey`/`COLUMNS`/`sortKey` model, `useColumnWidths` total record, the `apply_extraction`/`update_meta_and_reindex` write path, `DisplayMenu`'s `COLUMNS.filter`) are already the right shape for additive columns. Reuse them; do not reshape.
 - Story file lives in `.bmad/implementation-artifacts/epic-7/` (per-epic convention).
 
 ### References
