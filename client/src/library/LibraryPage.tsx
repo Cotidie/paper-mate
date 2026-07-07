@@ -199,6 +199,18 @@ export default function LibraryPage() {
     () => applyTableView(filterPapers(papers, selection, recentNow)),
     [papers, selection, applyTableView, recentNow],
   );
+  // Inside a folder, the Location column is redundant (fix request): the
+  // folder IS the location, so it's suppressed regardless of the user's own
+  // Display-menu toggle. All/Recent/Starred/Trash still show it (a mixed set
+  // of folders/Uncategorized). The underlying `hiddenColumns` toggle state is
+  // untouched, so leaving the folder restores whatever the user had set.
+  const visibleColumns = useMemo(
+    () =>
+      selection.kind === "folder"
+        ? tableView.visibleColumns.filter((c) => c.key !== "location")
+        : tableView.visibleColumns,
+    [tableView.visibleColumns, selection],
+  );
   // Toolbar Star state derives from the selection (AC-6): a mixed selection
   // toggles all -> starred; a fully-starred selection toggles all -> unstarred.
   const selectedRows = useMemo(
@@ -386,7 +398,7 @@ export default function LibraryPage() {
           {loading && papers.length === 0 && pending.length === 0 ? (
             <CollectionTable
               loading
-              visibleColumns={tableView.visibleColumns}
+              visibleColumns={visibleColumns}
               columnWidths={columnWidths.widths}
             />
           ) : papers.length > 0 || pending.length > 0 ? (
@@ -400,7 +412,7 @@ export default function LibraryPage() {
                 onEditField={handleEditField}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
-                visibleColumns={tableView.visibleColumns}
+                visibleColumns={visibleColumns}
                 sort={tableView.sort}
                 onSortChange={tableView.setSort}
                 onToggleColumn={tableView.toggleColumn}

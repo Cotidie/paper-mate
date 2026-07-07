@@ -715,6 +715,46 @@ describe("Folder filter + move (Story 7.2)", () => {
     expect(screen.queryByText("Uncategorized Paper")).toBeNull();
   });
 
+  it("hides the Location column inside a folder view (fix request: the folder IS the location), shows it in All/Starred/Trash", async () => {
+    const inFolder = libraryRow({
+      doc_id: "f".repeat(64),
+      title: "Foldered Paper",
+      folder_id: folderA.id,
+      order: 0,
+    });
+    const starredPaper = libraryRow({
+      doc_id: "s".repeat(64),
+      title: "Starred Paper",
+      starred: true,
+      order: 1,
+    });
+    const trashedPaper = libraryRow({
+      doc_id: "t".repeat(64),
+      title: "Trashed Paper",
+      trashed: true,
+      order: 2,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({
+      papers: [inFolder, starredPaper, trashedPaper],
+      folders: [folderA],
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Foldered Paper")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Location" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Folder A" }));
+    expect(screen.queryByRole("button", { name: "Location" })).toBeNull();
+
+    fireEvent.click(screen.getByText("All"));
+    expect(screen.getByRole("button", { name: "Location" })).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Starred"));
+    expect(screen.getByRole("button", { name: "Location" })).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Trash"));
+    expect(screen.getByRole("button", { name: "Location" })).toBeTruthy();
+  });
+
   it("All shows every non-trashed paper regardless of folder", async () => {
     const uncategorized = libraryRow({ doc_id: "u".repeat(64), title: "Uncategorized Paper", order: 0 });
     const inFolder = libraryRow({
