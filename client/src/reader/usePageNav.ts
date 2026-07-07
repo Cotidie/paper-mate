@@ -30,34 +30,42 @@ export function usePageNav(opts: {
   const { scrollRef, cards, pageCount, currentPage } = opts;
 
   // Scroll a page card's top (+ a card-relative `extraTop` px offset) into the
-  // viewport — offset-only, so nothing reflows (NFR-1). Honors
-  // `prefers-reduced-motion` (smooth → instant) and refocuses the canvas after
-  // (so PgUp/PgDn nav / a next Bank jump stays live — a ToC row click or Bank
-  // row click unmounts its panel, dropping focus to <body>; `preventScroll` so
-  // the focus call can't fight the smooth scroll). No-ops where layout/scrollTo
-  // is unavailable (jsdom). No anchor/coordinate math (AR-9). Shared by
-  // `scrollToPage` (PgUp/PgDn + ToC, `extraTop=0`) and `jumpToAnnotation`
-  // (Annotation Bank, Story 3.6) so there is one scroll mechanic, not two.
+  // viewport — offset-only, so nothing reflows (NFR-1). `smooth` picks the
+  // scroll behavior: page-step nav (arrows / keys / ToC) is instant (fix
+  // request: the per-step glide is useless), while the Annotation Bank jump
+  // keeps a smooth glide for orientation; `prefers-reduced-motion` forces
+  // instant regardless. Refocuses the canvas after (so PgUp/PgDn nav / a next
+  // Bank jump stays live — a ToC row click or Bank row click unmounts its
+  // panel, dropping focus to <body>; `preventScroll` so the focus call can't
+  // fight a smooth scroll). No-ops where layout/scrollTo is unavailable
+  // (jsdom). No anchor/coordinate math (AR-9). Shared by `scrollToPage`
+  // (arrows/keys + ToC, `extraTop=0`, instant) and `jumpToAnnotation`
+  // (Annotation Bank, Story 3.6, smooth) so there is one scroll mechanic.
   const scrollCardIntoView = useCallback(
-    (card: HTMLDivElement, extraTop: number) => {
+    (card: HTMLDivElement, extraTop: number, smooth = true) => {
       const container = scrollRef.current;
       if (!container || typeof container.scrollTo !== "function") return;
       const reduceMotion =
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      container.scrollTo({ top: card.offsetTop + extraTop, behavior: reduceMotion ? "auto" : "smooth" });
+      container.scrollTo({
+        top: card.offsetTop + extraTop,
+        behavior: smooth && !reduceMotion ? "smooth" : "auto",
+      });
       container.focus?.({ preventScroll: true });
     },
     [scrollRef],
   );
 
-  // Scroll a 1-based page to the top of the viewport (PgUp/PgDn + the ToC jump,
-  // Story 1.9): clamp the target, find its card, scroll it flush to the top.
+  // Scroll a 1-based page to the top of the viewport (arrows / PgUp/PgDn + the
+  // ToC jump, Story 1.9): clamp the target, find its card, scroll it flush to
+  // the top. Instant (`smooth=false`, fix request) — a single-page step needs
+  // no animation.
   const scrollToPage = useCallback(
     (pageNumber: number) => {
       const target = Math.min(pageCount, Math.max(1, pageNumber));
       const card = cards.current.get(target);
-      if (card) scrollCardIntoView(card, 0);
+      if (card) scrollCardIntoView(card, 0, false);
     },
     [pageCount, cards, scrollCardIntoView],
   );
