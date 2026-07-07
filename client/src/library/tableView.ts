@@ -6,7 +6,7 @@ import { seedFieldValue } from "@/library/row";
  * AD-L3: view-state, never persisted, never a route). Mirrors
  * `folderFilter.ts` - pure functions, no React, trivially unit-testable.
  */
-export type ColumnKey = "title" | "authors" | "added" | "file_type" | "location";
+export type ColumnKey = "title" | "authors" | "added" | "file_type" | "location" | "venue" | "year" | "doi";
 
 export interface ColumnDef {
   key: ColumnKey;
@@ -23,6 +23,9 @@ export const COLUMNS: ColumnDef[] = [
   { key: "added", label: "Added", hideable: true, sortable: true },
   { key: "file_type", label: "File type", hideable: true, sortable: true },
   { key: "location", label: "Location", hideable: true, sortable: true },
+  { key: "venue", label: "Venue", hideable: true, sortable: true },
+  { key: "year", label: "Year", hideable: true, sortable: true },
+  { key: "doi", label: "DOI", hideable: true, sortable: true },
 ];
 
 /** `Uncategorized` mirrors `FolderPanel`'s own copy for a null `folder_id`. */
@@ -61,6 +64,12 @@ function sortKey(row: CollectionRow, column: ColumnKey, folderNameById: Map<stri
       return row.file_type;
     case "location":
       return row.folder_id ? (folderNameById.get(row.folder_id) ?? UNCATEGORIZED_LABEL) : UNCATEGORIZED_LABEL;
+    case "venue":
+      return row.venue ?? "";
+    case "year":
+      return row.year ?? "";
+    case "doi":
+      return row.doi ?? "";
   }
 }
 

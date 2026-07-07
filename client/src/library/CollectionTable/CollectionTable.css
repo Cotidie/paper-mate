@@ -33,6 +33,18 @@
   width: var(--collection-table-location-width);
 }
 
+.collection-table__col-venue {
+  width: var(--collection-table-venue-width);
+}
+
+.collection-table__col-year {
+  width: var(--collection-table-year-width);
+}
+
+.collection-table__col-doi {
+  width: var(--collection-table-doi-width);
+}
+
 /* Recent lens date-bucket header row (Today/Yesterday/Last week/Last month,
    post-review scope): mirrors the folder panel's own uppercase section-label
    type (`.library-folder-panel__label`) rather than inventing new type.
@@ -243,6 +255,27 @@
 
 .collection-table__untitled {
   color: var(--color-muted);
+}
+
+.collection-table__venue {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-table__doi {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-table__doi-link {
+  color: var(--color-text-link);
+  text-decoration: none;
+}
+
+.collection-table__doi-link:hover {
+  text-decoration: underline;
 }
 
 /* Compact custom drag image (Story 7.2 fix request): built once per

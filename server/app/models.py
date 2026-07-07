@@ -44,6 +44,10 @@ class ExtractedMeta(BaseModel):
     title: str | None = None
     authors: list[str] = []
     doi: str | None = None
+    # Captured from Crossref (`container-title` / `issued`); the domain's
+    # honest shape before storage projects them.
+    venue: str | None = None
+    year: int | None = None
 
 
 class DocMeta(BaseModel):
@@ -67,6 +71,12 @@ class DocMeta(BaseModel):
     authors: str | None = None
     file_type: Literal["pdf", "note"] = "pdf"
     status: DocStatus = "ready"
+    # Additive (Story 7.9, no schema_version bump): meta-derived, Crossref-
+    # sourced (venue/year) or extraction-sourced (doi). An existing meta.json
+    # missing them still validates via defaults.
+    doi: str | None = None
+    venue: str | None = None
+    year: int | None = None
     schema_version: int = 1
 
 
@@ -198,6 +208,13 @@ class CollectionRow(BaseModel):
     # when `title` is null. Optional so a pre-existing library.json entry
     # cached before this field existed still validates; reconcile backfills it.
     filename: str | None = None
+    # Additive (Story 7.9, no schema_version bump): meta-derived cache
+    # (like `filename`/`last_opened`), NOT org state like `starred`. Optional
+    # so a pre-existing library.json entry cached before these fields existed
+    # still validates; reconcile_library backfills them.
+    doi: str | None = None
+    venue: str | None = None
+    year: int | None = None
 
 
 class Library(BaseModel):

@@ -84,5 +84,8 @@ export function docToRow(doc: Doc, papers: CollectionRow[]): CollectionRow {
     starred: false,
     order: maxOrder + 1,
     filename: doc.filename,
+    doi: doc.doi ?? null,
+    venue: doc.venue ?? null,
+    year: doc.year ?? null,
   };
 }

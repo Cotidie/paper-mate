@@ -61,19 +61,24 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
     "authors": null,             // string | null; filled by background enrichment
     "file_type": "pdf",          // "pdf" | "note"
     "status": "extracting",      // a new import; settles to ready | enrich-skipped | parse-failed
+    "doi": null,                  // string | null; extraction-sourced, filled on settle
+    "venue": null,                // string | null; Crossref-sourced, filled on settle
+    "year": null,                 // int | null; Crossref-sourced, filled on settle
     "schema_version": 1
   }
   ```
 - **400** → `{ "detail": "Could not read PDF file" }` — corrupt, empty, or non-PDF bytes. Nothing is written.
 
 > `Doc` = `doc_id` + the on-disk `meta.json` schema (`DocMeta`:
-> `filename, title, page_count, added, last_opened, authors, file_type, status, schema_version`).
+> `filename, title, page_count, added, last_opened, authors, file_type, status, doi, venue, year, schema_version`).
 > `doc_id` is the library folder name and is **not** stored inside `meta.json`
-> (AD-8). `authors`/`file_type`/`status` are additive (Story 6.2). A new import
+> (AD-8). `authors`/`file_type`/`status` are additive (Story 6.2); `doi`/`venue`/`year`
+> are additive (Story 7.9, Crossref new-imports-only). A new import
 > lands at `status: "extracting"`; the background pipeline (Story 6.5) drives the
 > `extracting -> ready | enrich-skipped | parse-failed` transitions and fills
-> `authors`. This import also indexes the paper into `library.json` (see
-> `GET /api/library` below) as Uncategorized, untrashed, at the next order.
+> `authors` and (when Crossref matches) `doi`/`venue`/`year`. This import also
+> indexes the paper into `library.json` (see `GET /api/library` below) as
+> Uncategorized, untrashed, at the next order.
 
 ### `GET /api/docs/{doc_id}` — get a document's own metadata
 
@@ -208,7 +213,10 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
         "trashed": false,
         "starred": false,
         "order": 0,
-        "filename": "a-paper.pdf"
+        "filename": "a-paper.pdf",
+        "doi": null,
+        "venue": null,
+        "year": null
       }
     ],
     "folders": []
@@ -220,21 +228,26 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 > `library.json` is the authoritative index for **cross-doc** state: the
 > folder tree, membership (paper → ≤1 folder), trash, star, and paper order. A
 > paper's **own** fields (title/authors/added/last_opened/file_type/status/
-> filename) stay authoritative in its `meta.json`; `CollectionRow`'s display
-> fields are a non-authoritative cache of that projection, refreshed from
-> `meta.json` on every index write, so this endpoint never opens N
-> `meta.json` files (LNFR-4). At boot, storage reconciles `library.json`
-> against `library/{doc_id}/` dirs on disk (adds an unindexed dir as
-> Uncategorized, prunes an index entry whose dir vanished, best-effort skip
-> on a missing/corrupt `meta.json`) so papers imported before Story 6.2 (or
-> out-of-band) still show up here. `filename` (Story 6.3 fix) and
-> `last_opened` (Story 7.7, drives the client Recent lens) are optional
-> (`null` on a pre-existing row cached before the field existed) and backfill
-> on the next reconcile; the client falls back to `filename` when `title` is
-> null. `starred` (Story 7.8) is org state authoritative in `library.json`
-> itself (like `trashed`), not meta-derived: `bool = False` default so a
-> pre-existing row cached before the field existed still validates as
-> unstarred, with no forced backfill.
+> filename/doi/venue/year) stay authoritative in its `meta.json`;
+> `CollectionRow`'s display fields are a non-authoritative cache of that
+> projection, refreshed from `meta.json` on every index write, so this
+> endpoint never opens N `meta.json` files (LNFR-4). At boot, storage
+> reconciles `library.json` against `library/{doc_id}/` dirs on disk (adds an
+> unindexed dir as Uncategorized, prunes an index entry whose dir vanished,
+> best-effort skip on a missing/corrupt `meta.json`) so papers imported
+> before Story 6.2 (or out-of-band) still show up here. `filename` (Story 6.3
+> fix), `last_opened` (Story 7.7, drives the client Recent lens), and
+> `doi`/`venue`/`year` (Story 7.9) are optional (`null` on a pre-existing row
+> cached before the field existed) and backfill on the next reconcile; the
+> client falls back to `filename` when `title` is null. `starred` (Story 7.8)
+> is org state authoritative in `library.json` itself (like `trashed`), not
+> meta-derived: `bool = False` default so a pre-existing row cached before
+> the field existed still validates as unstarred, with no forced backfill.
+> `doi`/`venue`/`year` are Crossref new-imports-only (Story 7.9): a paper
+> imported before this feature, or with no Crossref match, keeps `null`
+> until it is re-imported; `doi` is sourced from the PDF extraction (not the
+> matched Crossref work), `venue`/`year` from Crossref's `container-title` /
+> `issued` date.
 
 ### `POST /api/library/folders` — create a folder
 
@@ -391,6 +404,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-08 (Story 7.9):** `CollectionRow` gains `doi: str | null`, `venue: str | null`, `year: int | null` (additive, all default `null`; `GET /api/library`'s `Library` response); `DocMeta` gains the same three fields (its `meta.json`-authoritative source); `ExtractedMeta` (internal, not in the OpenAPI schema) gains `venue`/`year` alongside its existing `doi`. Meta-derived cache (like `filename`/`last_opened`), projected through `_cache_from_meta` so it auto-seeds new imports and backfills a pre-existing row on the next reconcile. `venue`/`year` are captured from Crossref (`container-title[0]`, and the first of `issued`/`published-print`/`published-online`/`published` `date-parts[0][0]`) during the existing enrichment; `doi` stays the PDF-extraction-sourced value (not the matched Crossref work's `DOI`). Crossref new-imports-only: no backfill/re-enrich pass over the existing library. No new path, no `schema_version` bump.
 - **2026-07-07 (Story 7.8):** added `POST /api/library/star`, `POST /api/library/unstar` (set-based `DocIdSet`: `{doc_ids}`, reused verbatim, no new schema). `CollectionRow` gains `starred: bool = False` (additive, org state authoritative in `library.json`, peer of `trashed`, not meta-derived; the key being absent on a pre-existing row cached before the field existed defaults to unstarred, no forced backfill). Star/unstar 404 on an unknown `doc_id` (all-or-nothing, no partial write). Contract shape change: two new paths + `CollectionRow.starred`.
 - **2026-07-07 (Story 7.7):** `CollectionRow` gains `last_opened: str | null` (additive, default `null`; `GET /api/library`'s `Library` response), projected from `meta.json` (already advanced on open by `POST /api/docs/{doc_id}/open`, Story 6.7). Populated on every index write through the existing `_cache_from_meta` projection; `reconcile_library()` backfills a pre-existing row cached before the field existed on the next server start. Drives the client's Recent lens (order by `last_opened` desc, grouped under Today/Yesterday/Last week/Last month date buckets, dropping anything older than 30 days - no numeric cap); no new endpoint.
 - **2026-07-07 (Story 7.5):** added `POST /api/library/trash`, `POST /api/library/restore` (set-based `DocIdSet`: `{doc_ids}`, `extra="forbid"`, `doc_ids` non-empty) and `DELETE /api/docs/{doc_id}` (purge: removes the whole `library/{doc_id}/` dir and its `library.json` entry, crash-safe rmtree-then-prune order). New base schema `DocIdSet`, which `MoveRequest` now subclasses (adds only `folder_id`; `MoveRequest`'s emitted shape is unchanged). `POST /api/docs`'s idempotent re-import branch now also restores a trashed paper (clears `trashed`, keeps its retained `folder_id`), rather than creating a duplicate row. Trash/restore 404 on an unknown `doc_id` (all-or-nothing); purge 404s on an unknown or already-purged `doc_id`. Contract shape change: three new paths + one new schema (`DocIdSet`).

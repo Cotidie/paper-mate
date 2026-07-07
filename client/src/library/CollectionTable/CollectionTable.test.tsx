@@ -977,7 +977,7 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         onResizeColumnKeyDown={noop}
       />,
     );
-    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(5);
+    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(8);
   });
 
   it("pointerdown on a column's handle calls onResizeColumnStart with that column's key", () => {
@@ -1028,7 +1028,16 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         rows={rows}
         onOpenRow={noop}
         onEditField={noop}
-        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80, location: 120 }}
+        columnWidths={{
+          title: 400,
+          authors: 150,
+          added: 100,
+          file_type: 80,
+          location: 120,
+          venue: 60,
+          year: 40,
+          doi: 60,
+        }}
       />,
     );
     const cols = document.querySelectorAll("colgroup col");
@@ -1045,11 +1054,20 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         rows={rows}
         onOpenRow={noop}
         onEditField={noop}
-        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80, location: 120 }}
+        columnWidths={{
+          title: 400,
+          authors: 150,
+          added: 100,
+          file_type: 80,
+          location: 120,
+          venue: 60,
+          year: 40,
+          doi: 60,
+        }}
       />,
     );
     const table = container.querySelector("table.collection-table") as HTMLElement;
-    expect(table.style.width).toBe("850px");
+    expect(table.style.width).toBe("1010px");
   });
 
   it("falls back to the CSS width:100% default when columnWidths is omitted", () => {
@@ -1172,5 +1190,106 @@ describe("CollectionTable star marker (Story 7.8, AC-2)", () => {
     render(<CollectionTable rows={[unstarred]} onOpenRow={noop} onEditField={noop} />);
     const titleCell = screen.getByText("Unstarred Paper").closest("td")!;
     expect(titleCell.querySelector('[aria-label="Starred"]')).toBeNull();
+  });
+});
+
+describe("CollectionTable Venue/Year/DOI columns (Story 7.9)", () => {
+  const withMeta: CollectionRow = {
+    doc_id: "m".repeat(64),
+    title: "Paper With Meta",
+    authors: null,
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    starred: false,
+    order: 0,
+    doi: "10.1234/abcd",
+    venue: "Journal of Foo",
+    year: 2017,
+  };
+  const withoutMeta: CollectionRow = {
+    doc_id: "n".repeat(64),
+    title: "Paper Without Meta",
+    authors: null,
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    starred: false,
+    order: 1,
+    doi: null,
+    venue: null,
+    year: null,
+  };
+
+  it("renders venue, year, and a DOI link for a row with metadata", () => {
+    render(<CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} />);
+    expect(screen.getByText("Journal of Foo")).toBeTruthy();
+    expect(screen.getByText("2017")).toBeTruthy();
+    const link = screen.getByRole("link", { name: "10.1234/abcd" }) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("https://doi.org/10.1234/abcd");
+  });
+
+  it("renders blank venue/year/doi cells for a row with no metadata", () => {
+    render(<CollectionTable rows={[withoutMeta]} onOpenRow={noop} onEditField={noop} />);
+    expect(screen.queryByRole("link", { name: /10\./ })).toBeNull();
+  });
+
+  it("clicking the DOI link does not arm/select the row (stopPropagation)", () => {
+    render(<CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} />);
+    const link = screen.getByRole("link", { name: "10.1234/abcd" });
+    const row = link.closest("tr")!;
+    fireEvent.click(link);
+    expect(row.getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("a keydown on the DOI link does not bubble to the row's own handling", () => {
+    render(<CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} />);
+    const link = screen.getByRole("link", { name: "10.1234/abcd" });
+    const row = link.closest("tr")!;
+    fireEvent.keyDown(link, { key: "Enter" });
+    expect(row.getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("Ctrl+click on the DOI link does not toggle row multi-select (regression: capture-phase row handler ran before the link's own stopPropagation)", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={[withMeta]}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const link = screen.getByRole("link", { name: "10.1234/abcd" });
+    fireEvent.click(link, { ctrlKey: true });
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it("dragging from the DOI link does not start a row-move drag (regression: row drag guard only excluded input/textarea/button)", () => {
+    render(<CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} />);
+    const link = screen.getByRole("link", { name: "10.1234/abcd" });
+    // React's onDragStart is bound on the <tr>; the native event bubbles up
+    // from the link, so e.target inside the handler is the link. fireEvent's
+    // return value is false when the (cancelable) event's preventDefault was
+    // called, which the row's drag guard does for an excluded target.
+    const notPrevented = fireEvent.dragStart(link);
+    expect(notPrevented).toBe(false);
+  });
+
+  it("hiding the Venue/Year/DOI columns omits their headers and cells", () => {
+    const visibleColumns = COLUMNS.filter((c) => !["venue", "year", "doi"].includes(c.key));
+    render(
+      <CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} visibleColumns={visibleColumns} />,
+    );
+    expect(screen.queryByRole("columnheader", { name: "Venue" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Year" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "DOI" })).toBeNull();
+    expect(screen.queryByText("Journal of Foo")).toBeNull();
+    expect(screen.queryByRole("link", { name: "10.1234/abcd" })).toBeNull();
   });
 });

@@ -164,6 +164,29 @@ export default function PaperRow({
           <span className="collection-table__location-text">{locationLabel}</span>
         </td>
       )}
+      {visibleColumns.has("venue") && (
+        <td className="collection-table__venue" title={row.venue ?? undefined}>
+          {row.venue ?? ""}
+        </td>
+      )}
+      {visibleColumns.has("year") && <td className="collection-table__year">{row.year ?? ""}</td>}
+      {visibleColumns.has("doi") && (
+        <td className="collection-table__doi">
+          {row.doi && (
+            <a
+              href={`https://doi.org/${row.doi}`}
+              target="_blank"
+              rel="noreferrer"
+              className="collection-table__doi-link"
+              title={row.doi}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              {row.doi}
+            </a>
+          )}
+        </td>
+      )}
     </tr>
   );
 }

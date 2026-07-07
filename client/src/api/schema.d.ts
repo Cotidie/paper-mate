@@ -447,6 +447,12 @@ export interface components {
             order: number;
             /** Filename */
             filename?: string | null;
+            /** Doi */
+            doi?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
         };
         /**
          * Doc
@@ -477,6 +483,12 @@ export interface components {
              * @enum {string}
              */
             status: "extracting" | "ready" | "enrich-skipped" | "parse-failed";
+            /** Doi */
+            doi?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
             /**
              * Schema Version
              * @default 1

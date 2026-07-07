@@ -12,7 +12,7 @@ import { COLUMNS, sortRows, type ColumnDef, type ColumnKey, type SortState } fro
  * `folders` resolves the `location` column's sort (folder id -> name).
  */
 export function useTableView(folders: Folder[] = []) {
-  const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(new Set());
+  const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => new Set<ColumnKey>(["doi"]));
   const [sort, setSort] = useState<SortState | null>(null);
   const folderNameById = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
 

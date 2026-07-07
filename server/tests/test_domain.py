@@ -220,6 +220,8 @@ def test_enrich_doi_first_success(fake_httpx):
                         {"given": "Ada", "family": "Lovelace"},
                         {"given": "Alan", "family": "Turing"},
                     ],
+                    "container-title": ["Journal of Foo"],
+                    "issued": {"date-parts": [[2017, 6, 12]]},
                 }
             },
         )
@@ -230,6 +232,8 @@ def test_enrich_doi_first_success(fake_httpx):
     assert result.title == "Corrected Title"
     assert result.authors == ["Ada Lovelace", "Alan Turing"]
     assert result.doi == "10.1234/abcd"
+    assert result.venue == "Journal of Foo"
+    assert result.year == 2017
 
 
 def test_enrich_title_fallback_success(fake_httpx):
@@ -238,7 +242,19 @@ def test_enrich_title_fallback_success(fake_httpx):
         assert params["query.bibliographic"] == "Attention Is All You Need"
         return _FakeResponse(
             200,
-            {"message": {"items": [{"title": ["Attention Is All You Need"], "author": []}]}},
+            {
+                "message": {
+                    "items": [
+                        {
+                            "title": ["Attention Is All You Need"],
+                            "author": [],
+                            "container-title": ["NeurIPS"],
+                            "issued": {"date-parts": [[2017]]},
+                            "DOI": "10.9999/should-be-ignored",
+                        }
+                    ]
+                }
+            },
         )
 
     fake_httpx(handler)
@@ -246,6 +262,12 @@ def test_enrich_title_fallback_success(fake_httpx):
     assert result != "skipped"
     assert result.title == "Attention Is All You Need"
     assert result.authors == []
+    assert result.venue == "NeurIPS"
+    assert result.year == 2017
+    # Title-fallback: doi stays None (the passed-in arg), NOT work["DOI"]
+    # (scope guard, Story 7.9) -- the fake work carries a DOI to prove it's
+    # actually ignored, not just absent.
+    assert result.doi is None
 
 
 def test_enrich_offline_returns_skipped(fake_httpx):
@@ -323,6 +345,51 @@ def test_enrich_falls_back_to_title_when_doi_misses(fake_httpx):
     assert result.title == "Found By Title"
     # Both the DOI lookup and the title fallback were attempted.
     assert len(_FakeClient.calls) == 2
+
+
+# --- _venue_from_work / _year_from_work (Story 7.9) -------------------------
+
+
+def test_venue_from_work_takes_first_container_title():
+    assert crossref._venue_from_work({"container-title": ["Journal of Foo", "Alt"]}) == "Journal of Foo"
+
+
+def test_venue_from_work_none_when_absent():
+    assert crossref._venue_from_work({}) is None
+    assert crossref._venue_from_work({"container-title": []}) is None
+
+
+def test_year_from_work_prefers_issued_over_published_variants():
+    work = {
+        "issued": {"date-parts": [[2020, 1, 1]]},
+        "published-print": {"date-parts": [[2019]]},
+    }
+    assert crossref._year_from_work(work) == 2020
+
+
+def test_year_from_work_falls_back_through_published_keys():
+    assert crossref._year_from_work({"published-print": {"date-parts": [[2019, 3]]}}) == 2019
+    assert crossref._year_from_work({"published-online": {"date-parts": [[2018]]}}) == 2018
+    assert crossref._year_from_work({"published": {"date-parts": [[2016]]}}) == 2016
+
+
+def test_year_from_work_none_on_malformed_date_parts():
+    assert crossref._year_from_work({"issued": {"date-parts": [[]]}}) is None
+    assert crossref._year_from_work({"issued": {"date-parts": [[None]]}}) is None
+    assert crossref._year_from_work({"issued": {}}) is None
+    assert crossref._year_from_work({}) is None
+    # A malformed external payload where the date key isn't even a dict, or
+    # date-parts isn't a list-of-lists, must degrade to None, never raise.
+    assert crossref._year_from_work({"issued": "2020"}) is None
+    assert crossref._year_from_work({"issued": {"date-parts": "2020"}}) is None
+    assert crossref._year_from_work({"issued": {"date-parts": [2020]}}) is None
+
+
+def test_meta_from_work_no_container_title_yields_venue_none():
+    meta = crossref._meta_from_work({"title": ["A Paper"]}, doi=None)
+    assert meta is not None
+    assert meta.venue is None
+    assert meta.year is None
 
 
 _FORBIDDEN_IMPORTS = {"os", "pathlib", "app.storage"}

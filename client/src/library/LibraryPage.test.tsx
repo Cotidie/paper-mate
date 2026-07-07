@@ -1091,6 +1091,31 @@ describe("Display, Sort controls (Story 7.4)", () => {
     expect(screen.getByText("Only Paper")).toBeTruthy();
   });
 
+  it("Display: DOI column is hidden by default while Venue and Year render (Story 7.9, AC-7)", async () => {
+    const paper = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Meta Paper",
+      doi: "10.1234/abcd",
+      venue: "Journal of Foo",
+      year: 2017,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Meta Paper")).toBeTruthy());
+
+    expect(screen.queryByRole("columnheader", { name: /^DOI/ })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: /^Venue/ })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /^Year/ })).toBeTruthy();
+    expect(screen.getByText("Journal of Foo")).toBeTruthy();
+    expect(screen.getByText("2017")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Display" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "DOI" }));
+
+    expect(screen.getByRole("columnheader", { name: /^DOI/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "10.1234/abcd" })).toBeTruthy();
+  });
+
   it("Column header dropdown: Hide from a header's own menu omits that column (fix request: clickable headers)", async () => {
     const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
