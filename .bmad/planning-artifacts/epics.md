@@ -1807,6 +1807,71 @@ So that I can scan and sort my papers by where and when they were published and 
 
 > **Out of scope (this story):** backfilling/re-enriching already-imported papers; inline-editing Venue/Year/DOI; any Crossref capture beyond `container-title`/`issued`. **Open design calls for create-story:** DOI-as-link vs muted text; whether DOI is hidden by default; `year` as `int` vs the raw issued string (recommend `int`).
 
+### Story 7.10: Epic 7 structural refactor (modularize the library client and the storage/routes organize layer) (added 2026-07-07)
+
+> User request (2026-07-07): Epic 7 landed the whole organize/curate run (folders CRUD + nest, assign/filter, batch move, display/sort/filter controls, Trash, Recent, Starred, and pending Venue/Year/DOI) on top of Epic 6's table + index, and grew structural debt: `client/src/library/CollectionTable/CollectionTable.tsx` is now 629 lines fusing header/sort menus, column-resize, selection + Shift-range, drag-preview, group headers, and row rendering; `LibraryPage.tsx` (449) is a composition root with per-lens copy, a two-branch toolbar, and star/trash/move/selection handler sprawl; the three paper-org op hooks (`useMovePapers`/`useTrashPapers`/`useStarPapers`) are near-twin optimistic-flip → API → reconcile → revert+toast skeletons; `server/app/storage/library_index.py` (453) spans folder CRUD + subtree delete + the near-identical `move`/`trash`/`restore`/`star`/`unstar` `mutate_index` mutators (each a validate-before-mutate closure); and `routes/library.py` repeats a near-identical `DocIdSet → storage_errors → storage.X_papers` body across trash/restore/star/unstar. Audit inter-module dependencies, dedupe, abstract the recurring shapes into shared units, and simplify conditional sprawl. A pure refactor thread, same footing as Story 5.0 / 5.3 / 5.4 / 6.8, its own PR(s), never folded into a feature story. No behavior or contract change.
+
+As a developer,
+I want the Epic 7 code (client `library/` + backend `storage`/`domain`/`routes`) decomposed into cohesive, single-responsibility modules with dependencies audited, duplication removed, and conditional sprawl simplified,
+So that the next story builds on legible modular seams instead of a 629-line table component, a 449-line composition root, and three near-twin op hooks.
+
+**Acceptance Criteria:**
+
+**Given** `client/src/library/CollectionTable/CollectionTable.tsx` (629 lines fusing header + per-column sort/hide menus, column-resize handles, the selection + Shift-click range model, the custom drag-preview, Recent group-header rows, and row rendering)
+**Then** it is decomposed into cohesive units under `CollectionTable/` (e.g. a header/sort-controls unit, the selection/range model as a hook or leaf, the drag-preview builder, the group-header rows), each colocated with its `.css` + `.test.tsx` per the Story 5.4 `components/<Name>/` convention, so no single file owns more than one concern; the table's public props stay unchanged so `LibraryPage` is unaffected
+
+**Given** `LibraryPage.tsx` (449 lines: fetch/loading wiring + per-lens `emptySelectionMessage`/`selectionLabel`/`visibleColumns` derivations + a two-branch toolbar + star/trash/move/purge/selection handlers)
+**Then** the per-lens view-state derivations and the toolbar are extracted into cohesive units (e.g. a lens-copy/columns helper module and a `LibraryToolbar` component owning the trash-vs-non-trash branch), leaving `LibraryPage` a thin composition root; behavior (which button shows in which lens, the counts, the empty copy) is byte-identical
+
+**Given** the three paper-org op hooks `useMovePapers` / `useTrashPapers` / `useStarPapers` (each an optimistic field-flip → API call → reconcile-from-returned-`Library` → revert-`prior`+error-toast skeleton sharing one `mountedRef` + monotonic `opSeqRef` guard)
+**Then** the shared optimistic-mutation machinery is abstracted into ONE reusable seam (e.g. a `useOptimisticLibraryOp` the three verbs configure with an optimistic patch + API fn + error copy), so adding the next org op is registering one descriptor, not copying a fourth near-twin hook; the StrictMode `mountedRef` reset and stale-response `opSeqRef` guard live in one place
+
+**Given** `server/app/storage/library_index.py` (453 lines spanning folder create/rename/delete + subtree re-home and the near-identical `move_papers`/`trash_papers`/`restore_papers`/`star_papers`/`unstar_papers` mutators, each a `mutate_index` closure that builds `papers_by_id`, validates all-or-nothing, then maps a field)
+**Then** the folder-tree operations and the set-based paper-org mutators are separated into cohesive modules behind the stable `storage` facade (every `storage.<fn>` call site stays byte-identical), and the repeated build-`papers_by_id` → validate-unknown-ids → apply-field pattern is consolidated to one helper the flag-flip mutators share; storage stays the ONLY code touching `~/.paper-mate` (AL-9) and the single index lock stays the sole `library.json` writer (AL-7)
+
+**Given** `routes/library.py` repeats a near-identical handler body for `trash`/`restore`/`star`/`unstar` (a `DocIdSet` body → `storage_errors("Could not update the collection")` → `storage.X_papers(body.doc_ids)`, plus the same 404/422/500 `responses=` map)
+**Then** the duplicated `responses=` map and the set-based-op handler shape are each consolidated to one definition (a shared responses constant + a thin dispatch), leaving each route a thin controller; the two distinct-404 move route and the folder CRUD routes stay explicit where their error surface differs
+
+**Given** duplication and dead code across the Epic 7 surface (client and server)
+**Then** logic duplicated across these files (or vs. the Epic 6 `library/` units and the `storage`/`domain` server layers) is consolidated to one definition, and dead code (unreferenced exports, stale branches, superseded comments) is deleted, not left "just in case"
+
+**Given** the refactor
+**Then** it is BEHAVIOR- and CONTRACT-identical: client + server suites stay green, `server/openapi.json` / `client/src/api/schema.d.ts` regenerate byte-identical, `no-raw-values` re-run after any CSS move, no em-dash introduced in any UI string, and the folder-filter / batch-move / Trash / Starred / sort paths re-smoked live (the folder-view Location-hide, the never-clip star, the toolbar lens branches); its own PR(s), never folded into a feature story
+
+**Given** AD-9 downward layering (client `render/`→`anchor/`→`annotations/`→`App`; server `routes/`→`domain`/`storage`) and the domain's no-storage-import rule (AD-L2)
+**Then** the new module boundaries respect it: no upward imports, routes stay thin, storage stays the sole data-root writer, and the client `library/` units keep the view-state lens (`folderFilter`/`tableView`) as pure, React-free leaves
+
+> **Out of scope (this story):** any new organize capability, column, or lens; the descoped Note file-type (7.6); the pending Venue/Year/DOI columns (7.9, if 7.9 has not merged when this runs, refactor around it or sequence after it, do not fold them together). **Open design calls for create-story:** whether the shared optimistic-op seam is a hook factory vs a descriptor map; how far to split `CollectionTable` without over-fragmenting; whether the backend split is two modules (`folders` + `paper_org`) or a lighter dedupe-in-place.
+
 ## Epic 8: Remote sync (DEFERRED)
 
 Not decomposed into stories this sprint. See the Library Epic List entry and the architecture spine's Deferred section. LFR-25..29 remain captured; the sync epic runs its own discovery (trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest) before any story is written.
+
+## Epic 9: Reader fidelity round 2 (post-v1, Phase-1.5)
+
+> Added 2026-07-07 via correct-course (`sprint-change-proposal-2026-07-07-deferred-review.md`). A deferred-work review removed every reader-fidelity item that had since shipped (4.1 copy/selection + de-flake, 4.2A gutter split, 3.7 convert, 5.1 settings, 5.5 hide-all, 5.6 layered-Esc, 5.0/5.3/5.4 refactors, 3.1 memo move/resize, 7.8 Starred-lens column) and promoted the one still-open, still-wanted reader bug into this epic. Theme: a fidelity defect that survives on top of Story 4.1's copy fix. Same posture as Epic 4, fix correctness, do not add capability, no new FRs; sequenced post-v1.
+
+### Story 9.1: Paragraph-aware copy (join soft-wrapped lines)
+
+> deferred-work: "copied single-visual-line text copies as MULTIPLE clipboard lines" (2026-07-07). This is the mirror-image regression of the 4.1 fix: Story 4.1 faithfully reproduced pdf.js's `TextLayer`, which appends a `<br role="presentation">` after every text item with `hasEOL: true`. A PDF marks EVERY visually distinct line `hasEOL` (it carries no paragraph metadata), so a paragraph that soft-wraps across several lines now copies with a hard line break at every wrap, not just at real paragraph ends. Confirmed upstream (Firefox's built-in pdf.js viewer has the identical characteristic), not a Paper Mate regression.
+
+As a reader,
+I want a soft-wrapped paragraph to copy as one continuous line,
+So that pasting a passage keeps real paragraph breaks but joins wrapped lines with a space instead of a hard newline.
+
+**Acceptance Criteria:**
+
+**Given** a selection spanning a paragraph that soft-wraps across several visual lines
+**When** I copy it
+**Then** the clipboard text joins the wrapped lines with a single space (no hard `\n` mid-paragraph); a genuine paragraph break still copies as a line break (FR-2, AR-2)
+
+**Given** the fix must distinguish a soft wrap from a real break
+**Then** it applies a paragraph-vs-wrap HEURISTIC over pdf.js's per-line geometry (e.g. consecutive lines' Y-gap vs the page's typical line-height, left-margin/indent alignment, trailing punctuation), since pdf.js's `hasEOL` alone cannot tell them apart, and only the geometry-derived "real break" keeps a `\n` (FR-2)
+
+**Given** the risk that any heuristic has false positives/negatives
+**Then** the story STARTS with a small spike: prototype the Y-gap/indent heuristic against 2–3 real papers (multi-column, justified, and indented-paragraph layouts) and validate before committing to the full implementation; the AC-1 join behavior is verified by copying a wrapped passage from a real paper and diffing against the intended single-line result, not only a unit test
+
+**Given** the fix
+**Then** it stays in `render/` (the text layer's owner, alongside Story 4.1's `render/textSelection.ts`), no annotation/anchor/store change; highlight/underline geometry (per-line rects via `anchor/collectTextRects`) is unaffected, and it does NOT reintroduce the 4.1 inter-line-space or trailing-punctuation defects (AR-9, regression-guard on 4.1)
+
+> **Out of scope (this story):** OCR / scanned-PDF handling (no geometry to read); reflowing or editing the PDF; any change to stored `anchor.text` semantics beyond what the copy path already captures. **Open design calls for create-story:** the exact heuristic signals + thresholds (settle in the spike); whether an ambiguous line defaults to join or break; whether to expose the raw-vs-joined behavior as a preference (default: joined, matching normal reader/browser copy).
