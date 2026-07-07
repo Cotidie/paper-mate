@@ -972,7 +972,7 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         onResizeColumnKeyDown={noop}
       />,
     );
-    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(4);
+    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(5);
   });
 
   it("pointerdown on a column's handle calls onResizeColumnStart with that column's key", () => {
@@ -1023,7 +1023,7 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         rows={rows}
         onOpenRow={noop}
         onEditField={noop}
-        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80 }}
+        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80, location: 120 }}
       />,
     );
     const cols = document.querySelectorAll("colgroup col");
@@ -1031,6 +1031,7 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
     expect((cols[1] as HTMLElement).style.width).toBe("150px");
     expect((cols[2] as HTMLElement).style.width).toBe("100px");
     expect((cols[3] as HTMLElement).style.width).toBe("80px");
+    expect((cols[4] as HTMLElement).style.width).toBe("120px");
   });
 
   it("sizes the <table> itself to the exact sum of columnWidths (fix request: table-layout:fixed + width:100% rescaled every <col> proportionally when they didn't sum to 100%, so narrowing one column visibly widened another even though its own width state never changed)", () => {
@@ -1039,11 +1040,11 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         rows={rows}
         onOpenRow={noop}
         onEditField={noop}
-        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80 }}
+        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80, location: 120 }}
       />,
     );
     const table = container.querySelector("table.collection-table") as HTMLElement;
-    expect(table.style.width).toBe("730px");
+    expect(table.style.width).toBe("850px");
   });
 
   it("falls back to the CSS width:100% default when columnWidths is omitted", () => {
@@ -1070,5 +1071,60 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
       .querySelector(".collection-table__col-resize-handle")!;
     fireEvent.pointerDown(authorsHandle);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", () => {
+  const foldered: CollectionRow = {
+    doc_id: "f".repeat(64),
+    title: "Foldered Paper",
+    authors: null,
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: "folder-a",
+    trashed: false,
+    order: 0,
+  };
+  const uncategorized: CollectionRow = {
+    doc_id: "u".repeat(64),
+    title: "Uncategorized Paper",
+    authors: null,
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    order: 1,
+  };
+  const folders = [{ id: "folder-a", name: "Folder A", parent_id: null }];
+
+  it("shows the owning folder's name for a foldered paper, resolved from folders", () => {
+    render(
+      <CollectionTable rows={[foldered]} onOpenRow={noop} onEditField={noop} folders={folders} />,
+    );
+    expect(screen.getByText("Folder A")).toBeTruthy();
+  });
+
+  it("shows 'Uncategorized' when folder_id is null", () => {
+    render(
+      <CollectionTable rows={[uncategorized]} onOpenRow={noop} onEditField={noop} folders={folders} />,
+    );
+    expect(screen.getByText("Uncategorized")).toBeTruthy();
+  });
+
+  it("falls back to 'Uncategorized' when folders is omitted entirely (isolated tests)", () => {
+    render(<CollectionTable rows={[uncategorized]} onOpenRow={noop} onEditField={noop} />);
+    expect(screen.getByText("Uncategorized")).toBeTruthy();
+  });
+
+  it("renders a folder icon only for a paper assigned to a real folder, not Uncategorized", () => {
+    render(
+      <CollectionTable rows={[foldered, uncategorized]} onOpenRow={noop} onEditField={noop} folders={folders} />,
+    );
+    const folderedCell = screen.getByText("Folder A").closest("td")!;
+    const uncategorizedCell = screen.getByText("Uncategorized").closest("td")!;
+    expect(folderedCell.querySelector(".collection-table__location-icon")).toBeTruthy();
+    expect(uncategorizedCell.querySelector(".collection-table__location-icon")).toBeNull();
   });
 });

@@ -201,6 +201,7 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
         "title": "A Paper",
         "authors": null,
         "added": "2026-06-28T00:00:00+00:00",
+        "last_opened": "2026-06-28T00:00:00+00:00",
         "file_type": "pdf",
         "status": "ready",
         "folder_id": null,
@@ -217,17 +218,19 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 
 > `library.json` is the authoritative index for **cross-doc** state: the
 > folder tree, membership (paper → ≤1 folder), trash, and paper order. A
-> paper's **own** fields (title/authors/added/file_type/status/filename) stay
-> authoritative in its `meta.json`; `CollectionRow`'s display fields are a
-> non-authoritative cache of that projection, refreshed from `meta.json` on
-> every index write, so this endpoint never opens N `meta.json` files
-> (LNFR-4). At boot, storage reconciles `library.json` against
-> `library/{doc_id}/` dirs on disk (adds an unindexed dir as Uncategorized,
-> prunes an index entry whose dir vanished, best-effort skip on a
-> missing/corrupt `meta.json`) so papers imported before Story 6.2 (or
-> out-of-band) still show up here. `filename` (Story 6.3 fix) is optional
-> (`null` on a pre-existing row cached before the field existed) and backfills
-> on the next reconcile; the client falls back to it when `title` is null.
+> paper's **own** fields (title/authors/added/last_opened/file_type/status/
+> filename) stay authoritative in its `meta.json`; `CollectionRow`'s display
+> fields are a non-authoritative cache of that projection, refreshed from
+> `meta.json` on every index write, so this endpoint never opens N
+> `meta.json` files (LNFR-4). At boot, storage reconciles `library.json`
+> against `library/{doc_id}/` dirs on disk (adds an unindexed dir as
+> Uncategorized, prunes an index entry whose dir vanished, best-effort skip
+> on a missing/corrupt `meta.json`) so papers imported before Story 6.2 (or
+> out-of-band) still show up here. `filename` (Story 6.3 fix) and
+> `last_opened` (Story 7.7, drives the client Recent lens) are optional
+> (`null` on a pre-existing row cached before the field existed) and backfill
+> on the next reconcile; the client falls back to `filename` when `title` is
+> null.
 
 ### `POST /api/library/folders` — create a folder
 
@@ -352,6 +355,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-07 (Story 7.7):** `CollectionRow` gains `last_opened: str | null` (additive, default `null`; `GET /api/library`'s `Library` response), projected from `meta.json` (already advanced on open by `POST /api/docs/{doc_id}/open`, Story 6.7). Populated on every index write through the existing `_cache_from_meta` projection; `reconcile_library()` backfills a pre-existing row cached before the field existed on the next server start. Drives the client's Recent lens (order by `last_opened` desc, grouped under Today/Yesterday/Last week/Last month date buckets, dropping anything older than 30 days - no numeric cap); no new endpoint.
 - **2026-07-07 (Story 7.5):** added `POST /api/library/trash`, `POST /api/library/restore` (set-based `DocIdSet`: `{doc_ids}`, `extra="forbid"`, `doc_ids` non-empty) and `DELETE /api/docs/{doc_id}` (purge: removes the whole `library/{doc_id}/` dir and its `library.json` entry, crash-safe rmtree-then-prune order). New base schema `DocIdSet`, which `MoveRequest` now subclasses (adds only `folder_id`; `MoveRequest`'s emitted shape is unchanged). `POST /api/docs`'s idempotent re-import branch now also restores a trashed paper (clears `trashed`, keeps its retained `folder_id`), rather than creating a duplicate row. Trash/restore 404 on an unknown `doc_id` (all-or-nothing); purge 404s on an unknown or already-purged `doc_id`. Contract shape change: three new paths + one new schema (`DocIdSet`).
 - **2026-07-06 (Story 7.2):** added `POST /api/library/move` — set-based paper→folder assignment (`MoveRequest`: `{doc_ids, folder_id}`, `extra="forbid"`, `doc_ids` non-empty). `folder_id: null` clears membership; a move replaces any prior folder (at most one). TWO distinct 404s: bad `folder_id` → `"Folder not found"`, unknown `doc_id` → `"Document not found"`; either aborts all-or-nothing. Contract shape change: one new path + one new schema (`MoveRequest`).
 - **2026-07-06 (Story 7.1):** added `/api/library/folders` folder CRUD — `POST` (create, optional `parent_id` nesting), `PATCH /{folder_id}` (rename, name-only), `DELETE /{folder_id}` (subtree delete: removes the folder and every descendant, re-homes every paper in the subtree to Uncategorized, returns the updated `Library` in one round-trip; never deletes a paper). New request models `FolderCreate`/`FolderRename` (`extra="forbid"`; a blank/whitespace `name` is a 422). A missing folder is 404 `"Folder not found"`, distinct from the doc-specific `"Document not found"` literal. Contract shape change: three new paths + two new schemas.

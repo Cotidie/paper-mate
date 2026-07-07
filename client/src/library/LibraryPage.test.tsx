@@ -705,7 +705,7 @@ describe("Folder filter + move (Story 7.2)", () => {
     await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
     expect(screen.getByText("Foldered Paper")).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Folder A"));
+    fireEvent.click(screen.getByRole("button", { name: "Folder A" }));
 
     expect(screen.getByText("Foldered Paper")).toBeTruthy();
     expect(screen.queryByText("Uncategorized Paper")).toBeNull();
@@ -723,7 +723,7 @@ describe("Folder filter + move (Story 7.2)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Folder A"));
+    fireEvent.click(screen.getByRole("button", { name: "Folder A" }));
     fireEvent.click(screen.getByText("All"));
 
     expect(screen.getByText("Uncategorized Paper")).toBeTruthy();
@@ -742,7 +742,7 @@ describe("Folder filter + move (Story 7.2)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Uncategorized"));
+    fireEvent.click(screen.getByRole("button", { name: "Uncategorized" }));
 
     expect(screen.getByText("Uncategorized Paper")).toBeTruthy();
     expect(screen.queryByText("Foldered Paper")).toBeNull();
@@ -760,10 +760,10 @@ describe("Folder filter + move (Story 7.2)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("2 files in library")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Uncategorized"));
+    fireEvent.click(screen.getByRole("button", { name: "Uncategorized" }));
     expect(screen.getByText("1 files in Uncategorized")).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Folder A"));
+    fireEvent.click(screen.getByRole("button", { name: "Folder A" }));
     expect(screen.getByText("1 files in Folder A")).toBeTruthy();
 
     fireEvent.click(screen.getByText("All"));
@@ -779,7 +779,7 @@ describe("Folder filter + move (Story 7.2)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Movable Paper")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Uncategorized"));
+    fireEvent.click(screen.getByRole("button", { name: "Uncategorized" }));
     expect(screen.getByText("Movable Paper")).toBeTruthy();
 
     fireEvent.click(screen.getByText("Movable Paper").closest("tr")!, { ctrlKey: true });
@@ -865,7 +865,7 @@ describe("Folder filter + move (Story 7.2)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("First Paper")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Uncategorized"));
+    fireEvent.click(screen.getByRole("button", { name: "Uncategorized" }));
     fireEvent.click(screen.getByText("First Paper").closest("tr")!); // anchor = first row
     fireEvent.click(screen.getByText("Third Paper").closest("tr")!, { shiftKey: true }); // range first..third
 
@@ -910,7 +910,7 @@ describe("Folder filter + move (Story 7.2)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
 
-    fireEvent.click(screen.getByText("Folder A"));
+    fireEvent.click(screen.getByRole("button", { name: "Folder A" }));
 
     expect(screen.getByText("No papers in this folder.")).toBeTruthy();
     expect(screen.queryByTestId("empty-dropzone")).toBeNull();
@@ -927,7 +927,7 @@ describe("Folder filter + move (Story 7.2)", () => {
     await waitFor(() => expect(screen.getByText("Uncategorized Paper")).toBeTruthy());
 
     // Folder A is empty; select it (table layout stays, since total papers > 0).
-    fireEvent.click(screen.getByText("Folder A"));
+    fireEvent.click(screen.getByRole("button", { name: "Folder A" }));
     expect(screen.getByText("No papers in this folder.")).toBeTruthy();
 
     fireEvent.change(screen.getByTestId("library-add-input"), {
@@ -1343,5 +1343,191 @@ describe("Trash (Story 7.5)", () => {
     fireEvent.change(input, { target: { files: [pdfFile("old.pdf")] } });
 
     await waitFor(() => expect(screen.getByText("restored from Trash")).toBeTruthy());
+  });
+});
+
+describe("Recent (Story 7.7)", () => {
+  function libraryRow(overrides: Partial<api.CollectionRow>): api.CollectionRow {
+    return {
+      doc_id: "p".repeat(64),
+      title: "A Paper",
+      authors: null,
+      added: "2026-07-06T00:00:00+00:00",
+      last_opened: "2026-07-06T00:00:00+00:00",
+      file_type: "pdf",
+      status: "ready",
+      folder_id: null,
+      trashed: false,
+      order: 0,
+      ...overrides,
+    };
+  }
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  it("selecting Recent shows the last-opened rows most-recent-first and labels the toolbar count", async () => {
+    const now = Date.now();
+    const older = libraryRow({
+      doc_id: "o".repeat(64),
+      title: "Older Paper",
+      last_opened: new Date(now - 4 * DAY_MS).toISOString(),
+    });
+    const newer = libraryRow({
+      doc_id: "n".repeat(64),
+      title: "Newer Paper",
+      last_opened: new Date(now).toISOString(),
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [older, newer], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Older Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Recent"));
+
+    const rows = screen
+      .getAllByRole("row")
+      .filter((r) => r.querySelector("td") && !r.classList.contains("collection-table__group-header"));
+    expect(rows[0].textContent).toContain("Newer Paper");
+    expect(rows[rows.length - 1].textContent).toContain("Older Paper");
+    expect(screen.getByText("2 files in Recent")).toBeTruthy();
+  });
+
+  it("has no numeric cap: every paper within the last month shows, not just the most-recent 50", async () => {
+    const now = Date.now();
+    const papers = Array.from({ length: 60 }, (_, i) =>
+      libraryRow({
+        doc_id: i.toString().padStart(64, "0"),
+        title: `Paper ${i}`,
+        last_opened: new Date(now - i * 1000).toISOString(),
+        order: i,
+      }),
+    );
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers, folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Paper 0")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Recent"));
+
+    expect(screen.getByText("60 files in Recent")).toBeTruthy();
+  });
+
+  it("excludes a paper last opened more than a month ago (rolling window, post-review scope)", async () => {
+    const now = Date.now();
+    const recent = libraryRow({
+      doc_id: "r".repeat(64),
+      title: "Recent Paper",
+      last_opened: new Date(now).toISOString(),
+    });
+    const tooOld = libraryRow({
+      doc_id: "t".repeat(64),
+      title: "Ancient Paper",
+      last_opened: new Date(now - 40 * DAY_MS).toISOString(),
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [recent, tooOld], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Recent Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Recent"));
+
+    expect(screen.getByText("Recent Paper")).toBeTruthy();
+    expect(screen.queryByText("Ancient Paper")).toBeNull();
+    expect(screen.getByText("1 files in Recent")).toBeTruthy();
+  });
+
+  it("groups Recent rows under Today/Yesterday/Last week/Last month date-bucket headers, in order", async () => {
+    const now = Date.now();
+    const today = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Today Paper",
+      last_opened: new Date(now).toISOString(),
+    });
+    const yesterday = libraryRow({
+      doc_id: "2".repeat(64),
+      title: "Yesterday Paper",
+      last_opened: new Date(now - 1 * DAY_MS).toISOString(),
+    });
+    const lastWeek = libraryRow({
+      doc_id: "3".repeat(64),
+      title: "Last Week Paper",
+      last_opened: new Date(now - 4 * DAY_MS).toISOString(),
+    });
+    const lastMonth = libraryRow({
+      doc_id: "4".repeat(64),
+      title: "Last Month Paper",
+      last_opened: new Date(now - 15 * DAY_MS).toISOString(),
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({
+      papers: [today, yesterday, lastWeek, lastMonth],
+      folders: [],
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Today Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Recent"));
+
+    const rows = screen.getAllByRole("row").filter((r) => r.textContent && r.textContent.trim() !== "");
+    const order = rows.map((r) => r.textContent ?? "");
+    const indexOf = (needle: string) => order.findIndex((text) => text.includes(needle));
+    expect(indexOf("Today")).toBeGreaterThanOrEqual(0);
+    expect(indexOf("Today")).toBeLessThan(indexOf("Today Paper"));
+    expect(indexOf("Yesterday")).toBeLessThan(indexOf("Yesterday Paper"));
+    expect(indexOf("Last week")).toBeLessThan(indexOf("Last Week Paper"));
+    expect(indexOf("Last month")).toBeLessThan(indexOf("Last Month Paper"));
+    // Buckets appear in recency order.
+    expect(indexOf("Today")).toBeLessThan(indexOf("Yesterday"));
+    expect(indexOf("Yesterday")).toBeLessThan(indexOf("Last week"));
+    expect(indexOf("Last week")).toBeLessThan(indexOf("Last month"));
+  });
+
+  it("does not render date-bucket headers once a column sort is active", async () => {
+    const now = Date.now();
+    const today = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Today Paper",
+      last_opened: new Date(now).toISOString(),
+    });
+    const yesterday = libraryRow({
+      doc_id: "2".repeat(64),
+      title: "Yesterday Paper",
+      last_opened: new Date(now - 1 * DAY_MS).toISOString(),
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [today, yesterday], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Today Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Recent"));
+    expect(screen.getByText("Today")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sort ASC" }));
+
+    expect(screen.queryByText("Today")).toBeNull();
+    expect(screen.queryByText("Yesterday")).toBeNull();
+  });
+
+  it("Recent lens empty copy reads exactly 'No recent papers.'", async () => {
+    // Every untrashed paper appears in Recent (Option A, AC-6), so the only
+    // way the lens is empty with a non-empty library is when every paper is
+    // trashed.
+    const trashedPaper = libraryRow({ doc_id: "t".repeat(64), title: "Trashed Paper", trashed: true });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [trashedPaper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Recent")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Recent"));
+
+    expect(screen.getByText("No recent papers.")).toBeTruthy();
+  });
+
+  it("excludes trashed papers from Recent", async () => {
+    const trashedPaper = libraryRow({ doc_id: "t".repeat(64), title: "Trashed Paper", trashed: true });
+    const livePaper = libraryRow({ doc_id: "l".repeat(64), title: "Live Paper" });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [trashedPaper, livePaper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Live Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Recent"));
+
+    expect(screen.getByText("Live Paper")).toBeTruthy();
+    expect(screen.queryByText("Trashed Paper")).toBeNull();
   });
 });

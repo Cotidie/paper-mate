@@ -219,6 +219,7 @@
   --collection-table-authors-width: 220px;
   --collection-table-added-width: 120px;
   --collection-table-file-type-width: 96px;
+  --collection-table-location-width: 140px;
 
   /* add-menu (Library toolbar Add dropdown): File upload / Folder upload. */
   --add-menu-width: 180px;

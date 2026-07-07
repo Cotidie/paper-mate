@@ -9,6 +9,7 @@ const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
   authors: 220,
   added: 120,
   file_type: 96,
+  location: 140,
 };
 const MIN_COLUMN_WIDTH = 80;
 const MAX_COLUMN_WIDTH = 640;
@@ -25,12 +26,14 @@ export function useColumnWidths() {
   const authors = useDragResize(DEFAULT_WIDTHS.authors, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
   const added = useDragResize(DEFAULT_WIDTHS.added, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
   const fileType = useDragResize(DEFAULT_WIDTHS.file_type, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
+  const location = useDragResize(DEFAULT_WIDTHS.location, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
 
   const byKey: Record<ColumnKey, ReturnType<typeof useDragResize>> = {
     title,
     authors,
     added,
     file_type: fileType,
+    location,
   };
 
   const widths: Record<ColumnKey, number> = {
@@ -38,6 +41,7 @@ export function useColumnWidths() {
     authors: authors.value,
     added: added.value,
     file_type: fileType.value,
+    location: location.value,
   };
 
   function startResize(key: ColumnKey, e: React.PointerEvent) {
