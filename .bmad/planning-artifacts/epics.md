@@ -1212,6 +1212,12 @@ Namespaced `LFR-n` = Library PRD `FR-n` (1:1).
 - **LFR-30** A **Recent** view lists the papers the user has most recently opened, ordered most-recent-first, capped at the last 50. Selecting the left-panel `Recent` entry shows this view.
 - **LFR-31** The user **stars** or unstars a paper (or a multi-selection). A starred paper shows a filled-star marker at the end of its title in the table, and the left-panel `Starred` entry lists all starred papers.
 
+**F10 · Bibliographic columns (added 2026-07-07 via correct-course; not in the original Library PRD)**
+
+> Added by user request (`sprint-change-proposal-2026-07-07-metadata-columns.md`) while iterating on the Library table. Extends Story 7.4's column model with three bibliographic columns sourced from the existing Crossref enrichment (new imports only; no backfill of already-imported papers).
+
+- **LFR-32** The collection table offers **Venue**, **Year** (published year), and **DOI** columns, sortable and hideable via the Display menu. Venue and Year are captured from the Crossref enrichment (`container-title`, `issued`); DOI is persisted from the existing extraction. Populated on new / re-imported papers; papers imported before this feature (or with no Crossref match) show blank cells.
+
 ### Library NonFunctional Requirements
 
 - **LNFR-1 Local-first.** Every Library feature works fully offline. The optional external metadata lookup is the only network call; opt-in, degrades gracefully offline or on failure.
@@ -1284,6 +1290,7 @@ DESIGN.md (line 567) explicitly leaves Phase-2 Library surfaces **not yet styled
 - **LFR-25..29** Remote sync (WebDAV/Google Drive, whole-dir mirror, LWW) → Epic 8 **(DEFERRED, not built this sprint)**
 - **LFR-30** Recent view (last-opened order, capped 50) → Epic 7 **(added 2026-07-07)**
 - **LFR-31** Star/unstar a paper; filled-star title marker + Starred view → Epic 7 **(added 2026-07-07)**
+- **LFR-32** Venue / Year / DOI columns (Crossref-sourced, sortable + hideable, new imports only) → Epic 7 **(added 2026-07-07)**
 
 ## Library Epic List
 
@@ -1296,7 +1303,7 @@ On boot the user lands in their collection, not an empty reader. Drop one or mor
 
 ### Epic 7: Organize & curate the collection
 Shape the collection into nested custom folders, multi-select and batch-move papers, sort / filter / hide columns to find any paper in seconds, jump to recently-opened papers, star the ones that matter, and delete safely through a Trash lens (restore or permanently purge). Builds on Epic 6's table + collection index; stands alone as the curation layer without Epic 6 depending on it. (The Note file-type, LFR-17, was descoped 2026-07-07; Recent + Starred, LFR-30/31, were added the same day.)
-**LFRs covered:** LFR-3, LFR-4, LFR-5, LFR-6, LFR-12, LFR-13, LFR-14, LFR-15, LFR-16, LFR-22, LFR-23, LFR-24, LFR-30, LFR-31 (LFR-17 descoped)
+**LFRs covered:** LFR-3, LFR-4, LFR-5, LFR-6, LFR-12, LFR-13, LFR-14, LFR-15, LFR-16, LFR-22, LFR-23, LFR-24, LFR-30, LFR-31, LFR-32 (LFR-17 descoped)
 **NFRs:** LNFR-2 (no auth), LNFR-4 (collection scale: sort/filter/scroll no stall)
 **Architecture:** AL-5 (trash + folder lifecycle), AL-6 (folder + set-based org endpoints)
 **Goals:** G3 (find and open any paper in seconds)
@@ -1767,6 +1774,38 @@ So that my most important papers are one click away and visibly marked in any vi
 
 **Given** any new Star label, toolbar copy, or empty-view copy
 **Then** no string contains an em-dash (L-UX-DR13, L-UX-DR15)
+
+### Story 7.9: Venue, Year & DOI columns (added 2026-07-07)
+
+As a reader,
+I want Venue, published Year, and DOI columns in the library table,
+So that I can scan and sort my papers by where and when they were published and jump straight to a paper's DOI.
+
+**Acceptance Criteria:**
+
+**Given** the per-document model
+**Then** `DocMeta` gains `doi`, `venue`, and `year` (additive, no `schema_version` bump; an existing `meta.json` missing them still validates via defaults), and `ExtractedMeta` gains `venue` + `year` (it already carries `doi`) (LFR-32, AL-1, AL-2)
+
+**Given** the Crossref enrichment of a newly imported paper
+**When** `enrich()` resolves a Crossref `work`
+**Then** it captures `container-title` as Venue and the `issued`/`published` date-parts year as Year (alongside the existing title/authors/doi), and the route projects `doi`/`venue`/`year` onto `DocMeta` (LFR-32, AL-2)
+
+**Given** a paper imported before this feature, or one with no Crossref match
+**Then** its Venue/Year/DOI cells render blank (no backfill/re-enrich this story: the decision is Crossref new-imports-only) (LFR-32)
+
+**Given** the collection index display cache
+**Then** `CollectionRow` exposes `doi`, `venue`, `year` (additive contract change: Pydantic → OpenAPI → regenerated TS types; `docs/API.md` updated), projected in `_cache_from_meta` (LFR-32, AL-1, AL-6, AL-8)
+
+**Given** the collection table
+**Then** Venue, Year, and DOI appear as columns that are sortable and hideable via the Display menu (Title stays non-hideable); Year sorts numerically, Venue/DOI as strings with empty values sorting last (LFR-32, L-UX-DR-table)
+
+**Given** the DOI cell of a paper with a DOI
+**Then** it offers a way to open `https://doi.org/{doi}` without also triggering the row's open/arm gesture (a link that stops propagation, mirroring the Title Open button) (LFR-32)
+
+**Given** any new column header, label, or empty-cell copy
+**Then** no string contains an em-dash (L-UX-DR13)
+
+> **Out of scope (this story):** backfilling/re-enriching already-imported papers; inline-editing Venue/Year/DOI; any Crossref capture beyond `container-title`/`issued`. **Open design calls for create-story:** DOI-as-link vs muted text; whether DOI is hidden by default; `year` as `int` vs the raw issued string (recommend `int`).
 
 ## Epic 8: Remote sync (DEFERRED)
 
