@@ -180,6 +180,10 @@ class CollectionRow(BaseModel):
     title: str | None
     authors: str | None
     added: str  # ISO-8601 UTC
+    # Additive (Recent lens, no schema_version bump): the client orders the
+    # Recent view by this. Optional so a pre-existing library.json entry
+    # cached before this field existed still validates; reconcile backfills it.
+    last_opened: str | None = None
     file_type: Literal["pdf", "note"]
     status: DocStatus
     folder_id: str | None

@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaretDown, CaretUp, EyeSlash, X } from "@phosphor-icons/react";
-import type { CollectionRow } from "@/api/client";
+import type { CollectionRow, Folder } from "@/api/client";
 import { currentFieldValue, stripPdfExtension, type EditableField, type PendingUpload } from "@/library/row";
 import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
-import { COLUMNS, type ColumnDef, type ColumnKey, type SortState } from "@/library/tableView";
+import { COLUMNS, UNCATEGORIZED_LABEL, type ColumnDef, type ColumnKey, type SortState } from "@/library/tableView";
 import { usePopover } from "@/library/usePopover";
 import PaperRow from "./PaperRow";
 import PendingRow from "./PendingRow";
@@ -13,6 +13,7 @@ import "@/library/TableControls/TableControls.css";
 
 const SKELETON_ROW_COUNT = 6;
 const EMPTY_SELECTED: Set<string> = new Set();
+const EMPTY_FOLDERS: Folder[] = [];
 
 /** `file_type`'s CSS class suffix drops the underscore (`col-file-type`);
  *  every other key is already a valid class-name segment. */
@@ -346,6 +347,15 @@ type CollectionTableProps =
        *  and its drag-to-folder affordance. Restore/Purge live in the
        *  toolbar, bulk over the selection (fix request), not per row. */
       trashLens?: boolean;
+      /** Resolves the Location column's folder id -> name (post-review
+       *  scope). Omit for isolated tests that don't render that column. */
+      folders?: Folder[];
+      /** Recent lens date-bucket headers (post-review scope): a `doc_id` ->
+       *  bucket label, computed by `LibraryPage` via `recentGroupLabels`. A
+       *  header row renders immediately before any row present here. Omit
+       *  outside the Recent lens (or once a column sort is active) for a
+       *  flat list, same as before this scope was added. */
+      groupLabels?: Map<string, string>;
     };
 
 /**
@@ -401,8 +411,14 @@ export default function CollectionTable(props: CollectionTableProps) {
     onResizeColumnStart,
     onResizeColumnKeyDown,
     trashLens = false,
+    folders = EMPTY_FOLDERS,
+    groupLabels,
   } = props;
   const visibleKeys = new Set(visibleColumns.map((c) => c.key));
+  const folderNameById = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
+  function locationLabel(row: CollectionRow): string {
+    return row.folder_id ? (folderNameById.get(row.folder_id) ?? UNCATEGORIZED_LABEL) : UNCATEGORIZED_LABEL;
+  }
   // Controlled-or-uncontrolled (like `<input value onChange>`): when the
   // caller doesn't pass `selectedIds`, the table owns the set itself so
   // isolated tests of the arm/edit flow don't need to wire a selection
@@ -577,25 +593,35 @@ export default function CollectionTable(props: CollectionTableProps) {
           {pendingRows.map((pending) => (
             <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={visibleKeys} />
           ))}
-          {rows.map((row) => (
-            <PaperRow
-              key={row.doc_id}
-              row={row}
-              visibleColumns={visibleKeys}
-              armed={selectedIds.size === 1 && selectedIds.has(row.doc_id)}
-              editingField={editing?.docId === row.doc_id ? editing.field : null}
-              checked={selectedIds.has(row.doc_id)}
-              onRowClick={() => handleRowClick(row.doc_id)}
-              onRowClickCapture={(e) => handleRowClickCapture(e, row.doc_id)}
-              onArm={() => commitSelected(new Set([row.doc_id]))}
-              onOpen={() => openRow(row.doc_id)}
-              onDragStart={(e) => handleDragStart(e, row.doc_id)}
-              onStartEdit={(field) => startEdit(row.doc_id, field)}
-              onCommit={(field, value, viaBlur) => commitEdit(row, field, value, viaBlur)}
-              onCancel={() => setEditing(null)}
-              trashLens={trashLens}
-            />
-          ))}
+          {rows.map((row) => {
+            const groupLabel = groupLabels?.get(row.doc_id);
+            return (
+              <Fragment key={row.doc_id}>
+                {groupLabel !== undefined && (
+                  <tr className="collection-table__group-header">
+                    <td colSpan={visibleColumns.length}>{groupLabel}</td>
+                  </tr>
+                )}
+                <PaperRow
+                  row={row}
+                  visibleColumns={visibleKeys}
+                  armed={selectedIds.size === 1 && selectedIds.has(row.doc_id)}
+                  editingField={editing?.docId === row.doc_id ? editing.field : null}
+                  checked={selectedIds.has(row.doc_id)}
+                  onRowClick={() => handleRowClick(row.doc_id)}
+                  onRowClickCapture={(e) => handleRowClickCapture(e, row.doc_id)}
+                  onArm={() => commitSelected(new Set([row.doc_id]))}
+                  onOpen={() => openRow(row.doc_id)}
+                  onDragStart={(e) => handleDragStart(e, row.doc_id)}
+                  onStartEdit={(field) => startEdit(row.doc_id, field)}
+                  onCommit={(field, value, viaBlur) => commitEdit(row, field, value, viaBlur)}
+                  onCancel={() => setEditing(null)}
+                  trashLens={trashLens}
+                  locationLabel={locationLabel(row)}
+                />
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>

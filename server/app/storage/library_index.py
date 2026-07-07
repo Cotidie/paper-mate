@@ -94,6 +94,7 @@ def _cache_from_meta(meta: DocMeta) -> dict:
         "title": meta.title,
         "authors": meta.authors,
         "added": meta.added,
+        "last_opened": meta.last_opened,
         "file_type": meta.file_type,
         "status": meta.status,
         "filename": meta.filename,

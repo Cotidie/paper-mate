@@ -13,7 +13,13 @@ function dispatchPointer(type: "pointermove" | "pointerup", clientX = 0) {
 describe("useColumnWidths", () => {
   it("starts at the default width per column (matches the CSS tokens)", () => {
     const { result } = renderHook(() => useColumnWidths());
-    expect(result.current.widths).toEqual({ title: 320, authors: 220, added: 120, file_type: 96 });
+    expect(result.current.widths).toEqual({
+      title: 320,
+      authors: 220,
+      added: 120,
+      file_type: 96,
+      location: 140,
+    });
   });
 
   it("dragging one column's handle only changes that column's width", () => {
@@ -24,6 +30,7 @@ describe("useColumnWidths", () => {
     expect(result.current.widths.title).toBe(320);
     expect(result.current.widths.added).toBe(120);
     expect(result.current.widths.file_type).toBe(96);
+    expect(result.current.widths.location).toBe(140);
   });
 
   it("clamps each column to its own minimum", () => {

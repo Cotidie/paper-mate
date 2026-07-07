@@ -375,6 +375,8 @@ export interface components {
             authors: string | null;
             /** Added */
             added: string;
+            /** Last Opened */
+            last_opened?: string | null;
             /**
              * File Type
              * @enum {string}

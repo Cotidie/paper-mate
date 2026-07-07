@@ -17,7 +17,12 @@ import { useTrashPapers } from "@/library/useTrashPapers";
 import { useColumnWidths } from "@/library/useColumnWidths";
 import { useResizablePanel } from "@/library/useResizablePanel";
 import { useTableView } from "@/library/useTableView";
-import { filterPapers, type FolderSelection } from "@/library/folderFilter";
+import {
+  filterPapers,
+  msUntilNextUtcMidnight,
+  recentGroupLabels,
+  type FolderSelection,
+} from "@/library/folderFilter";
 import { stripPdfExtension } from "@/library/row";
 import { fetchHealth, type CollectionRow, type Folder } from "@/api/client";
 
@@ -31,6 +36,7 @@ function emptySelectionMessage(selection: FolderSelection): string {
   if (selection.kind === "uncategorized") return "No uncategorized papers.";
   if (selection.kind === "folder") return "No papers in this folder.";
   if (selection.kind === "trash") return "Trash is empty.";
+  if (selection.kind === "recent") return "No recent papers.";
   return "No papers to show.";
 }
 
@@ -41,6 +47,7 @@ function selectionLabel(selection: FolderSelection, folders: Folder[]): string {
   if (selection.kind === "uncategorized") return "Uncategorized";
   if (selection.kind === "folder") return folders.find((f) => f.id === selection.id)?.name ?? "folder";
   if (selection.kind === "trash") return "Trash";
+  if (selection.kind === "recent") return "Recent";
   return "library";
 }
 
@@ -80,6 +87,17 @@ export default function LibraryPage() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
+  // ONE `now` shared by the Recent lens's filter AND its date-bucket header
+  // labels (Codex review, second pass): two independent `Date.now()` calls
+  // could disagree right at a UTC-midnight boundary, desyncing row
+  // membership from the headers painted over it. Rescheduled at exactly the
+  // next UTC midnight so a long-lived mounted session re-buckets across a
+  // day rollover without the user touching anything.
+  const [recentNow, setRecentNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setTimeout(() => setRecentNow(Date.now()), msUntilNextUtcMidnight(recentNow));
+    return () => clearTimeout(timer);
+  }, [recentNow]);
 
   const onToast = useCallback(
     (message: string, variant: ToastState["variant"]) => setToast({ message, variant }),
@@ -89,6 +107,7 @@ export default function LibraryPage() {
   const { library, setLibrary, loading, loadFailed, pending, uploadFiles } = useCollection({
     onToast,
   });
+  const folders = library?.folders ?? [];
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
   const { movePapers } = useMovePapers({ setLibrary, onToast });
   const trash = useTrashPapers({ setLibrary, onToast });
@@ -96,10 +115,10 @@ export default function LibraryPage() {
   // the sidebar's Empty Trash both funnel here) - one or many rows, the
   // ConfirmDialog copy adapts to the count. Empty = closed.
   const [purgeTargets, setPurgeTargets] = useState<CollectionRow[]>([]);
-  const tableView = useTableView();
+  const tableView = useTableView(folders);
   const folderPanelResize = useResizablePanel();
   const columnWidths = useColumnWidths();
-  const [selection, setSelection] = useState<FolderSelection>({ kind: "all" });
+  const [selection, setSelection] = useState<FolderSelection>({ kind: "recent" });
   // The one selection set driving BOTH a plain-click single row and a
   // Ctrl/Cmd+click multi-select (fix request: they were two disjoint pieces
   // of state - a table-local `selectedId` and this lifted `checkedIds` -
@@ -162,7 +181,6 @@ export default function LibraryPage() {
   }, []);
 
   const papers = library?.papers ?? [];
-  const folders = library?.folders ?? [];
   const trashedPapers = useMemo(() => papers.filter((p) => p.trashed), [papers]);
   const handleEmptyTrashRequest = useCallback(() => {
     if (trashedPapers.length === 0) return;
@@ -174,13 +192,29 @@ export default function LibraryPage() {
   // Shift+click range indexes (its range math is index-based over `rows`).
   const { applyTableView } = tableView;
   const visiblePapers = useMemo(
-    () => applyTableView(filterPapers(papers, selection)),
-    [papers, selection, applyTableView],
+    () => applyTableView(filterPapers(papers, selection, recentNow)),
+    [papers, selection, applyTableView, recentNow],
+  );
+  // Recent lens date-bucket headers (post-review scope): only meaningful in
+  // the default recency order - a manual column sort scrambles it, so no
+  // headers render then (same "sort still works, membership/order doesn't
+  // pretend to be locked" precedent as the original 50-cap Dev Notes). Shares
+  // `recentNow` with `visiblePapers`'s own filter (see its declaration) so
+  // membership and header boundaries never disagree.
+  const recentGroups = useMemo(
+    () =>
+      selection.kind === "recent" && tableView.sort === null
+        ? recentGroupLabels(visiblePapers, recentNow)
+        : undefined,
+    [selection, tableView.sort, visiblePapers, recentNow],
   );
   // A just-uploaded paper lands Uncategorized; it should not appear under an
-  // unrelated selected folder or the Trash lens (Dev Notes: gate pending rows
-  // on selection kind - a just-uploaded paper is never trashed).
-  const visiblePending = selection.kind === "folder" || selection.kind === "trash" ? [] : pending;
+  // unrelated selected folder or the Trash lens. The Recent lens DOES show it:
+  // an upload in progress is the most-recent item, and Recent is the default
+  // landing view (see the initial `selection`), so its pending "Extracting" row
+  // is the user's only upload feedback on the front door.
+  const visiblePending =
+    selection.kind === "folder" || selection.kind === "trash" ? [] : pending;
   const mainClassName = [
     "library-main",
     isTableLayout && "library-main--table",
@@ -345,6 +379,8 @@ export default function LibraryPage() {
                 onResizeColumnStart={columnWidths.startResize}
                 onResizeColumnKeyDown={columnWidths.handleKeyDown}
                 trashLens={selection.kind === "trash"}
+                folders={folders}
+                groupLabels={recentGroups}
               />
             )
           ) : loadFailed ? null : (

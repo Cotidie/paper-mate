@@ -441,6 +441,25 @@ def test_reconcile_backfills_filename_for_pre_existing_entry(data_root):
     assert library.papers[0].filename == "backfill-me.pdf"
 
 
+def test_reconcile_backfills_last_opened_for_pre_existing_entry(data_root):
+    """Story 7.7, AC-4: mirrors the `filename` backfill precedent - a
+    library.json entry cached before `last_opened` existed on CollectionRow
+    must gain it on the next reconcile, without a re-import."""
+    raw = make_pdf_bytes(pages=1)
+    doc_id, _ = storage.import_pdf(raw, "backfill-me.pdf")
+
+    library_path = data_root / "library.json"
+    payload = json.loads(library_path.read_text())
+    del payload["papers"][0]["last_opened"]
+    library_path.write_text(json.dumps(payload))
+
+    storage.reconcile_library()
+
+    library = storage.read_library()
+    meta = storage.read_meta(doc_id)
+    assert library.papers[0].last_opened == meta.last_opened
+
+
 def test_reconcile_prunes_entry_whose_dir_vanished(data_root):
     raw = make_pdf_bytes(pages=1)
     doc_id, _ = storage.import_pdf(raw, "gone.pdf")
@@ -689,8 +708,8 @@ def test_touch_last_opened_advances_field_only(data_root):
 
 
 def test_touch_last_opened_refreshes_library_cache_unchanged(data_root):
-    """AC-7: library.json carries no last_opened, so the displayed row is
-    byte-identical (title/authors/status) after the touch."""
+    """AC-7: touch only advances last_opened, so title/authors/status stay
+    byte-identical on the displayed row."""
     raw = make_pdf_bytes(pages=1, title="Cached")
     doc_id, _ = storage.import_pdf(raw, "cached.pdf")
     before_row = storage.read_library().papers[0]
@@ -701,6 +720,21 @@ def test_touch_last_opened_refreshes_library_cache_unchanged(data_root):
     assert after_row.title == before_row.title
     assert after_row.authors == before_row.authors
     assert after_row.status == before_row.status
+
+
+def test_touch_last_opened_advances_cached_last_opened(data_root):
+    """Story 7.7, AC-3: opening a paper floats it in the Recent lens because
+    the cached `last_opened` (projected through `_cache_from_meta`) advances,
+    not just the meta.json field."""
+    raw = make_pdf_bytes(pages=1, title="Cached")
+    doc_id, _ = storage.import_pdf(raw, "cached.pdf")
+    before_row = storage.read_library().papers[0]
+
+    updated_meta = storage.touch_last_opened(doc_id)
+
+    after_row = storage.read_library().papers[0]
+    assert after_row.last_opened == updated_meta.last_opened
+    assert after_row.last_opened >= before_row.last_opened
 
 
 def test_touch_last_opened_missing_doc_raises_not_found(data_root):

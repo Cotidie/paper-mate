@@ -210,6 +210,40 @@ def test_collection_row_round_trips() -> None:
     assert row.trashed is False
 
 
+def test_collection_row_accepts_and_round_trips_last_opened() -> None:
+    """Story 7.7, AC-4: additive display-cache field, mirrors `filename`."""
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        last_opened="2026-07-06T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+    )
+    assert row.last_opened == "2026-07-06T00:00:00+00:00"
+
+
+def test_collection_row_defaults_last_opened_when_missing() -> None:
+    """A dict missing `last_opened` (a pre-existing library.json entry cached
+    before the field existed) still validates."""
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+    )
+    assert row.last_opened is None
+
+
 def test_library_wraps_papers_and_folders() -> None:
     row = CollectionRow(
         doc_id="d1",

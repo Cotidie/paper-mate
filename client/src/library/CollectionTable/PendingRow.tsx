@@ -30,6 +30,9 @@ export default function PendingRow({
       {visibleColumns.has("file_type") && (
         <td>{label && <span className="badge-pill">{label}</span>}</td>
       )}
+      {/* A fresh upload always lands Uncategorized (Dev Notes) - no folder
+          lookup needed while it's still pending. */}
+      {visibleColumns.has("location") && <td className="collection-table__location">Uncategorized</td>}
     </tr>
   );
 }

@@ -378,12 +378,26 @@ describe("Folder selection filter (Story 7.2, AC-1, AC-2, AC-5)", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("Recent remains inert (no click handler, not selectable)", () => {
+  it("Recent is a real selectable button (Story 7.7)", () => {
     const onSelect = vi.fn();
     render(<Harness initialFolders={[]} onSelect={onSelect} />);
-    fireEvent.click(screen.getByText("Recent"));
-    expect(onSelect).not.toHaveBeenCalled();
-    expect(screen.getByText("Recent").closest("button")).toBeNull();
+    const recentButton = screen.getByText("Recent").closest("button");
+    expect(recentButton).not.toBeNull();
+    fireEvent.click(recentButton!);
+    expect(onSelect).toHaveBeenCalledWith({ kind: "recent" });
+  });
+
+  it("Recent is active-highlighted when selected", () => {
+    render(<Harness initialFolders={[]} initialSelection={{ kind: "recent" }} />);
+    const recentButton = screen.getByText("Recent").closest("button")!;
+    expect(recentButton.className).toContain("library-folder-panel__item--active");
+  });
+
+  it("Recent is keyboard-focusable with a role/name of button 'Recent'", () => {
+    render(<Harness initialFolders={[]} />);
+    const recentButton = screen.getByRole("button", { name: "Recent" });
+    recentButton.focus();
+    expect(document.activeElement).toBe(recentButton);
   });
 
   it("Trash is a real selectable button (Story 7.5)", () => {

@@ -1,3 +1,4 @@
+import { Folder as FolderIcon } from "@phosphor-icons/react";
 import type { CollectionRow } from "@/api/client";
 import {
   formatAdded,
@@ -47,6 +48,7 @@ export default function PaperRow({
   onCommit,
   onCancel,
   trashLens = false,
+  locationLabel,
 }: {
   row: CollectionRow;
   visibleColumns: Set<ColumnKey>;
@@ -65,6 +67,11 @@ export default function PaperRow({
    *  the selection - a row itself carries no action button). A trashed row
    *  still isn't opened, and isn't draggable onto a folder drop target. */
   trashLens?: boolean;
+  /** The owning folder's name, or "Uncategorized" (post-review scope: a
+   *  Location column). Resolved by `CollectionTable` (it holds the folder
+   *  list; a row only carries `folder_id`), so this component stays a plain
+   *  string, no id lookup of its own. */
+  locationLabel: string;
 }) {
   // A null title falls back to the filename, extension stripped (still
   // recognizable); `Untitled` is the last resort when neither is known.
@@ -146,6 +153,12 @@ export default function PaperRow({
           ) : (
             <span className="badge-pill">{row.file_type === "note" ? "Note" : "PDF"}</span>
           )}
+        </td>
+      )}
+      {visibleColumns.has("location") && (
+        <td className="collection-table__location" title={locationLabel}>
+          {row.folder_id && <FolderIcon aria-hidden className="collection-table__location-icon" />}
+          <span className="collection-table__location-text">{locationLabel}</span>
         </td>
       )}
     </tr>

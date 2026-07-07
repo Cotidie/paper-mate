@@ -6,7 +6,7 @@ import { seedFieldValue } from "@/library/row";
  * AD-L3: view-state, never persisted, never a route). Mirrors
  * `folderFilter.ts` - pure functions, no React, trivially unit-testable.
  */
-export type ColumnKey = "title" | "authors" | "added" | "file_type";
+export type ColumnKey = "title" | "authors" | "added" | "file_type" | "location";
 
 export interface ColumnDef {
   key: ColumnKey;
@@ -22,7 +22,11 @@ export const COLUMNS: ColumnDef[] = [
   { key: "authors", label: "Authors", hideable: true, sortable: true },
   { key: "added", label: "Added", hideable: true, sortable: true },
   { key: "file_type", label: "File type", hideable: true, sortable: true },
+  { key: "location", label: "Location", hideable: true, sortable: true },
 ];
+
+/** `Uncategorized` mirrors `FolderPanel`'s own copy for a null `folder_id`. */
+export const UNCATEGORIZED_LABEL = "Uncategorized";
 
 export type SortDirection = "asc" | "desc";
 
@@ -42,8 +46,10 @@ function displayTitle(row: CollectionRow): string {
 
 /** The underlying sort key per column (AC-3): `added` is chronological (the
  *  ISO timestamp's epoch millis), never the formatted "Jul 5, 2026" string,
- *  which would sort lexically (wrong month order). */
-function sortKey(row: CollectionRow, column: ColumnKey): string | number {
+ *  which would sort lexically (wrong month order). `location` sorts by the
+ *  DISPLAYED folder name, which needs an id→name lookup the row itself
+ *  doesn't carry - `folderNameById` threads that in from `useTableView`. */
+function sortKey(row: CollectionRow, column: ColumnKey, folderNameById: Map<string, string>): string | number {
   switch (column) {
     case "added":
       return new Date(row.added).getTime();
@@ -53,6 +59,8 @@ function sortKey(row: CollectionRow, column: ColumnKey): string | number {
       return row.authors ?? "";
     case "file_type":
       return row.file_type;
+    case "location":
+      return row.folder_id ? (folderNameById.get(row.folder_id) ?? UNCATEGORIZED_LABEL) : UNCATEGORIZED_LABEL;
   }
 }
 
@@ -78,9 +86,16 @@ function compareForSort(a: string | number, b: string | number, direction: SortD
 
 /** Sort rows by the column's underlying value (AC-2/AC-3). Returns `rows`
  *  unchanged when `sort` is null (default: the backend response order).
- *  Never mutates the input. */
-export function sortRows(rows: CollectionRow[], sort: SortState | null): CollectionRow[] {
+ *  Never mutates the input. `folderNameById` resolves the `location` column;
+ *  omit it for a column that never sorts by folder name. */
+export function sortRows(
+  rows: CollectionRow[],
+  sort: SortState | null,
+  folderNameById: Map<string, string> = new Map(),
+): CollectionRow[] {
   if (sort === null) return rows;
   const { column, direction } = sort;
-  return [...rows].sort((a, b) => compareForSort(sortKey(a, column), sortKey(b, column), direction));
+  return [...rows].sort((a, b) =>
+    compareForSort(sortKey(a, column, folderNameById), sortKey(b, column, folderNameById), direction),
+  );
 }
