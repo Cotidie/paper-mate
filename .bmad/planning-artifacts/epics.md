@@ -1205,6 +1205,13 @@ Namespaced `LFR-n` = Library PRD `FR-n` (1:1).
 - **LFR-28** Conflicts resolve last-write-wins by timestamp.
 - **LFR-29** Sync backends sit behind one switchable interface (WebDAV first, Google Drive later), mirroring the reserved agent-abstraction seam.
 
+**F9 · Recent & Starred views (added 2026-07-07 via correct-course; not in the original Library PRD)**
+
+> These two requirements were added after Epic 7 was underway, by user request (`sprint-change-proposal-2026-07-07.md`). They light up the two inert left-panel placeholders (`Recent`, `Starred`) that Story 7.1 shipped disabled, completing the fixed Library section. They replace the discarded Note file-type (LFR-17) as the remaining Epic-7 work.
+
+- **LFR-30** A **Recent** view lists the papers the user has most recently opened, ordered most-recent-first, capped at the last 50. Selecting the left-panel `Recent` entry shows this view.
+- **LFR-31** The user **stars** or unstars a paper (or a multi-selection). A starred paper shows a filled-star marker at the end of its title in the table, and the left-panel `Starred` entry lists all starred papers.
+
 ### Library NonFunctional Requirements
 
 - **LNFR-1 Local-first.** Every Library feature works fully offline. The optional external metadata lookup is the only network call; opt-in, degrades gracefully offline or on failure.
@@ -1245,6 +1252,8 @@ DESIGN.md (line 567) explicitly leaves Phase-2 Library surfaces **not yet styled
 - **L-UX-DR11 Empty & loading states**: an empty collection shows the dropzone + "No papers yet." copy; table load shows skeleton rows that reserve layout (no stall, LNFR-4); the folder panel on an empty collection shows only All / Uncategorized.
 - **L-UX-DR12 Accessibility floor**: every control keyboard-operable; visible 2px `{colors.ink}` focus rings; table rows reachable and openable by keyboard (Enter opens); checkboxes have associated labels; confirms are Esc-dismissable with focus management; respect `prefers-reduced-motion`. (Inherits UX-DR17.)
 - **L-UX-DR13 Voice & microcopy**: Obsidian-quiet: sparse, plain, lowercase-leaning; no exclamation marks, no emoji, no em-dash; errors state the fact then the fallback. (Inherits UX-DR18.)
+- **L-UX-DR14 Recent lens (added 2026-07-07)**: `Recent` is a **view-state filter, not a route** (like Trash, AL-3): selecting the left-panel `Recent` entry lists papers ordered by last-opened descending, capped at 50, with Open the primary row affordance (no Move/Delete/Star toolbar actions specific to it beyond what the normal lens offers). Trashed papers never appear. Empty copy reads "No recent papers." The `Recent` entry becomes a real selectable, keyboard-operable button with the shared active-highlight (retires the Story 7.1 inert placeholder).
+- **L-UX-DR15 Starred lens + star affordance (added 2026-07-07)**: `Starred` is a **view-state filter, not a route**: selecting the left-panel `Starred` entry lists all starred (non-trashed) papers; empty copy reads "No starred papers." A starred paper renders a **filled star icon at the end of its Title cell text**, Google-Drive style: appended right after the title when the column has room, and holding its own space (the title truncates first) when it does not, so the star is never clipped. A **Star** toggle sits in the main toolbar row alongside Move / Delete / Add (enabled on a selection, mirroring the Story 7.5 bulk Restore/Purge pattern), toggling the star state of the whole selection; the button reflects whether the selection is starred. Star is org state, so the marker and lens membership persist across restart. The `Starred` entry becomes a real selectable button (retires the Story 7.1 inert placeholder). All new copy/labels em-dash-free (L-UX-DR13).
 
 ### Library FR Coverage Map
 
@@ -1264,7 +1273,7 @@ DESIGN.md (line 567) explicitly leaves Phase-2 Library surfaces **not yet styled
 - **LFR-14** Selecting a folder filters the table → Epic 7
 - **LFR-15** Assign/move a paper (or selection) to a folder → Epic 7
 - **LFR-16** Delete folder = subtree; papers → Uncategorized, never deleted → Epic 7
-- **LFR-17** Note file-type reserved + displayed → Epic 7
+- **LFR-17** Note file-type reserved + displayed → Epic 7 **(DESCOPED 2026-07-07: Story 7.6 dropped by user request; deferred to a future notes epic)**
 - **LFR-18** Double-click a row opens the annotator → Epic 6
 - **LFR-19** Open restores existing annotations via doc-scoped store → Epic 6
 - **LFR-20** Return from reader to Library → Epic 6
@@ -1273,6 +1282,8 @@ DESIGN.md (line 567) explicitly leaves Phase-2 Library surfaces **not yet styled
 - **LFR-23** Restore a Trash item → Epic 7
 - **LFR-24** Purge a Trash item permanently → Epic 7
 - **LFR-25..29** Remote sync (WebDAV/Google Drive, whole-dir mirror, LWW) → Epic 8 **(DEFERRED, not built this sprint)**
+- **LFR-30** Recent view (last-opened order, capped 50) → Epic 7 **(added 2026-07-07)**
+- **LFR-31** Star/unstar a paper; filled-star title marker + Starred view → Epic 7 **(added 2026-07-07)**
 
 ## Library Epic List
 
@@ -1284,8 +1295,8 @@ On boot the user lands in their collection, not an empty reader. Drop one or mor
 **Goals:** G1 (persistent workspace) + G2 (one-action add)
 
 ### Epic 7: Organize & curate the collection
-Shape the collection into nested custom folders, multi-select and batch-move papers, sort / filter / hide columns to find any paper in seconds, reserve the Note file-type, and delete safely through a Trash lens (restore or permanently purge). Builds on Epic 6's table + collection index; stands alone as the curation layer without Epic 6 depending on it.
-**LFRs covered:** LFR-3, LFR-4, LFR-5, LFR-6, LFR-12, LFR-13, LFR-14, LFR-15, LFR-16, LFR-17, LFR-22, LFR-23, LFR-24
+Shape the collection into nested custom folders, multi-select and batch-move papers, sort / filter / hide columns to find any paper in seconds, jump to recently-opened papers, star the ones that matter, and delete safely through a Trash lens (restore or permanently purge). Builds on Epic 6's table + collection index; stands alone as the curation layer without Epic 6 depending on it. (The Note file-type, LFR-17, was descoped 2026-07-07; Recent + Starred, LFR-30/31, were added the same day.)
+**LFRs covered:** LFR-3, LFR-4, LFR-5, LFR-6, LFR-12, LFR-13, LFR-14, LFR-15, LFR-16, LFR-22, LFR-23, LFR-24, LFR-30, LFR-31 (LFR-17 descoped)
 **NFRs:** LNFR-2 (no auth), LNFR-4 (collection scale: sort/filter/scroll no stall)
 **Architecture:** AL-5 (trash + folder lifecycle), AL-6 (folder + set-based org endpoints)
 **Goals:** G3 (find and open any paper in seconds)
@@ -1533,7 +1544,7 @@ So that the next Library story (Epic 7 folders/trash/sort) builds on legible mod
 
 ## Epic 7: Organize & curate the collection
 
-Shape the collection into nested custom folders, multi-select and batch-move papers, sort / filter / hide columns to find any paper in seconds, reserve the Note file-type, and delete safely through a Trash lens (restore or permanently purge). Builds on Epic 6's table + collection index; stands alone as the curation layer.
+Shape the collection into nested custom folders, multi-select and batch-move papers, sort / filter / hide columns to find any paper in seconds, jump to recently-opened papers, star the ones that matter, and delete safely through a Trash lens (restore or permanently purge). Builds on Epic 6's table + collection index; stands alone as the curation layer.
 
 ### Story 7.1: Folders (create, rename, delete, nest)
 
@@ -1681,13 +1692,15 @@ So that I never lose a paper or its annotations by accident.
 **Given** any Trash label or notice copy
 **Then** no string contains an em-dash (L-UX-DR9, L-UX-DR13)
 
-### Story 7.6: Note file-type (reserved and displayed)
+### Story 7.6: Note file-type (reserved and displayed): DESCOPED from Epic 7 (2026-07-07)
+
+> Dropped by user request (`sprint-change-proposal-2026-07-07.md`), never attempted: no story file, no code. The `file_type` enum already carries the reserved `"note"` value from Epic 6 (`DocMeta`/`CollectionRow`), but nothing displays or creates a Note this sprint. LFR-17 defers to a future notes epic (alongside in-app note authoring, which was always out of scope). Marked `blocked` in `sprint-status.yaml` so Epic 7 can still reach `done`. Section kept for traceability; the original spec follows.
 
 As a reader,
 I want the collection to recognize a Note file-type distinct from a PDF,
 So that the model and table are ready for notes even before authoring exists.
 
-**Acceptance Criteria:**
+**Acceptance Criteria (DESCOPED, not built):**
 
 **Given** the data model
 **Then** `meta.json` `file_type` and the `CollectionRow` model support a "Note" value distinct from "PDF" (LFR-17, AL-1)
@@ -1698,6 +1711,62 @@ So that the model and table are ready for notes even before authoring exists.
 
 **Given** this sprint
 **Then** nothing in the app CREATES a note (authoring is out of scope); the type is reserved and displayed only (LFR-17, spine Deferred: note identity)
+
+### Story 7.7: Recent view (recently-opened papers)
+
+As a reader,
+I want a Recent view that lists the papers I most recently opened,
+So that I can jump straight back to what I was reading without hunting through the collection.
+
+**Acceptance Criteria:**
+
+**Given** the left-panel `Recent` entry (an inert placeholder from Story 7.1)
+**When** I select it
+**Then** it becomes a real selectable, keyboard-operable button (shared active-highlight) and shows the Recent view as VIEW-STATE inside the Library route, not a route change (LFR-30, AL-3, L-UX-DR14)
+
+**Given** the Recent view
+**Then** it lists papers ordered by last-opened descending, capped at the 50 most-recently-opened; trashed papers never appear (LFR-30, L-UX-DR14)
+
+**Given** a paper is opened from the Library
+**Then** its `last_opened` advances (already wired via `POST /api/docs/{id}/open`, Story 6.7) so it moves to the top of Recent on the next `GET /api/library` reconcile (LFR-30, AL-1)
+
+**Given** the collection table's display cache
+**Then** `CollectionRow` exposes `last_opened` (additive contract change: Pydantic → OpenAPI → regenerated TS types; `docs/API.md` updated) so the client can order the Recent lens in one read (AL-1, AL-6, AL-8)
+
+**Given** the Recent view is empty
+**Then** the empty copy reads "No recent papers." (L-UX-DR11, L-UX-DR14)
+
+**Given** the ordering source
+**Then** the 50-cap and last-opened ordering are client view-state over the returned rows (no new persistence: `last_opened` already persists in `meta.json` per AL-1); a design note resolves whether a never-opened paper (seeded `last_opened == added`) appears in Recent or Recent shows only genuinely-opened papers (see the sprint-change-proposal decision).
+
+### Story 7.8: Star / unstar papers (filled-star marker + Starred view)
+
+As a reader,
+I want to star the papers that matter and see them together,
+So that my most important papers are one click away and visibly marked in any view.
+
+**Acceptance Criteria:**
+
+**Given** a paper or a multi-selection
+**When** I toggle Star (a toolbar button in the main row alongside Move / Delete / Add, enabled on a selection, mirroring the Story 7.5 bulk Restore/Purge pattern)
+**Then** `starred` flips in `library.json` for every selected paper via a set-based `POST /api/library/star` / `unstar` taking `{doc_ids}`, applied through the serialized write path so a concurrent background refresh cannot drop it (LFR-31, AL-5, AL-6, AL-7)
+
+**Given** a starred paper in ANY lens (All, a folder, Recent, Starred)
+**When** the table renders its Title cell
+**Then** a filled star icon appears at the end of the title text: appended right after the title when the column has room, and holding its own space so the title truncates first when it does not, so the star is never clipped (LFR-31, L-UX-DR15)
+
+**Given** the left-panel `Starred` entry (an inert placeholder from Story 7.1)
+**When** I select it
+**Then** it becomes a real selectable button and shows a VIEW-STATE lens listing all starred, non-trashed papers; empty copy reads "No starred papers." (LFR-31, AL-3, L-UX-DR15)
+
+**Given** the `starred` flag
+**Then** it is org state in `library.json` (like `trashed`), surfaced on `CollectionRow` (additive contract change: regenerated TS types; `docs/API.md` updated) and persists across restart (LFR-31, AL-1, AL-8, LNFR-5)
+
+**Given** the Star toolbar button
+**Then** its label/pressed state reflect whether the current selection is starred (a mixed selection toggles all to starred), it is keyboard-operable with a visible focus ring, and hidden or inert in the Trash lens (LFR-31, L-UX-DR12, L-UX-DR15)
+
+**Given** any new Star label, toolbar copy, or empty-view copy
+**Then** no string contains an em-dash (L-UX-DR13, L-UX-DR15)
 
 ## Epic 8: Remote sync (DEFERRED)
 
