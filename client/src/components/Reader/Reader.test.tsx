@@ -298,7 +298,8 @@ describe("Reader", () => {
     await screen.findAllByTestId("page-surface");
     const canvas = screen.getByTestId("reader-backdrop") as HTMLElement;
     // jsdom has no real scrollTo; stub it to capture the jump (offsetTop is 0
-    // under jsdom — assert the call + smooth behavior, not pixels).
+    // under jsdom — assert the call + instant behavior, not pixels). Page-step
+    // nav is instant (fix request: no per-step glide), so behavior is "auto".
     const scrollTo = vi.fn();
     canvas.scrollTo = scrollTo as unknown as typeof canvas.scrollTo;
     expect(typeof ref.current?.jumpToPage).toBe("function");
@@ -307,7 +308,7 @@ describe("Reader", () => {
     // tests dodge this by asserting the delta, not the scroll).
     await waitFor(() => {
       ref.current!.jumpToPage(2);
-      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: "auto" }));
     });
   });
 

@@ -126,8 +126,11 @@ describe("loading a document via the route param (Story 6.1, AC-2)", () => {
     vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
     renderReaderAt(fakeDoc.doc_id);
 
-    // Reader (mocked render) reports page 1; total = doc.page_count (3).
-    await waitFor(() => expect(screen.getByTestId("page-indicator-current").textContent).toBe("1"));
+    // Reader (mocked render) reports page 1; total = doc.page_count (3). The
+    // current-page chip is an editable input, so the page is its `value`.
+    await waitFor(() =>
+      expect((screen.getByTestId("page-indicator-current") as HTMLInputElement).value).toBe("1"),
+    );
     expect(screen.getByTestId("page-indicator").textContent).toContain("of 3");
   });
 

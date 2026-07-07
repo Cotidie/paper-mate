@@ -341,6 +341,11 @@ export default function ReaderPage() {
             pendingPageRef.current = target;
             readerRef.current?.jumpToPage(target);
           }}
+          onJump={(page) => {
+            const target = pageNavTarget(page, 0, doc.page_count);
+            pendingPageRef.current = target;
+            readerRef.current?.jumpToPage(target);
+          }}
         />
         <div className="top-bar__actions">
           {/* Zoom control sits left of ToC (UX-DR10 revised 2026-06-28). */}

@@ -112,6 +112,25 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The chip is an editable <input> (fix request: type a page number to jump).
+   Reset the input's UA chrome/font so it keeps the filled-chip look above.
+   `field-sizing: content` hugs the typed digits so the chip stays as compact
+   as the old static readout (the base `min-width` floors it); the `size`
+   attribute is only a fallback width where `field-sizing` is unsupported. The
+   focus state is the app's inset ink ring, matching the other editable fields. */
+input.page-indicator__current {
+  field-sizing: content;
+  border: none;
+  font: inherit;
+  cursor: text;
+  appearance: none;
+}
+
+input.page-indicator__current:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--color-ink);
+}
+
 .page-indicator__total {
   padding: 0 var(--space-xxs);
   color: var(--color-muted);
