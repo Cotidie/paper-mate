@@ -1807,7 +1807,68 @@ So that I can scan and sort my papers by where and when they were published and 
 
 > **Out of scope (this story):** backfilling/re-enriching already-imported papers; inline-editing Venue/Year/DOI; any Crossref capture beyond `container-title`/`issued`. **Open design calls for create-story:** DOI-as-link vs muted text; whether DOI is hidden by default; `year` as `int` vs the raw issued string (recommend `int`).
 
-### Story 7.10: Epic 7 structural refactor (modularize the library client and the storage/routes organize layer) (added 2026-07-07)
+### Story 7.10: Reorder columns by drag-and-drop (persisted table layout) (added 2026-07-08)
+
+> User request (2026-07-08): drag a column header to reorder the collection-table columns, and have that order survive a reload. Extends Story 7.4's column model (`tableView.ts` `COLUMNS` + `useTableView` visibility/sort + `useColumnWidths`), which today is a fixed const order held in ephemeral view-state. This introduces the first CLIENT-SIDE PERSISTED table layout: column order, visibility (the 7.4 Display toggle), and widths persist in a `localStorage` "table view preferences" store (app-global, one layout for the collection table), decided with the user. Sort stays ephemeral (re-sort per session). Row ordering is untouched (still the client sort / library.json insertion order per AD-L1). No backend/contract change: table LAYOUT prefs are client-only UI state and never enter `library.json`/`meta.json` (storage stays the sole writer of those; AD-9, AL-7).
+
+As a reader,
+I want to drag columns into the order I prefer and have it remembered,
+So that the table opens the way I left it every time.
+
+**Acceptance Criteria:**
+
+**Given** the table header
+**When** I drag a column header onto another
+**Then** the columns reorder to the drop position, with a clear drag affordance and drop indicator (token-driven, no raw values); the reorder is also keyboard-operable (an accessible move, e.g. focus a header and move it left/right) (LFR-4, L-UX-DR3, L-UX-DR12)
+
+**Given** a reordered / re-hidden / resized table
+**When** I reload the app or revisit the Library
+**Then** the column ORDER, VISIBILITY (7.4 Display toggle), and WIDTHS are restored from a client-only `localStorage` table-view-preferences store; the active SORT is NOT persisted (re-sort per session); row order is unchanged (LFR-4, AL-3-amended)
+
+**Given** Title carries the Open button + inline-edit affordance (7.4 AC-1: never hideable)
+**Then** the reorder respects that constraint (Title stays reachable as the primary column); decide at create-story whether Title is pinned first or may move while staying non-hideable
+
+**Given** the persisted preferences store
+**Then** it is a client-only, app-global UI-prefs surface (NOT per-doc, NOT in `library.json`/`meta.json`), it degrades safely on a missing/corrupt/older-shape value (fall back to the default `COLUMNS` order + all-visible), and an unknown/removed column key in a stored layout is ignored so a future column-set change can't break an old saved layout (LNFR-5-style forward-compat, AL-3-amended)
+
+**Given** the change
+**Then** `tableView.ts`'s fixed `COLUMNS` const becomes an ordered, persisted list threaded through `useTableView`; client tests + typecheck stay green, `no-raw-values` re-run after any CSS, no em-dash in any new UI string; the reorder + persistence are live-smoked (reorder, hide, resize, reload → layout restored)
+
+> **Out of scope (this story):** persisting the active sort; per-doc or server-synced layout (this is one app-global client layout); adding/removing columns beyond reordering the existing set. **Open design calls for create-story:** whether Title is drag-pinned-first or freely movable; the exact drag library vs a hand-rolled HTML5 DnD (adopt a stable primitive per CLAUDE.md if it fits); the localStorage key + versioned schema for the prefs blob.
+
+### Story 7.11: Tag-type columns, Author as editable, filterable tags (added 2026-07-08)
+
+> User request (2026-07-08, with a Notion screenshot): columns should support a "tag" cell type (Notion-style chips), and the Author column should be the first to use it. Today the domain layer already carries the honest `ExtractedMeta.authors: list[str]`, but storage FLATTENS it to a single joined `DocMeta.authors: str | None` display string, and the client renders/inline-edits that one string. This story introduces a column CELL-TYPE seam (a column declares text / number / badge / tag; the renderer dispatches) and makes Author a `tag` column: each author is a chip, the multi-value list is surfaced end-to-end, and authors become editable (add/remove chips) and filterable (click/scope to an author). Colors are NOT in this slice (decided with the user): chips render with a uniform token style, per-value color assignment is a follow-up. This is the larger of the two 2026-07-08 stories, it changes the authors representation (a `meta.json` schema decision), the API contract (Pydantic → OpenAPI → TS), and the inline-edit + filter seams.
+
+As a reader,
+I want the Author column to show each author as its own tag that I can add, remove, and filter by,
+So that authorship reads and behaves like a real multi-value field instead of one flat string.
+
+**Acceptance Criteria:**
+
+**Given** the collection table
+**Then** a column can declare a `cellType` (text / number / badge / tag) and the table dispatches rendering on it (a small registry/descriptor, not a per-column `if` chain, coordinate with Story 7.12's decomposition seam), with Author declared `tag` (LFR-4, AD-5-style dispatch)
+
+**Given** the authors value (domain already `list[str]`, storage currently joins it to one string)
+**Then** authors are surfaced as a first-class list end-to-end: `meta.json`/`DocMeta` holds the list (schema handling is an open call, additive `authors_list` kept alongside the derived join, vs a typed migration with a `schema_version` bump + old-doc read path), `CollectionRow` exposes the list (additive contract: Pydantic → OpenAPI → regenerated TS types; `docs/API.md` updated), projected in `_cache_from_meta` (AL-1, AL-6, AL-8, NFR-5)
+
+**Given** the Author cell rendered as tags
+**Then** each author is a distinct chip (uniform token style this story, no per-value colors yet, but the chip style is token-driven and color-ready), the cell wraps to multiple chips, and it truncates/never reflows the frame like the other cells (L-UX-DR3)
+
+**Given** a selected paper's Author cell
+**When** I add or remove an author tag (a Notion-style "select or create" affordance)
+**Then** the change persists to `meta.json` through the existing edit path (extends Story 6.6 inline-edit / the command path, AR-7/AD-7): `DocPatch` (or a successor) accepts the author list or an add/remove op; the `library.json` display cache refreshes; no author is silently lost (LFR-4, FR-10-style never-lost)
+
+**Given** the tag filter
+**When** I click an author chip or set an Author filter
+**Then** the table filters to rows containing that author, integrating with Story 7.4's Filter control (a tag filter is a set-membership match on the author list, not a substring on a joined string) (LFR-6)
+
+**Given** any new UI string (chip labels, the add-author affordance, the filter copy, aria-labels)
+**Then** none contains an em-dash (L-UX-DR13); the chips + editor are keyboard-operable with visible focus (L-UX-DR12)
+
+> **Out of scope (this story):** per-value / user-assignable tag COLORS (deferred follow-up, the chip style is left color-ready); applying `tag` type to columns other than Author (Topics/Type/etc. from the screenshot come later once the seam is proven); a general tag-management surface (rename/merge/recolor a tag across the collection). **Open design calls for create-story:** the `meta.json` authors-list schema handling (additive field vs type migration + `schema_version` bump); whether editing tags flows through `DocPatch` (widened to a list) or a dedicated add/remove endpoint; the author-string → list parse/back-compat for papers imported before this; sequencing vs Story 7.12 (the cell-type seam is exactly the descriptor 7.12 introduces, recommend 7.12 first, or 7.11 introduces the seam 7.12 then generalizes) and vs Story 7.9 (both add/alter columns).
+
+### Story 7.12: Epic 7 structural refactor (modularize the library client and the storage/routes organize layer) (added 2026-07-07)
 
 > User request (2026-07-07): Epic 7 landed the whole organize/curate run (folders CRUD + nest, assign/filter, batch move, display/sort/filter controls, Trash, Recent, Starred, and pending Venue/Year/DOI) on top of Epic 6's table + index, and grew structural debt: `client/src/library/CollectionTable/CollectionTable.tsx` is now 629 lines fusing header/sort menus, column-resize, selection + Shift-range, drag-preview, group headers, and row rendering; `LibraryPage.tsx` (449) is a composition root with per-lens copy, a two-branch toolbar, and star/trash/move/selection handler sprawl; the three paper-org op hooks (`useMovePapers`/`useTrashPapers`/`useStarPapers`) are near-twin optimistic-flip → API → reconcile → revert+toast skeletons; `server/app/storage/library_index.py` (453) spans folder CRUD + subtree delete + the near-identical `move`/`trash`/`restore`/`star`/`unstar` `mutate_index` mutators (each a validate-before-mutate closure); and `routes/library.py` repeats a near-identical `DocIdSet → storage_errors → storage.X_papers` body across trash/restore/star/unstar. Audit inter-module dependencies, dedupe, abstract the recurring shapes into shared units, and simplify conditional sprawl. A pure refactor thread, same footing as Story 5.0 / 5.3 / 5.4 / 6.8, its own PR(s), never folded into a feature story. No behavior or contract change.
 
@@ -1842,67 +1903,6 @@ So that the next story builds on legible modular seams instead of a 629-line tab
 **Then** the new module boundaries respect it: no upward imports, routes stay thin, storage stays the sole data-root writer, and the client `library/` units keep the view-state lens (`folderFilter`/`tableView`) as pure, React-free leaves
 
 > **Out of scope (this story):** any new organize capability, column, or lens; the descoped Note file-type (7.6); the pending Venue/Year/DOI columns (7.9, if 7.9 has not merged when this runs, refactor around it or sequence after it, do not fold them together). **Open design calls for create-story:** whether the shared optimistic-op seam is a hook factory vs a descriptor map; how far to split `CollectionTable` without over-fragmenting; whether the backend split is two modules (`folders` + `paper_org`) or a lighter dedupe-in-place.
-
-### Story 7.11: Reorder columns by drag-and-drop (persisted table layout) (added 2026-07-08)
-
-> User request (2026-07-08): drag a column header to reorder the collection-table columns, and have that order survive a reload. Extends Story 7.4's column model (`tableView.ts` `COLUMNS` + `useTableView` visibility/sort + `useColumnWidths`), which today is a fixed const order held in ephemeral view-state. This introduces the first CLIENT-SIDE PERSISTED table layout: column order, visibility (the 7.4 Display toggle), and widths persist in a `localStorage` "table view preferences" store (app-global, one layout for the collection table), decided with the user. Sort stays ephemeral (re-sort per session). Row ordering is untouched (still the client sort / library.json insertion order per AD-L1). No backend/contract change: table LAYOUT prefs are client-only UI state and never enter `library.json`/`meta.json` (storage stays the sole writer of those; AD-9, AL-7).
-
-As a reader,
-I want to drag columns into the order I prefer and have it remembered,
-So that the table opens the way I left it every time.
-
-**Acceptance Criteria:**
-
-**Given** the table header
-**When** I drag a column header onto another
-**Then** the columns reorder to the drop position, with a clear drag affordance and drop indicator (token-driven, no raw values); the reorder is also keyboard-operable (an accessible move, e.g. focus a header and move it left/right) (LFR-4, L-UX-DR3, L-UX-DR12)
-
-**Given** a reordered / re-hidden / resized table
-**When** I reload the app or revisit the Library
-**Then** the column ORDER, VISIBILITY (7.4 Display toggle), and WIDTHS are restored from a client-only `localStorage` table-view-preferences store; the active SORT is NOT persisted (re-sort per session); row order is unchanged (LFR-4, AL-3-amended)
-
-**Given** Title carries the Open button + inline-edit affordance (7.4 AC-1: never hideable)
-**Then** the reorder respects that constraint (Title stays reachable as the primary column); decide at create-story whether Title is pinned first or may move while staying non-hideable
-
-**Given** the persisted preferences store
-**Then** it is a client-only, app-global UI-prefs surface (NOT per-doc, NOT in `library.json`/`meta.json`), it degrades safely on a missing/corrupt/older-shape value (fall back to the default `COLUMNS` order + all-visible), and an unknown/removed column key in a stored layout is ignored so a future column-set change can't break an old saved layout (LNFR-5-style forward-compat, AL-3-amended)
-
-**Given** the change
-**Then** `tableView.ts`'s fixed `COLUMNS` const becomes an ordered, persisted list threaded through `useTableView`; client tests + typecheck stay green, `no-raw-values` re-run after any CSS, no em-dash in any new UI string; the reorder + persistence are live-smoked (reorder, hide, resize, reload → layout restored)
-
-> **Out of scope (this story):** persisting the active sort; per-doc or server-synced layout (this is one app-global client layout); adding/removing columns beyond reordering the existing set. **Open design calls for create-story:** whether Title is drag-pinned-first or freely movable; the exact drag library vs a hand-rolled HTML5 DnD (adopt a stable primitive per CLAUDE.md if it fits); the localStorage key + versioned schema for the prefs blob.
-
-### Story 7.12: Tag-type columns, Author as editable, filterable tags (added 2026-07-08)
-
-> User request (2026-07-08, with a Notion screenshot): columns should support a "tag" cell type (Notion-style chips), and the Author column should be the first to use it. Today the domain layer already carries the honest `ExtractedMeta.authors: list[str]`, but storage FLATTENS it to a single joined `DocMeta.authors: str | None` display string, and the client renders/inline-edits that one string. This story introduces a column CELL-TYPE seam (a column declares text / number / badge / tag; the renderer dispatches) and makes Author a `tag` column: each author is a chip, the multi-value list is surfaced end-to-end, and authors become editable (add/remove chips) and filterable (click/scope to an author). Colors are NOT in this slice (decided with the user): chips render with a uniform token style, per-value color assignment is a follow-up. This is the larger of the two 2026-07-08 stories, it changes the authors representation (a `meta.json` schema decision), the API contract (Pydantic → OpenAPI → TS), and the inline-edit + filter seams.
-
-As a reader,
-I want the Author column to show each author as its own tag that I can add, remove, and filter by,
-So that authorship reads and behaves like a real multi-value field instead of one flat string.
-
-**Acceptance Criteria:**
-
-**Given** the collection table
-**Then** a column can declare a `cellType` (text / number / badge / tag) and the table dispatches rendering on it (a small registry/descriptor, not a per-column `if` chain, coordinate with Story 7.10's decomposition seam), with Author declared `tag` (LFR-4, AD-5-style dispatch)
-
-**Given** the authors value (domain already `list[str]`, storage currently joins it to one string)
-**Then** authors are surfaced as a first-class list end-to-end: `meta.json`/`DocMeta` holds the list (schema handling is an open call, additive `authors_list` kept alongside the derived join, vs a typed migration with a `schema_version` bump + old-doc read path), `CollectionRow` exposes the list (additive contract: Pydantic → OpenAPI → regenerated TS types; `docs/API.md` updated), projected in `_cache_from_meta` (AL-1, AL-6, AL-8, NFR-5)
-
-**Given** the Author cell rendered as tags
-**Then** each author is a distinct chip (uniform token style this story, no per-value colors yet, but the chip style is token-driven and color-ready), the cell wraps to multiple chips, and it truncates/never reflows the frame like the other cells (L-UX-DR3)
-
-**Given** a selected paper's Author cell
-**When** I add or remove an author tag (a Notion-style "select or create" affordance)
-**Then** the change persists to `meta.json` through the existing edit path (extends Story 6.6 inline-edit / the command path, AR-7/AD-7): `DocPatch` (or a successor) accepts the author list or an add/remove op; the `library.json` display cache refreshes; no author is silently lost (LFR-4, FR-10-style never-lost)
-
-**Given** the tag filter
-**When** I click an author chip or set an Author filter
-**Then** the table filters to rows containing that author, integrating with Story 7.4's Filter control (a tag filter is a set-membership match on the author list, not a substring on a joined string) (LFR-6)
-
-**Given** any new UI string (chip labels, the add-author affordance, the filter copy, aria-labels)
-**Then** none contains an em-dash (L-UX-DR13); the chips + editor are keyboard-operable with visible focus (L-UX-DR12)
-
-> **Out of scope (this story):** per-value / user-assignable tag COLORS (deferred follow-up, the chip style is left color-ready); applying `tag` type to columns other than Author (Topics/Type/etc. from the screenshot come later once the seam is proven); a general tag-management surface (rename/merge/recolor a tag across the collection). **Open design calls for create-story:** the `meta.json` authors-list schema handling (additive field vs type migration + `schema_version` bump); whether editing tags flows through `DocPatch` (widened to a list) or a dedicated add/remove endpoint; the author-string → list parse/back-compat for papers imported before this; sequencing vs Story 7.10 (the cell-type seam is exactly the descriptor 7.10 introduces, recommend 7.10 first, or 7.12 introduces the seam 7.10 then generalizes) and vs Story 7.9 (both add/alter columns).
 
 ## Epic 8: Remote sync (DEFERRED)
 
