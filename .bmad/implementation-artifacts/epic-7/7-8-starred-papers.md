@@ -4,7 +4,7 @@ baseline_commit: dd82fe094fbe7dbfa5dc66308db47dc52ea9bd72
 
 # Story 7.8: Star / unstar papers (filled-star marker + Starred view)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
