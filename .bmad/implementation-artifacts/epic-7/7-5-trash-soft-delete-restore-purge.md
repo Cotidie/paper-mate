@@ -4,7 +4,7 @@ baseline_commit: 32a8aa5
 
 # Story 7.5: Trash (soft-delete, restore, purge)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
