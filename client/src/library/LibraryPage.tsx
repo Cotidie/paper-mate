@@ -118,7 +118,7 @@ export default function LibraryPage() {
   const tableView = useTableView(folders);
   const folderPanelResize = useResizablePanel();
   const columnWidths = useColumnWidths();
-  const [selection, setSelection] = useState<FolderSelection>({ kind: "all" });
+  const [selection, setSelection] = useState<FolderSelection>({ kind: "recent" });
   // The one selection set driving BOTH a plain-click single row and a
   // Ctrl/Cmd+click multi-select (fix request: they were two disjoint pieces
   // of state - a table-local `selectedId` and this lifted `checkedIds` -
@@ -209,11 +209,12 @@ export default function LibraryPage() {
     [selection, tableView.sort, visiblePapers, recentNow],
   );
   // A just-uploaded paper lands Uncategorized; it should not appear under an
-  // unrelated selected folder, the Trash lens, or the Recent lens (a
-  // pre-settle optimistic row has no real `last_opened` yet - Dev Notes:
-  // gate pending rows on selection kind).
+  // unrelated selected folder or the Trash lens. The Recent lens DOES show it:
+  // an upload in progress is the most-recent item, and Recent is the default
+  // landing view (see the initial `selection`), so its pending "Extracting" row
+  // is the user's only upload feedback on the front door.
   const visiblePending =
-    selection.kind === "folder" || selection.kind === "trash" || selection.kind === "recent" ? [] : pending;
+    selection.kind === "folder" || selection.kind === "trash" ? [] : pending;
   const mainClassName = [
     "library-main",
     isTableLayout && "library-main--table",

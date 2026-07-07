@@ -120,7 +120,7 @@ describe("Library shell (Story 6.1, AC-3)", () => {
   it("shows the count and an Add control in one row once the library has papers", async () => {
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [fakeRow], folders: [] });
     renderLibrary();
-    await waitFor(() => expect(screen.getByText("1 files in library")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("1 files in Recent")).toBeTruthy());
     expect(screen.getByRole("button", { name: "Add" })).toBeTruthy();
   });
 
@@ -170,7 +170,7 @@ describe("Bulk upload (Story 6.4)", () => {
     await waitFor(() => expect(screen.getByText("Paper Alpha")).toBeTruthy());
     expect(screen.getByText("Paper Beta")).toBeTruthy();
     expect(screen.queryByText("Extracting")).toBeNull();
-    await waitFor(() => expect(screen.getByText("2 files in library")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("2 files in Recent")).toBeTruthy());
   });
 
   it("shows a failure toast for one bad file while the other still lands", async () => {
@@ -202,13 +202,13 @@ describe("Bulk upload (Story 6.4)", () => {
       target: { files: [pdfFile("dup.pdf")] },
     });
     await waitFor(() => expect(screen.getByText("Duplicate Paper")).toBeTruthy());
-    expect(screen.getByText("1 files in library")).toBeTruthy();
+    expect(screen.getByText("1 files in Recent")).toBeTruthy();
 
     fireEvent.change(screen.getByTestId("library-add-input"), {
       target: { files: [pdfFile("dup.pdf")] },
     });
     await waitFor(() => expect(screen.getAllByText("Duplicate Paper").length).toBe(1));
-    expect(screen.getByText("1 files in library")).toBeTruthy();
+    expect(screen.getByText("1 files in Recent")).toBeTruthy();
   });
 
   it("uploads files picked via the empty-state dropzone", async () => {
@@ -248,7 +248,7 @@ describe("Collection table (Story 6.3)", () => {
     renderLibrary();
 
     await waitFor(() => expect(screen.getByText("Attention Is All You Need")).toBeTruthy());
-    expect(screen.getByText("1 files in library")).toBeTruthy();
+    expect(screen.getByText("1 files in Recent")).toBeTruthy();
     expect(screen.queryByText("Drop PDFs here")).toBeNull();
   });
 
@@ -758,7 +758,7 @@ describe("Folder filter + move (Story 7.2)", () => {
     });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [uncategorized, inFolder], folders: [folderA] });
     renderLibrary();
-    await waitFor(() => expect(screen.getByText("2 files in library")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("2 files in Recent")).toBeTruthy());
 
     fireEvent.click(screen.getByRole("button", { name: "Uncategorized" }));
     expect(screen.getByText("1 files in Uncategorized")).toBeTruthy();
@@ -1241,7 +1241,7 @@ describe("Trash (Story 7.5)", () => {
       .spyOn(api, "restorePapers")
       .mockResolvedValue({ papers: [{ ...trashedPaper, trashed: false }], folders: [] });
     renderLibrary();
-    await waitFor(() => expect(screen.getByText("No papers to show.")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("No recent papers.")).toBeTruthy());
 
     fireEvent.click(screen.getByText("Trash"));
     await waitFor(() => expect(screen.getByText("Trashed Paper")).toBeTruthy());
@@ -1364,6 +1364,20 @@ describe("Recent (Story 7.7)", () => {
   }
 
   const DAY_MS = 24 * 60 * 60 * 1000;
+
+  it("is the default landing view: opens on Recent without any sidebar click", async () => {
+    const paper = libraryRow({ doc_id: "d".repeat(64), title: "Landing Paper" });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+
+    // The toolbar count names the active lens, and the Recent sidebar item is
+    // highlighted - both before the user touches the panel.
+    await waitFor(() => expect(screen.getByText("1 files in Recent")).toBeTruthy());
+    expect(screen.getByText("Landing Paper")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Recent" }).classList.contains("library-folder-panel__item--active"),
+    ).toBe(true);
+  });
 
   it("selecting Recent shows the last-opened rows most-recent-first and labels the toolbar count", async () => {
     const now = Date.now();
