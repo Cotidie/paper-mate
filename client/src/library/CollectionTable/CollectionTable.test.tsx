@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, createEvent } from "@testing-library/react";
 import CollectionTable from "./CollectionTable";
 import { formatAdded } from "@/library/row";
 import { COLUMNS } from "@/library/tableView";
@@ -12,6 +12,9 @@ afterEach(cleanup);
 // dragStart didn't wait a tick for, so it can't leak into the next test.
 afterEach(() => {
   document.querySelectorAll(".collection-table__drag-preview").forEach((el) => el.remove());
+});
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 const rows: CollectionRow[] = [
@@ -1139,6 +1142,61 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     };
   }
 
+  // jsdom never computes real layout, so `getBoundingClientRect()` returns
+  // all-zero rects - the live preview's frozen-geometry hit-testing (fix
+  // request) needs each header's rect to actually differ. Stubs a fixed
+  // 100px-wide slot per column, in `COLUMNS` order, keyed off the
+  // `data-column-key` attribute the real component sets.
+  const COLUMN_ORDER_KEYS = [
+    "title",
+    "authors",
+    "venue",
+    "year",
+    "location",
+    "added",
+    "file_type",
+    "doi",
+  ];
+  const SLOT_WIDTH = 100;
+
+  function mockColumnRects() {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: Element,
+    ) {
+      const key = this instanceof HTMLElement ? this.dataset.columnKey : undefined;
+      const idx = key ? COLUMN_ORDER_KEYS.indexOf(key) : -1;
+      const left = idx >= 0 ? idx * SLOT_WIDTH : 0;
+      return {
+        left,
+        right: left + SLOT_WIDTH,
+        top: 0,
+        bottom: 0,
+        width: SLOT_WIDTH,
+        height: 0,
+        x: left,
+        y: 0,
+        toJSON() {
+          return this;
+        },
+      } as DOMRect;
+    });
+  }
+
+  /** The clientX at the MIDPOINT of `key`'s mocked slot. */
+  function clientXFor(key: string): number {
+    return COLUMN_ORDER_KEYS.indexOf(key) * SLOT_WIDTH + SLOT_WIDTH / 2;
+  }
+
+  function fireColumnDragOver(
+    target: HTMLElement,
+    dataTransfer: ReturnType<typeof dataTransferStub>,
+    clientX: number,
+  ) {
+    const event = createEvent.dragOver(target, { dataTransfer });
+    Object.defineProperty(event, "clientX", { value: clientX });
+    fireEvent(target, event);
+  }
+
   it("the cell order matches the header order under a non-default column order (the cell-order trap, AC-6)", () => {
     const reordered = [
       COLUMNS.find((c) => c.key === "title")!,
@@ -1225,6 +1283,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
   });
 
   it("dragging one header onto another calls onReorderColumn with (fromKey, toKey)", () => {
+    mockColumnRects();
     const onReorderColumn = vi.fn();
     render(
       <CollectionTable
@@ -1240,7 +1299,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
-    fireEvent.dragOver(venueHeader, { dataTransfer });
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
     fireEvent.drop(venueHeader, { dataTransfer });
     expect(onReorderColumn).toHaveBeenCalledWith("authors", "venue");
   });
@@ -1266,6 +1325,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
   });
 
   it("shows a drop-target indicator while dragging over a header, cleared on drop", () => {
+    mockColumnRects();
     render(
       <CollectionTable
         rows={rows}
@@ -1280,13 +1340,14 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
-    fireEvent.dragOver(venueHeader, { dataTransfer });
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
     expect(venueHeader.getAttribute("data-drop-target")).toBe("before");
     fireEvent.drop(venueHeader, { dataTransfer });
     expect(venueHeader.getAttribute("data-drop-target")).toBeNull();
   });
 
   it("live-previews the reordered headers WHILE dragging, before any drop (fix request)", () => {
+    mockColumnRects();
     render(
       <CollectionTable
         rows={rows}
@@ -1301,7 +1362,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
-    fireEvent.dragOver(venueHeader, { dataTransfer });
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
 
     const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
     expect(headerTexts).toEqual([
@@ -1317,6 +1378,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
   });
 
   it("live-previews row cells in the same swapped order as the headers, not just on drop (fix request)", () => {
+    mockColumnRects();
     render(
       <CollectionTable
         rows={[rows[0]]}
@@ -1331,7 +1393,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
-    fireEvent.dragOver(venueHeader, { dataTransfer });
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
 
     const firstRowCells = document.querySelectorAll("tbody tr")[0].querySelectorAll("td");
     expect(firstRowCells[1].className).toBe("collection-table__venue");
@@ -1390,7 +1452,8 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     expect(headerTexts[0]).toBe("Title");
   });
 
-  it("does not oscillate when the dragged column's own (relocated) header ends up under the cursor after a swap (fix request)", () => {
+  it("hit-testing is driven by frozen geometry + pointer clientX, not by which live DOM element the event fires on (fix request: a stationary-cursor 'ignore self' guard alone did not stop a REAL, continuously moving mouse from oscillating severely)", () => {
+    mockColumnRects();
     render(
       <CollectionTable
         rows={rows}
@@ -1405,31 +1468,37 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
-    fireEvent.dragOver(venueHeader, { dataTransfer }); // swap: Authors <-> Venue
 
-    const swapped = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
-    expect(swapped).toEqual([
+    function headerOrder() {
+      return Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    }
+    const swapped = ["Title", "Venue", "Authors", "Year", "Location", "Added", "File type", "DOI"];
+
+    // Fire the SAME clientX (Venue's slot) on ALTERNATING elements - in a
+    // real browser, once a swap happens, native hit-testing routes the next
+    // dragover to whichever header the layout NOW puts under that screen
+    // position (not necessarily the same element as before). The resolved
+    // target must depend on clientX alone and stay put, not thrash.
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
+    expect(headerOrder()).toEqual(swapped);
+    fireColumnDragOver(authorsHeader, dataTransfer, clientXFor("venue"));
+    expect(headerOrder()).toEqual(swapped);
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
+    expect(headerOrder()).toEqual(swapped);
+
+    // The pointer genuinely moves further right, past Year - the target
+    // updates accordingly, with no back-and-forth along the way.
+    fireColumnDragOver(authorsHeader, dataTransfer, clientXFor("year"));
+    expect(headerOrder()).toEqual([
       "Title",
       "Venue",
-      "Authors",
       "Year",
+      "Authors",
       "Location",
       "Added",
       "File type",
       "DOI",
     ]);
-
-    // The dragged column (Authors) now renders at Venue's OLD screen slot -
-    // a stationary cursor there fires dragover on Authors' own header next
-    // (same element reference: React key-based reconciliation moves the DOM
-    // node, doesn't recreate it). Before the fix this reverted the swap
-    // (dragging a column onto itself is a no-op in `livePreviewColumns`),
-    // landing the cursor back over the original target and re-triggering
-    // the swap - repeating hundreds of times a second.
-    fireEvent.dragOver(authorsHeader, { dataTransfer });
-
-    const afterSelfHover = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
-    expect(afterSelfHover).toEqual(swapped);
   });
 
   it("opens the header menu with Move left / Move right when onMoveColumn is supplied", () => {
