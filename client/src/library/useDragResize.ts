@@ -60,6 +60,16 @@ export function useDragResize(
   const startResize = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
+      // Code-review fix: a re-entrant start (a second pointerdown, or a
+      // multi-pointer/multi-touch drag) before the first pointerup would
+      // otherwise overwrite `attachedRef` and add a SECOND listener pair
+      // without ever removing the first, orphaning it on `document`.
+      // Removing whatever's already attached first keeps exactly one pair
+      // live at a time, regardless of how a new start was triggered.
+      if (attachedRef.current) {
+        document.removeEventListener("pointermove", attachedRef.current.move);
+        document.removeEventListener("pointerup", attachedRef.current.up);
+      }
       dragRef.current = { startX: e.clientX, startValue: value };
       attachedRef.current = { move: handlePointerMove, up: handlePointerUp };
       document.addEventListener("pointermove", handlePointerMove);

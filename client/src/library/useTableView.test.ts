@@ -11,19 +11,19 @@ beforeEach(() => {
   useTableViewPrefs.getState().reset();
 });
 
-describe("useTableView (Story 7.9, AC-7)", () => {
-  it("hides DOI by default, keeps Venue and Year visible", () => {
+describe("useTableView (Story 7.9/7.10, AC-7)", () => {
+  it("hides File type by default, keeps Venue and Year visible", () => {
     const { result } = renderHook(() => useTableView());
-    expect(result.current.hiddenColumns.has("doi")).toBe(true);
+    expect(result.current.hiddenColumns.has("file_type")).toBe(true);
     expect(result.current.hiddenColumns.has("venue")).toBe(false);
     expect(result.current.hiddenColumns.has("year")).toBe(false);
   });
 
-  it("toggling doi reveals it", () => {
+  it("toggling file_type reveals it", () => {
     const { result } = renderHook(() => useTableView());
-    act(() => result.current.toggleColumn("doi"));
-    expect(result.current.hiddenColumns.has("doi")).toBe(false);
-    expect(result.current.visibleColumns.some((c) => c.key === "doi")).toBe(true);
+    act(() => result.current.toggleColumn("file_type"));
+    expect(result.current.hiddenColumns.has("file_type")).toBe(false);
+    expect(result.current.visibleColumns.some((c) => c.key === "file_type")).toBe(true);
   });
 
   it("Title can never enter the hidden set", () => {
@@ -42,10 +42,10 @@ describe("useTableView persisted order (Story 7.10, AC-3/AC-4)", () => {
       "venue",
       "authors",
       "year",
+      "doi",
       "location",
       "added",
-      // doi hidden by default
-      "file_type",
+      // file_type hidden by default
     ]);
   });
 
@@ -63,9 +63,9 @@ describe("useTableView persisted order (Story 7.10, AC-3/AC-4)", () => {
       "year",
       "authors",
       "venue",
+      "doi",
       "location",
       "added",
-      "file_type",
     ]);
   });
 

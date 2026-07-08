@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useDragResize } from "@/library/useDragResize";
 
@@ -84,5 +84,26 @@ describe("useDragResize", () => {
     const other = { key: "Enter", preventDefault: () => {} } as unknown as React.KeyboardEvent;
     act(() => result.current.handleKeyDown(other));
     expect(result.current.value).toBe(100);
+  });
+
+  it("a re-entrant startResize before pointerup removes the previous listener pair instead of leaking it (code-review fix)", () => {
+    const onCommit1 = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ onCommit }: { onCommit: (v: number) => void }) => useDragResize(100, 0, 200, 16, onCommit),
+      { initialProps: { onCommit: onCommit1 } },
+    );
+    act(() => result.current.startResize(pointerDownEvent(0)));
+    // Re-render with a NEW onCommit identity mid-drag (simulating an
+    // unstable callback, e.g. useColumnWidths's per-key inline closures) -
+    // this changes handlePointerUp's own identity too.
+    const onCommit2 = vi.fn();
+    rerender({ onCommit: onCommit2 });
+    // A re-entrant start (still before any pointerup) must remove the FIRST
+    // listener pair (bound to onCommit1), not leave it attached alongside
+    // the new one - otherwise a single native pointerup would fire BOTH.
+    act(() => result.current.startResize(pointerDownEvent(50)));
+    act(() => dispatchPointer("pointerup"));
+    expect(onCommit1).not.toHaveBeenCalled();
+    expect(onCommit2).toHaveBeenCalledTimes(1);
   });
 });

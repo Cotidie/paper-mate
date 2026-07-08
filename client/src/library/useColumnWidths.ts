@@ -1,6 +1,6 @@
 import { useDragResize } from "@/library/useDragResize";
 import { useTableViewPrefs } from "@/library/tableViewPrefs";
-import type { ColumnKey } from "@/library/tableView";
+import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, type ColumnKey } from "@/library/tableView";
 
 /** Matches the `--collection-table-*-width` tokens (each column's default,
  *  pre-resize, width) - the fallback used when a column has no persisted
@@ -16,8 +16,6 @@ const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
   year: 80,
   doi: 200,
 };
-const MIN_COLUMN_WIDTH = 80;
-const MAX_COLUMN_WIDTH = 640;
 const KEYBOARD_STEP = 16;
 
 /**

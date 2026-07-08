@@ -13,10 +13,10 @@ beforeEach(() => {
 });
 
 describe("useTableViewPrefs defaults (Story 7.10, AC-3/AC-5)", () => {
-  it("defaults to the COLUMNS order, hidden: [doi], and empty widths", () => {
+  it("defaults to the COLUMNS order, hidden: [file_type], and empty widths", () => {
     const state = useTableViewPrefs.getState();
     expect(state.order).toEqual(DEFAULT_ORDER);
-    expect(state.hidden).toEqual(["doi"]);
+    expect(state.hidden).toEqual(["file_type"]);
     expect(state.widths).toEqual({});
   });
 });
@@ -29,10 +29,10 @@ describe("useTableViewPrefs actions", () => {
       "venue",
       "authors",
       "year",
+      "doi",
       "location",
       "added",
       "file_type",
-      "doi",
     ]);
   });
 
@@ -74,7 +74,7 @@ describe("useTableViewPrefs actions", () => {
     useTableViewPrefs.getState().reset();
     const state = useTableViewPrefs.getState();
     expect(state.order).toEqual(DEFAULT_ORDER);
-    expect(state.hidden).toEqual(["doi"]);
+    expect(state.hidden).toEqual(["file_type"]);
     expect(state.widths).toEqual({});
   });
 
@@ -99,7 +99,7 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
 
   it("drops an unknown/removed column key from a persisted order", async () => {
     await rehydrateWith({
-      order: ["title", "authors", "removed-column", "venue", "year", "location", "added", "file_type", "doi"],
+      order: ["title", "authors", "removed-column", "venue", "year", "doi", "location", "added", "file_type"],
       hidden: [],
       widths: {},
     });
@@ -108,7 +108,7 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
 
   it("appends a known column missing from a persisted order, at the end (not spliced into the middle)", async () => {
     await rehydrateWith({
-      order: ["title", "venue", "year", "location", "added", "file_type", "doi"], // authors missing
+      order: ["title", "venue", "year", "doi", "location", "added", "file_type"], // authors missing
       hidden: [],
       widths: {},
     });
@@ -116,10 +116,10 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
       "title",
       "venue",
       "year",
+      "doi",
       "location",
       "added",
       "file_type",
-      "doi",
       "authors",
     ]);
   });
@@ -144,7 +144,7 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
 
   it("force-pins Title to index 0 regardless of a stored order", async () => {
     await rehydrateWith({
-      order: ["authors", "title", "venue", "year", "location", "added", "file_type", "doi"],
+      order: ["authors", "title", "venue", "year", "doi", "location", "added", "file_type"],
       hidden: [],
       widths: {},
     });
@@ -153,7 +153,7 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
 
   it("collapses a duplicate column key to its first occurrence (corrupt order, code-review fix)", async () => {
     await rehydrateWith({
-      order: ["title", "authors", "authors", "venue", "year", "location", "added", "file_type", "doi"],
+      order: ["title", "authors", "authors", "venue", "year", "doi", "location", "added", "file_type"],
       hidden: [],
       widths: {},
     });
@@ -180,6 +180,15 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
     expect(useTableViewPrefs.getState().widths).toEqual({ authors: 250 });
   });
 
+  it("drops a persisted width outside the resize clamp range (code-review fix: a hand-edited -500 or 1000000 would otherwise render before any resize interaction re-clamps it)", async () => {
+    await rehydrateWith({
+      order: DEFAULT_ORDER,
+      hidden: [],
+      widths: { title: 250, authors: -500, venue: 1000000 },
+    });
+    expect(useTableViewPrefs.getState().widths).toEqual({ title: 250 });
+  });
+
   it("a non-array persisted order falls back to the default order", async () => {
     await rehydrateWith({ order: "corrupt", hidden: [], widths: {} });
     expect(useTableViewPrefs.getState().order).toEqual(DEFAULT_ORDER);
@@ -190,7 +199,7 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
     await useTableViewPrefs.persist.rehydrate();
     const state = useTableViewPrefs.getState();
     expect(state.order).toEqual(DEFAULT_ORDER);
-    expect(state.hidden).toEqual(["doi"]);
+    expect(state.hidden).toEqual(["file_type"]);
   });
 
   it("corrupt JSON in localStorage keeps the default state", async () => {
@@ -198,6 +207,6 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
     await useTableViewPrefs.persist.rehydrate();
     const state = useTableViewPrefs.getState();
     expect(state.order).toEqual(DEFAULT_ORDER);
-    expect(state.hidden).toEqual(["doi"]);
+    expect(state.hidden).toEqual(["file_type"]);
   });
 });

@@ -168,16 +168,22 @@ describe("Bulk upload (Story 6.4)", () => {
       target: { files: [pdfFile("alpha.pdf"), pdfFile("beta.pdf")] },
     });
 
+    // The "Extracting" chip lives in the File type column, hidden by default
+    // (Story 7.10 fix request) - assert via each row's own status class
+    // instead, which applies regardless of column visibility.
     await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
     expect(screen.getByText("beta")).toBeTruthy();
-    expect(screen.getAllByText("Extracting").length).toBe(2);
+    expect(screen.getByText("alpha").closest("tr")!.className).toContain("collection-table__row--extracting");
+    expect(screen.getByText("beta").closest("tr")!.className).toContain("collection-table__row--extracting");
 
     resolveAlpha(backend.store(docAlpha));
     resolveBeta(backend.store(docBeta));
 
     await waitFor(() => expect(screen.getByText("Paper Alpha")).toBeTruthy());
     expect(screen.getByText("Paper Beta")).toBeTruthy();
-    expect(screen.queryByText("Extracting")).toBeNull();
+    expect(screen.getByText("Paper Alpha").closest("tr")!.className).not.toContain(
+      "collection-table__row--extracting",
+    );
     await waitFor(() => expect(screen.getByText("2 files in Recent")).toBeTruthy());
   });
 
@@ -465,17 +471,22 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
       target: { files: [pdfFile("P.pdf")] },
     });
     // Upload resolves + batch reconcile (call 2, extracting) -> poll starts.
+    // The "Extracting" chip lives in the File type column, hidden by default
+    // (Story 7.10 fix request) - assert via the row's own status class
+    // instead, which applies regardless of column visibility.
     await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
-    expect(screen.getByText("Extracting")).toBeTruthy();
+    expect(screen.getByText("P").closest("tr")!.className).toContain("collection-table__row--extracting");
 
     // Poll tick 1 (call 3, still extracting).
     await act(async () => void (await vi.advanceTimersByTimeAsync(1200)));
-    expect(screen.getByText("Extracting")).toBeTruthy();
+    expect(screen.getByText("P").closest("tr")!.className).toContain("collection-table__row--extracting");
 
     // Poll tick 2 (call 4, settled): row updates in place, info notice shown.
     await act(async () => void (await vi.advanceTimersByTimeAsync(1200)));
     expect(screen.getByText("Local Title")).toBeTruthy();
-    expect(screen.queryByText("Extracting")).toBeNull();
+    expect(screen.getByText("Local Title").closest("tr")!.className).not.toContain(
+      "collection-table__row--extracting",
+    );
     expect(screen.getByText("Enrichment skipped.")).toBeTruthy();
 
     // Polling has stopped: no further getLibrary calls however long we wait.
@@ -548,8 +559,10 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
     });
     renderLibrary();
 
+    // The parse-failed "-" chip lives in the File type column, hidden by
+    // default (Story 7.10 fix request) - its rendering is covered separately
+    // in CollectionTable.test.tsx, which doesn't hide any column by default.
     await waitFor(() => expect(screen.getByText("poor-paper")).toBeTruthy());
-    expect(screen.getByText("-")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
     await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
   });
@@ -1182,7 +1195,7 @@ describe("Display, Sort controls (Story 7.4)", () => {
     expect(screen.getByText("Only Paper")).toBeTruthy();
   });
 
-  it("Display: DOI column is hidden by default while Venue and Year render (Story 7.9, AC-7)", async () => {
+  it("Display: File type column is hidden by default while Venue, Year, and DOI render (Story 7.9/7.10, AC-7)", async () => {
     const paper = libraryRow({
       doc_id: "1".repeat(64),
       title: "Meta Paper",
@@ -1194,17 +1207,18 @@ describe("Display, Sort controls (Story 7.4)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Meta Paper")).toBeTruthy());
 
-    expect(screen.queryByRole("columnheader", { name: /^DOI/ })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /^File type/ })).toBeNull();
     expect(screen.getByRole("columnheader", { name: /^Venue/ })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /^Year/ })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /^DOI/ })).toBeTruthy();
     expect(screen.getByText("Journal of Foo")).toBeTruthy();
     expect(screen.getByText("2017")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "10.1234/abcd" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Display" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "DOI" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "File type" }));
 
-    expect(screen.getByRole("columnheader", { name: /^DOI/ })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "10.1234/abcd" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /^File type/ })).toBeTruthy();
   });
 
   it("Column header dropdown: Hide from a header's own menu omits that column (fix request: clickable headers)", async () => {
@@ -1227,13 +1241,13 @@ describe("Display, Sort controls (Story 7.4)", () => {
     await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
 
     const headerTextsDefault = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
-    expect(headerTextsDefault).toEqual(["Title", "Authors", "Venue", "Year", "Location", "Added", "File type"]);
+    expect(headerTextsDefault).toEqual(["Title", "Authors", "Venue", "Year", "DOI", "Location", "Added"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Authors" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Move right" }));
 
     const headerTextsReordered = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
-    expect(headerTextsReordered).toEqual(["Title", "Venue", "Authors", "Year", "Location", "Added", "File type"]);
+    expect(headerTextsReordered).toEqual(["Title", "Venue", "Authors", "Year", "DOI", "Location", "Added"]);
 
     cleanup();
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });

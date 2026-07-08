@@ -6,7 +6,6 @@ import { currentFieldValue, stripPdfExtension, type EditableField, type PendingU
 import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
 import {
   COLUMNS,
-  UNCATEGORIZED_LABEL,
   reorderColumns as reorderColumnsInOrder,
   type ColumnDef,
   type ColumnKey,
@@ -146,7 +145,9 @@ function ColumnGroup({ columns, widths }: { columns: ColumnDef[]; widths?: Recor
  *  Drag-to-reorder (Story 7.10, AC-1): every column except Title is
  *  `draggable`, using a dedicated `COLUMN_DRAG_MIME` payload (mirrors the
  *  row-move drag) and a compact drag preview. Dragging one header over
- *  another shows a left-edge drop indicator (`data-drop-target`) and calls
+ *  another shows a drop indicator (`data-drop-target`, "before" or "after"
+ *  depending on drag direction - matches `reorderColumns`'s array-move
+ *  semantics, see `CollectionTable`'s `dropIndicator` memo) and calls
  *  `onReorderColumn` on drop - both the drag affordance and the keyboard
  *  Move left/right items are omitted when `onReorderColumn`/`onMoveColumn`
  *  aren't supplied (same optional-prop pattern as `onResizeStart`), so
@@ -604,8 +605,11 @@ export default function CollectionTable(props: CollectionTableProps) {
     groupLabels,
   } = props;
   const folderNameById = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
+  // Uncategorized (no folder, or a stale folder reference) renders an empty
+  // cell (fix request) - `UNCATEGORIZED_LABEL` still names the sidebar's own
+  // "Uncategorized" folder-panel entry and the sort key, just not this cell.
   function locationLabel(row: CollectionRow): string {
-    return row.folder_id ? (folderNameById.get(row.folder_id) ?? UNCATEGORIZED_LABEL) : UNCATEGORIZED_LABEL;
+    return row.folder_id ? (folderNameById.get(row.folder_id) ?? "") : "";
   }
   // Controlled-or-uncontrolled (like `<input value onChange>`): when the
   // caller doesn't pass `selectedIds`, the table owns the set itself so

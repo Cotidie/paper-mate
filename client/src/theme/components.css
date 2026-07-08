@@ -268,7 +268,9 @@
 
   /* collection-table column-header drop indicator (Story 7.10 AC-1): the
      insertion bar painted on a header while another header is dragged over
-     it - `reorderColumns` always inserts BEFORE the drop target, so a
-     single left-edge bar is enough (no left/right variants). */
+     it. `reorderColumns` uses array-move semantics (a forward drag lands
+     the dragged column AFTER the target, backward lands it BEFORE), so the
+     bar renders on the matching side - both a left ("before") and a right
+     ("after") variant share this width (`CollectionTable.css`). */
   --collection-table-drop-indicator-width: 2px;
 }

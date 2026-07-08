@@ -1057,13 +1057,14 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         }}
       />,
     );
-    // Column order (fix request): title, authors, venue, year, location, added, file_type, doi.
+    // Column order (Story 7.10 fix request): title, authors, venue, year, doi, location, added, file_type.
     const cols = document.querySelectorAll("colgroup col");
     expect((cols[0] as HTMLElement).style.width).toBe("400px"); // title
     expect((cols[1] as HTMLElement).style.width).toBe("150px"); // authors
     expect((cols[2] as HTMLElement).style.width).toBe("60px"); // venue
     expect((cols[3] as HTMLElement).style.width).toBe("40px"); // year
-    expect((cols[4] as HTMLElement).style.width).toBe("120px"); // location
+    expect((cols[4] as HTMLElement).style.width).toBe("60px"); // doi
+    expect((cols[5] as HTMLElement).style.width).toBe("120px"); // location
   });
 
   it("sizes the <table> itself to the exact sum of columnWidths (fix request: table-layout:fixed + width:100% rescaled every <col> proportionally when they didn't sum to 100%, so narrowing one column visibly widened another even though its own width state never changed)", () => {
@@ -1152,10 +1153,10 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     "authors",
     "venue",
     "year",
+    "doi",
     "location",
     "added",
     "file_type",
-    "doi",
   ];
   const SLOT_WIDTH = 100;
 
@@ -1392,10 +1393,10 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       "Venue",
       "Authors",
       "Year",
+      "DOI",
       "Location",
       "Added",
       "File type",
-      "DOI",
     ]);
   });
 
@@ -1446,10 +1447,10 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       "Authors",
       "Venue",
       "Year",
+      "DOI",
       "Location",
       "Added",
       "File type",
-      "DOI",
     ]);
   });
 
@@ -1494,7 +1495,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     function headerOrder() {
       return Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
     }
-    const swapped = ["Title", "Venue", "Authors", "Year", "Location", "Added", "File type", "DOI"];
+    const swapped = ["Title", "Venue", "Authors", "Year", "DOI", "Location", "Added", "File type"];
 
     // Fire the SAME clientX (Venue's slot) on ALTERNATING elements - in a
     // real browser, once a swap happens, native hit-testing routes the next
@@ -1516,10 +1517,10 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       "Venue",
       "Year",
       "Authors",
+      "DOI",
       "Location",
       "Added",
       "File type",
-      "DOI",
     ]);
   });
 
@@ -1575,7 +1576,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
         onMoveColumn={noop}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "DOI" }));
+    fireEvent.click(screen.getByRole("button", { name: "File type" }));
     expect(screen.getByRole("menuitem", { name: "Move left" })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: "Move right" })).toBeNull();
   });
@@ -1666,24 +1667,26 @@ describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", 
     expect(screen.getByText("Folder A")).toBeTruthy();
   });
 
-  it("shows 'Uncategorized' when folder_id is null", () => {
+  it("shows an empty location cell when folder_id is null (fix request: no 'Uncategorized' text)", () => {
     render(
       <CollectionTable rows={[uncategorized]} onOpenRow={noop} onEditField={noop} folders={folders} />,
     );
-    expect(screen.getByText("Uncategorized")).toBeTruthy();
+    expect(screen.queryByText("Uncategorized")).toBeNull();
+    const cell = document.querySelector(".collection-table__location")!;
+    expect(cell.querySelector(".collection-table__location-text")!.textContent).toBe("");
   });
 
-  it("falls back to 'Uncategorized' when folders is omitted entirely (isolated tests)", () => {
+  it("falls back to an empty location cell when folders is omitted entirely (isolated tests)", () => {
     render(<CollectionTable rows={[uncategorized]} onOpenRow={noop} onEditField={noop} />);
-    expect(screen.getByText("Uncategorized")).toBeTruthy();
+    const cell = document.querySelector(".collection-table__location")!;
+    expect(cell.querySelector(".collection-table__location-text")!.textContent).toBe("");
   });
 
-  it("renders a folder icon only for a paper assigned to a real folder, not Uncategorized", () => {
+  it("renders a folder icon only for a paper assigned to a real folder, not an uncategorized one", () => {
     render(
       <CollectionTable rows={[foldered, uncategorized]} onOpenRow={noop} onEditField={noop} folders={folders} />,
     );
-    const folderedCell = screen.getByText("Folder A").closest("td")!;
-    const uncategorizedCell = screen.getByText("Uncategorized").closest("td")!;
+    const [folderedCell, uncategorizedCell] = document.querySelectorAll(".collection-table__location");
     expect(folderedCell.querySelector(".collection-table__location-icon")).toBeTruthy();
     expect(uncategorizedCell.querySelector(".collection-table__location-icon")).toBeNull();
   });

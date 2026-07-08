@@ -38,13 +38,10 @@ export default function PendingRow({
       case "year":
         return <td key="year" className="collection-table__year" />;
       // A fresh upload always lands Uncategorized (Dev Notes) - no folder
-      // lookup needed while it's still pending.
+      // lookup needed while it's still pending; an uncategorized Location
+      // cell renders empty (fix request), matching `PaperRow`'s own cell.
       case "location":
-        return (
-          <td key="location" className="collection-table__location">
-            Uncategorized
-          </td>
-        );
+        return <td key="location" className="collection-table__location" />;
       case "added":
         return <td key="added" className="collection-table__added" />;
       case "file_type":

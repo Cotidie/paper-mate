@@ -9,13 +9,16 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   COLUMNS,
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
   moveColumn as moveColumnInOrder,
   reorderColumns as reorderColumnsInOrder,
   type ColumnKey,
 } from "@/library/tableView";
 
 const DEFAULT_ORDER: ColumnKey[] = COLUMNS.map((c) => c.key);
-const DEFAULT_HIDDEN: ColumnKey[] = ["doi"];
+// File type hidden by default (Story 7.10 fix request; was DOI).
+const DEFAULT_HIDDEN: ColumnKey[] = ["file_type"];
 const KNOWN_KEYS = new Set<ColumnKey>(DEFAULT_ORDER);
 
 function isColumnKey(value: unknown): value is ColumnKey {
@@ -56,10 +59,19 @@ function reconcile(order: unknown, hidden: unknown, widths: unknown): Reconciled
     ? hidden.filter((k): k is ColumnKey => isColumnKey(k) && k !== "title")
     : [...DEFAULT_HIDDEN];
 
+  // A persisted width outside the resize clamp range (code-review fix: e.g.
+  // a hand-edited `-500` or `1000000`) is dropped, not just type-checked -
+  // it would otherwise render at that value before any resize interaction
+  // ever re-clamps it, breaking the table layout.
   const reconciledWidths: Partial<Record<ColumnKey, number>> = {};
   if (widths && typeof widths === "object") {
     for (const [key, value] of Object.entries(widths as Record<string, unknown>)) {
-      if (isColumnKey(key) && typeof value === "number") reconciledWidths[key] = value;
+      const inRange =
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        value >= MIN_COLUMN_WIDTH &&
+        value <= MAX_COLUMN_WIDTH;
+      if (isColumnKey(key) && inRange) reconciledWidths[key] = value;
     }
   }
 

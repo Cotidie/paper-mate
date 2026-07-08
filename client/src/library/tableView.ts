@@ -17,20 +17,32 @@ export interface ColumnDef {
   sortable: boolean;
 }
 
-// Order (fix request): Title -> Authors -> Venue -> Year -> Location ->
-// Added -> File type -> DOI (DOI last, unlisted in the request; it's hidden
-// by default anyway, AC-7). Position here is display order only - it has no
-// bearing on `visibleColumns`/hidden-state or the Location per-lens
-// suppression in `LibraryPage.tsx`, which filter this array, not reorder it.
+/** Column-width clamp range (Story 7.10, AC-5, code-review fix): shared by
+ *  `useColumnWidths` (the live drag/keyboard resize clamp) AND
+ *  `tableViewPrefs`'s reconcile (rejecting a corrupt/hand-edited persisted
+ *  width outside this range, e.g. `-500` or `1000000`, which would otherwise
+ *  survive reconcile and render before any resize interaction ever clamps
+ *  it). Homed here (not in either of those two modules) so both can import
+ *  it without a circular dependency (`useColumnWidths` already imports
+ *  `tableViewPrefs`). */
+export const MIN_COLUMN_WIDTH = 80;
+export const MAX_COLUMN_WIDTH = 640;
+
+// Order (Story 7.10 fix request): Title -> Authors -> Venue -> Year -> DOI ->
+// Location -> Added -> File type (File type last, unlisted in the request;
+// it's hidden by default now instead of DOI, AC-7/story 7.10 fix request).
+// Position here is display order only - it has no bearing on
+// `visibleColumns`/hidden-state or the Location per-lens suppression in
+// `LibraryPage.tsx`, which filter this array, not reorder it.
 export const COLUMNS: ColumnDef[] = [
   { key: "title", label: "Title", hideable: false, sortable: true },
   { key: "authors", label: "Authors", hideable: true, sortable: true },
   { key: "venue", label: "Venue", hideable: true, sortable: true },
   { key: "year", label: "Year", hideable: true, sortable: true },
+  { key: "doi", label: "DOI", hideable: true, sortable: true },
   { key: "location", label: "Location", hideable: true, sortable: true },
   { key: "added", label: "Added", hideable: true, sortable: true },
   { key: "file_type", label: "File type", hideable: true, sortable: true },
-  { key: "doi", label: "DOI", hideable: true, sortable: true },
 ];
 
 /** `Uncategorized` mirrors `FolderPanel`'s own copy for a null `folder_id`. */

@@ -2,17 +2,17 @@ import { describe, it, expect } from "vitest";
 import { COLUMNS, moveColumn, reorderColumns, sortRows, type ColumnKey, type SortState } from "@/library/tableView";
 import type { CollectionRow } from "@/api/client";
 
-describe("COLUMNS order (fix request)", () => {
-  it("Title, Authors, Venue, Year, Location, Added, File type, DOI", () => {
+describe("COLUMNS order (Story 7.10 fix request)", () => {
+  it("Title, Authors, Venue, Year, DOI, Location, Added, File type", () => {
     expect(COLUMNS.map((c) => c.key)).toEqual([
       "title",
       "authors",
       "venue",
       "year",
+      "doi",
       "location",
       "added",
       "file_type",
-      "doi",
     ]);
   });
 });
