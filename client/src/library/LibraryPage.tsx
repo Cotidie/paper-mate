@@ -416,6 +416,8 @@ export default function LibraryPage() {
                 sort={tableView.sort}
                 onSortChange={tableView.setSort}
                 onToggleColumn={tableView.toggleColumn}
+                onReorderColumn={tableView.reorderColumns}
+                onMoveColumn={tableView.moveColumn}
                 columnWidths={columnWidths.widths}
                 onResizeColumnStart={columnWidths.startResize}
                 onResizeColumnKeyDown={columnWidths.handleKeyDown}

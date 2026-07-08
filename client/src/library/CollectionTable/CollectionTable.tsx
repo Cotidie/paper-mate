@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CaretDown, CaretUp, EyeSlash, X } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, CaretDown, CaretUp, EyeSlash, X } from "@phosphor-icons/react";
 import type { CollectionRow, Folder } from "@/api/client";
 import { currentFieldValue, stripPdfExtension, type EditableField, type PendingUpload } from "@/library/row";
 import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
@@ -76,6 +76,22 @@ function buildDragPreview(rows: CollectionRow[], ids: string[]): HTMLElement {
   return el;
 }
 
+/** A dedicated MIME type for the column-header drag (Story 7.10 AC-1), so a
+ *  header drag is distinguishable from the row-move drag above (mirrors
+ *  `MOVE_DRAG_MIME`'s own reasoning, `moveDrag.ts`). */
+const COLUMN_DRAG_MIME = "application/x-papermate-column-reorder";
+
+/** The column-header drag's own compact preview (Story 7.10): reuses
+ *  `buildDragPreview`'s detached-node shape (and its CSS class - no new
+ *  styling needed) with just the column's label instead of a row title. */
+function buildColumnDragPreview(label: string): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "collection-table__drag-preview";
+  el.textContent = label;
+  document.body.appendChild(el);
+  return el;
+}
+
 /** `widths` overrides each column's CSS-default width (fix request:
  *  drag-to-resize) - omitted, the `<col>` falls back to its
  *  `--collection-table-*-width` CSS token. */
@@ -93,11 +109,24 @@ function ColumnGroup({ columns, widths }: { columns: ColumnDef[]; widths?: Recor
   );
 }
 
-/** A clickable header: opens a per-column dropdown (Sort ASC/DESC,
- *  Hide) mirroring the reference product's column-header menu. Each instance
- *  owns its own `usePopover` so multiple headers can each have (only one at a
- *  time, per-instance) open state. Closes on pick - a one-shot action menu,
- *  like `MoveMenu`, not a stays-open toggle panel like `DisplayMenu`. */
+/** A clickable header: opens a per-column dropdown (Sort ASC/DESC, Move
+ *  left/right, Hide) mirroring the reference product's column-header menu.
+ *  Each instance owns its own `usePopover` so multiple headers can each have
+ *  (only one at a time, per-instance) open state. Closes on pick - a
+ *  one-shot action menu, like `MoveMenu`, not a stays-open toggle panel like
+ *  `DisplayMenu`.
+ *
+ *  Drag-to-reorder (Story 7.10, AC-1): every column except Title is
+ *  `draggable`, using a dedicated `COLUMN_DRAG_MIME` payload (mirrors the
+ *  row-move drag) and a compact drag preview. Dragging one header over
+ *  another shows a left-edge drop indicator (`data-drop-target`) and calls
+ *  `onReorderColumn` on drop - both the drag affordance and the keyboard
+ *  Move left/right items are omitted when `onReorderColumn`/`onMoveColumn`
+ *  aren't supplied (same optional-prop pattern as `onResizeStart`), so
+ *  isolated tests that don't exercise reorder see no new draggable/menu
+ *  surface. Title is never a drag source or a drop target: nothing drops
+ *  before it (the reorder helpers also clamp this, but excluding Title here
+ *  keeps the affordance honest - hovering it never implies a drop there). */
 function ColumnHeaderCell({
   col,
   sort,
@@ -105,6 +134,10 @@ function ColumnHeaderCell({
   onToggleColumn,
   onResizeStart,
   onResizeKeyDown,
+  onReorderColumn,
+  onMoveColumn,
+  canMoveLeft,
+  canMoveRight,
 }: {
   col: ColumnDef;
   sort: SortState | null;
@@ -112,11 +145,53 @@ function ColumnHeaderCell({
   onToggleColumn: (key: ColumnKey) => void;
   onResizeStart?: (key: ColumnKey, e: React.PointerEvent) => void;
   onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+  onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
+  onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
 }) {
   const { anchor, buttonRef, popoverRef, toggle, close } = usePopover();
   const active = sort?.column === col.key;
+  const reorderable = col.key !== "title";
+  const [dropTarget, setDropTarget] = useState(false);
+
+  function handleColumnDragStart(e: React.DragEvent<HTMLTableCellElement>) {
+    e.dataTransfer.setData(COLUMN_DRAG_MIME, col.key);
+    e.dataTransfer.effectAllowed = "move";
+    const preview = buildColumnDragPreview(col.label);
+    e.dataTransfer.setDragImage(preview, 12, 16);
+    setTimeout(() => preview.remove(), 0);
+  }
+
+  function handleColumnDragOver(e: React.DragEvent<HTMLTableCellElement>) {
+    if (!e.dataTransfer.types.includes(COLUMN_DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropTarget(true);
+  }
+
+  function handleColumnDrop(e: React.DragEvent<HTMLTableCellElement>) {
+    e.preventDefault();
+    setDropTarget(false);
+    const fromKey = e.dataTransfer.getData(COLUMN_DRAG_MIME) as ColumnKey | "";
+    if (fromKey) onReorderColumn?.(fromKey, col.key);
+  }
+
+  const dragEnabled = reorderable && Boolean(onReorderColumn);
   return (
-    <th scope="col" className="collection-table__th--interactive" aria-sort={ariaSortValue(col, sort)}>
+    <th
+      scope="col"
+      className="collection-table__th--interactive"
+      aria-sort={ariaSortValue(col, sort)}
+      draggable={dragEnabled}
+      data-drop-target={dropTarget ? "before" : undefined}
+      onDragStart={dragEnabled ? handleColumnDragStart : undefined}
+      onDragOver={dragEnabled ? handleColumnDragOver : undefined}
+      onDragEnter={dragEnabled ? handleColumnDragOver : undefined}
+      onDragLeave={dragEnabled ? () => setDropTarget(false) : undefined}
+      onDragEnd={dragEnabled ? () => setDropTarget(false) : undefined}
+      onDrop={dragEnabled ? handleColumnDrop : undefined}
+    >
       <button
         ref={buttonRef}
         type="button"
@@ -188,6 +263,36 @@ function ColumnHeaderCell({
                 Clear sort
               </button>
             )}
+            {reorderable && onMoveColumn && canMoveLeft && (
+              <button
+                type="button"
+                role="menuitem"
+                className="table-control__item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                  onMoveColumn(col.key, "left");
+                }}
+              >
+                <ArrowLeft aria-hidden />
+                Move left
+              </button>
+            )}
+            {reorderable && onMoveColumn && canMoveRight && (
+              <button
+                type="button"
+                role="menuitem"
+                className="table-control__item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                  onMoveColumn(col.key, "right");
+                }}
+              >
+                <ArrowRight aria-hidden />
+                Move right
+              </button>
+            )}
             {col.hideable && (
               <button
                 type="button"
@@ -223,7 +328,10 @@ function ColumnHeaderCell({
 
 /** Renders the active sort column's caret. Headers are clickable
  *  (`ColumnHeaderCell`) when `onSortChange`/`onToggleColumn` are supplied;
- *  otherwise (the loading skeleton) they render as plain static text. */
+ *  otherwise (the loading skeleton) they render as plain static text.
+ *  `canMoveLeft`/`canMoveRight` (Story 7.10, AC-2) are derived from each
+ *  column's own index in `columns`: index 1 (immediately right of the
+ *  pinned Title) can't move left, and the last index can't move right. */
 function TableHead({
   columns,
   sort,
@@ -231,6 +339,8 @@ function TableHead({
   onToggleColumn,
   onResizeStart,
   onResizeKeyDown,
+  onReorderColumn,
+  onMoveColumn,
 }: {
   columns: ColumnDef[];
   sort: SortState | null;
@@ -238,11 +348,13 @@ function TableHead({
   onToggleColumn?: (key: ColumnKey) => void;
   onResizeStart?: (key: ColumnKey, e: React.PointerEvent) => void;
   onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+  onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
+  onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
 }) {
   return (
     <thead>
       <tr>
-        {columns.map((col) =>
+        {columns.map((col, idx) =>
           onSortChange && onToggleColumn ? (
             <ColumnHeaderCell
               key={col.key}
@@ -252,6 +364,10 @@ function TableHead({
               onToggleColumn={onToggleColumn}
               onResizeStart={onResizeStart}
               onResizeKeyDown={onResizeKeyDown}
+              onReorderColumn={onReorderColumn}
+              onMoveColumn={onMoveColumn}
+              canMoveLeft={idx > 1}
+              canMoveRight={idx < columns.length - 1}
             />
           ) : (
             <th key={col.key} scope="col" aria-sort={ariaSortValue(col, sort)}>
@@ -343,6 +459,12 @@ type CollectionTableProps =
        *  both are supplied; omit for isolated tests that don't care. */
       onResizeColumnStart?: (key: ColumnKey, e: React.PointerEvent) => void;
       onResizeColumnKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+      /** Column headers grow drag-to-reorder + a "Move left"/"Move right"
+       *  menu (Story 7.10, AC-1/AC-2) when supplied; omit for isolated tests
+       *  that don't exercise reorder (same optional pattern as the resize
+       *  callbacks above). */
+      onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
+      onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
       /** True in the Trash lens (Story 7.5): every row drops its Open button
        *  and its drag-to-folder affordance. Restore/Purge live in the
        *  toolbar, bulk over the selection (fix request), not per row. */
@@ -410,11 +532,12 @@ export default function CollectionTable(props: CollectionTableProps) {
     columnWidths,
     onResizeColumnStart,
     onResizeColumnKeyDown,
+    onReorderColumn,
+    onMoveColumn,
     trashLens = false,
     folders = EMPTY_FOLDERS,
     groupLabels,
   } = props;
-  const visibleKeys = new Set(visibleColumns.map((c) => c.key));
   const folderNameById = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
   function locationLabel(row: CollectionRow): string {
     return row.folder_id ? (folderNameById.get(row.folder_id) ?? UNCATEGORIZED_LABEL) : UNCATEGORIZED_LABEL;
@@ -594,10 +717,12 @@ export default function CollectionTable(props: CollectionTableProps) {
           onToggleColumn={onToggleColumn}
           onResizeStart={onResizeColumnStart}
           onResizeKeyDown={onResizeColumnKeyDown}
+          onReorderColumn={onReorderColumn}
+          onMoveColumn={onMoveColumn}
         />
         <tbody>
           {pendingRows.map((pending) => (
-            <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={visibleKeys} />
+            <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={visibleColumns} />
           ))}
           {rows.map((row) => {
             const groupLabel = groupLabels?.get(row.doc_id);
@@ -610,7 +735,7 @@ export default function CollectionTable(props: CollectionTableProps) {
                 )}
                 <PaperRow
                   row={row}
-                  visibleColumns={visibleKeys}
+                  visibleColumns={visibleColumns}
                   armed={selectedIds.size === 1 && selectedIds.has(row.doc_id)}
                   editingField={editing?.docId === row.doc_id ? editing.field : null}
                   checked={selectedIds.has(row.doc_id)}

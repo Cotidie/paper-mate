@@ -113,3 +113,48 @@ export function sortRows(
     compareForSort(sortKey(a, column, folderNameById), sortKey(b, column, folderNameById), direction),
   );
 }
+
+/** Pins Title to index 0 (Story 7.10, AC-4 - a store invariant, not just a UI
+ *  check, Dev Notes: "no code path... can strand it"). A well-formed `order`
+ *  (Title already first) is returned as-is, so `moveColumn`/`reorderColumns`
+ *  don't allocate on the common path; a malformed one (e.g. adversarial
+ *  `localStorage`, or a caller passing an arbitrary array straight into
+ *  these exported pure functions) is defensively re-pinned BEFORE any index
+ *  math runs, so a swap/splice computed against a bad input can never
+ *  further displace Title. */
+function pinTitleFirst(order: ColumnKey[]): ColumnKey[] {
+  if (order[0] === "title") return order;
+  return ["title", ...order.filter((k) => k !== "title")];
+}
+
+/** Moves `key` one slot toward `dir` in `order` (Story 7.10, AC-1/AC-2/AC-4).
+ *  Title is pinned at index 0: moving Title is a no-op, and a move that would
+ *  cross Title (the column immediately right of it moving left) or run off
+ *  either end is also a no-op. Always returns a NEW array, never mutates
+ *  `order` - the single source `tableViewPrefs`'s store actions delegate to. */
+export function moveColumn(order: ColumnKey[], key: ColumnKey, dir: "left" | "right"): ColumnKey[] {
+  const pinned = pinTitleFirst(order);
+  if (key === "title") return [...pinned];
+  const idx = pinned.indexOf(key);
+  if (idx === -1) return [...pinned];
+  const targetIdx = dir === "left" ? idx - 1 : idx + 1;
+  if (targetIdx <= 0 || targetIdx >= pinned.length) return [...pinned];
+  const next = [...pinned];
+  [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+  return next;
+}
+
+/** Inserts `fromKey` at `toKey`'s position (drop-onto semantics, Story 7.10
+ *  AC-1/AC-4): removes `fromKey` first, then splices it back in at wherever
+ *  `toKey` now sits. Title never moves (a `fromKey` of "title" is a no-op)
+ *  and nothing is ever inserted before Title - a drop onto/before Title
+ *  clamps to "just after Title" (index 1). Always returns a NEW array. */
+export function reorderColumns(order: ColumnKey[], fromKey: ColumnKey, toKey: ColumnKey): ColumnKey[] {
+  const pinned = pinTitleFirst(order);
+  if (fromKey === "title" || fromKey === toKey || !pinned.includes(fromKey)) return [...pinned];
+  const without = pinned.filter((k) => k !== fromKey);
+  const insertAt = Math.max(without.indexOf(toKey), 1);
+  const next = [...without];
+  next.splice(insertAt, 0, fromKey);
+  return next;
+}

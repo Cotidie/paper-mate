@@ -3,6 +3,7 @@ import { render, screen, cleanup, waitFor, fireEvent, act, within } from "@testi
 import { createMemoryRouter, RouterProvider } from "react-router";
 import LibraryPage from "@/library/LibraryPage";
 import * as api from "@/api/client";
+import { useTableViewPrefs } from "@/library/tableViewPrefs";
 
 afterEach(() => {
   cleanup();
@@ -20,6 +21,11 @@ beforeEach(() => {
   // ReaderPage. Stub it so tests never hit the network; individual tests
   // override to assert the rendered value.
   vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9" });
+  // `tableViewPrefs` is a `localStorage`-persisted Zustand store (Story
+  // 7.10): module-level, so it leaks column order/hidden/widths across
+  // tests otherwise (mirrors `settings/store.test.ts`'s own reset).
+  localStorage.clear();
+  useTableViewPrefs.getState().reset();
 });
 
 function pdfFile(name: string) {
@@ -1196,6 +1202,30 @@ describe("Display, Sort controls (Story 7.4)", () => {
 
     expect(screen.queryByRole("columnheader", { name: "Authors" })).toBeNull();
     expect(screen.queryByText("Some Author")).toBeNull();
+  });
+
+  it("Column header dropdown: Move right persists the column order across a remount (Story 7.10, AC-1/AC-3)", async () => {
+    const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
+
+    const headerTextsDefault = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTextsDefault).toEqual(["Title", "Authors", "Venue", "Year", "Location", "Added", "File type"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move right" }));
+
+    const headerTextsReordered = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTextsReordered).toEqual(["Title", "Venue", "Authors", "Year", "Location", "Added", "File type"]);
+
+    cleanup();
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
+
+    const headerTextsAfterRemount = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTextsAfterRemount).toEqual(headerTextsReordered);
   });
 
   it("Column header dropdown: Sort DESC from a header's own menu reorders rows", async () => {

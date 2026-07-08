@@ -164,6 +164,32 @@
   background: var(--color-surface-strong);
 }
 
+/* Draggable column header (Story 7.10 AC-1): a grab affordance on every
+   reorderable header - Title is never marked `draggable`, so it never gets
+   this cursor. */
+.collection-table__th--interactive[draggable="true"] {
+  cursor: grab;
+}
+
+.collection-table__th--interactive[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Drop indicator (Story 7.10 AC-1): a left-edge insertion bar on the header
+   currently being dragged over. `reorderColumns` always inserts the dragged
+   column BEFORE the drop target, so a single left-edge bar reads correctly
+   without needing a left/right variant. Positioned against the `<th>`'s own
+   `position: relative` (set above by `.collection-table__th--interactive`). */
+.collection-table__th--interactive[data-drop-target="before"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--collection-table-drop-indicator-width);
+  background: var(--color-ink);
+}
+
 /* The active sort column's caret (Story 7.4, AC-2). */
 .collection-table__sort-caret {
   width: var(--table-control-sort-caret-size);

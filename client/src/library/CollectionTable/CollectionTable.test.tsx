@@ -1112,6 +1112,289 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
   });
 });
 
+describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () => {
+  function dataTransferStub() {
+    const store = new Map<string, string>();
+    const types: string[] = [];
+    return {
+      setData: (type: string, value: string) => {
+        store.set(type, value);
+        if (!types.includes(type)) types.push(type);
+      },
+      getData: (type: string) => store.get(type) ?? "",
+      get effectAllowed() {
+        return store.get("__effectAllowed") ?? "";
+      },
+      set effectAllowed(value: string) {
+        store.set("__effectAllowed", value);
+      },
+      get dropEffect() {
+        return store.get("__dropEffect") ?? "";
+      },
+      set dropEffect(value: string) {
+        store.set("__dropEffect", value);
+      },
+      types,
+      setDragImage: () => {},
+    };
+  }
+
+  it("the cell order matches the header order under a non-default column order (the cell-order trap, AC-6)", () => {
+    const reordered = [
+      COLUMNS.find((c) => c.key === "title")!,
+      COLUMNS.find((c) => c.key === "venue")!,
+      COLUMNS.find((c) => c.key === "authors")!,
+      COLUMNS.find((c) => c.key === "year")!,
+    ];
+    render(
+      <CollectionTable rows={[rows[0]]} onOpenRow={noop} onEditField={noop} visibleColumns={reordered} />,
+    );
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTexts).toEqual(["Title", "Venue", "Authors", "Year"]);
+    const cellClasses = Array.from(document.querySelectorAll("tbody tr td")).map((td) => td.className);
+    expect(cellClasses).toEqual([
+      "collection-table__title",
+      "collection-table__venue",
+      "collection-table__authors",
+      "collection-table__year",
+    ]);
+  });
+
+  it("a pending row's cells also follow a non-default column order", () => {
+    const reordered = [
+      COLUMNS.find((c) => c.key === "title")!,
+      COLUMNS.find((c) => c.key === "venue")!,
+      COLUMNS.find((c) => c.key === "authors")!,
+    ];
+    render(
+      <CollectionTable
+        rows={[]}
+        onOpenRow={noop}
+        onEditField={noop}
+        visibleColumns={reordered}
+        pendingRows={[{ tempId: "t1", filename: "brand-new.pdf" }]}
+      />,
+    );
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    const pendingRow = screen.getByText("brand-new").closest("tr")!;
+    const cellClasses = Array.from(pendingRow.querySelectorAll("td")).map((td) => td.className);
+    expect(headerTexts).toEqual(["Title", "Venue", "Authors"]);
+    expect(cellClasses).toEqual([
+      "collection-table__title",
+      "collection-table__venue",
+      "collection-table__authors",
+    ]);
+  });
+
+  it("Title's header is never draggable, even when onReorderColumn is supplied", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const titleHeader = screen.getByRole("button", { name: "Title" }).closest("th")!;
+    expect(titleHeader.getAttribute("draggable")).toBe("false");
+  });
+
+  it("a non-Title header is draggable when onReorderColumn is supplied", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    expect(authorsHeader.getAttribute("draggable")).toBe("true");
+  });
+
+  it("a header is not draggable when onReorderColumn is omitted (isolated tests unaffected)", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    expect(authorsHeader.getAttribute("draggable")).toBe("false");
+  });
+
+  it("dragging one header onto another calls onReorderColumn with (fromKey, toKey)", () => {
+    const onReorderColumn = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={onReorderColumn}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireEvent.dragOver(venueHeader, { dataTransfer });
+    fireEvent.drop(venueHeader, { dataTransfer });
+    expect(onReorderColumn).toHaveBeenCalledWith("authors", "venue");
+  });
+
+  it("uses a compact custom drag image for the header drag (reuses the row drag-preview shape)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const setDragImage = vi.fn();
+    fireEvent.dragStart(authorsHeader, { dataTransfer: { ...dataTransferStub(), setDragImage } });
+    expect(setDragImage).toHaveBeenCalledTimes(1);
+    const [previewEl] = setDragImage.mock.calls[0];
+    expect(previewEl.className).toBe("collection-table__drag-preview");
+    expect(previewEl.textContent).toBe("Authors");
+  });
+
+  it("shows a drop-target indicator while dragging over a header, cleared on drop", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireEvent.dragOver(venueHeader, { dataTransfer });
+    expect(venueHeader.getAttribute("data-drop-target")).toBe("before");
+    fireEvent.drop(venueHeader, { dataTransfer });
+    expect(venueHeader.getAttribute("data-drop-target")).toBeNull();
+  });
+
+  it("opens the header menu with Move left / Move right when onMoveColumn is supplied", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+    expect(screen.getByRole("menuitem", { name: "Move left" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Move right" })).toBeTruthy();
+  });
+
+  it("omits Move left/right when onMoveColumn is omitted", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+    expect(screen.queryByRole("menuitem", { name: "Move left" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Move right" })).toBeNull();
+  });
+
+  it("omits Move left for the column immediately right of Title", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
+    expect(screen.queryByRole("menuitem", { name: "Move left" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Move right" })).toBeTruthy();
+  });
+
+  it("omits Move right for the last column", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "DOI" }));
+    expect(screen.getByRole("menuitem", { name: "Move left" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Move right" })).toBeNull();
+  });
+
+  it("Move left calls onMoveColumn with the column key and 'left', then closes the menu", () => {
+    const onMoveColumn = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={onMoveColumn}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move left" }));
+    expect(onMoveColumn).toHaveBeenCalledWith("venue", "left");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("Move right calls onMoveColumn with the column key and 'right'", () => {
+    const onMoveColumn = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={onMoveColumn}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move right" }));
+    expect(onMoveColumn).toHaveBeenCalledWith("venue", "right");
+  });
+
+  it("never offers Move left/right on the Title column (pinned first, never movable)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    expect(screen.queryByRole("menuitem", { name: "Move left" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Move right" })).toBeNull();
+  });
+});
+
 describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", () => {
   const foldered: CollectionRow = {
     doc_id: "f".repeat(64),
