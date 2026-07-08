@@ -1,7 +1,8 @@
 import type { CollectionRow, Doc } from "@/api/client";
 
-/** The two inline-editable metadata fields (Story 6.6). */
-export type EditableField = "title" | "authors";
+/** The inline-editable metadata fields (Story 6.6; `venue`/`year` added by a
+ *  Story 7.9 fix request). `doi` stays link-only, never inline-editable. */
+export type EditableField = "title" | "authors" | "venue" | "year";
 
 /** A row's display status: the settled `CollectionRow["status"]` plus the
  *  client-only `"extracting"` overlay for an optimistic/in-flight row. Homed
@@ -28,17 +29,20 @@ export function stripPdfExtension(filename: string): string {
   return filename.replace(/\.pdf$/i, "");
 }
 
-/** The stored field value, normalized for the no-op comparison (AC-6). */
+/** The stored field value, normalized for the no-op comparison (AC-6). Year
+ *  is stringified (the editor is a plain text input for every field). */
 export function currentFieldValue(row: CollectionRow, field: EditableField): string {
-  return (field === "title" ? row.title : row.authors) ?? "";
+  if (field === "year") return row.year != null ? String(row.year) : "";
+  if (field === "title") return row.title ?? "";
+  return row[field] ?? "";
 }
 
 /** What the editor is seeded with — the DISPLAYED text, never the literal
  * `Untitled` placeholder (AC-3/Dev Notes: a parse-failed row seeds its
  * filename fallback so the user tweaks what they see). */
 export function seedFieldValue(row: CollectionRow, field: EditableField): string {
-  if (field === "authors") return row.authors ?? "";
-  return row.title ?? (row.filename ? stripPdfExtension(row.filename) : "");
+  if (field === "title") return row.title ?? (row.filename ? stripPdfExtension(row.filename) : "");
+  return currentFieldValue(row, field);
 }
 
 /**
@@ -84,5 +88,8 @@ export function docToRow(doc: Doc, papers: CollectionRow[]): CollectionRow {
     starred: false,
     order: maxOrder + 1,
     filename: doc.filename,
+    doi: doc.doi ?? null,
+    venue: doc.venue ?? null,
+    year: doc.year ?? null,
   };
 }

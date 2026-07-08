@@ -173,6 +173,20 @@ describe("CollectionTable pending rows (Story 6.4)", () => {
     expect(onOpenRow).not.toHaveBeenCalled();
     expect(pendingRow.getAttribute("aria-selected")).toBeNull();
   });
+
+  it("a pending row's cell count matches the header's column count (regression: PendingRow lacked venue/year/doi cells, desyncing it from the colgroup once those columns shipped)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        pendingRows={[{ tempId: "t1", filename: "brand-new.pdf" }]}
+      />,
+    );
+    const headerCellCount = document.querySelectorAll("thead th").length;
+    const pendingRow = screen.getByText("brand-new").closest("tr")!;
+    expect(pendingRow.querySelectorAll("td").length).toBe(headerCellCount);
+  });
 });
 
 describe("CollectionTable status visuals (Story 6.5)", () => {
@@ -977,7 +991,7 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         onResizeColumnKeyDown={noop}
       />,
     );
-    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(5);
+    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(8);
   });
 
   it("pointerdown on a column's handle calls onResizeColumnStart with that column's key", () => {
@@ -1028,15 +1042,25 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         rows={rows}
         onOpenRow={noop}
         onEditField={noop}
-        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80, location: 120 }}
+        columnWidths={{
+          title: 400,
+          authors: 150,
+          added: 100,
+          file_type: 80,
+          location: 120,
+          venue: 60,
+          year: 40,
+          doi: 60,
+        }}
       />,
     );
+    // Column order (fix request): title, authors, venue, year, location, added, file_type, doi.
     const cols = document.querySelectorAll("colgroup col");
-    expect((cols[0] as HTMLElement).style.width).toBe("400px");
-    expect((cols[1] as HTMLElement).style.width).toBe("150px");
-    expect((cols[2] as HTMLElement).style.width).toBe("100px");
-    expect((cols[3] as HTMLElement).style.width).toBe("80px");
-    expect((cols[4] as HTMLElement).style.width).toBe("120px");
+    expect((cols[0] as HTMLElement).style.width).toBe("400px"); // title
+    expect((cols[1] as HTMLElement).style.width).toBe("150px"); // authors
+    expect((cols[2] as HTMLElement).style.width).toBe("60px"); // venue
+    expect((cols[3] as HTMLElement).style.width).toBe("40px"); // year
+    expect((cols[4] as HTMLElement).style.width).toBe("120px"); // location
   });
 
   it("sizes the <table> itself to the exact sum of columnWidths (fix request: table-layout:fixed + width:100% rescaled every <col> proportionally when they didn't sum to 100%, so narrowing one column visibly widened another even though its own width state never changed)", () => {
@@ -1045,11 +1069,20 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         rows={rows}
         onOpenRow={noop}
         onEditField={noop}
-        columnWidths={{ title: 400, authors: 150, added: 100, file_type: 80, location: 120 }}
+        columnWidths={{
+          title: 400,
+          authors: 150,
+          added: 100,
+          file_type: 80,
+          location: 120,
+          venue: 60,
+          year: 40,
+          doi: 60,
+        }}
       />,
     );
     const table = container.querySelector("table.collection-table") as HTMLElement;
-    expect(table.style.width).toBe("850px");
+    expect(table.style.width).toBe("1010px");
   });
 
   it("falls back to the CSS width:100% default when columnWidths is omitted", () => {
@@ -1172,5 +1205,207 @@ describe("CollectionTable star marker (Story 7.8, AC-2)", () => {
     render(<CollectionTable rows={[unstarred]} onOpenRow={noop} onEditField={noop} />);
     const titleCell = screen.getByText("Unstarred Paper").closest("td")!;
     expect(titleCell.querySelector('[aria-label="Starred"]')).toBeNull();
+  });
+});
+
+describe("CollectionTable Venue/Year/DOI columns (Story 7.9)", () => {
+  const withMeta: CollectionRow = {
+    doc_id: "m".repeat(64),
+    title: "Paper With Meta",
+    authors: null,
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    starred: false,
+    order: 0,
+    doi: "10.1234/abcd",
+    venue: "Journal of Foo",
+    year: 2017,
+  };
+  const withoutMeta: CollectionRow = {
+    doc_id: "n".repeat(64),
+    title: "Paper Without Meta",
+    authors: null,
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    starred: false,
+    order: 1,
+    doi: null,
+    venue: null,
+    year: null,
+  };
+
+  it("renders venue, year, and a DOI link for a row with metadata", () => {
+    render(<CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} />);
+    expect(screen.getByText("Journal of Foo")).toBeTruthy();
+    expect(screen.getByText("2017")).toBeTruthy();
+    const link = screen.getByRole("link", { name: "10.1234/abcd" }) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("https://doi.org/10.1234/abcd");
+  });
+
+  it("renders blank venue/year/doi cells for a row with no metadata", () => {
+    render(<CollectionTable rows={[withoutMeta]} onOpenRow={noop} onEditField={noop} />);
+    expect(screen.queryByRole("link", { name: /10\./ })).toBeNull();
+  });
+
+  it("clicking the DOI link does not arm/select the row (stopPropagation)", () => {
+    render(<CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} />);
+    const link = screen.getByRole("link", { name: "10.1234/abcd" });
+    const row = link.closest("tr")!;
+    fireEvent.click(link);
+    expect(row.getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("a keydown on the DOI link does not bubble to the row's own handling", () => {
+    render(<CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} />);
+    const link = screen.getByRole("link", { name: "10.1234/abcd" });
+    const row = link.closest("tr")!;
+    fireEvent.keyDown(link, { key: "Enter" });
+    expect(row.getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("Ctrl+click on the DOI link does not toggle row multi-select (regression: capture-phase row handler ran before the link's own stopPropagation)", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <CollectionTable
+        rows={[withMeta]}
+        onOpenRow={noop}
+        onEditField={noop}
+        selectedIds={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const link = screen.getByRole("link", { name: "10.1234/abcd" });
+    fireEvent.click(link, { ctrlKey: true });
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it("dragging from the DOI link does not start a row-move drag (regression: row drag guard only excluded input/textarea/button)", () => {
+    render(<CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} />);
+    const link = screen.getByRole("link", { name: "10.1234/abcd" });
+    // React's onDragStart is bound on the <tr>; the native event bubbles up
+    // from the link, so e.target inside the handler is the link. fireEvent's
+    // return value is false when the (cancelable) event's preventDefault was
+    // called, which the row's drag guard does for an excluded target.
+    const notPrevented = fireEvent.dragStart(link);
+    expect(notPrevented).toBe(false);
+  });
+
+  it("hiding the Venue/Year/DOI columns omits their headers and cells", () => {
+    const visibleColumns = COLUMNS.filter((c) => !["venue", "year", "doi"].includes(c.key));
+    render(
+      <CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} visibleColumns={visibleColumns} />,
+    );
+    expect(screen.queryByRole("columnheader", { name: "Venue" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Year" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "DOI" })).toBeNull();
+    expect(screen.queryByText("Journal of Foo")).toBeNull();
+    expect(screen.queryByRole("link", { name: "10.1234/abcd" })).toBeNull();
+  });
+});
+
+describe("CollectionTable inline edit Venue/Year (Story 7.9 fix request)", () => {
+  const row: CollectionRow = {
+    doc_id: "v".repeat(64),
+    title: "Editable Meta Paper",
+    authors: null,
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    starred: false,
+    order: 0,
+    doi: "10.1234/abcd",
+    venue: "Journal of Foo",
+    year: 2017,
+  };
+
+  it("click on an armed row's Venue cell enters edit seeded with the current text", () => {
+    render(<CollectionTable rows={[row]} onOpenRow={noop} onEditField={noop} />);
+    const cell = screen.getByText("Journal of Foo");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    expect(screen.getByDisplayValue("Journal of Foo")).toBeTruthy();
+  });
+
+  it("Enter commits the new venue via onEditField", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={[row]} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("Journal of Foo");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Journal of Foo") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "New Venue" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onEditField).toHaveBeenCalledWith(row.doc_id, "venue", "New Venue");
+  });
+
+  it("a blank Venue commit clears it to null", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={[row]} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("Journal of Foo");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Journal of Foo") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onEditField).toHaveBeenCalledWith(row.doc_id, "venue", null);
+  });
+
+  it("click on an armed row's Year cell enters edit seeded with the current value", () => {
+    render(<CollectionTable rows={[row]} onOpenRow={noop} onEditField={noop} />);
+    const cell = screen.getByText("2017");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    expect(screen.getByDisplayValue("2017")).toBeTruthy();
+  });
+
+  it("Enter commits the new year via onEditField as a string (the hook parses it)", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={[row]} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("2017");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("2017") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "2019" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onEditField).toHaveBeenCalledWith(row.doc_id, "year", "2019");
+  });
+
+  it("a blank Year commit clears it to null", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={[row]} onOpenRow={noop} onEditField={onEditField} />);
+    const cell = screen.getByText("2017");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("2017") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onEditField).toHaveBeenCalledWith(row.doc_id, "year", null);
+  });
+
+  it("a no-op Venue/Year commit (unchanged value) does not call onEditField", () => {
+    const onEditField = vi.fn();
+    render(<CollectionTable rows={[row]} onOpenRow={noop} onEditField={onEditField} />);
+    const venueCell = screen.getByText("Journal of Foo");
+    fireEvent.click(venueCell.closest("tr")!); // arm
+    fireEvent.click(venueCell); // edit
+    fireEvent.keyDown(screen.getByDisplayValue("Journal of Foo"), { key: "Enter" });
+    expect(onEditField).not.toHaveBeenCalled();
+  });
+
+  it("an extracting row's Venue/Year cells are not editable", () => {
+    const extracting: CollectionRow = { ...row, status: "extracting" };
+    render(<CollectionTable rows={[extracting]} onOpenRow={noop} onEditField={noop} />);
+    const venueCell = screen.getByText("Journal of Foo");
+    fireEvent.click(venueCell); // arms the row; not editable, no interception
+    fireEvent.click(venueCell);
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 });

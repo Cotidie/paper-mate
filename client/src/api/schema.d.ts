@@ -79,12 +79,13 @@ export interface paths {
         head?: never;
         /**
          * Patch Doc
-         * @description Partially update a document's ``title``/``authors`` (Story 6.6, AD-L6).
+         * @description Partially update a document's ``title``/``authors``/``venue``/``year``
+         *     (Story 6.6; ``venue``/``year`` added by a Story 7.9 fix request, AD-L6).
          *
          *     Only fields present in the request body change (``exclude_unset``); an
-         *     empty body -> 400. A malformed/forbidden field (e.g. ``status``) is
-         *     rejected by ``DocPatch`` itself as FastAPI's standard 422. Unknown id ->
-         *     404; a storage failure -> 500. Both use the single ``{ "detail" }``
+         *     empty body -> 400. A malformed/forbidden field (e.g. ``status``, ``doi``)
+         *     is rejected by ``DocPatch`` itself as FastAPI's standard 422. Unknown id
+         *     -> 404; a storage failure -> 500. Both use the single ``{ "detail" }``
          *     envelope (AR-11). Editing never touches ``status``/``page_count``/
          *     ``added``/``last_opened``.
          */
@@ -447,6 +448,12 @@ export interface components {
             order: number;
             /** Filename */
             filename?: string | null;
+            /** Doi */
+            doi?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
         };
         /**
          * Doc
@@ -477,6 +484,12 @@ export interface components {
              * @enum {string}
              */
             status: "extracting" | "ready" | "enrich-skipped" | "parse-failed";
+            /** Doi */
+            doi?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
             /**
              * Schema Version
              * @default 1
@@ -498,21 +511,27 @@ export interface components {
         };
         /**
          * DocPatch
-         * @description Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6): a partial
-         *     title/authors edit. Request-only (no route returns it) — surfaced into
+         * @description Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6; ``venue``/
+         *     ``year`` added by a Story 7.9 fix request): a partial title/authors/
+         *     venue/year edit. Request-only (no route returns it) — surfaced into
          *     OpenAPI by the route's body parameter, not by a model injection.
          *
-         *     Both fields default unset so ``model_dump(exclude_unset=True)`` yields
+         *     All fields default unset so ``model_dump(exclude_unset=True)`` yields
          *     only what the client actually sent (true PATCH semantics: a title-only
-         *     edit leaves authors untouched). ``extra="forbid"`` turns an attempt to
+         *     edit leaves the rest untouched). ``extra="forbid"`` turns an attempt to
          *     patch a non-editable field (e.g. ``status``) into a loud 422 instead of a
-         *     silently-ignored no-op.
+         *     silently-ignored no-op. ``doi`` is deliberately NOT editable here (it
+         *     stays a link-only cell, per Story 7.9's scope boundary).
          */
         DocPatch: {
             /** Title */
             title?: string | null;
             /** Authors */
             authors?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
         };
         /**
          * Folder

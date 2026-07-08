@@ -643,6 +643,75 @@ describe("Inline edit Title/Authors (Story 6.6)", () => {
   });
 });
 
+describe("Inline edit Venue/Year (Story 7.9 fix request)", () => {
+  const metaRow: api.CollectionRow = {
+    ...fakeRow,
+    venue: "Journal of Foo",
+    year: 2017,
+  };
+
+  it("commits a Venue edit optimistically and calls patchDoc with just that field", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [metaRow], folders: [] });
+    const patchDoc = vi.spyOn(api, "patchDoc").mockResolvedValue({
+      ...fakeDoc(metaRow.doc_id, "attention.pdf", metaRow.title),
+      venue: "New Venue",
+      year: metaRow.year,
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Journal of Foo")).toBeTruthy());
+
+    const cell = screen.getByText("Journal of Foo");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("Journal of Foo") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "New Venue" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByText("New Venue")).toBeTruthy(); // optimistic
+    expect(patchDoc).toHaveBeenCalledWith(metaRow.doc_id, { venue: "New Venue" });
+    await waitFor(() => expect(screen.getByText("New Venue")).toBeTruthy());
+  });
+
+  it("commits a Year edit optimistically, calling patchDoc with a NUMBER (not the raw input string)", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [metaRow], folders: [] });
+    const patchDoc = vi.spyOn(api, "patchDoc").mockResolvedValue({
+      ...fakeDoc(metaRow.doc_id, "attention.pdf", metaRow.title),
+      venue: metaRow.venue,
+      year: 2019,
+    });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("2017")).toBeTruthy());
+
+    const cell = screen.getByText("2017");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("2017") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "2019" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByText("2019")).toBeTruthy(); // optimistic
+    expect(patchDoc).toHaveBeenCalledWith(metaRow.doc_id, { year: 2019 });
+    await waitFor(() => expect(screen.getByText("2019")).toBeTruthy());
+  });
+
+  it("an unparseable Year commit is silently ignored: no patchDoc call, cell reverts to the prior value", async () => {
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [metaRow], folders: [] });
+    const patchDoc = vi.spyOn(api, "patchDoc");
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("2017")).toBeTruthy());
+
+    const cell = screen.getByText("2017");
+    fireEvent.click(cell.closest("tr")!); // arm
+    fireEvent.click(cell); // edit
+    const input = screen.getByDisplayValue("2017") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "not a year" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(patchDoc).not.toHaveBeenCalled();
+    expect(screen.getByText("2017")).toBeTruthy(); // reverted to the prior value
+  });
+});
+
 describe("Left pane (version display)", () => {
   it("shows the app version once fetchHealth resolves", async () => {
     vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.4.4" });
@@ -1089,6 +1158,31 @@ describe("Display, Sort controls (Story 7.4)", () => {
     expect(screen.queryByRole("columnheader", { name: "Authors" })).toBeNull();
     expect(screen.queryByText("Some Author")).toBeNull();
     expect(screen.getByText("Only Paper")).toBeTruthy();
+  });
+
+  it("Display: DOI column is hidden by default while Venue and Year render (Story 7.9, AC-7)", async () => {
+    const paper = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Meta Paper",
+      doi: "10.1234/abcd",
+      venue: "Journal of Foo",
+      year: 2017,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Meta Paper")).toBeTruthy());
+
+    expect(screen.queryByRole("columnheader", { name: /^DOI/ })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: /^Venue/ })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /^Year/ })).toBeTruthy();
+    expect(screen.getByText("Journal of Foo")).toBeTruthy();
+    expect(screen.getByText("2017")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Display" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "DOI" }));
+
+    expect(screen.getByRole("columnheader", { name: /^DOI/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "10.1234/abcd" })).toBeTruthy();
   });
 
   it("Column header dropdown: Hide from a header's own menu omits that column (fix request: clickable headers)", async () => {

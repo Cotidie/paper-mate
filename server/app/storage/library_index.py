@@ -98,6 +98,9 @@ def _cache_from_meta(meta: DocMeta) -> dict:
         "file_type": meta.file_type,
         "status": meta.status,
         "filename": meta.filename,
+        "doi": meta.doi,
+        "venue": meta.venue,
+        "year": meta.year,
     }
 
 

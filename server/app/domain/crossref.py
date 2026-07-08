@@ -1,4 +1,6 @@
-"""The Crossref enricher: the ONLY network call in the whole backend (AD-L2).
+"""The Crossref enricher: the primary bibliographic network call (AD-L2).
+``arxiv_enrich.py`` (fix request) is the other, a conditional fallback
+``enrich.py`` layers on top when this one leaves ``venue`` unset.
 
 ``enrich`` (the domain surface, in ``enrich.py``) delegates to an ``Enricher``
 port; ``CrossrefEnricher`` is its default implementation. Abstracting Crossref
@@ -36,6 +38,10 @@ _TIMEOUT = 5.0
 #: needs no such guard.)
 _TITLE_MATCH_MIN_JACCARD = 0.5
 
+#: Preference order for a Crossref work's publication year: the canonical
+#: `issued` date, falling back through the `published-*` variants.
+_YEAR_KEYS = ("issued", "published-print", "published-online", "published")
+
 
 class Enricher(Protocol):
     """The metadata-enrichment port (AD-L2): correct an ``ExtractedMeta`` against
@@ -61,14 +67,43 @@ def _authors_from_crossref(work: dict) -> list[str]:
     return names
 
 
+def _venue_from_work(work: dict) -> str | None:
+    containers = work.get("container-title") or []
+    return clean(containers[0]) if containers else None
+
+
+def _year_from_work(work: dict) -> int | None:
+    for key in _YEAR_KEYS:
+        entry = work.get(key)
+        if not isinstance(entry, dict):
+            continue
+        date_parts = entry.get("date-parts") or []
+        if not date_parts:
+            continue
+        first = date_parts[0]
+        if isinstance(first, list) and first and isinstance(first[0], int):
+            return first[0]
+    return None
+
+
 def _meta_from_work(work: dict, doi: str | None) -> ExtractedMeta | None:
     """Project a Crossref ``message`` work into ``ExtractedMeta`` (``None`` if
-    it carries no title — an empty result is a skip, not a correction)."""
+    it carries no title — an empty result is a skip, not a correction).
+
+    ``doi`` stays the passed-in, extraction-sourced value (scope guard, Story
+    7.9): this does NOT read ``work.get("DOI")``.
+    """
     titles = work.get("title") or []
     title = clean(titles[0]) if titles else None
     if title is None:
         return None
-    return ExtractedMeta(title=title, authors=_authors_from_crossref(work), doi=doi)
+    return ExtractedMeta(
+        title=title,
+        authors=_authors_from_crossref(work),
+        doi=doi,
+        venue=_venue_from_work(work),
+        year=_year_from_work(work),
+    )
 
 
 def _titles_match(query_title: str, result_title: str) -> bool:

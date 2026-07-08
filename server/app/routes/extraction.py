@@ -33,13 +33,29 @@ def run_extraction(doc_id: str, pdf_bytes: bytes) -> None:
             final, status = extracted, "parse-failed"
         authors = ", ".join(final.authors) or None  # storage owns list->display
         try:
-            storage.apply_extraction(doc_id, title=final.title, authors=authors, status=status)
+            storage.apply_extraction(
+                doc_id,
+                title=final.title,
+                authors=authors,
+                status=status,
+                doi=final.doi,
+                venue=final.venue,
+                year=final.year,
+            )
         except storage.DocumentNotFoundError:
             pass  # purged mid-flight — best-effort no-op
     except Exception:
         # Never leave the row stuck at "extracting" (the client would poll to
         # its cap and give up on a permanently-muted row). Settle it as failed.
         try:
-            storage.apply_extraction(doc_id, title=None, authors=None, status="parse-failed")
+            storage.apply_extraction(
+                doc_id,
+                title=None,
+                authors=None,
+                status="parse-failed",
+                doi=None,
+                venue=None,
+                year=None,
+            )
         except storage.StorageError:
             pass

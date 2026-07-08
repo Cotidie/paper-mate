@@ -490,6 +490,12 @@ export default function CollectionTable(props: CollectionTableProps) {
   // `stopPropagation` here keeps them from ALSO arming the row, entering edit
   // mode, or opening the reader.
   function handleRowClickCapture(e: React.MouseEvent<HTMLTableRowElement>, docId: string) {
+    // The DOI cell's link is a plain external-link gesture (AC-6): a
+    // modifier-click on it must open/copy the link like any other anchor,
+    // not ALSO toggle/range-select the row. This runs in the CAPTURE phase
+    // (before the link's own bubble-phase stopPropagation), so it must bail
+    // out here rather than relying on the link's handler to undo it.
+    if ((e.target as HTMLElement).closest("a")) return;
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
       // The Title/Authors <td> is tabIndex=0 (EditableCell's Enter-to-edit
       // keyboard path). The browser's native mousedown default already
@@ -565,7 +571,7 @@ export default function CollectionTable(props: CollectionTableProps) {
   // preventDefault bails out of the drag entirely rather than starting a
   // bogus row-move over a click/text-select gesture (code-review fix).
   function handleDragStart(e: React.DragEvent<HTMLTableRowElement>, docId: string) {
-    if ((e.target as HTMLElement).closest("input, textarea, button, [contenteditable=true]")) {
+    if ((e.target as HTMLElement).closest("input, textarea, button, a, [contenteditable=true]")) {
       e.preventDefault();
       return;
     }

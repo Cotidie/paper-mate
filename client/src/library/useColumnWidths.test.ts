@@ -19,6 +19,9 @@ describe("useColumnWidths", () => {
       added: 120,
       file_type: 96,
       location: 140,
+      venue: 200,
+      year: 80,
+      doi: 200,
     });
   });
 
@@ -31,6 +34,9 @@ describe("useColumnWidths", () => {
     expect(result.current.widths.added).toBe(120);
     expect(result.current.widths.file_type).toBe(96);
     expect(result.current.widths.location).toBe(140);
+    expect(result.current.widths.venue).toBe(200);
+    expect(result.current.widths.year).toBe(80);
+    expect(result.current.widths.doi).toBe(200);
   });
 
   it("clamps each column to its own minimum", () => {

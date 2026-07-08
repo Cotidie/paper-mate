@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { EditableField } from "@/library/row";
 
+const EDIT_ARIA_LABEL: Record<EditableField, string> = {
+  title: "Edit title",
+  authors: "Edit authors",
+  venue: "Edit venue",
+  year: "Edit year",
+};
+
 /**
  * The `<input>` for an in-progress cell edit (Story 6.6). Owns its draft text
  * and autofocus/select-all on mount; a `committedRef` guards the classic
@@ -112,7 +119,7 @@ export default function EditableCell({
       className={className}
       title={title}
       tabIndex={0}
-      aria-label={field === "title" ? "Edit title" : "Edit authors"}
+      aria-label={EDIT_ARIA_LABEL[field]}
       onClick={(e) => {
         if (armed) {
           e.stopPropagation();

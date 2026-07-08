@@ -189,6 +189,30 @@ def test_doc_meta_round_trips_new_fields() -> None:
     assert meta.status == "extracting"
 
 
+def test_doc_meta_defaults_doi_venue_year_when_missing() -> None:
+    """Story 7.9, AC-1: an existing meta.json missing doi/venue/year still
+    validates via defaults (additive, no schema_version bump)."""
+    meta = DocMeta(filename="f.pdf", page_count=1, added="t", last_opened="t")
+    assert meta.doi is None
+    assert meta.venue is None
+    assert meta.year is None
+
+
+def test_doc_meta_round_trips_doi_venue_year() -> None:
+    meta = DocMeta(
+        filename="f.pdf",
+        page_count=1,
+        added="t",
+        last_opened="t",
+        doi="10.1234/abcd",
+        venue="Journal of Foo",
+        year=2017,
+    )
+    assert meta.doi == "10.1234/abcd"
+    assert meta.venue == "Journal of Foo"
+    assert meta.year == 2017
+
+
 def test_folder_round_trips() -> None:
     folder = Folder(id="11111111-1111-1111-1111-111111111111", name="Reading List")
     assert folder.parent_id is None
@@ -276,6 +300,47 @@ def test_collection_row_defaults_starred_when_missing() -> None:
         order=0,
     )
     assert row.starred is False
+
+
+def test_collection_row_accepts_and_round_trips_doi_venue_year() -> None:
+    """Story 7.9, AC-4: additive display-cache fields, mirror `filename`/
+    `last_opened` (meta-derived, NOT the `starred` org-state shape)."""
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+        doi="10.1234/abcd",
+        venue="Journal of Foo",
+        year=2017,
+    )
+    assert row.doi == "10.1234/abcd"
+    assert row.venue == "Journal of Foo"
+    assert row.year == 2017
+
+
+def test_collection_row_defaults_doi_venue_year_when_missing() -> None:
+    """A dict missing doi/venue/year (a pre-existing library.json entry cached
+    before the fields existed) still validates; reconcile backfills them."""
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+    )
+    assert row.doi is None
+    assert row.venue is None
+    assert row.year is None
 
 
 def test_library_wraps_papers_and_folders() -> None:

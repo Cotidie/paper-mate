@@ -119,6 +119,9 @@ def apply_extraction(
     title: str | None,
     authors: str | None,
     status: DocStatus,
+    doi: str | None,
+    venue: str | None,
+    year: int | None,
 ) -> None:
     """Persist a background extraction's result — the ONLY writer of it (AD-L2).
 
@@ -128,15 +131,25 @@ def apply_extraction(
     never a crash). Storage imports nothing from ``domain``.
     """
     library_index.update_meta_and_reindex(
-        doc_id, {"title": title, "authors": authors, "status": status}
+        doc_id,
+        {
+            "title": title,
+            "authors": authors,
+            "status": status,
+            "doi": doi,
+            "venue": venue,
+            "year": year,
+        },
     )
 
 
-def update_doc_meta(doc_id: str, updates: dict[str, str | None]) -> DocMeta:
-    """Persist a user-driven title/authors edit (Story 6.6, AC-2/AC-8/AC-9).
+def update_doc_meta(doc_id: str, updates: dict[str, str | int | None]) -> DocMeta:
+    """Persist a user-driven title/authors/venue/year edit (Story 6.6, AC-2/
+    AC-8/AC-9; venue/year added by a Story 7.9 fix request).
 
-    ``updates`` keys are ⊆ ``{"title", "authors"}`` and already normalized
-    (``.strip()``, empty -> ``None``) by the route. Reuses the same
+    ``updates`` keys are ⊆ ``{"title", "authors", "venue", "year"}``; the
+    string fields are already normalized (``.strip()``, empty -> ``None``)
+    by the route. Reuses the same
     re-read/TOCTOU-guard/write/reindex core as ``apply_extraction`` — never a
     second copy of that dance. Raises ``DocumentNotFoundError`` for an
     unresolvable id, a missing ``meta.json``, or a dir purged mid-write.

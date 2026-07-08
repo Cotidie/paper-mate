@@ -90,7 +90,11 @@ def test_run_extraction_ready_path(data_root, monkeypatch):
     doc_id, _ = storage.import_pdf(raw, "rough.pdf")
     monkeypatch.setattr(domain, "extract", lambda b: ExtractedMeta(title="rough", doi="10.1/x"))
     monkeypatch.setattr(
-        domain, "enrich", lambda m: ExtractedMeta(title="Corrected", authors=["Ada L"], doi="10.1/x")
+        domain,
+        "enrich",
+        lambda m: ExtractedMeta(
+            title="Corrected", authors=["Ada L"], doi="10.1/x", venue="Journal of Foo", year=2017
+        ),
     )
 
     run_extraction(doc_id, raw)
@@ -99,7 +103,14 @@ def test_run_extraction_ready_path(data_root, monkeypatch):
     assert meta.status == "ready"
     assert meta.title == "Corrected"
     assert meta.authors == "Ada L"
-    assert storage.read_library().papers[0].status == "ready"
+    assert meta.doi == "10.1/x"
+    assert meta.venue == "Journal of Foo"
+    assert meta.year == 2017
+    row = storage.read_library().papers[0]
+    assert row.status == "ready"
+    assert row.doi == "10.1/x"
+    assert row.venue == "Journal of Foo"
+    assert row.year == 2017
 
 
 def test_run_extraction_enrich_skipped_path(data_root, monkeypatch):
@@ -130,6 +141,9 @@ def test_run_extraction_parse_failed_path(data_root, monkeypatch):
     assert meta.status == "parse-failed"
     assert meta.title is None
     assert meta.filename == "poor.pdf"
+    assert meta.doi is None
+    assert meta.venue is None
+    assert meta.year is None
 
 
 def test_run_extraction_doi_only_settles_ready(data_root, monkeypatch):
@@ -171,7 +185,11 @@ def test_run_extraction_unexpected_failure_settles_parse_failed(data_root, monke
 
     run_extraction(doc_id, raw)  # must not raise
 
-    assert storage.read_meta(doc_id).status == "parse-failed"
+    meta = storage.read_meta(doc_id)
+    assert meta.status == "parse-failed"
+    assert meta.doi is None
+    assert meta.venue is None
+    assert meta.year is None
 
 
 def test_upload_non_pdf_returns_400_detail_envelope(data_root):
@@ -307,6 +325,59 @@ def test_patch_doc_does_not_change_other_fields(data_root):
     assert body["status"] == before["status"]
     assert body["page_count"] == before["page_count"] == 5
     assert body["added"] == before["added"]
+
+
+def test_patch_doc_updates_venue_and_year(data_root):
+    """Fix request: Venue/Year are inline-editable, mirroring title/authors."""
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("g.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"venue": "Journal of Foo", "year": 2019})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["venue"] == "Journal of Foo"
+    assert body["year"] == 2019
+    assert storage.read_meta(doc_id).venue == "Journal of Foo"
+    row = storage.read_library().papers[0]
+    assert row.venue == "Journal of Foo"
+    assert row.year == 2019
+
+
+def test_patch_doc_blank_venue_clears_to_null(data_root):
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("h.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    client.patch(f"/api/docs/{doc_id}", json={"venue": "Some Venue"})
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"venue": "   "})
+    assert resp.status_code == 200
+    assert resp.json()["venue"] is None
+
+
+def test_patch_doc_null_year_clears_it(data_root):
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("i.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    client.patch(f"/api/docs/{doc_id}", json={"year": 2019})
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"year": None})
+    assert resp.status_code == 200
+    assert resp.json()["year"] is None
+
+
+def test_patch_doc_doi_is_rejected_422(data_root):
+    """Scope boundary: DOI stays a link-only cell, never patchable."""
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("j.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"doi": "10.1/x"})
+    assert resp.status_code == 422
 
 
 # --- Purge route (Story 7.5 AC-4, AL-5.3, AL-6) -----------------------------

@@ -44,6 +44,16 @@ class ExtractedMeta(BaseModel):
     title: str | None = None
     authors: list[str] = []
     doi: str | None = None
+    # Captured from Crossref (`container-title` / `issued`), or the arXiv
+    # fallback (fix request) when Crossref has no venue; the domain's honest
+    # shape before storage projects them.
+    venue: str | None = None
+    year: int | None = None
+    # A new-style arXiv id (e.g. "2103.12345") found in the PDF text (fix
+    # request), NOT projected to DocMeta/CollectionRow: it's a transient
+    # lookup key `enrich()` uses to route the arXiv venue/year fallback,
+    # never displayed or persisted itself.
+    arxiv_id: str | None = None
 
 
 class DocMeta(BaseModel):
@@ -67,6 +77,12 @@ class DocMeta(BaseModel):
     authors: str | None = None
     file_type: Literal["pdf", "note"] = "pdf"
     status: DocStatus = "ready"
+    # Additive (Story 7.9, no schema_version bump): meta-derived, Crossref-
+    # sourced (venue/year) or extraction-sourced (doi). An existing meta.json
+    # missing them still validates via defaults.
+    doi: str | None = None
+    venue: str | None = None
+    year: int | None = None
     schema_version: int = 1
 
 
@@ -77,21 +93,25 @@ class Doc(DocMeta):
 
 
 class DocPatch(BaseModel):
-    """Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6): a partial
-    title/authors edit. Request-only (no route returns it) — surfaced into
+    """Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6; ``venue``/
+    ``year`` added by a Story 7.9 fix request): a partial title/authors/
+    venue/year edit. Request-only (no route returns it) — surfaced into
     OpenAPI by the route's body parameter, not by a model injection.
 
-    Both fields default unset so ``model_dump(exclude_unset=True)`` yields
+    All fields default unset so ``model_dump(exclude_unset=True)`` yields
     only what the client actually sent (true PATCH semantics: a title-only
-    edit leaves authors untouched). ``extra="forbid"`` turns an attempt to
+    edit leaves the rest untouched). ``extra="forbid"`` turns an attempt to
     patch a non-editable field (e.g. ``status``) into a loud 422 instead of a
-    silently-ignored no-op.
+    silently-ignored no-op. ``doi`` is deliberately NOT editable here (it
+    stays a link-only cell, per Story 7.9's scope boundary).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = None
     authors: str | None = None
+    venue: str | None = None
+    year: int | None = None
 
 
 # --- Library / collection index (AD-L1, Story 6.2) --------------------------
@@ -198,6 +218,13 @@ class CollectionRow(BaseModel):
     # when `title` is null. Optional so a pre-existing library.json entry
     # cached before this field existed still validates; reconcile backfills it.
     filename: str | None = None
+    # Additive (Story 7.9, no schema_version bump): meta-derived cache
+    # (like `filename`/`last_opened`), NOT org state like `starred`. Optional
+    # so a pre-existing library.json entry cached before these fields existed
+    # still validates; reconcile_library backfills them.
+    doi: str | None = None
+    venue: str | None = None
+    year: int | None = None
 
 
 class Library(BaseModel):

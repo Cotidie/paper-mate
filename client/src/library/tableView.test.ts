@@ -1,6 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { sortRows, type SortState } from "@/library/tableView";
+import { COLUMNS, sortRows, type SortState } from "@/library/tableView";
 import type { CollectionRow } from "@/api/client";
+
+describe("COLUMNS order (fix request)", () => {
+  it("Title, Authors, Venue, Year, Location, Added, File type, DOI", () => {
+    expect(COLUMNS.map((c) => c.key)).toEqual([
+      "title",
+      "authors",
+      "venue",
+      "year",
+      "location",
+      "added",
+      "file_type",
+      "doi",
+    ]);
+  });
+});
 
 function row(overrides: Partial<CollectionRow>): CollectionRow {
   return {
@@ -85,5 +100,46 @@ describe("sortRows", () => {
     ];
     expect(sortRows(rows, { column: "authors", direction: "asc" }).map((r) => r.doc_id)).toEqual(["1", "2", "3"]);
     expect(sortRows(rows, { column: "authors", direction: "desc" }).map((r) => r.doc_id)).toEqual(["1", "2", "3"]);
+  });
+
+  it("sorts Venue case-insensitively, empty last in either direction", () => {
+    const rows = [
+      row({ doc_id: "1", venue: "Zeta Journal" }),
+      row({ doc_id: "2", venue: "alpha journal" }),
+      row({ doc_id: "3", venue: null }),
+    ];
+    expect(sortRows(rows, { column: "venue", direction: "asc" }).map((r) => r.doc_id)).toEqual(["2", "1", "3"]);
+    expect(sortRows(rows, { column: "venue", direction: "desc" }).map((r) => r.doc_id)).toEqual(["1", "2", "3"]);
+  });
+
+  it("sorts Year numerically, not lexically, empty last in either direction", () => {
+    const rows = [
+      row({ doc_id: "a", year: 2009 }),
+      row({ doc_id: "b", year: 2017 }),
+      row({ doc_id: "c", year: 1998 }),
+      row({ doc_id: "d", year: null }),
+    ];
+    expect(sortRows(rows, { column: "year", direction: "asc" }).map((r) => r.doc_id)).toEqual([
+      "c",
+      "a",
+      "b",
+      "d",
+    ]);
+    expect(sortRows(rows, { column: "year", direction: "desc" }).map((r) => r.doc_id)).toEqual([
+      "b",
+      "a",
+      "c",
+      "d",
+    ]);
+  });
+
+  it("sorts DOI as a string, empty last in either direction", () => {
+    const rows = [
+      row({ doc_id: "1", doi: "10.5/zzz" }),
+      row({ doc_id: "2", doi: "10.5/aaa" }),
+      row({ doc_id: "3", doi: null }),
+    ];
+    expect(sortRows(rows, { column: "doi", direction: "asc" }).map((r) => r.doc_id)).toEqual(["2", "1", "3"]);
+    expect(sortRows(rows, { column: "doi", direction: "desc" }).map((r) => r.doc_id)).toEqual(["1", "2", "3"]);
   });
 });

@@ -48,8 +48,8 @@ def test_import_writes_source_and_meta(data_root):
     assert (doc_dir / "source.pdf").read_bytes() == raw
 
     on_disk = json.loads((doc_dir / "meta.json").read_text())
-    # Exactly the 9-field storage schema (Story 6.2 adds authors/file_type/
-    # status), no doc_id inside meta.json (AD-8).
+    # Exactly the 12-field storage schema (Story 6.2 adds authors/file_type/
+    # status; Story 7.9 adds doi/venue/year), no doc_id inside meta.json (AD-8).
     assert set(on_disk) == {
         "filename",
         "title",
@@ -59,6 +59,9 @@ def test_import_writes_source_and_meta(data_root):
         "authors",
         "file_type",
         "status",
+        "doi",
+        "venue",
+        "year",
         "schema_version",
     }
     assert on_disk["filename"] == "a-paper.pdf"
@@ -122,7 +125,7 @@ def test_apply_extraction_does_not_restore_trashed_paper(data_root):
     doc_id, _ = storage.import_pdf(make_pdf_bytes(pages=1), "a.pdf")
     storage.trash_papers([doc_id])
 
-    storage.apply_extraction(doc_id, title="T", authors="A", status="ready")
+    storage.apply_extraction(doc_id, title="T", authors="A", status="ready", doi=None, venue=None, year=None)
 
     paper = next(p for p in storage.read_library().papers if p.doc_id == doc_id)
     assert paper.trashed is True
@@ -462,6 +465,27 @@ def test_reconcile_backfills_last_opened_for_pre_existing_entry(data_root):
     assert library.papers[0].last_opened == meta.last_opened
 
 
+def test_reconcile_projects_doi_venue_year_from_meta(data_root):
+    """Story 7.9, AC-4: `_cache_from_meta` projects doi/venue/year (meta-derived
+    cache, mirrors `filename`/`last_opened`) - a DocMeta carrying them is
+    reflected in the library.json entry on the next reconcile."""
+    raw = make_pdf_bytes(pages=1, title="Has DOI")
+    doc_id, meta = storage.import_pdf(raw, "has-doi.pdf")
+
+    doc_dir = data_root / "library" / doc_id
+    updated = meta.model_copy(
+        update={"doi": "10.1234/abcd", "venue": "Journal of Foo", "year": 2017}
+    )
+    meta_store.write(doc_dir, updated)
+
+    storage.reconcile_library()
+
+    row = storage.read_library().papers[0]
+    assert row.doi == "10.1234/abcd"
+    assert row.venue == "Journal of Foo"
+    assert row.year == 2017
+
+
 def test_reconcile_prunes_entry_whose_dir_vanished(data_root):
     raw = make_pdf_bytes(pages=1)
     doc_id, _ = storage.import_pdf(raw, "gone.pdf")
@@ -528,7 +552,13 @@ def test_apply_extraction_persists_meta_and_refreshes_cache(data_root):
     doc_id, _ = storage.import_pdf(raw, "rough.pdf")
 
     storage.apply_extraction(
-        doc_id, title="Corrected Title", authors="Ada Lovelace, Alan Turing", status="ready"
+        doc_id,
+        title="Corrected Title",
+        authors="Ada Lovelace, Alan Turing",
+        status="ready",
+        doi="10.1234/abcd",
+        venue="Journal of Foo",
+        year=2017,
     )
 
     # meta.json updated.
@@ -536,18 +566,24 @@ def test_apply_extraction_persists_meta_and_refreshes_cache(data_root):
     assert meta.title == "Corrected Title"
     assert meta.authors == "Ada Lovelace, Alan Turing"
     assert meta.status == "ready"
+    assert meta.doi == "10.1234/abcd"
+    assert meta.venue == "Journal of Foo"
+    assert meta.year == 2017
     # Display cache refreshed through the AD-L7 index path.
     row = storage.read_library().papers[0]
     assert row.title == "Corrected Title"
     assert row.authors == "Ada Lovelace, Alan Turing"
     assert row.status == "ready"
+    assert row.doi == "10.1234/abcd"
+    assert row.venue == "Journal of Foo"
+    assert row.year == 2017
 
 
 def test_apply_extraction_parse_failed_keeps_null_title(data_root):
     raw = make_pdf_bytes(pages=1)
     doc_id, _ = storage.import_pdf(raw, "poor.pdf")
 
-    storage.apply_extraction(doc_id, title=None, authors=None, status="parse-failed")
+    storage.apply_extraction(doc_id, title=None, authors=None, status="parse-failed", doi=None, venue=None, year=None)
 
     meta = storage.read_meta(doc_id)
     assert meta.title is None
@@ -560,7 +596,7 @@ def test_apply_extraction_preserves_identity_fields(data_root):
     raw = make_pdf_bytes(pages=3, title="Orig")
     doc_id, before = storage.import_pdf(raw, "orig.pdf")
 
-    storage.apply_extraction(doc_id, title="New", authors=None, status="enrich-skipped")
+    storage.apply_extraction(doc_id, title="New", authors=None, status="enrich-skipped", doi=None, venue=None, year=None)
 
     meta = storage.read_meta(doc_id)
     # Only title/authors/status change; page_count/added/filename are untouched.
@@ -573,8 +609,8 @@ def test_apply_extraction_is_idempotent(data_root):
     raw = make_pdf_bytes(pages=1, title="X")
     doc_id, _ = storage.import_pdf(raw, "x.pdf")
 
-    storage.apply_extraction(doc_id, title="Once", authors=None, status="ready")
-    storage.apply_extraction(doc_id, title="Once", authors=None, status="ready")
+    storage.apply_extraction(doc_id, title="Once", authors=None, status="ready", doi=None, venue=None, year=None)
+    storage.apply_extraction(doc_id, title="Once", authors=None, status="ready", doi=None, venue=None, year=None)
 
     library = storage.read_library()
     assert len(library.papers) == 1  # no duplicate entry
@@ -583,7 +619,7 @@ def test_apply_extraction_is_idempotent(data_root):
 
 def test_apply_extraction_missing_doc_raises_not_found(data_root):
     with pytest.raises(storage.DocumentNotFoundError):
-        storage.apply_extraction("0" * 64, title="T", authors=None, status="ready")
+        storage.apply_extraction("0" * 64, title="T", authors=None, status="ready", doi=None, venue=None, year=None)
 
 
 def test_apply_extraction_purged_mid_flight_raises_not_found(data_root):
@@ -592,7 +628,7 @@ def test_apply_extraction_purged_mid_flight_raises_not_found(data_root):
     shutil.rmtree(data_root / "library" / doc_id)  # purged while extracting
 
     with pytest.raises(storage.DocumentNotFoundError):
-        storage.apply_extraction(doc_id, title="T", authors=None, status="ready")
+        storage.apply_extraction(doc_id, title="T", authors=None, status="ready", doi=None, venue=None, year=None)
 
 
 def test_apply_extraction_does_not_resurrect_dir_purged_after_read(data_root, monkeypatch):
@@ -615,7 +651,7 @@ def test_apply_extraction_does_not_resurrect_dir_purged_after_read(data_root, mo
     monkeypatch.setattr(meta_store, "read", read_then_purge)
 
     with pytest.raises(storage.DocumentNotFoundError):
-        storage.apply_extraction(doc_id, title="Ghost", authors=None, status="ready")
+        storage.apply_extraction(doc_id, title="Ghost", authors=None, status="ready", doi=None, venue=None, year=None)
 
     # The dir was NOT recreated (no meta-only ghost written back) and the index
     # was NOT refreshed with the ghost values — apply_extraction wrote nothing.
@@ -646,7 +682,7 @@ def test_update_doc_meta_refreshes_library_cache(data_root):
 def test_update_doc_meta_partial_leaves_authors_untouched(data_root):
     raw = make_pdf_bytes(pages=1, title="X")
     doc_id, _ = storage.import_pdf(raw, "x.pdf")
-    storage.apply_extraction(doc_id, title="X", authors="Original Author", status="ready")
+    storage.apply_extraction(doc_id, title="X", authors="Original Author", status="ready", doi=None, venue=None, year=None)
 
     storage.update_doc_meta(doc_id, {"title": "New Title"})
 
@@ -693,7 +729,7 @@ def test_update_doc_meta_purged_dir_raises_not_found_no_ghost_row(data_root, mon
 def test_touch_last_opened_advances_field_only(data_root):
     raw = make_pdf_bytes(pages=4, title="Original")
     doc_id, before = storage.import_pdf(raw, "orig.pdf")
-    storage.apply_extraction(doc_id, title="Original", authors="Ada Lovelace", status="ready")
+    storage.apply_extraction(doc_id, title="Original", authors="Ada Lovelace", status="ready", doi=None, venue=None, year=None)
     settled = storage.read_meta(doc_id)
 
     updated = storage.touch_last_opened(doc_id)
