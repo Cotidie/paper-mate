@@ -265,4 +265,12 @@
      (easier to grab), widening to 2px on hover/drag. */
   --library-resize-handle-width: 6px;
   --library-resize-handle-active-width: 2px;
+
+  /* collection-table column-header drop indicator (Story 7.10 AC-1): the
+     insertion bar painted on a header while another header is dragged over
+     it. `reorderColumns` uses array-move semantics (a forward drag lands
+     the dragged column AFTER the target, backward lands it BEFORE), so the
+     bar renders on the matching side - both a left ("before") and a right
+     ("after") variant share this width (`CollectionTable.css`). */
+  --collection-table-drop-indicator-width: 2px;
 }

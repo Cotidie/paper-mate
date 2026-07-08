@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, createEvent } from "@testing-library/react";
 import CollectionTable from "./CollectionTable";
 import { formatAdded } from "@/library/row";
 import { COLUMNS } from "@/library/tableView";
@@ -12,6 +12,9 @@ afterEach(cleanup);
 // dragStart didn't wait a tick for, so it can't leak into the next test.
 afterEach(() => {
   document.querySelectorAll(".collection-table__drag-preview").forEach((el) => el.remove());
+});
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 const rows: CollectionRow[] = [
@@ -1054,13 +1057,14 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         }}
       />,
     );
-    // Column order (fix request): title, authors, venue, year, location, added, file_type, doi.
+    // Column order (Story 7.10 fix request): title, authors, venue, year, doi, location, added, file_type.
     const cols = document.querySelectorAll("colgroup col");
     expect((cols[0] as HTMLElement).style.width).toBe("400px"); // title
     expect((cols[1] as HTMLElement).style.width).toBe("150px"); // authors
     expect((cols[2] as HTMLElement).style.width).toBe("60px"); // venue
     expect((cols[3] as HTMLElement).style.width).toBe("40px"); // year
-    expect((cols[4] as HTMLElement).style.width).toBe("120px"); // location
+    expect((cols[4] as HTMLElement).style.width).toBe("60px"); // doi
+    expect((cols[5] as HTMLElement).style.width).toBe("120px"); // location
   });
 
   it("sizes the <table> itself to the exact sum of columnWidths (fix request: table-layout:fixed + width:100% rescaled every <col> proportionally when they didn't sum to 100%, so narrowing one column visibly widened another even though its own width state never changed)", () => {
@@ -1112,6 +1116,523 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
   });
 });
 
+describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () => {
+  function dataTransferStub() {
+    const store = new Map<string, string>();
+    const types: string[] = [];
+    return {
+      setData: (type: string, value: string) => {
+        store.set(type, value);
+        if (!types.includes(type)) types.push(type);
+      },
+      getData: (type: string) => store.get(type) ?? "",
+      get effectAllowed() {
+        return store.get("__effectAllowed") ?? "";
+      },
+      set effectAllowed(value: string) {
+        store.set("__effectAllowed", value);
+      },
+      get dropEffect() {
+        return store.get("__dropEffect") ?? "";
+      },
+      set dropEffect(value: string) {
+        store.set("__dropEffect", value);
+      },
+      types,
+      setDragImage: () => {},
+    };
+  }
+
+  // jsdom never computes real layout, so `getBoundingClientRect()` returns
+  // all-zero rects - the live preview's frozen-geometry hit-testing (fix
+  // request) needs each header's rect to actually differ. Stubs a fixed
+  // 100px-wide slot per column, in `COLUMNS` order, keyed off the
+  // `data-column-key` attribute the real component sets.
+  const COLUMN_ORDER_KEYS = [
+    "title",
+    "authors",
+    "venue",
+    "year",
+    "doi",
+    "location",
+    "added",
+    "file_type",
+  ];
+  const SLOT_WIDTH = 100;
+
+  function mockColumnRects() {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: Element,
+    ) {
+      const key = this instanceof HTMLElement ? this.dataset.columnKey : undefined;
+      const idx = key ? COLUMN_ORDER_KEYS.indexOf(key) : -1;
+      const left = idx >= 0 ? idx * SLOT_WIDTH : 0;
+      return {
+        left,
+        right: left + SLOT_WIDTH,
+        top: 0,
+        bottom: 0,
+        width: SLOT_WIDTH,
+        height: 0,
+        x: left,
+        y: 0,
+        toJSON() {
+          return this;
+        },
+      } as DOMRect;
+    });
+  }
+
+  /** The clientX at the MIDPOINT of `key`'s mocked slot. */
+  function clientXFor(key: string): number {
+    return COLUMN_ORDER_KEYS.indexOf(key) * SLOT_WIDTH + SLOT_WIDTH / 2;
+  }
+
+  function fireColumnDragOver(
+    target: HTMLElement,
+    dataTransfer: ReturnType<typeof dataTransferStub>,
+    clientX: number,
+  ) {
+    const event = createEvent.dragOver(target, { dataTransfer });
+    Object.defineProperty(event, "clientX", { value: clientX });
+    fireEvent(target, event);
+  }
+
+  it("the cell order matches the header order under a non-default column order (the cell-order trap, AC-6)", () => {
+    const reordered = [
+      COLUMNS.find((c) => c.key === "title")!,
+      COLUMNS.find((c) => c.key === "venue")!,
+      COLUMNS.find((c) => c.key === "authors")!,
+      COLUMNS.find((c) => c.key === "year")!,
+    ];
+    render(
+      <CollectionTable rows={[rows[0]]} onOpenRow={noop} onEditField={noop} visibleColumns={reordered} />,
+    );
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTexts).toEqual(["Title", "Venue", "Authors", "Year"]);
+    const cellClasses = Array.from(document.querySelectorAll("tbody tr td")).map((td) => td.className);
+    expect(cellClasses).toEqual([
+      "collection-table__title",
+      "collection-table__venue",
+      "collection-table__authors",
+      "collection-table__year",
+    ]);
+  });
+
+  it("a pending row's cells also follow a non-default column order", () => {
+    const reordered = [
+      COLUMNS.find((c) => c.key === "title")!,
+      COLUMNS.find((c) => c.key === "venue")!,
+      COLUMNS.find((c) => c.key === "authors")!,
+    ];
+    render(
+      <CollectionTable
+        rows={[]}
+        onOpenRow={noop}
+        onEditField={noop}
+        visibleColumns={reordered}
+        pendingRows={[{ tempId: "t1", filename: "brand-new.pdf" }]}
+      />,
+    );
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    const pendingRow = screen.getByText("brand-new").closest("tr")!;
+    const cellClasses = Array.from(pendingRow.querySelectorAll("td")).map((td) => td.className);
+    expect(headerTexts).toEqual(["Title", "Venue", "Authors"]);
+    expect(cellClasses).toEqual([
+      "collection-table__title",
+      "collection-table__venue",
+      "collection-table__authors",
+    ]);
+  });
+
+  it("Title's header is never draggable, even when onReorderColumn is supplied", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const titleHeader = screen.getByRole("button", { name: "Title" }).closest("th")!;
+    expect(titleHeader.getAttribute("draggable")).toBe("false");
+  });
+
+  it("a non-Title header is draggable when onReorderColumn is supplied", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    expect(authorsHeader.getAttribute("draggable")).toBe("true");
+  });
+
+  it("a header is not draggable when onReorderColumn is omitted (isolated tests unaffected)", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    expect(authorsHeader.getAttribute("draggable")).toBe("false");
+  });
+
+  it("dragging one header onto another calls onReorderColumn with (fromKey, toKey)", () => {
+    mockColumnRects();
+    const onReorderColumn = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={onReorderColumn}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
+    fireEvent.drop(venueHeader, { dataTransfer });
+    expect(onReorderColumn).toHaveBeenCalledWith("authors", "venue");
+  });
+
+  it("uses a compact custom drag image for the header drag (reuses the row drag-preview shape)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const setDragImage = vi.fn();
+    fireEvent.dragStart(authorsHeader, { dataTransfer: { ...dataTransferStub(), setDragImage } });
+    expect(setDragImage).toHaveBeenCalledTimes(1);
+    const [previewEl] = setDragImage.mock.calls[0];
+    expect(previewEl.className).toBe("collection-table__drag-preview");
+    expect(previewEl.textContent).toBe("Authors");
+  });
+
+  it("shows the drop-target indicator on the AFTER (right) edge for a forward drag, matching where the column actually lands (fix request: it used to always render 'before', which pointed at the wrong side once reorderColumns switched to array-move semantics)", () => {
+    mockColumnRects();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    // Forward: Authors (idx1) dragged onto Venue (idx2) lands AFTER Venue.
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
+    expect(venueHeader.getAttribute("data-drop-target")).toBe("after");
+    fireEvent.drop(venueHeader, { dataTransfer });
+    expect(venueHeader.getAttribute("data-drop-target")).toBeNull();
+  });
+
+  it("shows the drop-target indicator on the BEFORE (left) edge for a backward drag", () => {
+    mockColumnRects();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    // Backward: Venue (idx2) dragged onto Authors (idx1) lands BEFORE Authors.
+    fireEvent.dragStart(venueHeader, { dataTransfer });
+    fireColumnDragOver(authorsHeader, dataTransfer, clientXFor("authors"));
+    expect(authorsHeader.getAttribute("data-drop-target")).toBe("before");
+  });
+
+  it("live-previews the reordered headers WHILE dragging, before any drop (fix request)", () => {
+    mockColumnRects();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
+
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTexts).toEqual([
+      "Title",
+      "Venue",
+      "Authors",
+      "Year",
+      "DOI",
+      "Location",
+      "Added",
+      "File type",
+    ]);
+  });
+
+  it("live-previews row cells in the same swapped order as the headers, not just on drop (fix request)", () => {
+    mockColumnRects();
+    render(
+      <CollectionTable
+        rows={[rows[0]]}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
+
+    const firstRowCells = document.querySelectorAll("tbody tr")[0].querySelectorAll("td");
+    expect(firstRowCells[1].className).toBe("collection-table__venue");
+    expect(firstRowCells[2].className).toBe("collection-table__authors");
+  });
+
+  it("reverts the live preview to the committed order on dragend without a drop (drag cancelled, fix request)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireEvent.dragOver(venueHeader, { dataTransfer });
+    fireEvent.dragEnd(authorsHeader, { dataTransfer });
+
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTexts).toEqual([
+      "Title",
+      "Authors",
+      "Venue",
+      "Year",
+      "DOI",
+      "Location",
+      "Added",
+      "File type",
+    ]);
+  });
+
+  it("the live preview never touches Title's position (never a drag source or target)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const titleHeader = screen.getByRole("button", { name: "Title" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireEvent.dragOver(titleHeader, { dataTransfer });
+
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTexts[0]).toBe("Title");
+  });
+
+  it("hit-testing is driven by frozen geometry + pointer clientX, not by which live DOM element the event fires on (fix request: a stationary-cursor 'ignore self' guard alone did not stop a REAL, continuously moving mouse from oscillating severely)", () => {
+    mockColumnRects();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+
+    function headerOrder() {
+      return Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    }
+    const swapped = ["Title", "Venue", "Authors", "Year", "DOI", "Location", "Added", "File type"];
+
+    // Fire the SAME clientX (Venue's slot) on ALTERNATING elements - in a
+    // real browser, once a swap happens, native hit-testing routes the next
+    // dragover to whichever header the layout NOW puts under that screen
+    // position (not necessarily the same element as before). The resolved
+    // target must depend on clientX alone and stay put, not thrash.
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
+    expect(headerOrder()).toEqual(swapped);
+    fireColumnDragOver(authorsHeader, dataTransfer, clientXFor("venue"));
+    expect(headerOrder()).toEqual(swapped);
+    fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
+    expect(headerOrder()).toEqual(swapped);
+
+    // The pointer genuinely moves further right, past Year - the target
+    // updates accordingly, with no back-and-forth along the way.
+    fireColumnDragOver(authorsHeader, dataTransfer, clientXFor("year"));
+    expect(headerOrder()).toEqual([
+      "Title",
+      "Venue",
+      "Year",
+      "Authors",
+      "DOI",
+      "Location",
+      "Added",
+      "File type",
+    ]);
+  });
+
+  it("opens the header menu with Move left / Move right when onMoveColumn is supplied", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+    expect(screen.getByRole("menuitem", { name: "Move left" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Move right" })).toBeTruthy();
+  });
+
+  it("omits Move left/right when onMoveColumn is omitted", () => {
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onSortChange={noop} onToggleColumn={noop} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+    expect(screen.queryByRole("menuitem", { name: "Move left" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Move right" })).toBeNull();
+  });
+
+  it("omits Move left for the column immediately right of Title", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
+    expect(screen.queryByRole("menuitem", { name: "Move left" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Move right" })).toBeTruthy();
+  });
+
+  it("omits Move right for the last column", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "File type" }));
+    expect(screen.getByRole("menuitem", { name: "Move left" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Move right" })).toBeNull();
+  });
+
+  it("Move left calls onMoveColumn with the column key and 'left', then closes the menu", () => {
+    const onMoveColumn = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={onMoveColumn}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move left" }));
+    expect(onMoveColumn).toHaveBeenCalledWith("venue", "left");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("Move right calls onMoveColumn with the column key and 'right'", () => {
+    const onMoveColumn = vi.fn();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={onMoveColumn}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Venue" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move right" }));
+    expect(onMoveColumn).toHaveBeenCalledWith("venue", "right");
+  });
+
+  it("never offers Move left/right on the Title column (pinned first, never movable)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onMoveColumn={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Title" }));
+    expect(screen.queryByRole("menuitem", { name: "Move left" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Move right" })).toBeNull();
+  });
+});
+
 describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", () => {
   const foldered: CollectionRow = {
     doc_id: "f".repeat(64),
@@ -1146,24 +1667,26 @@ describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", 
     expect(screen.getByText("Folder A")).toBeTruthy();
   });
 
-  it("shows 'Uncategorized' when folder_id is null", () => {
+  it("shows an empty location cell when folder_id is null (fix request: no 'Uncategorized' text)", () => {
     render(
       <CollectionTable rows={[uncategorized]} onOpenRow={noop} onEditField={noop} folders={folders} />,
     );
-    expect(screen.getByText("Uncategorized")).toBeTruthy();
+    expect(screen.queryByText("Uncategorized")).toBeNull();
+    const cell = document.querySelector(".collection-table__location")!;
+    expect(cell.querySelector(".collection-table__location-text")!.textContent).toBe("");
   });
 
-  it("falls back to 'Uncategorized' when folders is omitted entirely (isolated tests)", () => {
+  it("falls back to an empty location cell when folders is omitted entirely (isolated tests)", () => {
     render(<CollectionTable rows={[uncategorized]} onOpenRow={noop} onEditField={noop} />);
-    expect(screen.getByText("Uncategorized")).toBeTruthy();
+    const cell = document.querySelector(".collection-table__location")!;
+    expect(cell.querySelector(".collection-table__location-text")!.textContent).toBe("");
   });
 
-  it("renders a folder icon only for a paper assigned to a real folder, not Uncategorized", () => {
+  it("renders a folder icon only for a paper assigned to a real folder, not an uncategorized one", () => {
     render(
       <CollectionTable rows={[foldered, uncategorized]} onOpenRow={noop} onEditField={noop} folders={folders} />,
     );
-    const folderedCell = screen.getByText("Folder A").closest("td")!;
-    const uncategorizedCell = screen.getByText("Uncategorized").closest("td")!;
+    const [folderedCell, uncategorizedCell] = document.querySelectorAll(".collection-table__location");
     expect(folderedCell.querySelector(".collection-table__location-icon")).toBeTruthy();
     expect(uncategorizedCell.querySelector(".collection-table__location-icon")).toBeNull();
   });

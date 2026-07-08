@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Folder as FolderIcon, Star } from "@phosphor-icons/react";
 import type { CollectionRow } from "@/api/client";
 import {
@@ -8,7 +9,7 @@ import {
   stripPdfExtension,
   type EditableField,
 } from "@/library/row";
-import type { ColumnKey } from "@/library/tableView";
+import type { ColumnDef } from "@/library/tableView";
 import EditableCell from "./EditableCell";
 
 /**
@@ -32,6 +33,12 @@ import EditableCell from "./EditableCell";
  * up via a callback - `CollectionTable` owns the one selection set, the
  * editing state, and the click-suppression discipline; this component only
  * renders and reports.
+ *
+ * `visibleColumns` is the ORDERED column list (Story 7.10, AC-6), not a
+ * membership `Set`: the `<td>`s render via `.map` in that order, each
+ * dispatched by `renderCell`'s `switch`, so a persisted column order that
+ * differs from the default can never desync a cell from the `<th>` above it
+ * (the cell-order trap - see the story's Dev Notes).
  */
 export default function PaperRow({
   row,
@@ -51,7 +58,7 @@ export default function PaperRow({
   locationLabel,
 }: {
   row: CollectionRow;
-  visibleColumns: Set<ColumnKey>;
+  visibleColumns: ColumnDef[];
   armed: boolean;
   editingField: EditableField | null;
   checked: boolean;
@@ -78,6 +85,154 @@ export default function PaperRow({
   const displayTitle = row.title ?? (row.filename ? stripPdfExtension(row.filename) : null);
   const label = statusLabel(row.status);
   const editable = row.status !== "extracting";
+
+  // A plain inline switch (Story 7.10 Dev Notes: this is the ordered-render
+  // seam, not the general cellType registry - that's Story 7.11's job).
+  function renderCell(col: ColumnDef): ReactNode {
+    switch (col.key) {
+      case "title":
+        return (
+          <EditableCell
+            key="title"
+            className="collection-table__title"
+            title={displayTitle ?? undefined}
+            field="title"
+            editable={editable}
+            armed={armed}
+            isEditing={editingField === "title"}
+            seedValue={seedFieldValue(row, "title")}
+            onStartEdit={() => onStartEdit("title")}
+            onArm={onArm}
+            onCommit={(value, viaBlur) => onCommit("title", value, viaBlur)}
+            onCancel={onCancel}
+          >
+            <span className="collection-table__title-text">
+              {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
+            </span>
+            {row.starred && (
+              <Star weight="fill" aria-label="Starred" className="collection-table__star" />
+            )}
+            {!trashLens && (
+              <button
+                type="button"
+                className="collection-table__open-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen();
+                }}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                Open
+              </button>
+            )}
+          </EditableCell>
+        );
+      case "authors":
+        return (
+          <EditableCell
+            key="authors"
+            className="collection-table__authors"
+            title={row.authors ?? undefined}
+            field="authors"
+            editable={editable}
+            armed={armed}
+            isEditing={editingField === "authors"}
+            seedValue={seedFieldValue(row, "authors")}
+            onStartEdit={() => onStartEdit("authors")}
+            onArm={onArm}
+            onCommit={(value, viaBlur) => onCommit("authors", value, viaBlur)}
+            onCancel={onCancel}
+          >
+            {row.authors ?? ""}
+          </EditableCell>
+        );
+      case "venue":
+        return (
+          <EditableCell
+            key="venue"
+            className="collection-table__venue"
+            title={row.venue ?? undefined}
+            field="venue"
+            editable={editable}
+            armed={armed}
+            isEditing={editingField === "venue"}
+            seedValue={seedFieldValue(row, "venue")}
+            onStartEdit={() => onStartEdit("venue")}
+            onArm={onArm}
+            onCommit={(value, viaBlur) => onCommit("venue", value, viaBlur)}
+            onCancel={onCancel}
+          >
+            {row.venue ?? ""}
+          </EditableCell>
+        );
+      case "year":
+        return (
+          <EditableCell
+            key="year"
+            className="collection-table__year"
+            field="year"
+            editable={editable}
+            armed={armed}
+            isEditing={editingField === "year"}
+            seedValue={seedFieldValue(row, "year")}
+            onStartEdit={() => onStartEdit("year")}
+            onArm={onArm}
+            onCommit={(value, viaBlur) => onCommit("year", value, viaBlur)}
+            onCancel={onCancel}
+          >
+            {row.year ?? ""}
+          </EditableCell>
+        );
+      case "location":
+        return (
+          <td key="location" className="collection-table__location" title={locationLabel}>
+            {row.folder_id && <FolderIcon aria-hidden className="collection-table__location-icon" />}
+            <span className="collection-table__location-text">{locationLabel}</span>
+          </td>
+        );
+      case "added":
+        return (
+          <td key="added" className="collection-table__added">
+            {formatAdded(row.added)}
+          </td>
+        );
+      case "file_type":
+        return (
+          <td key="file_type">
+            {label ? (
+              <span
+                className={
+                  row.status === "parse-failed" ? "badge-pill badge-pill--muted" : "badge-pill"
+                }
+              >
+                {label}
+              </span>
+            ) : (
+              <span className="badge-pill">{row.file_type === "note" ? "Note" : "PDF"}</span>
+            )}
+          </td>
+        );
+      case "doi":
+        return (
+          <td key="doi" className="collection-table__doi">
+            {row.doi && (
+              <a
+                href={`https://doi.org/${row.doi}`}
+                target="_blank"
+                rel="noreferrer"
+                className="collection-table__doi-link"
+                title={row.doi}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                {row.doi}
+              </a>
+            )}
+          </td>
+        );
+    }
+  }
+
   return (
     <tr
       aria-selected={armed}
@@ -88,132 +243,7 @@ export default function PaperRow({
       draggable={!trashLens}
       onDragStart={trashLens ? undefined : onDragStart}
     >
-      {visibleColumns.has("title") && (
-        <EditableCell
-          className="collection-table__title"
-          title={displayTitle ?? undefined}
-          field="title"
-          editable={editable}
-          armed={armed}
-          isEditing={editingField === "title"}
-          seedValue={seedFieldValue(row, "title")}
-          onStartEdit={() => onStartEdit("title")}
-          onArm={onArm}
-          onCommit={(value, viaBlur) => onCommit("title", value, viaBlur)}
-          onCancel={onCancel}
-        >
-          <span className="collection-table__title-text">
-            {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
-          </span>
-          {row.starred && (
-            <Star weight="fill" aria-label="Starred" className="collection-table__star" />
-          )}
-          {!trashLens && (
-            <button
-              type="button"
-              className="collection-table__open-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpen();
-              }}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              Open
-            </button>
-          )}
-        </EditableCell>
-      )}
-      {visibleColumns.has("authors") && (
-        <EditableCell
-          className="collection-table__authors"
-          title={row.authors ?? undefined}
-          field="authors"
-          editable={editable}
-          armed={armed}
-          isEditing={editingField === "authors"}
-          seedValue={seedFieldValue(row, "authors")}
-          onStartEdit={() => onStartEdit("authors")}
-          onArm={onArm}
-          onCommit={(value, viaBlur) => onCommit("authors", value, viaBlur)}
-          onCancel={onCancel}
-        >
-          {row.authors ?? ""}
-        </EditableCell>
-      )}
-      {visibleColumns.has("venue") && (
-        <EditableCell
-          className="collection-table__venue"
-          title={row.venue ?? undefined}
-          field="venue"
-          editable={editable}
-          armed={armed}
-          isEditing={editingField === "venue"}
-          seedValue={seedFieldValue(row, "venue")}
-          onStartEdit={() => onStartEdit("venue")}
-          onArm={onArm}
-          onCommit={(value, viaBlur) => onCommit("venue", value, viaBlur)}
-          onCancel={onCancel}
-        >
-          {row.venue ?? ""}
-        </EditableCell>
-      )}
-      {visibleColumns.has("year") && (
-        <EditableCell
-          className="collection-table__year"
-          field="year"
-          editable={editable}
-          armed={armed}
-          isEditing={editingField === "year"}
-          seedValue={seedFieldValue(row, "year")}
-          onStartEdit={() => onStartEdit("year")}
-          onArm={onArm}
-          onCommit={(value, viaBlur) => onCommit("year", value, viaBlur)}
-          onCancel={onCancel}
-        >
-          {row.year ?? ""}
-        </EditableCell>
-      )}
-      {visibleColumns.has("location") && (
-        <td className="collection-table__location" title={locationLabel}>
-          {row.folder_id && <FolderIcon aria-hidden className="collection-table__location-icon" />}
-          <span className="collection-table__location-text">{locationLabel}</span>
-        </td>
-      )}
-      {visibleColumns.has("added") && (
-        <td className="collection-table__added">{formatAdded(row.added)}</td>
-      )}
-      {visibleColumns.has("file_type") && (
-        <td>
-          {label ? (
-            <span
-              className={
-                row.status === "parse-failed" ? "badge-pill badge-pill--muted" : "badge-pill"
-              }
-            >
-              {label}
-            </span>
-          ) : (
-            <span className="badge-pill">{row.file_type === "note" ? "Note" : "PDF"}</span>
-          )}
-        </td>
-      )}
-      {visibleColumns.has("doi") && (
-        <td className="collection-table__doi">
-          {row.doi && (
-            <a
-              href={`https://doi.org/${row.doi}`}
-              target="_blank"
-              rel="noreferrer"
-              className="collection-table__doi-link"
-              title={row.doi}
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              {row.doi}
-            </a>
-          )}
-        </td>
-      )}
+      {visibleColumns.map((col) => renderCell(col))}
     </tr>
   );
 }

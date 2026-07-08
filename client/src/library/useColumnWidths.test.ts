@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useColumnWidths } from "@/library/useColumnWidths";
+import { useTableViewPrefs } from "@/library/tableViewPrefs";
 
 function pointerDownEvent(clientX: number): React.PointerEvent {
   return { clientX, preventDefault: () => {} } as unknown as React.PointerEvent;
@@ -9,6 +10,15 @@ function pointerDownEvent(clientX: number): React.PointerEvent {
 function dispatchPointer(type: "pointermove" | "pointerup", clientX = 0) {
   document.dispatchEvent(new MouseEvent(type, { clientX }) as unknown as PointerEvent);
 }
+
+// `tableViewPrefs` is a `localStorage`-persisted Zustand store (Story 7.10)
+// that now seeds `useColumnWidths`'s initial values - reset it between cases
+// (mirrors `settings/store.test.ts`) so the defaults stay green with an
+// EMPTY persisted store, per test.
+beforeEach(() => {
+  localStorage.clear();
+  useTableViewPrefs.getState().reset();
+});
 
 describe("useColumnWidths", () => {
   it("starts at the default width per column (matches the CSS tokens)", () => {
@@ -59,5 +69,35 @@ describe("useColumnWidths", () => {
     act(() => result.current.handleKeyDown("added", right));
     expect(result.current.widths.added).toBe(136);
     expect(result.current.widths.title).toBe(320);
+  });
+});
+
+describe("useColumnWidths persistence (Story 7.10, AC-3/AC-5)", () => {
+  it("a settled drag resize (pointerup) writes the value back to tableViewPrefs", () => {
+    const { result } = renderHook(() => useColumnWidths());
+    act(() => result.current.startResize("authors", pointerDownEvent(100)));
+    act(() => dispatchPointer("pointermove", 150));
+    act(() => dispatchPointer("pointerup"));
+    expect(useTableViewPrefs.getState().widths.authors).toBe(270);
+  });
+
+  it("a per-frame pointermove does NOT persist - only the settled pointerup value does", () => {
+    const { result } = renderHook(() => useColumnWidths());
+    act(() => result.current.startResize("authors", pointerDownEvent(100)));
+    act(() => dispatchPointer("pointermove", 150));
+    expect(useTableViewPrefs.getState().widths.authors).toBeUndefined();
+  });
+
+  it("a keyboard resize step persists immediately (it is already settled)", () => {
+    const { result } = renderHook(() => useColumnWidths());
+    const right = { key: "ArrowRight", preventDefault: () => {} } as unknown as React.KeyboardEvent;
+    act(() => result.current.handleKeyDown("added", right));
+    expect(useTableViewPrefs.getState().widths.added).toBe(136);
+  });
+
+  it("a fresh useColumnWidths seeds from a persisted width", () => {
+    act(() => useTableViewPrefs.getState().setWidth("venue", 333));
+    const { result } = renderHook(() => useColumnWidths());
+    expect(result.current.widths.venue).toBe(333);
   });
 });

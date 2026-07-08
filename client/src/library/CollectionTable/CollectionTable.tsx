@@ -1,10 +1,16 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CaretDown, CaretUp, EyeSlash, X } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, CaretDown, CaretUp, EyeSlash, X } from "@phosphor-icons/react";
 import type { CollectionRow, Folder } from "@/api/client";
 import { currentFieldValue, stripPdfExtension, type EditableField, type PendingUpload } from "@/library/row";
 import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
-import { COLUMNS, UNCATEGORIZED_LABEL, type ColumnDef, type ColumnKey, type SortState } from "@/library/tableView";
+import {
+  COLUMNS,
+  reorderColumns as reorderColumnsInOrder,
+  type ColumnDef,
+  type ColumnKey,
+  type SortState,
+} from "@/library/tableView";
 import { usePopover } from "@/library/usePopover";
 import PaperRow from "./PaperRow";
 import PendingRow from "./PendingRow";
@@ -76,6 +82,42 @@ function buildDragPreview(rows: CollectionRow[], ids: string[]): HTMLElement {
   return el;
 }
 
+/** A dedicated MIME type for the column-header drag (Story 7.10 AC-1), so a
+ *  header drag is distinguishable from the row-move drag above (mirrors
+ *  `MOVE_DRAG_MIME`'s own reasoning, `moveDrag.ts`). */
+const COLUMN_DRAG_MIME = "application/x-papermate-column-reorder";
+
+/** The column-header drag's own compact preview (Story 7.10): reuses
+ *  `buildDragPreview`'s detached-node shape (and its CSS class - no new
+ *  styling needed) with just the column's label instead of a row title. */
+function buildColumnDragPreview(label: string): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "collection-table__drag-preview";
+  el.textContent = label;
+  document.body.appendChild(el);
+  return el;
+}
+
+/** Live drag-over preview (fix request): while a column drag is in
+ *  progress, the header/cell order shown to the user already reflects where
+ *  it would land, rather than only snapping into place on drop. Reuses the
+ *  same `reorderColumns` the drop itself commits, so the preview and the
+ *  eventual committed order are computed by the identical logic (a
+ *  mid-drag Escape/drop-outside just clears `draggingKey`/`overKey`,
+ *  reverting to `columns` with no store write - this is a display-only
+ *  overlay, never persisted). */
+function livePreviewColumns(
+  columns: ColumnDef[],
+  draggingKey: ColumnKey | null,
+  overKey: ColumnKey | null,
+): ColumnDef[] {
+  if (!draggingKey || !overKey || draggingKey === overKey) return columns;
+  const keys = columns.map((c) => c.key);
+  if (!keys.includes(draggingKey) || !keys.includes(overKey)) return columns;
+  const previewKeys = reorderColumnsInOrder(keys, draggingKey, overKey);
+  return previewKeys.map((k) => columns.find((c) => c.key === k)!);
+}
+
 /** `widths` overrides each column's CSS-default width (fix request:
  *  drag-to-resize) - omitted, the `<col>` falls back to its
  *  `--collection-table-*-width` CSS token. */
@@ -93,11 +135,26 @@ function ColumnGroup({ columns, widths }: { columns: ColumnDef[]; widths?: Recor
   );
 }
 
-/** A clickable header: opens a per-column dropdown (Sort ASC/DESC,
- *  Hide) mirroring the reference product's column-header menu. Each instance
- *  owns its own `usePopover` so multiple headers can each have (only one at a
- *  time, per-instance) open state. Closes on pick - a one-shot action menu,
- *  like `MoveMenu`, not a stays-open toggle panel like `DisplayMenu`. */
+/** A clickable header: opens a per-column dropdown (Sort ASC/DESC, Move
+ *  left/right, Hide) mirroring the reference product's column-header menu.
+ *  Each instance owns its own `usePopover` so multiple headers can each have
+ *  (only one at a time, per-instance) open state. Closes on pick - a
+ *  one-shot action menu, like `MoveMenu`, not a stays-open toggle panel like
+ *  `DisplayMenu`.
+ *
+ *  Drag-to-reorder (Story 7.10, AC-1): every column except Title is
+ *  `draggable`, using a dedicated `COLUMN_DRAG_MIME` payload (mirrors the
+ *  row-move drag) and a compact drag preview. Dragging one header over
+ *  another shows a drop indicator (`data-drop-target`, "before" or "after"
+ *  depending on drag direction - matches `reorderColumns`'s array-move
+ *  semantics, see `CollectionTable`'s `dropIndicator` memo) and calls
+ *  `onReorderColumn` on drop - both the drag affordance and the keyboard
+ *  Move left/right items are omitted when `onReorderColumn`/`onMoveColumn`
+ *  aren't supplied (same optional-prop pattern as `onResizeStart`), so
+ *  isolated tests that don't exercise reorder see no new draggable/menu
+ *  surface. Title is never a drag source or a drop target: nothing drops
+ *  before it (the reorder helpers also clamp this, but excluding Title here
+ *  keeps the affordance honest - hovering it never implies a drop there). */
 function ColumnHeaderCell({
   col,
   sort,
@@ -105,6 +162,15 @@ function ColumnHeaderCell({
   onToggleColumn,
   onResizeStart,
   onResizeKeyDown,
+  onReorderColumn,
+  onMoveColumn,
+  canMoveLeft,
+  canMoveRight,
+  dropIndicator,
+  onColumnDragStart,
+  onColumnDragEnd,
+  onColumnDragOverAt,
+  onColumnDrop,
 }: {
   col: ColumnDef;
   sort: SortState | null;
@@ -112,11 +178,71 @@ function ColumnHeaderCell({
   onToggleColumn: (key: ColumnKey) => void;
   onResizeStart?: (key: ColumnKey, e: React.PointerEvent) => void;
   onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+  onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
+  onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
+  /** Set when `CollectionTable` has resolved THIS column as the live-preview
+   *  drop target (fix request: driven by lifted state, not local "did
+   *  dragover fire on me" tracking - see the module doc comment above for
+   *  why element-based hit-testing oscillates), and which SIDE the dragged
+   *  column will land on - "after" for a forward drag, "before" for a
+   *  backward one, matching `reorderColumns`'s own array-move semantics
+   *  exactly (fix request: this used to always render "before", which
+   *  visibly pointed at the wrong edge for a forward drag). */
+  dropIndicator: "before" | "after" | null;
+  onColumnDragStart?: (key: ColumnKey) => void;
+  onColumnDragEnd?: () => void;
+  /** Reports the pointer's raw `clientX`, NOT this header's own key -
+   *  `CollectionTable` resolves the actual target itself against a frozen
+   *  geometry snapshot (fix request, see module doc comment). */
+  onColumnDragOverAt?: (clientX: number) => void;
+  /** The actual reorder commit (fix request): fires with no args - the
+   *  fromKey/toKey are already known to `CollectionTable` from its own
+   *  lifted drag state, which is the single source of truth the live
+   *  preview already rendered from. */
+  onColumnDrop?: () => void;
 }) {
   const { anchor, buttonRef, popoverRef, toggle, close } = usePopover();
   const active = sort?.column === col.key;
+  const reorderable = col.key !== "title";
+
+  function handleColumnDragStart(e: React.DragEvent<HTMLTableCellElement>) {
+    e.dataTransfer.setData(COLUMN_DRAG_MIME, col.key);
+    e.dataTransfer.effectAllowed = "move";
+    const preview = buildColumnDragPreview(col.label);
+    e.dataTransfer.setDragImage(preview, 12, 16);
+    setTimeout(() => preview.remove(), 0);
+    onColumnDragStart?.(col.key);
+  }
+
+  function handleColumnDragOver(e: React.DragEvent<HTMLTableCellElement>) {
+    if (!e.dataTransfer.types.includes(COLUMN_DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    onColumnDragOverAt?.(e.clientX);
+  }
+
+  function handleColumnDrop(e: React.DragEvent<HTMLTableCellElement>) {
+    e.preventDefault();
+    onColumnDrop?.();
+  }
+
+  const dragEnabled = reorderable && Boolean(onReorderColumn);
   return (
-    <th scope="col" className="collection-table__th--interactive" aria-sort={ariaSortValue(col, sort)}>
+    <th
+      scope="col"
+      className="collection-table__th--interactive"
+      aria-sort={ariaSortValue(col, sort)}
+      draggable={dragEnabled}
+      data-column-key={col.key}
+      data-drop-target={dropIndicator ?? undefined}
+      onDragStart={dragEnabled ? handleColumnDragStart : undefined}
+      onDragOver={dragEnabled ? handleColumnDragOver : undefined}
+      onDragEnter={dragEnabled ? handleColumnDragOver : undefined}
+      onDragEnd={dragEnabled ? onColumnDragEnd : undefined}
+      onDrop={dragEnabled ? handleColumnDrop : undefined}
+    >
       <button
         ref={buttonRef}
         type="button"
@@ -188,6 +314,36 @@ function ColumnHeaderCell({
                 Clear sort
               </button>
             )}
+            {reorderable && onMoveColumn && canMoveLeft && (
+              <button
+                type="button"
+                role="menuitem"
+                className="table-control__item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                  onMoveColumn(col.key, "left");
+                }}
+              >
+                <ArrowLeft aria-hidden />
+                Move left
+              </button>
+            )}
+            {reorderable && onMoveColumn && canMoveRight && (
+              <button
+                type="button"
+                role="menuitem"
+                className="table-control__item"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  close();
+                  onMoveColumn(col.key, "right");
+                }}
+              >
+                <ArrowRight aria-hidden />
+                Move right
+              </button>
+            )}
             {col.hideable && (
               <button
                 type="button"
@@ -223,7 +379,10 @@ function ColumnHeaderCell({
 
 /** Renders the active sort column's caret. Headers are clickable
  *  (`ColumnHeaderCell`) when `onSortChange`/`onToggleColumn` are supplied;
- *  otherwise (the loading skeleton) they render as plain static text. */
+ *  otherwise (the loading skeleton) they render as plain static text.
+ *  `canMoveLeft`/`canMoveRight` (Story 7.10, AC-2) are derived from each
+ *  column's own index in `columns`: index 1 (immediately right of the
+ *  pinned Title) can't move left, and the last index can't move right. */
 function TableHead({
   columns,
   sort,
@@ -231,6 +390,13 @@ function TableHead({
   onToggleColumn,
   onResizeStart,
   onResizeKeyDown,
+  onReorderColumn,
+  onMoveColumn,
+  dropIndicator,
+  onColumnDragStart,
+  onColumnDragEnd,
+  onColumnDragOverAt,
+  onColumnDrop,
 }: {
   columns: ColumnDef[];
   sort: SortState | null;
@@ -238,11 +404,18 @@ function TableHead({
   onToggleColumn?: (key: ColumnKey) => void;
   onResizeStart?: (key: ColumnKey, e: React.PointerEvent) => void;
   onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+  onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
+  onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
+  dropIndicator?: { key: ColumnKey; side: "before" | "after" } | null;
+  onColumnDragStart?: (key: ColumnKey) => void;
+  onColumnDragEnd?: () => void;
+  onColumnDragOverAt?: (clientX: number) => void;
+  onColumnDrop?: () => void;
 }) {
   return (
     <thead>
       <tr>
-        {columns.map((col) =>
+        {columns.map((col, idx) =>
           onSortChange && onToggleColumn ? (
             <ColumnHeaderCell
               key={col.key}
@@ -252,6 +425,15 @@ function TableHead({
               onToggleColumn={onToggleColumn}
               onResizeStart={onResizeStart}
               onResizeKeyDown={onResizeKeyDown}
+              onReorderColumn={onReorderColumn}
+              onMoveColumn={onMoveColumn}
+              canMoveLeft={idx > 1}
+              canMoveRight={idx < columns.length - 1}
+              dropIndicator={dropIndicator?.key === col.key ? dropIndicator.side : null}
+              onColumnDragStart={onColumnDragStart}
+              onColumnDragEnd={onColumnDragEnd}
+              onColumnDragOverAt={onColumnDragOverAt}
+              onColumnDrop={onColumnDrop}
             />
           ) : (
             <th key={col.key} scope="col" aria-sort={ariaSortValue(col, sort)}>
@@ -343,6 +525,12 @@ type CollectionTableProps =
        *  both are supplied; omit for isolated tests that don't care. */
       onResizeColumnStart?: (key: ColumnKey, e: React.PointerEvent) => void;
       onResizeColumnKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
+      /** Column headers grow drag-to-reorder + a "Move left"/"Move right"
+       *  menu (Story 7.10, AC-1/AC-2) when supplied; omit for isolated tests
+       *  that don't exercise reorder (same optional pattern as the resize
+       *  callbacks above). */
+      onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
+      onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
       /** True in the Trash lens (Story 7.5): every row drops its Open button
        *  and its drag-to-folder affordance. Restore/Purge live in the
        *  toolbar, bulk over the selection (fix request), not per row. */
@@ -410,14 +598,18 @@ export default function CollectionTable(props: CollectionTableProps) {
     columnWidths,
     onResizeColumnStart,
     onResizeColumnKeyDown,
+    onReorderColumn,
+    onMoveColumn,
     trashLens = false,
     folders = EMPTY_FOLDERS,
     groupLabels,
   } = props;
-  const visibleKeys = new Set(visibleColumns.map((c) => c.key));
   const folderNameById = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
+  // Uncategorized (no folder, or a stale folder reference) renders an empty
+  // cell (fix request) - `UNCATEGORIZED_LABEL` still names the sidebar's own
+  // "Uncategorized" folder-panel entry and the sort key, just not this cell.
   function locationLabel(row: CollectionRow): string {
-    return row.folder_id ? (folderNameById.get(row.folder_id) ?? UNCATEGORIZED_LABEL) : UNCATEGORIZED_LABEL;
+    return row.folder_id ? (folderNameById.get(row.folder_id) ?? "") : "";
   }
   // Controlled-or-uncontrolled (like `<input value onChange>`): when the
   // caller doesn't pass `selectedIds`, the table owns the set itself so
@@ -443,6 +635,96 @@ export default function CollectionTable(props: CollectionTableProps) {
     if (selectedIds.size === 0) anchorRef.current = null;
   }, [selectedIds]);
   const [editing, setEditing] = useState<{ docId: string; field: EditableField } | null>(null);
+  // Live column-drag preview (fix request): the key being dragged and the
+  // header currently resolved as the target, purely local render state -
+  // not persisted, not the committed order (that only changes on drop via
+  // `onReorderColumn`). `displayColumns` below is what actually renders.
+  const [draggingColumnKey, setDraggingColumnKey] = useState<ColumnKey | null>(null);
+  const [dragOverColumnKey, setDragOverColumnKey] = useState<ColumnKey | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  // A FROZEN snapshot of each header's screen geometry, captured ONCE at
+  // drag start (fix request - this is the actual oscillation fix, see the
+  // dedicated doc comment below). Never re-captured mid-drag.
+  const columnRectsRef = useRef<{ key: ColumnKey; left: number; right: number }[]>([]);
+  const displayColumns = useMemo(
+    () => livePreviewColumns(visibleColumns, draggingColumnKey, dragOverColumnKey),
+    [visibleColumns, draggingColumnKey, dragOverColumnKey],
+  );
+  // The target header + which side the drop indicator renders on (fix
+  // request: it always rendered on the LEFT/"before" edge, but
+  // `reorderColumns`'s array-move semantics land the dragged column AFTER
+  // the target on a forward drag (source left of target in the COMMITTED
+  // order) - the indicator must match, or it visibly points at the wrong
+  // side of where the column actually settles. Computed from the ORIGINAL
+  // committed order, exactly mirroring `reorderColumns`'s own fromIdx/toIdx
+  // comparison, so the two can never disagree.
+  const dropIndicator = useMemo<{ key: ColumnKey; side: "before" | "after" } | null>(() => {
+    if (!draggingColumnKey || !dragOverColumnKey || draggingColumnKey === dragOverColumnKey) return null;
+    const keys = visibleColumns.map((c) => c.key);
+    const fromIdx = keys.indexOf(draggingColumnKey);
+    const toIdx = keys.indexOf(dragOverColumnKey);
+    if (fromIdx === -1 || toIdx === -1) return null;
+    return { key: dragOverColumnKey, side: fromIdx < toIdx ? "after" : "before" };
+  }, [draggingColumnKey, dragOverColumnKey, visibleColumns]);
+
+  /**
+   * Resolves a live-preview drag target from the POINTER's raw `clientX`
+   * against a geometry snapshot frozen at drag start - never from "which
+   * DOM element did this dragover fire on" (fix request, 2nd attempt: a
+   * "same-column" guard alone only covered a STATIONARY cursor landing back
+   * on the dragged column after one swap; a real, continuously MOVING mouse
+   * sweeps across multiple headers while the layout reflows beneath it,
+   * which the same-column guard doesn't touch - severe rapid oscillation
+   * persisted). Since column WIDTHS never change during a reorder (only
+   * their ORDER does), each frozen [left, right) range represents a FIXED
+   * screen "slot" for the ENTIRE drag - whichever key occupied that slot in
+   * the COMMITTED order at drag-start is a stable, non-reflowing answer to
+   * "which key should the dragged column be inserted relative to", exactly
+   * matching what `reorderColumns` needs as `toKey`. No feedback loop is
+   * possible: the geometry this reads from never itself changes mid-drag.
+   */
+  function resolveColumnKeyAtClientX(clientX: number): ColumnKey | null {
+    const rects = columnRectsRef.current;
+    if (rects.length === 0) return null;
+    if (clientX <= rects[0].left) return rects[0].key;
+    const last = rects[rects.length - 1];
+    if (clientX >= last.right) return last.key;
+    for (const rect of rects) {
+      if (clientX >= rect.left && clientX < rect.right) return rect.key;
+    }
+    return last.key;
+  }
+
+  function captureColumnRects() {
+    const ths = tableRef.current?.querySelectorAll<HTMLElement>("thead th[data-column-key]");
+    columnRectsRef.current = Array.from(ths ?? []).map((th) => {
+      const rect = th.getBoundingClientRect();
+      return { key: th.dataset.columnKey as ColumnKey, left: rect.left, right: rect.right };
+    });
+  }
+
+  function handleColumnDragStart(key: ColumnKey) {
+    captureColumnRects();
+    setDraggingColumnKey(key);
+  }
+
+  function handleColumnDragOverAt(clientX: number) {
+    const key = resolveColumnKeyAtClientX(clientX);
+    if (key) setDragOverColumnKey(key);
+  }
+
+  function handleColumnDragEnd() {
+    setDraggingColumnKey(null);
+    setDragOverColumnKey(null);
+    columnRectsRef.current = [];
+  }
+
+  function commitColumnDrop() {
+    if (draggingColumnKey && dragOverColumnKey && draggingColumnKey !== dragOverColumnKey) {
+      onReorderColumn?.(draggingColumnKey, dragOverColumnKey);
+    }
+    handleColumnDragEnd();
+  }
   // A click that lands elsewhere while a cell is being edited blurs the
   // InlineEditor (auto-committing it) BEFORE the click event itself is
   // dispatched — without a guard, the SAME click that closes one field's
@@ -585,19 +867,30 @@ export default function CollectionTable(props: CollectionTableProps) {
 
   return (
     <div className="collection-table-wrap">
-      <table className="collection-table" style={{ width: sumColumnWidths(visibleColumns, columnWidths) }}>
-        <ColumnGroup columns={visibleColumns} widths={columnWidths} />
+      <table
+        ref={tableRef}
+        className="collection-table"
+        style={{ width: sumColumnWidths(visibleColumns, columnWidths) }}
+      >
+        <ColumnGroup columns={displayColumns} widths={columnWidths} />
         <TableHead
-          columns={visibleColumns}
+          columns={displayColumns}
           sort={sort}
           onSortChange={onSortChange}
           onToggleColumn={onToggleColumn}
           onResizeStart={onResizeColumnStart}
           onResizeKeyDown={onResizeColumnKeyDown}
+          onReorderColumn={onReorderColumn}
+          onMoveColumn={onMoveColumn}
+          dropIndicator={dropIndicator}
+          onColumnDragStart={handleColumnDragStart}
+          onColumnDragEnd={handleColumnDragEnd}
+          onColumnDragOverAt={handleColumnDragOverAt}
+          onColumnDrop={commitColumnDrop}
         />
         <tbody>
           {pendingRows.map((pending) => (
-            <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={visibleKeys} />
+            <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={displayColumns} />
           ))}
           {rows.map((row) => {
             const groupLabel = groupLabels?.get(row.doc_id);
@@ -610,7 +903,7 @@ export default function CollectionTable(props: CollectionTableProps) {
                 )}
                 <PaperRow
                   row={row}
-                  visibleColumns={visibleKeys}
+                  visibleColumns={displayColumns}
                   armed={selectedIds.size === 1 && selectedIds.has(row.doc_id)}
                   editingField={editing?.docId === row.doc_id ? editing.field : null}
                   checked={selectedIds.has(row.doc_id)}

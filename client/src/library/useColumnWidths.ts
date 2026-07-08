@@ -1,9 +1,11 @@
 import { useDragResize } from "@/library/useDragResize";
-import type { ColumnKey } from "@/library/tableView";
+import { useTableViewPrefs } from "@/library/tableViewPrefs";
+import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, type ColumnKey } from "@/library/tableView";
 
 /** Matches the `--collection-table-*-width` tokens (each column's default,
- *  pre-resize, width) - kept in sync manually since these are now client
- *  view-state overrides, not the CSS defaults themselves. */
+ *  pre-resize, width) - the fallback used when a column has no persisted
+ *  width yet (Story 7.10 AC-3/AC-5: `tableViewPrefs.widths` seeds instead,
+ *  once a resize has settled). */
 const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
   title: 320,
   authors: 220,
@@ -14,25 +16,82 @@ const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
   year: 80,
   doi: 200,
 };
-const MIN_COLUMN_WIDTH = 80;
-const MAX_COLUMN_WIDTH = 640;
+const KEYBOARD_STEP = 16;
 
 /**
- * Drag-to-resize for the Library table's columns (fix request): client-only
- * view-state, resets to the default widths on reload (AD-L3, same footing as
- * Story 7.4's other view-state). `COLUMNS` is a small, fixed, compile-time-
- * known set, so one `useDragResize` call per column key is a static call
- * count (satisfies the rules of hooks) rather than a loop.
+ * Drag-to-resize for the Library table's columns (fix request), persisted as
+ * of Story 7.10: each column's initial value seeds from the persisted
+ * `tableViewPrefs.widths[key]` when present, else `DEFAULT_WIDTHS[key]`; a
+ * SETTLED resize (drag pointerup, or each keyboard step) writes the value
+ * back via `tableViewPrefs.setWidth` (`useDragResize`'s `onCommit`, never a
+ * per-frame drag value). `COLUMNS` is a small, fixed, compile-time-known set,
+ * so one `useDragResize` call per column key is a static call count
+ * (satisfies the rules of hooks) rather than a loop. The store is read via
+ * `getState()` (not the subscribing hook form) because it only needs to seed
+ * each `useDragResize`'s ONE-TIME initial value - `useState(initial)` ignores
+ * the argument on every render after the first, so there is nothing to
+ * subscribe to here.
  */
 export function useColumnWidths() {
-  const title = useDragResize(DEFAULT_WIDTHS.title, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
-  const authors = useDragResize(DEFAULT_WIDTHS.authors, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
-  const added = useDragResize(DEFAULT_WIDTHS.added, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
-  const fileType = useDragResize(DEFAULT_WIDTHS.file_type, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
-  const location = useDragResize(DEFAULT_WIDTHS.location, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
-  const venue = useDragResize(DEFAULT_WIDTHS.venue, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
-  const year = useDragResize(DEFAULT_WIDTHS.year, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
-  const doi = useDragResize(DEFAULT_WIDTHS.doi, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH);
+  const persisted = useTableViewPrefs.getState().widths;
+  const setWidth = useTableViewPrefs((s) => s.setWidth);
+
+  const title = useDragResize(
+    persisted.title ?? DEFAULT_WIDTHS.title,
+    MIN_COLUMN_WIDTH,
+    MAX_COLUMN_WIDTH,
+    KEYBOARD_STEP,
+    (v) => setWidth("title", v),
+  );
+  const authors = useDragResize(
+    persisted.authors ?? DEFAULT_WIDTHS.authors,
+    MIN_COLUMN_WIDTH,
+    MAX_COLUMN_WIDTH,
+    KEYBOARD_STEP,
+    (v) => setWidth("authors", v),
+  );
+  const added = useDragResize(
+    persisted.added ?? DEFAULT_WIDTHS.added,
+    MIN_COLUMN_WIDTH,
+    MAX_COLUMN_WIDTH,
+    KEYBOARD_STEP,
+    (v) => setWidth("added", v),
+  );
+  const fileType = useDragResize(
+    persisted.file_type ?? DEFAULT_WIDTHS.file_type,
+    MIN_COLUMN_WIDTH,
+    MAX_COLUMN_WIDTH,
+    KEYBOARD_STEP,
+    (v) => setWidth("file_type", v),
+  );
+  const location = useDragResize(
+    persisted.location ?? DEFAULT_WIDTHS.location,
+    MIN_COLUMN_WIDTH,
+    MAX_COLUMN_WIDTH,
+    KEYBOARD_STEP,
+    (v) => setWidth("location", v),
+  );
+  const venue = useDragResize(
+    persisted.venue ?? DEFAULT_WIDTHS.venue,
+    MIN_COLUMN_WIDTH,
+    MAX_COLUMN_WIDTH,
+    KEYBOARD_STEP,
+    (v) => setWidth("venue", v),
+  );
+  const year = useDragResize(
+    persisted.year ?? DEFAULT_WIDTHS.year,
+    MIN_COLUMN_WIDTH,
+    MAX_COLUMN_WIDTH,
+    KEYBOARD_STEP,
+    (v) => setWidth("year", v),
+  );
+  const doi = useDragResize(
+    persisted.doi ?? DEFAULT_WIDTHS.doi,
+    MIN_COLUMN_WIDTH,
+    MAX_COLUMN_WIDTH,
+    KEYBOARD_STEP,
+    (v) => setWidth("doi", v),
+  );
 
   const byKey: Record<ColumnKey, ReturnType<typeof useDragResize>> = {
     title,

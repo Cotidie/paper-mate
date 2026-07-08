@@ -3,6 +3,7 @@ import { render, screen, cleanup, waitFor, fireEvent, act, within } from "@testi
 import { createMemoryRouter, RouterProvider } from "react-router";
 import LibraryPage from "@/library/LibraryPage";
 import * as api from "@/api/client";
+import { useTableViewPrefs } from "@/library/tableViewPrefs";
 
 afterEach(() => {
   cleanup();
@@ -20,6 +21,11 @@ beforeEach(() => {
   // ReaderPage. Stub it so tests never hit the network; individual tests
   // override to assert the rendered value.
   vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9" });
+  // `tableViewPrefs` is a `localStorage`-persisted Zustand store (Story
+  // 7.10): module-level, so it leaks column order/hidden/widths across
+  // tests otherwise (mirrors `settings/store.test.ts`'s own reset).
+  localStorage.clear();
+  useTableViewPrefs.getState().reset();
 });
 
 function pdfFile(name: string) {
@@ -162,16 +168,22 @@ describe("Bulk upload (Story 6.4)", () => {
       target: { files: [pdfFile("alpha.pdf"), pdfFile("beta.pdf")] },
     });
 
+    // The "Extracting" chip lives in the File type column, hidden by default
+    // (Story 7.10 fix request) - assert via each row's own status class
+    // instead, which applies regardless of column visibility.
     await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
     expect(screen.getByText("beta")).toBeTruthy();
-    expect(screen.getAllByText("Extracting").length).toBe(2);
+    expect(screen.getByText("alpha").closest("tr")!.className).toContain("collection-table__row--extracting");
+    expect(screen.getByText("beta").closest("tr")!.className).toContain("collection-table__row--extracting");
 
     resolveAlpha(backend.store(docAlpha));
     resolveBeta(backend.store(docBeta));
 
     await waitFor(() => expect(screen.getByText("Paper Alpha")).toBeTruthy());
     expect(screen.getByText("Paper Beta")).toBeTruthy();
-    expect(screen.queryByText("Extracting")).toBeNull();
+    expect(screen.getByText("Paper Alpha").closest("tr")!.className).not.toContain(
+      "collection-table__row--extracting",
+    );
     await waitFor(() => expect(screen.getByText("2 files in Recent")).toBeTruthy());
   });
 
@@ -459,17 +471,22 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
       target: { files: [pdfFile("P.pdf")] },
     });
     // Upload resolves + batch reconcile (call 2, extracting) -> poll starts.
+    // The "Extracting" chip lives in the File type column, hidden by default
+    // (Story 7.10 fix request) - assert via the row's own status class
+    // instead, which applies regardless of column visibility.
     await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
-    expect(screen.getByText("Extracting")).toBeTruthy();
+    expect(screen.getByText("P").closest("tr")!.className).toContain("collection-table__row--extracting");
 
     // Poll tick 1 (call 3, still extracting).
     await act(async () => void (await vi.advanceTimersByTimeAsync(1200)));
-    expect(screen.getByText("Extracting")).toBeTruthy();
+    expect(screen.getByText("P").closest("tr")!.className).toContain("collection-table__row--extracting");
 
     // Poll tick 2 (call 4, settled): row updates in place, info notice shown.
     await act(async () => void (await vi.advanceTimersByTimeAsync(1200)));
     expect(screen.getByText("Local Title")).toBeTruthy();
-    expect(screen.queryByText("Extracting")).toBeNull();
+    expect(screen.getByText("Local Title").closest("tr")!.className).not.toContain(
+      "collection-table__row--extracting",
+    );
     expect(screen.getByText("Enrichment skipped.")).toBeTruthy();
 
     // Polling has stopped: no further getLibrary calls however long we wait.
@@ -542,8 +559,10 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
     });
     renderLibrary();
 
+    // The parse-failed "-" chip lives in the File type column, hidden by
+    // default (Story 7.10 fix request) - its rendering is covered separately
+    // in CollectionTable.test.tsx, which doesn't hide any column by default.
     await waitFor(() => expect(screen.getByText("poor-paper")).toBeTruthy());
-    expect(screen.getByText("-")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
     await waitFor(() => expect(screen.getByTestId("reader-stub")).toBeTruthy());
   });
@@ -1017,6 +1036,22 @@ describe("Folder filter + move (Story 7.2)", () => {
     expect(movePapers).toHaveBeenCalledWith([paper.doc_id], folderA.id);
   });
 
+  it("a same-page drag (row-move, column-reorder) over the main area does NOT show the file-drop dropzone border (fix request)", async () => {
+    const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Movable Paper")).toBeTruthy());
+
+    const main = screen.getByRole("main");
+    // A row-move / column-reorder drag never carries a "Files" dataTransfer
+    // type; only a real OS file drag does.
+    fireEvent.dragOver(main, { dataTransfer: { types: ["application/x-papermate-move"] } });
+    expect(main.className).not.toContain("library-main--drag-over");
+
+    fireEvent.dragOver(main, { dataTransfer: { types: ["Files"] } });
+    expect(main.className).toContain("library-main--drag-over");
+  });
+
   it("entering an empty folder in a non-empty library keeps the table layout (no EmptyDropzone flash) and shows the empty-folder line", async () => {
     const uncategorized = libraryRow({ doc_id: "u".repeat(64), title: "Uncategorized Paper", order: 0 });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [uncategorized], folders: [folderA] });
@@ -1160,7 +1195,7 @@ describe("Display, Sort controls (Story 7.4)", () => {
     expect(screen.getByText("Only Paper")).toBeTruthy();
   });
 
-  it("Display: DOI column is hidden by default while Venue and Year render (Story 7.9, AC-7)", async () => {
+  it("Display: File type column is hidden by default while Venue, Year, and DOI render (Story 7.9/7.10, AC-7)", async () => {
     const paper = libraryRow({
       doc_id: "1".repeat(64),
       title: "Meta Paper",
@@ -1172,17 +1207,18 @@ describe("Display, Sort controls (Story 7.4)", () => {
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Meta Paper")).toBeTruthy());
 
-    expect(screen.queryByRole("columnheader", { name: /^DOI/ })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /^File type/ })).toBeNull();
     expect(screen.getByRole("columnheader", { name: /^Venue/ })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /^Year/ })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /^DOI/ })).toBeTruthy();
     expect(screen.getByText("Journal of Foo")).toBeTruthy();
     expect(screen.getByText("2017")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "10.1234/abcd" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Display" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "DOI" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "File type" }));
 
-    expect(screen.getByRole("columnheader", { name: /^DOI/ })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "10.1234/abcd" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /^File type/ })).toBeTruthy();
   });
 
   it("Column header dropdown: Hide from a header's own menu omits that column (fix request: clickable headers)", async () => {
@@ -1196,6 +1232,30 @@ describe("Display, Sort controls (Story 7.4)", () => {
 
     expect(screen.queryByRole("columnheader", { name: "Authors" })).toBeNull();
     expect(screen.queryByText("Some Author")).toBeNull();
+  });
+
+  it("Column header dropdown: Move right persists the column order across a remount (Story 7.10, AC-1/AC-3)", async () => {
+    const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
+
+    const headerTextsDefault = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTextsDefault).toEqual(["Title", "Authors", "Venue", "Year", "DOI", "Location", "Added"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move right" }));
+
+    const headerTextsReordered = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTextsReordered).toEqual(["Title", "Venue", "Authors", "Year", "DOI", "Location", "Added"]);
+
+    cleanup();
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
+
+    const headerTextsAfterRemount = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTextsAfterRemount).toEqual(headerTextsReordered);
   });
 
   it("Column header dropdown: Sort DESC from a header's own menu reorders rows", async () => {

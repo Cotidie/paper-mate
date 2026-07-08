@@ -27,20 +27,37 @@
 
 ## Overview
 
-Paper Mate runs as a local web app. The browser handles the reading and annotation UI; a small FastAPI server saves files and annotations to disk.
+Paper Mate is a local web app for keeping research PDFs, metadata, folders, and annotations in one place. The browser handles the library, reader, and annotation UI. A small FastAPI server saves files and annotations to disk.
 
-The current version is the viewer and annotator. Local AI-assisted reading is planned later, but the first job is simpler: keep the paper stable, make annotation fast, and avoid sending private PDFs to a cloud service.
+The current version focuses on library management and PDF reading: table view, folders, recent and starred papers, page navigation, annotation tools, and an annotation bank. Local AI-assisted reading is planned later. For now, Paper Mate keeps private PDFs local and makes it easy to return to a paper with your notes still in place.
 
-![Paper Mate reader with annotations and table of contents](docs/images/01-readme-paper-mate-main.png)
+<table>
+  <tr>
+    <th width="50%">Library</th>
+    <th width="50%">Reader</th>
+  </tr>
+  <tr>
+    <td width="50%"><img alt="Paper Mate library table view with folders, recent papers, metadata columns, and document actions" src="docs/images/02-readme-library-main.jpg" width="100%"></td>
+    <td width="50%"><img alt="Paper Mate reader with annotations and table of contents" src="docs/images/01-readme-paper-mate-main.png" width="100%"></td>
+  </tr>
+</table>
 
 ## Features
+
+### 🗂️ Library
+
+- Table view with title, authors, venue, year, folder, date added, and DOI
+- Folder-based organization with uncategorized and trash views
+- Recent and starred documents
+- Resizable metadata columns
+- Local library stored under `~/.paper-mate`
 
 ### 📄 Paper reading
 
 - Local PDF opening
-- Smooth scroll, zoom, and pan
 - Page controls and table of contents
-- Stable canvas, no layout shift from annotations
+- Smooth scroll, zoom, and pan
+- Stable pages while annotations are shown or hidden
 
 ### ✍️ Annotation
 
@@ -49,17 +66,16 @@ The current version is the viewer and annotator. Local AI-assisted reading is pl
 - Recolor, move, resize, delete, undo, and redo
 - Hide or show all annotations
 
-### 🗂️ Review and storage
+### 💾 Review and storage
 
 - Annotation Bank with click-to-jump
-- Local autosave and restore
+- Local autosave and restore for PDFs and annotations
 - Original PDF left untouched
-- Local library under `~/.paper-mate`
 
 ### 🔭 Planned
 
-- Inline previews for figures, tables, footnotes, and citations
-- Paper metadata and library view
+- Footnote and reference previews
+- Author and venue grouping
 - Export with annotations
 - Local AI chat through CLI agents
 - Click or drag a paper region into chat context
