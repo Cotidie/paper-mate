@@ -1390,6 +1390,48 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     expect(headerTexts[0]).toBe("Title");
   });
 
+  it("does not oscillate when the dragged column's own (relocated) header ends up under the cursor after a swap (fix request)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireEvent.dragOver(venueHeader, { dataTransfer }); // swap: Authors <-> Venue
+
+    const swapped = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(swapped).toEqual([
+      "Title",
+      "Venue",
+      "Authors",
+      "Year",
+      "Location",
+      "Added",
+      "File type",
+      "DOI",
+    ]);
+
+    // The dragged column (Authors) now renders at Venue's OLD screen slot -
+    // a stationary cursor there fires dragover on Authors' own header next
+    // (same element reference: React key-based reconciliation moves the DOM
+    // node, doesn't recreate it). Before the fix this reverted the swap
+    // (dragging a column onto itself is a no-op in `livePreviewColumns`),
+    // landing the cursor back over the original target and re-triggering
+    // the swap - repeating hundreds of times a second.
+    fireEvent.dragOver(authorsHeader, { dataTransfer });
+
+    const afterSelfHover = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(afterSelfHover).toEqual(swapped);
+  });
+
   it("opens the header menu with Move left / Move right when onMoveColumn is supplied", () => {
     render(
       <CollectionTable

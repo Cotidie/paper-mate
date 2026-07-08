@@ -794,7 +794,19 @@ export default function CollectionTable(props: CollectionTableProps) {
             setDraggingColumnKey(null);
             setDragOverColumnKey(null);
           }}
-          onColumnDragOverTarget={setDragOverColumnKey}
+          onColumnDragOverTarget={(key) => {
+            // Fix request: after a swap, the dragged column is rendered at
+            // the hovered target's OLD screen position - so a STATIONARY
+            // cursor ends up back over the column it's dragging on the very
+            // next dragover tick. Reacting to that re-triggers the swap
+            // (dragging X over itself reverts the preview per
+            // `livePreviewColumns`), landing the cursor over the ORIGINAL
+            // target again, ad infinitum - hundreds of swaps/sec. Ignoring a
+            // hover on the dragged column itself breaks the loop: the
+            // preview simply holds at wherever it last legitimately was.
+            if (key === draggingColumnKey) return;
+            setDragOverColumnKey(key);
+          }}
         />
         <tbody>
           {pendingRows.map((pending) => (
