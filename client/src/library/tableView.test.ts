@@ -213,7 +213,7 @@ describe("moveColumn (Story 7.10, AC-1/AC-2/AC-4)", () => {
 });
 
 describe("reorderColumns (Story 7.10, AC-1/AC-4)", () => {
-  it("inserts fromKey at toKey's position (drop-onto semantics)", () => {
+  it("a forward drag (fromKey left of toKey) moves fromKey to occupy toKey's original slot, landing AFTER it", () => {
     expect(reorderColumns(DEFAULT_ORDER, "authors", "doi")).toEqual([
       "title",
       "venue",
@@ -221,12 +221,12 @@ describe("reorderColumns (Story 7.10, AC-1/AC-4)", () => {
       "location",
       "added",
       "file_type",
-      "authors",
       "doi",
+      "authors",
     ]);
   });
 
-  it("dragging a later column onto an earlier one inserts it before the target", () => {
+  it("a backward drag (fromKey right of toKey) lands fromKey BEFORE toKey", () => {
     expect(reorderColumns(DEFAULT_ORDER, "doi", "venue")).toEqual([
       "title",
       "authors",
@@ -236,6 +236,32 @@ describe("reorderColumns (Story 7.10, AC-1/AC-4)", () => {
       "location",
       "added",
       "file_type",
+    ]);
+  });
+
+  it("dragging a column onto its immediate right neighbor swaps them (fix request: this used to be a no-op under 'insert before, post-removal index' semantics)", () => {
+    expect(reorderColumns(DEFAULT_ORDER, "authors", "venue")).toEqual([
+      "title",
+      "venue",
+      "authors",
+      "year",
+      "location",
+      "added",
+      "file_type",
+      "doi",
+    ]);
+  });
+
+  it("dragging a column onto its immediate left neighbor also swaps them", () => {
+    expect(reorderColumns(DEFAULT_ORDER, "venue", "authors")).toEqual([
+      "title",
+      "venue",
+      "authors",
+      "year",
+      "location",
+      "added",
+      "file_type",
+      "doi",
     ]);
   });
 

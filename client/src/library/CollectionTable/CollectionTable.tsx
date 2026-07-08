@@ -4,7 +4,14 @@ import { ArrowLeft, ArrowRight, CaretDown, CaretUp, EyeSlash, X } from "@phospho
 import type { CollectionRow, Folder } from "@/api/client";
 import { currentFieldValue, stripPdfExtension, type EditableField, type PendingUpload } from "@/library/row";
 import { MOVE_DRAG_MIME, encodeDragIds } from "@/library/moveDrag";
-import { COLUMNS, UNCATEGORIZED_LABEL, type ColumnDef, type ColumnKey, type SortState } from "@/library/tableView";
+import {
+  COLUMNS,
+  UNCATEGORIZED_LABEL,
+  reorderColumns as reorderColumnsInOrder,
+  type ColumnDef,
+  type ColumnKey,
+  type SortState,
+} from "@/library/tableView";
 import { usePopover } from "@/library/usePopover";
 import PaperRow from "./PaperRow";
 import PendingRow from "./PendingRow";
@@ -92,6 +99,26 @@ function buildColumnDragPreview(label: string): HTMLElement {
   return el;
 }
 
+/** Live drag-over preview (fix request): while a column drag is in
+ *  progress, the header/cell order shown to the user already reflects where
+ *  it would land, rather than only snapping into place on drop. Reuses the
+ *  same `reorderColumns` the drop itself commits, so the preview and the
+ *  eventual committed order are computed by the identical logic (a
+ *  mid-drag Escape/drop-outside just clears `draggingKey`/`overKey`,
+ *  reverting to `columns` with no store write - this is a display-only
+ *  overlay, never persisted). */
+function livePreviewColumns(
+  columns: ColumnDef[],
+  draggingKey: ColumnKey | null,
+  overKey: ColumnKey | null,
+): ColumnDef[] {
+  if (!draggingKey || !overKey || draggingKey === overKey) return columns;
+  const keys = columns.map((c) => c.key);
+  if (!keys.includes(draggingKey) || !keys.includes(overKey)) return columns;
+  const previewKeys = reorderColumnsInOrder(keys, draggingKey, overKey);
+  return previewKeys.map((k) => columns.find((c) => c.key === k)!);
+}
+
 /** `widths` overrides each column's CSS-default width (fix request:
  *  drag-to-resize) - omitted, the `<col>` falls back to its
  *  `--collection-table-*-width` CSS token. */
@@ -138,6 +165,9 @@ function ColumnHeaderCell({
   onMoveColumn,
   canMoveLeft,
   canMoveRight,
+  onColumnDragStart,
+  onColumnDragEnd,
+  onColumnDragOverTarget,
 }: {
   col: ColumnDef;
   sort: SortState | null;
@@ -149,6 +179,13 @@ function ColumnHeaderCell({
   onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
   canMoveLeft: boolean;
   canMoveRight: boolean;
+  /** Live drag-over preview (fix request): reports this header's own key up
+   *  to `CollectionTable` at drag start/end and on every hover, so it can
+   *  render the columns already swapped into their would-land order while
+   *  the drag is still in progress, not just on drop. */
+  onColumnDragStart?: (key: ColumnKey) => void;
+  onColumnDragEnd?: () => void;
+  onColumnDragOverTarget?: (key: ColumnKey | null) => void;
 }) {
   const { anchor, buttonRef, popoverRef, toggle, close } = usePopover();
   const active = sort?.column === col.key;
@@ -161,6 +198,7 @@ function ColumnHeaderCell({
     const preview = buildColumnDragPreview(col.label);
     e.dataTransfer.setDragImage(preview, 12, 16);
     setTimeout(() => preview.remove(), 0);
+    onColumnDragStart?.(col.key);
   }
 
   function handleColumnDragOver(e: React.DragEvent<HTMLTableCellElement>) {
@@ -168,13 +206,26 @@ function ColumnHeaderCell({
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDropTarget(true);
+    onColumnDragOverTarget?.(col.key);
+  }
+
+  function handleColumnDragLeave() {
+    setDropTarget(false);
+    onColumnDragOverTarget?.(null);
   }
 
   function handleColumnDrop(e: React.DragEvent<HTMLTableCellElement>) {
     e.preventDefault();
     setDropTarget(false);
+    onColumnDragOverTarget?.(null);
     const fromKey = e.dataTransfer.getData(COLUMN_DRAG_MIME) as ColumnKey | "";
     if (fromKey) onReorderColumn?.(fromKey, col.key);
+  }
+
+  function handleColumnDragEnd() {
+    setDropTarget(false);
+    onColumnDragOverTarget?.(null);
+    onColumnDragEnd?.();
   }
 
   const dragEnabled = reorderable && Boolean(onReorderColumn);
@@ -188,8 +239,8 @@ function ColumnHeaderCell({
       onDragStart={dragEnabled ? handleColumnDragStart : undefined}
       onDragOver={dragEnabled ? handleColumnDragOver : undefined}
       onDragEnter={dragEnabled ? handleColumnDragOver : undefined}
-      onDragLeave={dragEnabled ? () => setDropTarget(false) : undefined}
-      onDragEnd={dragEnabled ? () => setDropTarget(false) : undefined}
+      onDragLeave={dragEnabled ? handleColumnDragLeave : undefined}
+      onDragEnd={dragEnabled ? handleColumnDragEnd : undefined}
       onDrop={dragEnabled ? handleColumnDrop : undefined}
     >
       <button
@@ -341,6 +392,9 @@ function TableHead({
   onResizeKeyDown,
   onReorderColumn,
   onMoveColumn,
+  onColumnDragStart,
+  onColumnDragEnd,
+  onColumnDragOverTarget,
 }: {
   columns: ColumnDef[];
   sort: SortState | null;
@@ -350,6 +404,9 @@ function TableHead({
   onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
   onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
   onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
+  onColumnDragStart?: (key: ColumnKey) => void;
+  onColumnDragEnd?: () => void;
+  onColumnDragOverTarget?: (key: ColumnKey | null) => void;
 }) {
   return (
     <thead>
@@ -368,6 +425,9 @@ function TableHead({
               onMoveColumn={onMoveColumn}
               canMoveLeft={idx > 1}
               canMoveRight={idx < columns.length - 1}
+              onColumnDragStart={onColumnDragStart}
+              onColumnDragEnd={onColumnDragEnd}
+              onColumnDragOverTarget={onColumnDragOverTarget}
             />
           ) : (
             <th key={col.key} scope="col" aria-sort={ariaSortValue(col, sort)}>
@@ -566,6 +626,16 @@ export default function CollectionTable(props: CollectionTableProps) {
     if (selectedIds.size === 0) anchorRef.current = null;
   }, [selectedIds]);
   const [editing, setEditing] = useState<{ docId: string; field: EditableField } | null>(null);
+  // Live column-drag preview (fix request): the key being dragged and the
+  // header currently hovered, purely local render state - not persisted,
+  // not the committed order (that only changes on drop via
+  // `onReorderColumn`). `displayColumns` below is what actually renders.
+  const [draggingColumnKey, setDraggingColumnKey] = useState<ColumnKey | null>(null);
+  const [dragOverColumnKey, setDragOverColumnKey] = useState<ColumnKey | null>(null);
+  const displayColumns = useMemo(
+    () => livePreviewColumns(visibleColumns, draggingColumnKey, dragOverColumnKey),
+    [visibleColumns, draggingColumnKey, dragOverColumnKey],
+  );
   // A click that lands elsewhere while a cell is being edited blurs the
   // InlineEditor (auto-committing it) BEFORE the click event itself is
   // dispatched — without a guard, the SAME click that closes one field's
@@ -709,9 +779,9 @@ export default function CollectionTable(props: CollectionTableProps) {
   return (
     <div className="collection-table-wrap">
       <table className="collection-table" style={{ width: sumColumnWidths(visibleColumns, columnWidths) }}>
-        <ColumnGroup columns={visibleColumns} widths={columnWidths} />
+        <ColumnGroup columns={displayColumns} widths={columnWidths} />
         <TableHead
-          columns={visibleColumns}
+          columns={displayColumns}
           sort={sort}
           onSortChange={onSortChange}
           onToggleColumn={onToggleColumn}
@@ -719,10 +789,16 @@ export default function CollectionTable(props: CollectionTableProps) {
           onResizeKeyDown={onResizeColumnKeyDown}
           onReorderColumn={onReorderColumn}
           onMoveColumn={onMoveColumn}
+          onColumnDragStart={setDraggingColumnKey}
+          onColumnDragEnd={() => {
+            setDraggingColumnKey(null);
+            setDragOverColumnKey(null);
+          }}
+          onColumnDragOverTarget={setDragOverColumnKey}
         />
         <tbody>
           {pendingRows.map((pending) => (
-            <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={visibleColumns} />
+            <PendingRow key={pending.tempId} filename={pending.filename} visibleColumns={displayColumns} />
           ))}
           {rows.map((row) => {
             const groupLabel = groupLabels?.get(row.doc_id);
@@ -735,7 +811,7 @@ export default function CollectionTable(props: CollectionTableProps) {
                 )}
                 <PaperRow
                   row={row}
-                  visibleColumns={visibleColumns}
+                  visibleColumns={displayColumns}
                   armed={selectedIds.size === 1 && selectedIds.has(row.doc_id)}
                   editingField={editing?.docId === row.doc_id ? editing.field : null}
                   checked={selectedIds.has(row.doc_id)}

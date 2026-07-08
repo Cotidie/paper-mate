@@ -1286,6 +1286,110 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     expect(venueHeader.getAttribute("data-drop-target")).toBeNull();
   });
 
+  it("live-previews the reordered headers WHILE dragging, before any drop (fix request)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireEvent.dragOver(venueHeader, { dataTransfer });
+
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTexts).toEqual([
+      "Title",
+      "Venue",
+      "Authors",
+      "Year",
+      "Location",
+      "Added",
+      "File type",
+      "DOI",
+    ]);
+  });
+
+  it("live-previews row cells in the same swapped order as the headers, not just on drop (fix request)", () => {
+    render(
+      <CollectionTable
+        rows={[rows[0]]}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireEvent.dragOver(venueHeader, { dataTransfer });
+
+    const firstRowCells = document.querySelectorAll("tbody tr")[0].querySelectorAll("td");
+    expect(firstRowCells[1].className).toBe("collection-table__venue");
+    expect(firstRowCells[2].className).toBe("collection-table__authors");
+  });
+
+  it("reverts the live preview to the committed order on dragend without a drop (drag cancelled, fix request)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireEvent.dragOver(venueHeader, { dataTransfer });
+    fireEvent.dragEnd(authorsHeader, { dataTransfer });
+
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTexts).toEqual([
+      "Title",
+      "Authors",
+      "Venue",
+      "Year",
+      "Location",
+      "Added",
+      "File type",
+      "DOI",
+    ]);
+  });
+
+  it("the live preview never touches Title's position (never a drag source or target)", () => {
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const titleHeader = screen.getByRole("button", { name: "Title" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    fireEvent.dragStart(authorsHeader, { dataTransfer });
+    fireEvent.dragOver(titleHeader, { dataTransfer });
+
+    const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
+    expect(headerTexts[0]).toBe("Title");
+  });
+
   it("opens the header menu with Move left / Move right when onMoveColumn is supplied", () => {
     render(
       <CollectionTable
