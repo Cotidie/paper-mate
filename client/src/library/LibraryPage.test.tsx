@@ -1023,6 +1023,22 @@ describe("Folder filter + move (Story 7.2)", () => {
     expect(movePapers).toHaveBeenCalledWith([paper.doc_id], folderA.id);
   });
 
+  it("a same-page drag (row-move, column-reorder) over the main area does NOT show the file-drop dropzone border (fix request)", async () => {
+    const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Movable Paper")).toBeTruthy());
+
+    const main = screen.getByRole("main");
+    // A row-move / column-reorder drag never carries a "Files" dataTransfer
+    // type; only a real OS file drag does.
+    fireEvent.dragOver(main, { dataTransfer: { types: ["application/x-papermate-move"] } });
+    expect(main.className).not.toContain("library-main--drag-over");
+
+    fireEvent.dragOver(main, { dataTransfer: { types: ["Files"] } });
+    expect(main.className).toContain("library-main--drag-over");
+  });
+
   it("entering an empty folder in a non-empty library keeps the table layout (no EmptyDropzone flash) and shows the empty-folder line", async () => {
     const uncategorized = libraryRow({ doc_id: "u".repeat(64), title: "Uncategorized Paper", order: 0 });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [uncategorized], folders: [folderA] });

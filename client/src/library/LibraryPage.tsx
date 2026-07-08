@@ -285,15 +285,24 @@ export default function LibraryPage() {
           className={mainClassName}
           role="main"
           onDragOver={(e) => {
+            // Story 7.10 fix: this dropzone highlight is for an OS file drag
+            // only. A same-page drag (row-move, column-reorder) also fires
+            // dragover on every ancestor it passes over, including `<main>`
+            // - without this check the dashed "drop a file" border flashed
+            // on screen while just dragging a column header. `types` (not
+            // `files`, which is empty until the actual `drop`) is readable
+            // during dragover.
+            if (!e.dataTransfer.types.includes("Files")) return;
             e.preventDefault();
             setDragOver(true);
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length === 0) return;
             e.preventDefault();
             setDragOver(false);
-            const files = Array.from(e.dataTransfer.files);
-            if (files.length > 0) uploadFiles(files);
+            uploadFiles(files);
           }}
         >
           {isTableLayout && (
