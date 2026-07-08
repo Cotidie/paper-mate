@@ -4,7 +4,7 @@ baseline_commit: 11bfe2ffaf48f594d77cf528077950dd9e310504
 
 # Story 7.10: Reorder columns by drag-and-drop (persisted table layout)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -130,7 +130,7 @@ The epic left three open calls. Resolved here so the dev agent does not re-litig
   - [x] `cd client && npm run typecheck && npm test` green. Backend suite is unaffected (no server logic changed) but confirm it still passes on the host per CLAUDE.md if the version test (`test_version.py`) is touched by the bump.
   - [x] **Live smoke on your OWN fresh servers** (never a user-launched one, CLAUDE.md): fresh `uvicorn` + `vite dev` on alternate ports against a scratch `PAPER_MATE_DATA` with at least two imported papers. Verify: (1) drag a header (e.g. Venue) left/right and it reorders, with a visible drag preview + drop indicator, and the ROW cells follow (nothing renders under the wrong header, AC-6); (2) "Move left"/"Move right" from a header menu reorders by keyboard; (3) Title cannot be dragged and nothing drops before it; (4) hide a column (Display) + resize a column, then **reload the page**, order + visibility + widths are all restored, but any active SORT is cleared; (5) row order is unchanged by all of the above. Normal DPR is fine (no coordinate/anchor geometry). Tear both servers down after.
   - [x] **Cross-model Codex `bmad-code-review` (AE-6)** on the diff. Resolve High/Med before done. Backend pytest is run-it-yourself on the host (CLAUDE.md Sandbox note), though this story touches no backend logic.
-  - [ ] Branch `story-7-10-reorder-columns-persisted` off `main` before implementing (already cut at create-story, [x]). Flip `sprint-status.yaml` `7-10-reorder-columns-persisted` → `done` at PR merge (AE3-1, still pending - no PR/merge yet this session); fill the Dev Agent Record first (AE3-2, [x] done). **Do NOT close Epic 7**, 7.11 (author-tag) + 7.12 (refactor) remain backlog.
+  - [x] Branch `story-7-10-reorder-columns-persisted` off `main` before implementing (already cut at create-story, [x]). Flip `sprint-status.yaml` `7-10-reorder-columns-persisted` → `done` (AE3-1; flipped ahead of PR #60 merge per explicit user instruction, not at merge time as originally planned); fill the Dev Agent Record first (AE3-2, [x] done). **Do NOT close Epic 7**, 7.11 (author-tag) + 7.12 (refactor) remain backlog.
 
 ## Dev Notes
 
