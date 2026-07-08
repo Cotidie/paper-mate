@@ -1324,7 +1324,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     expect(previewEl.textContent).toBe("Authors");
   });
 
-  it("shows a drop-target indicator while dragging over a header, cleared on drop", () => {
+  it("shows the drop-target indicator on the AFTER (right) edge for a forward drag, matching where the column actually lands (fix request: it used to always render 'before', which pointed at the wrong side once reorderColumns switched to array-move semantics)", () => {
     mockColumnRects();
     render(
       <CollectionTable
@@ -1339,11 +1339,33 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
     const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
     const dataTransfer = dataTransferStub();
+    // Forward: Authors (idx1) dragged onto Venue (idx2) lands AFTER Venue.
     fireEvent.dragStart(authorsHeader, { dataTransfer });
     fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
-    expect(venueHeader.getAttribute("data-drop-target")).toBe("before");
+    expect(venueHeader.getAttribute("data-drop-target")).toBe("after");
     fireEvent.drop(venueHeader, { dataTransfer });
     expect(venueHeader.getAttribute("data-drop-target")).toBeNull();
+  });
+
+  it("shows the drop-target indicator on the BEFORE (left) edge for a backward drag", () => {
+    mockColumnRects();
+    render(
+      <CollectionTable
+        rows={rows}
+        onOpenRow={noop}
+        onEditField={noop}
+        onSortChange={noop}
+        onToggleColumn={noop}
+        onReorderColumn={noop}
+      />,
+    );
+    const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const dataTransfer = dataTransferStub();
+    // Backward: Venue (idx2) dragged onto Authors (idx1) lands BEFORE Authors.
+    fireEvent.dragStart(venueHeader, { dataTransfer });
+    fireColumnDragOver(authorsHeader, dataTransfer, clientXFor("authors"));
+    expect(authorsHeader.getAttribute("data-drop-target")).toBe("before");
   });
 
   it("live-previews the reordered headers WHILE dragging, before any drop (fix request)", () => {

@@ -175,19 +175,30 @@
   cursor: grabbing;
 }
 
-/* Drop indicator (Story 7.10 AC-1): a left-edge insertion bar on the header
-   currently being dragged over. `reorderColumns` always inserts the dragged
-   column BEFORE the drop target, so a single left-edge bar reads correctly
-   without needing a left/right variant. Positioned against the `<th>`'s own
+/* Drop indicator (Story 7.10 AC-1): an insertion bar on the header currently
+   resolved as the drop target. `reorderColumns` uses array-move semantics
+   (fix request): a FORWARD drag (dragged column left of the target in the
+   committed order) lands it AFTER the target, a BACKWARD drag lands it
+   BEFORE - so the bar must render on the matching side (right for "after",
+   left for "before"), or it visibly points at the wrong edge relative to
+   where the column actually settles. Positioned against the `<th>`'s own
    `position: relative` (set above by `.collection-table__th--interactive`). */
-.collection-table__th--interactive[data-drop-target="before"]::before {
+.collection-table__th--interactive[data-drop-target="before"]::before,
+.collection-table__th--interactive[data-drop-target="after"]::before {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
   width: var(--collection-table-drop-indicator-width);
   background: var(--color-ink);
+}
+
+.collection-table__th--interactive[data-drop-target="before"]::before {
+  left: 0;
+}
+
+.collection-table__th--interactive[data-drop-target="after"]::before {
+  right: 0;
 }
 
 /* The active sort column's caret (Story 7.4, AC-2). */

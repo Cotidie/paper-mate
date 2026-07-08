@@ -165,7 +165,7 @@ function ColumnHeaderCell({
   onMoveColumn,
   canMoveLeft,
   canMoveRight,
-  isDropTarget,
+  dropIndicator,
   onColumnDragStart,
   onColumnDragEnd,
   onColumnDragOverAt,
@@ -181,11 +181,15 @@ function ColumnHeaderCell({
   onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
   canMoveLeft: boolean;
   canMoveRight: boolean;
-  /** True when `CollectionTable` has resolved THIS column as the live-preview
+  /** Set when `CollectionTable` has resolved THIS column as the live-preview
    *  drop target (fix request: driven by lifted state, not local "did
    *  dragover fire on me" tracking - see the module doc comment above for
-   *  why element-based hit-testing oscillates). */
-  isDropTarget: boolean;
+   *  why element-based hit-testing oscillates), and which SIDE the dragged
+   *  column will land on - "after" for a forward drag, "before" for a
+   *  backward one, matching `reorderColumns`'s own array-move semantics
+   *  exactly (fix request: this used to always render "before", which
+   *  visibly pointed at the wrong edge for a forward drag). */
+  dropIndicator: "before" | "after" | null;
   onColumnDragStart?: (key: ColumnKey) => void;
   onColumnDragEnd?: () => void;
   /** Reports the pointer's raw `clientX`, NOT this header's own key -
@@ -231,7 +235,7 @@ function ColumnHeaderCell({
       aria-sort={ariaSortValue(col, sort)}
       draggable={dragEnabled}
       data-column-key={col.key}
-      data-drop-target={isDropTarget ? "before" : undefined}
+      data-drop-target={dropIndicator ?? undefined}
       onDragStart={dragEnabled ? handleColumnDragStart : undefined}
       onDragOver={dragEnabled ? handleColumnDragOver : undefined}
       onDragEnter={dragEnabled ? handleColumnDragOver : undefined}
@@ -387,7 +391,7 @@ function TableHead({
   onResizeKeyDown,
   onReorderColumn,
   onMoveColumn,
-  dragOverColumnKey,
+  dropIndicator,
   onColumnDragStart,
   onColumnDragEnd,
   onColumnDragOverAt,
@@ -401,7 +405,7 @@ function TableHead({
   onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
   onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
   onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
-  dragOverColumnKey?: ColumnKey | null;
+  dropIndicator?: { key: ColumnKey; side: "before" | "after" } | null;
   onColumnDragStart?: (key: ColumnKey) => void;
   onColumnDragEnd?: () => void;
   onColumnDragOverAt?: (clientX: number) => void;
@@ -424,7 +428,7 @@ function TableHead({
               onMoveColumn={onMoveColumn}
               canMoveLeft={idx > 1}
               canMoveRight={idx < columns.length - 1}
-              isDropTarget={col.key === dragOverColumnKey}
+              dropIndicator={dropIndicator?.key === col.key ? dropIndicator.side : null}
               onColumnDragStart={onColumnDragStart}
               onColumnDragEnd={onColumnDragEnd}
               onColumnDragOverAt={onColumnDragOverAt}
@@ -642,6 +646,22 @@ export default function CollectionTable(props: CollectionTableProps) {
     () => livePreviewColumns(visibleColumns, draggingColumnKey, dragOverColumnKey),
     [visibleColumns, draggingColumnKey, dragOverColumnKey],
   );
+  // The target header + which side the drop indicator renders on (fix
+  // request: it always rendered on the LEFT/"before" edge, but
+  // `reorderColumns`'s array-move semantics land the dragged column AFTER
+  // the target on a forward drag (source left of target in the COMMITTED
+  // order) - the indicator must match, or it visibly points at the wrong
+  // side of where the column actually settles. Computed from the ORIGINAL
+  // committed order, exactly mirroring `reorderColumns`'s own fromIdx/toIdx
+  // comparison, so the two can never disagree.
+  const dropIndicator = useMemo<{ key: ColumnKey; side: "before" | "after" } | null>(() => {
+    if (!draggingColumnKey || !dragOverColumnKey || draggingColumnKey === dragOverColumnKey) return null;
+    const keys = visibleColumns.map((c) => c.key);
+    const fromIdx = keys.indexOf(draggingColumnKey);
+    const toIdx = keys.indexOf(dragOverColumnKey);
+    if (fromIdx === -1 || toIdx === -1) return null;
+    return { key: dragOverColumnKey, side: fromIdx < toIdx ? "after" : "before" };
+  }, [draggingColumnKey, dragOverColumnKey, visibleColumns]);
 
   /**
    * Resolves a live-preview drag target from the POINTER's raw `clientX`
@@ -858,7 +878,7 @@ export default function CollectionTable(props: CollectionTableProps) {
           onResizeKeyDown={onResizeColumnKeyDown}
           onReorderColumn={onReorderColumn}
           onMoveColumn={onMoveColumn}
-          dragOverColumnKey={dragOverColumnKey}
+          dropIndicator={dropIndicator}
           onColumnDragStart={handleColumnDragStart}
           onColumnDragEnd={handleColumnDragEnd}
           onColumnDragOverAt={handleColumnDragOverAt}
