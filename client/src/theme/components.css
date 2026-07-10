@@ -228,13 +228,6 @@
      input, sized to sit inline with its own chips inside one table row. */
   --tag-editor-input-min-width: 96px;
 
-  /* tag-filter-pill (Story 7.11, AC-5): the active author-filter indicator
-     next to the Library toolbar's count line - a smaller scale than
-     `badge-pill` (the count line itself is caption-sized). */
-  --tag-filter-pill-padding-y: 2px;
-  --tag-filter-pill-padding-x: 8px;
-  --tag-filter-pill-clear-size: 12px;
-
   /* collection-table (Story 6.3): row/column dims for the Library table + its
      loading skeleton, which must reserve the same layout. */
   --collection-table-row-height: 34px;

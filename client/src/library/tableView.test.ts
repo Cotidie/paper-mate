@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  applyTagFilter,
   COLUMNS,
   moveColumn,
   reorderColumns,
@@ -163,41 +162,6 @@ const DEFAULT_ORDER: ColumnKey[] = [
   "file_type",
   "doi",
 ];
-
-describe("applyTagFilter (Story 7.11, AC-5)", () => {
-  const alice = row({ doc_id: "a", authors_list: ["Alice"] });
-  const bob = row({ doc_id: "b", authors_list: ["Bob"] });
-  const both = row({ doc_id: "c", authors_list: ["Alice", "Bob"] });
-  const rows = [alice, bob, both];
-
-  it("null is a no-op: returns rows unchanged (same reference)", () => {
-    expect(applyTagFilter(rows, null)).toBe(rows);
-  });
-
-  it("keeps only rows whose authors_list CONTAINS the author (set-membership)", () => {
-    expect(applyTagFilter(rows, "Alice").map((r) => r.doc_id)).toEqual(["a", "c"]);
-  });
-
-  it("excludes a row whose authors_list does not contain the author", () => {
-    expect(applyTagFilter(rows, "Alice").map((r) => r.doc_id)).not.toContain("b");
-  });
-
-  it("an author with no matches narrows to an empty array", () => {
-    expect(applyTagFilter(rows, "Nobody")).toEqual([]);
-  });
-
-  it("never mutates the input array", () => {
-    const before = [...rows];
-    applyTagFilter(rows, "Alice");
-    expect(rows).toEqual(before);
-  });
-
-  it("is NOT a substring match on the joined display string (LFR-6)", () => {
-    const li = row({ doc_id: "d", authors: "Li Ming", authors_list: ["Li Ming"] });
-    // "Li" is a substring of "Li Ming" but not itself a list member.
-    expect(applyTagFilter([li], "Li")).toEqual([]);
-  });
-});
 
 describe("moveColumn (Story 7.10, AC-1/AC-2/AC-4)", () => {
   it("moves a column left", () => {

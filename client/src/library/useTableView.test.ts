@@ -2,23 +2,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useTableView } from "@/library/useTableView";
 import { useTableViewPrefs } from "@/library/tableViewPrefs";
-import type { CollectionRow } from "@/api/client";
-
-function row(overrides: Partial<CollectionRow> & { doc_id: string }): CollectionRow {
-  return {
-    title: null,
-    authors: null,
-    authors_list: [],
-    added: "2026-07-05T00:00:00+00:00",
-    file_type: "pdf",
-    status: "ready",
-    folder_id: null,
-    trashed: false,
-    starred: false,
-    order: 0,
-    ...overrides,
-  } as CollectionRow;
-}
 
 // `tableViewPrefs` is a `localStorage`-persisted Zustand store (Story 7.10),
 // which now backs `order`/`hidden` - reset it between cases (mirrors
@@ -97,37 +80,5 @@ describe("useTableView persisted order (Story 7.10, AC-3/AC-4)", () => {
     expect(result.current.sort).toBeNull();
     act(() => result.current.setSort({ column: "added", direction: "asc" }));
     expect(result.current.sort).toEqual({ column: "added", direction: "asc" });
-  });
-});
-
-describe("useTableView author tag filter (Story 7.11, AC-5)", () => {
-  const alice = row({ doc_id: "a", title: "Alice's Paper", authors_list: ["Alice"], order: 0 });
-  const bob = row({ doc_id: "b", title: "Bob's Paper", authors_list: ["Bob"], order: 1 });
-  const both = row({ doc_id: "c", title: "Joint Paper", authors_list: ["Alice", "Bob"], order: 2 });
-
-  it("authorFilter is null by default: applyTableView is a no-op pass-through", () => {
-    const { result } = renderHook(() => useTableView());
-    expect(result.current.authorFilter).toBeNull();
-    expect(result.current.applyTableView([alice, bob, both])).toEqual([alice, bob, both]);
-  });
-
-  it("setAuthorFilter narrows applyTableView to rows containing that author", () => {
-    const { result } = renderHook(() => useTableView());
-    act(() => result.current.setAuthorFilter("Alice"));
-    expect(result.current.applyTableView([alice, bob, both]).map((r) => r.doc_id)).toEqual(["a", "c"]);
-  });
-
-  it("setAuthorFilter(null) clears the filter", () => {
-    const { result } = renderHook(() => useTableView());
-    act(() => result.current.setAuthorFilter("Alice"));
-    act(() => result.current.setAuthorFilter(null));
-    expect(result.current.applyTableView([alice, bob, both])).toEqual([alice, bob, both]);
-  });
-
-  it("the filter runs BEFORE sort: a narrowed set still sorts correctly", () => {
-    const { result } = renderHook(() => useTableView());
-    act(() => result.current.setAuthorFilter("Alice"));
-    act(() => result.current.setSort({ column: "title", direction: "desc" }));
-    expect(result.current.applyTableView([alice, bob, both]).map((r) => r.doc_id)).toEqual(["c", "a"]);
   });
 });

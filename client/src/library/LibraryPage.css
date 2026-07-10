@@ -68,37 +68,6 @@
   height: calc(var(--type-caption-size) * var(--type-caption-leading));
 }
 
-/* Active author-tag filter indicator (Story 7.11, AC-5): a small pill next
-   to the count line, mirroring `badge-pill`'s idiom at a smaller, inline
-   scale (the count line itself is caption-sized, not body). */
-.library-toolbar__author-filter-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xxs);
-  margin-inline-start: var(--space-xs);
-  padding: var(--tag-filter-pill-padding-y) var(--tag-filter-pill-padding-x);
-  background: var(--color-surface-strong);
-  color: var(--color-ink);
-  border-radius: var(--radius-pill);
-}
-
-.library-toolbar__author-filter-pill button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  padding: 0;
-  color: inherit;
-  cursor: pointer;
-}
-
-.library-toolbar__author-filter-pill button svg {
-  width: var(--tag-filter-pill-clear-size);
-  height: var(--tag-filter-pill-clear-size);
-  display: block;
-}
-
 .library-toolbar__actions {
   display: flex;
   align-items: center;

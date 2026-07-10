@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { CollectionRow, Folder } from "@/api/client";
 import {
-  applyTagFilter,
   COLUMNS,
   sortRows,
   type ColumnDef,
@@ -28,9 +27,6 @@ export function useTableView(folders: Folder[] = []) {
   const moveColumn = useTableViewPrefs((s) => s.moveColumn);
   const reorderColumns = useTableViewPrefs((s) => s.reorderColumns);
   const [sort, setSort] = useState<SortState | null>(null);
-  // The author-tag filter (Story 7.11, AC-5): a peer of `sort`, ephemeral
-  // client view-state (AD-L3, not persisted - unlike order/hidden above).
-  const [authorFilter, setAuthorFilter] = useState<string | null>(null);
   const folderNameById = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
 
   // Title can never enter the hidden set (AC-4): `tableViewPrefs.toggleHidden`
@@ -46,8 +42,8 @@ export function useTableView(folders: Folder[] = []) {
   );
 
   const applyTableView = useCallback(
-    (rows: CollectionRow[]) => sortRows(applyTagFilter(rows, authorFilter), sort, folderNameById),
-    [authorFilter, sort, folderNameById],
+    (rows: CollectionRow[]) => sortRows(rows, sort, folderNameById),
+    [sort, folderNameById],
   );
 
   return {
@@ -56,8 +52,6 @@ export function useTableView(folders: Folder[] = []) {
     visibleColumns,
     sort,
     setSort,
-    authorFilter,
-    setAuthorFilter,
     applyTableView,
     moveColumn,
     reorderColumns,

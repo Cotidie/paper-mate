@@ -243,9 +243,23 @@
 
 .collection-table__title {
   position: relative;
+}
+
+/* The flex row lives on an INNER wrapper, not the `<td>` itself (fix
+   request): `display: flex` directly on a `<td>` stops it from
+   participating in the table's per-row cell-height stretch (only a real
+   `display: table-cell` box does), so it fell back to its own content
+   height - shorter than sibling cells whenever another cell in the row
+   (e.g. wrapped Author chips) grows the row taller, staggering this
+   column's border-bottom above the rest of the row. Keeping the `<td>` a
+   plain table-cell restores the stretch; `height: 100%` on this inner div
+   then resolves against that now-definite cell height (a `<tr>` alone
+   never gives a percentage-height child a definite containing block). */
+.collection-table__title-row {
   display: flex;
   align-items: center;
   gap: var(--space-xxs);
+  height: 100%;
 }
 
 .collection-table__title-text {
@@ -300,19 +314,6 @@
   border-radius: var(--radius-pill);
   padding: var(--tag-chip-padding-y) var(--tag-chip-padding-x);
   white-space: nowrap;
-}
-
-/* A chip in the settled cell is a click-to-filter trigger (AC-5); one inside
-   the editor (below) is read-only text plus its own remove control, so it is
-   never itself a `<button>` there - only the settled-cell chip needs a
-   pointer/hover affordance. */
-button.tag-chip {
-  cursor: pointer;
-}
-
-button.tag-chip:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-ink);
-  outline-offset: var(--focus-ring-width);
 }
 
 /* The armed cell's tag editor (Story 7.11, AC-4/AC-7): a "select or create"
@@ -371,11 +372,17 @@ button.tag-chip:focus-visible {
 }
 
 .collection-table__location {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* The flex row lives on an inner wrapper, not the `<td>` - same reasoning as
+   `.collection-table__title-row` above. */
+.collection-table__location-row {
   display: flex;
   align-items: center;
   gap: var(--space-xxs);
-  overflow: hidden;
-  white-space: nowrap;
+  height: 100%;
 }
 
 .collection-table__location-icon {

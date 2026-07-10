@@ -348,9 +348,8 @@ describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
     render(
       <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onCommitAuthors={onCommitAuthors} />,
     );
-    // The chip itself is a filter trigger (stopPropagation, never arms/edits)
-    // - the cell BACKGROUND click is what arms/opens the editor, so target
-    // the outer <td>, not the chip <button> inside it.
+    // A chip is plain, non-interactive text - the cell BACKGROUND click is
+    // what arms/opens the editor, so target the outer <td>.
     const cell = screen.getByText("Vaswani et al.").closest("td")!;
     fireEvent.click(cell.closest("tr")!); // arm
     fireEvent.click(cell); // opens the tag editor

@@ -491,7 +491,6 @@ type CollectionTableProps =
       onOpenRow?: never;
       pendingRows?: never;
       onEditField?: never;
-      onFilterByAuthor?: never;
       onCommitAuthors?: never;
       selectedIds?: never;
       onSelectionChange?: never;
@@ -533,9 +532,6 @@ type CollectionTableProps =
        *  callbacks above). */
       onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
       onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
-      /** A chip click in the Author tag cell (Story 7.11, AC-5). Omit for
-       *  isolated tests that don't care about the tag filter. */
-      onFilterByAuthor?: (author: string) => void;
       /** The Author tag editor's commit: the new full author list (AC-4).
        *  Omit for isolated tests that don't exercise the tag editor. */
       onCommitAuthors?: (docId: string, authors: string[]) => void;
@@ -608,7 +604,6 @@ export default function CollectionTable(props: CollectionTableProps) {
     onResizeColumnKeyDown,
     onReorderColumn,
     onMoveColumn,
-    onFilterByAuthor = () => {},
     onCommitAuthors = () => {},
     trashLens = false,
     folders = EMPTY_FOLDERS,
@@ -941,7 +936,6 @@ export default function CollectionTable(props: CollectionTableProps) {
                   onStartEdit={(field) => startEdit(row.doc_id, field)}
                   onCommit={(field, value, viaBlur) => commitEdit(row, field, value, viaBlur)}
                   onCancel={() => setEditing(null)}
-                  onFilterByAuthor={onFilterByAuthor}
                   onCommitAuthors={(authors) => commitAuthors(row, authors)}
                   trashLens={trashLens}
                   locationLabel={locationLabel(row)}

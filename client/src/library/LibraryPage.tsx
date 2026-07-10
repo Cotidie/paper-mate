@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowCounterClockwise, Star, Trash, TrashSimple, X } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Star, Trash, TrashSimple } from "@phosphor-icons/react";
 import "@/library/LibraryPage.css";
 import Toast from "@/components/Toast/Toast";
 import CollectionTable from "@/library/CollectionTable/CollectionTable";
@@ -141,15 +141,6 @@ export default function LibraryPage() {
     setSelection(next);
     setSelectedIds(new Set());
   }, []);
-
-  // Codex review (High, AE-6): narrowing (or clearing) the author filter
-  // must ALSO clear the selection, same reasoning as a folder switch above -
-  // otherwise a toolbar action (Move/Star/Delete) could act on rows the
-  // filter just hid from view, which the user can no longer see to notice.
-  const handleAuthorFilterChange = useCallback((author: string | null) => {
-    tableView.setAuthorFilter(author);
-    setSelectedIds(new Set());
-  }, [tableView.setAuthorFilter]);
 
   const handleMoveRequest = useCallback(
     (docIds: string[], folderId: string | null) => {
@@ -329,18 +320,6 @@ export default function LibraryPage() {
               ) : (
                 <p className="library-toolbar__count">
                   {visiblePapers.length} files in {selectionLabel(selection, folders)}
-                  {tableView.authorFilter && (
-                    <span className="library-toolbar__author-filter-pill">
-                      Author: {tableView.authorFilter}
-                      <button
-                        type="button"
-                        aria-label="Clear author filter"
-                        onClick={() => handleAuthorFilterChange(null)}
-                      >
-                        <X aria-hidden />
-                      </button>
-                    </span>
-                  )}
                 </p>
               )}
               <div className="library-toolbar__actions">
@@ -445,7 +424,6 @@ export default function LibraryPage() {
                 pendingRows={visiblePending}
                 onOpenRow={(docId) => navigate(`/reader/${docId}`)}
                 onEditField={handleEditField}
-                onFilterByAuthor={handleAuthorFilterChange}
                 onCommitAuthors={handleEditAuthors}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}

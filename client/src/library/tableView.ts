@@ -133,19 +133,6 @@ export function sortRows(
   );
 }
 
-/** Set-membership filter over `authors_list` (Story 7.11, AC-5): a row passes
- *  when its `authors_list` CONTAINS `author`, never a substring match on the
- *  joined display string (LFR-6). `null` is a no-op (returns `rows`
- *  unchanged, same reference, mirroring `sortRows`'s own null-sort
- *  short-circuit); never mutates `rows`. Runs BEFORE `sortRows` in
- *  `useTableView.applyTableView` (filter, then sort) so the folder-filtered
- *  array Story 7.3's range-select indexes stays the one array threaded
- *  through, just narrowed. */
-export function applyTagFilter(rows: CollectionRow[], author: string | null): CollectionRow[] {
-  if (author === null) return rows;
-  return rows.filter((row) => row.authors_list.includes(author));
-}
-
 /** Pins Title to index 0 (Story 7.10, AC-4 - a store invariant, not just a UI
  *  check, Dev Notes: "no code path... can strand it"). A well-formed `order`
  *  (Title already first) is returned as-is, so `moveColumn`/`reorderColumns`

@@ -55,7 +55,6 @@ export default function PaperRow({
   onStartEdit,
   onCommit,
   onCancel,
-  onFilterByAuthor,
   onCommitAuthors,
   trashLens = false,
   locationLabel,
@@ -78,9 +77,6 @@ export default function PaperRow({
   onStartEdit: (field: EditableField | "authors") => void;
   onCommit: (field: EditableField, value: string, viaBlur: boolean) => void;
   onCancel: () => void;
-  /** A chip click (Story 7.11, AC-5): narrows the table to rows containing
-   *  this author. Never arms or edits (see `TagCell`'s own doc comment). */
-  onFilterByAuthor: (author: string) => void;
   /** The tag editor's commit (Story 7.11, AC-4): the NEW FULL author list. */
   onCommitAuthors: (authors: string[]) => void;
   /** Trash lens (fix request: Restore/Purge moved to the toolbar, bulk over
@@ -119,7 +115,6 @@ export default function PaperRow({
           isEditing={editingField === "authors"}
           onStartEdit={() => onStartEdit("authors")}
           onArm={onArm}
-          onFilterByAuthor={onFilterByAuthor}
           onCommit={onCommitAuthors}
           onCancel={onCancel}
         />
@@ -142,25 +137,27 @@ export default function PaperRow({
             onCommit={(value, viaBlur) => onCommit("title", value, viaBlur)}
             onCancel={onCancel}
           >
-            <span className="collection-table__title-text">
-              {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
-            </span>
-            {row.starred && (
-              <Star weight="fill" aria-label="Starred" className="collection-table__star" />
-            )}
-            {!trashLens && (
-              <button
-                type="button"
-                className="collection-table__open-button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpen();
-                }}
-                onKeyDown={(e) => e.stopPropagation()}
-              >
-                Open
-              </button>
-            )}
+            <div className="collection-table__title-row">
+              <span className="collection-table__title-text">
+                {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
+              </span>
+              {row.starred && (
+                <Star weight="fill" aria-label="Starred" className="collection-table__star" />
+              )}
+              {!trashLens && (
+                <button
+                  type="button"
+                  className="collection-table__open-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen();
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  Open
+                </button>
+              )}
+            </div>
           </EditableCell>
         );
       case "venue":
@@ -203,8 +200,10 @@ export default function PaperRow({
       case "location":
         return (
           <td key="location" className="collection-table__location" title={locationLabel}>
-            {row.folder_id && <FolderIcon aria-hidden className="collection-table__location-icon" />}
-            <span className="collection-table__location-text">{locationLabel}</span>
+            <div className="collection-table__location-row">
+              {row.folder_id && <FolderIcon aria-hidden className="collection-table__location-icon" />}
+              <span className="collection-table__location-text">{locationLabel}</span>
+            </div>
           </td>
         );
       case "added":

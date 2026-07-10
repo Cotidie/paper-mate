@@ -14,7 +14,6 @@ function renderCell(props: Partial<React.ComponentProps<typeof TagCell>> = {}) {
     isEditing: false,
     onStartEdit: vi.fn(),
     onArm: vi.fn(),
-    onFilterByAuthor: vi.fn(),
     onCommit: vi.fn(),
     onCancel: vi.fn(),
   };
@@ -44,29 +43,7 @@ describe("TagCell (Story 7.11, AC-1/AC-3)", () => {
   });
 });
 
-describe("TagCell chip-click vs cell-arm (Story 7.11, Dev Notes)", () => {
-  it("a chip click fires onFilterByAuthor and does NOT arm the row", () => {
-    const onFilterByAuthor = vi.fn();
-    const onArm = vi.fn();
-    renderCell({ onFilterByAuthor, onArm, armed: false });
-
-    fireEvent.click(screen.getByText("Ada Lovelace"));
-
-    expect(onFilterByAuthor).toHaveBeenCalledWith("Ada Lovelace");
-    expect(onArm).not.toHaveBeenCalled();
-  });
-
-  it("a chip click while armed does NOT open the editor", () => {
-    const onFilterByAuthor = vi.fn();
-    const onStartEdit = vi.fn();
-    renderCell({ onFilterByAuthor, onStartEdit, armed: true });
-
-    fireEvent.click(screen.getByText("Alan Turing"));
-
-    expect(onFilterByAuthor).toHaveBeenCalledWith("Alan Turing");
-    expect(onStartEdit).not.toHaveBeenCalled();
-  });
-
+describe("TagCell cell-arm/edit (Story 7.11, Dev Notes)", () => {
   it("an UNARMED cell background click bubbles to arm the row (not intercepted)", () => {
     const onArm = vi.fn();
     const onStartEdit = vi.fn();
@@ -89,13 +66,11 @@ describe("TagCell chip-click vs cell-arm (Story 7.11, Dev Notes)", () => {
     expect(onArm).not.toHaveBeenCalled();
   });
 
-  it("a non-editable (extracting) row still renders click-to-filter chips", () => {
-    const onFilterByAuthor = vi.fn();
-    renderCell({ onFilterByAuthor, editable: false });
+  it("a non-editable (extracting) row renders chips as plain, non-interactive text", () => {
+    renderCell({ editable: false });
 
-    fireEvent.click(screen.getByText("Ada Lovelace"));
-
-    expect(onFilterByAuthor).toHaveBeenCalledWith("Ada Lovelace");
+    expect(screen.getByText("Ada Lovelace")).toBeTruthy();
+    expect(screen.queryAllByRole("button").length).toBe(0);
   });
 });
 
