@@ -45,6 +45,12 @@ function withField(row: CollectionRow, field: EditableField, next: FieldValue): 
  * additionally guards two overlapping edits to the SAME field: only the
  * most-recently-issued request may reconcile/revert, so a slow older
  * request can't clobber a faster newer one.
+ *
+ * This per-doc field-edit family (with `useAuthorsEdit`) stays SEPARATE from
+ * the set-based org seam `useOptimisticLibraryOp` (Story 7.12 AC-3): those
+ * reconcile from the whole returned `Library` and revert a captured row-set;
+ * these reconcile from a single `Doc` and revert one value under a keyed
+ * `editSeqRef` Map, so one seam would only leak a union type.
  */
 export function useInlineEdit({ library, setLibrary, onToast }: UseInlineEditOptions) {
   // Per-field monotonic sequence (keyed "docId:field").

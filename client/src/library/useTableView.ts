@@ -1,12 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { CollectionRow, Folder } from "@/api/client";
-import {
-  COLUMNS,
-  sortRows,
-  type ColumnDef,
-  type ColumnKey,
-  type SortState,
-} from "@/library/tableView";
+import { COLUMNS, type ColumnDef, type ColumnKey, type SortState } from "@/library/tableView";
+import { sortRows } from "@/library/columnSort";
 import { useTableViewPrefs } from "@/library/tableViewPrefs";
 
 /**

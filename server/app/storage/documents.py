@@ -17,7 +17,7 @@ import shutil
 from pathlib import Path
 
 from app.models import DocMeta, DocStatus, Library
-from app.storage import library_index, meta_store, paths
+from app.storage import library_index, meta_store, paper_org, paths
 from app.storage.atomic import atomic_write
 from app.storage.errors import DocumentNotFoundError, StorageError
 from app.storage.meta_store import META_SCHEMA_VERSION
@@ -198,4 +198,4 @@ def purge_document(doc_id: str) -> Library:
         if not doc_dir.is_dir():
             raise DocumentNotFoundError(f"no document with id {doc_id!r}")
         shutil.rmtree(doc_dir)
-        return library_index.purge_entry(doc_id)
+        return paper_org.purge_entry(doc_id)

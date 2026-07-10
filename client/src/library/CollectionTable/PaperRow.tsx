@@ -1,17 +1,7 @@
-import type { ReactNode } from "react";
-import { Folder as FolderIcon, Star } from "@phosphor-icons/react";
 import type { CollectionRow } from "@/api/client";
-import {
-  formatAdded,
-  rowStatusClass,
-  seedFieldValue,
-  statusLabel,
-  stripPdfExtension,
-  type EditableField,
-} from "@/library/row";
+import { rowStatusClass, stripPdfExtension, type EditableField } from "@/library/row";
 import type { ColumnDef } from "@/library/tableView";
-import EditableCell from "./EditableCell";
-import TagCell from "./TagCell";
+import { CELL_RENDERERS, type CellContext } from "./cells";
 
 /**
  * One settled row of the collection table. A plain row click selects only
@@ -37,9 +27,10 @@ import TagCell from "./TagCell";
  *
  * `visibleColumns` is the ORDERED column list (Story 7.10, AC-6), not a
  * membership `Set`: the `<td>`s render via `.map` in that order, each
- * dispatched by `renderCell`'s `switch`, so a persisted column order that
- * differs from the default can never desync a cell from the `<th>` above it
- * (the cell-order trap - see the story's Dev Notes).
+ * dispatched through the `CELL_RENDERERS` registry (Story 7.12, AC-4) keyed
+ * by column key, so a persisted column order that differs from the default
+ * can never desync a cell from the `<th>` above it (the cell-order trap - see
+ * the story's Dev Notes), and there is no per-key `switch` to drift.
  */
 export default function PaperRow({
   row,
@@ -92,162 +83,21 @@ export default function PaperRow({
   // A null title falls back to the filename, extension stripped (still
   // recognizable); `Untitled` is the last resort when neither is known.
   const displayTitle = row.title ?? (row.filename ? stripPdfExtension(row.filename) : null);
-  const label = statusLabel(row.status);
-  const editable = row.status !== "extracting";
-
-  // A plain inline switch (Story 7.10 Dev Notes: this is the ordered-render
-  // seam, not the general cellType registry - that's Story 7.12's job).
-  // The `tag` cellType (Author, the only one this story) dispatches through
-  // `TagCell` as a guard BEFORE the switch (Codex review, Med, AC-1: "the
-  // table dispatches on [cellType]" - not on `col.key`); every other column
-  // keeps its bespoke per-key markup in the switch below.
-  function renderCell(col: ColumnDef): ReactNode {
-    if (col.cellType === "tag") {
-      // The cell-type seam (Story 7.11, AC-1): Author is the only `tag`
-      // column this story, dispatched through `TagCell` rather than the
-      // plain-string `EditableCell` every other editable column uses.
-      return (
-        <TagCell
-          key={col.key}
-          authors={row.authors_list}
-          editable={editable}
-          armed={armed}
-          isEditing={editingField === "authors"}
-          onStartEdit={() => onStartEdit("authors")}
-          onArm={onArm}
-          onCommit={onCommitAuthors}
-          onCancel={onCancel}
-        />
-      );
-    }
-    switch (col.key) {
-      case "title":
-        return (
-          <EditableCell
-            key="title"
-            className="collection-table__title"
-            title={displayTitle ?? undefined}
-            field="title"
-            editable={editable}
-            armed={armed}
-            isEditing={editingField === "title"}
-            seedValue={seedFieldValue(row, "title")}
-            onStartEdit={() => onStartEdit("title")}
-            onArm={onArm}
-            onCommit={(value, viaBlur) => onCommit("title", value, viaBlur)}
-            onCancel={onCancel}
-          >
-            <div className="collection-table__title-row">
-              <span className="collection-table__title-text">
-                {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
-              </span>
-              {row.starred && (
-                <Star weight="fill" aria-label="Starred" className="collection-table__star" />
-              )}
-              {!trashLens && (
-                <button
-                  type="button"
-                  className="collection-table__open-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpen();
-                  }}
-                  onKeyDown={(e) => e.stopPropagation()}
-                >
-                  Open
-                </button>
-              )}
-            </div>
-          </EditableCell>
-        );
-      case "venue":
-        return (
-          <EditableCell
-            key="venue"
-            className="collection-table__venue"
-            title={row.venue ?? undefined}
-            field="venue"
-            editable={editable}
-            armed={armed}
-            isEditing={editingField === "venue"}
-            seedValue={seedFieldValue(row, "venue")}
-            onStartEdit={() => onStartEdit("venue")}
-            onArm={onArm}
-            onCommit={(value, viaBlur) => onCommit("venue", value, viaBlur)}
-            onCancel={onCancel}
-          >
-            {row.venue ?? ""}
-          </EditableCell>
-        );
-      case "year":
-        return (
-          <EditableCell
-            key="year"
-            className="collection-table__year"
-            field="year"
-            editable={editable}
-            armed={armed}
-            isEditing={editingField === "year"}
-            seedValue={seedFieldValue(row, "year")}
-            onStartEdit={() => onStartEdit("year")}
-            onArm={onArm}
-            onCommit={(value, viaBlur) => onCommit("year", value, viaBlur)}
-            onCancel={onCancel}
-          >
-            {row.year ?? ""}
-          </EditableCell>
-        );
-      case "location":
-        return (
-          <td key="location" className="collection-table__location" title={locationLabel}>
-            <div className="collection-table__location-row">
-              {row.folder_id && <FolderIcon aria-hidden className="collection-table__location-icon" />}
-              <span className="collection-table__location-text">{locationLabel}</span>
-            </div>
-          </td>
-        );
-      case "added":
-        return (
-          <td key="added" className="collection-table__added">
-            {formatAdded(row.added)}
-          </td>
-        );
-      case "file_type":
-        return (
-          <td key="file_type">
-            {label ? (
-              <span
-                className={
-                  row.status === "parse-failed" ? "badge-pill badge-pill--muted" : "badge-pill"
-                }
-              >
-                {label}
-              </span>
-            ) : (
-              <span className="badge-pill">{row.file_type === "note" ? "Note" : "PDF"}</span>
-            )}
-          </td>
-        );
-      case "doi":
-        return (
-          <td key="doi" className="collection-table__doi">
-            {row.doi && (
-              <a
-                href={`https://doi.org/${row.doi}`}
-                target="_blank"
-                rel="noreferrer"
-                className="collection-table__doi-link"
-                title={row.doi}
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
-              >
-                {row.doi}
-              </a>
-            )}
-          </td>
-        );
-    }
-  }
+  const cellContext: CellContext = {
+    row,
+    editable: row.status !== "extracting",
+    armed,
+    editingField,
+    trashLens,
+    locationLabel,
+    displayTitle,
+    onArm,
+    onOpen,
+    onStartEdit,
+    onCommit,
+    onCancel,
+    onCommitAuthors,
+  };
 
   return (
     <tr
@@ -259,7 +109,7 @@ export default function PaperRow({
       draggable={!trashLens}
       onDragStart={trashLens ? undefined : onDragStart}
     >
-      {visibleColumns.map((col) => renderCell(col))}
+      {visibleColumns.map((col) => CELL_RENDERERS[col.key](cellContext))}
     </tr>
   );
 }

@@ -13,6 +13,8 @@ the doc-specific ``"Document not found"`` literal, via ``storage_errors``'s
 ``not_found``/``not_found_detail`` override.
 """
 
+from collections.abc import Callable
+
 from fastapi import APIRouter
 
 from app import storage
@@ -22,6 +24,25 @@ from app.routes._errors import error_response, storage_errors
 router = APIRouter(tags=["library"])
 
 _FOLDER_NOT_FOUND = "Folder not found"
+
+#: The 404/422/500 envelope map shared verbatim by the four set-op routes
+#: (trash/restore/star/unstar): an unknown doc_id is the only 404, an empty
+#: doc_ids the only 422, any other storage fault a 500. Defined once so the
+#: generated contract stays byte-identical across all four operations.
+_SET_OP_RESPONSES = {
+    404: error_response("An unknown document id."),
+    422: error_response("doc_ids must be non-empty."),
+    500: error_response("Could not update the collection."),
+}
+
+
+def _set_op(mutate: Callable[[list[str]], Library], doc_ids: list[str]) -> Library:
+    """Run one set-based org mutator under the shared collection error map.
+
+    The four flag-flip routes differ only in which ``storage.<verb>_papers`` they
+    call; the try/except-to-envelope body (AR-11) is one shape, so it lives here."""
+    with storage_errors("Could not update the collection"):
+        return mutate(doc_ids)
 
 
 @router.get(
@@ -121,34 +142,17 @@ async def move_papers(body: MoveRequest) -> Library:
         return storage.move_papers(body.doc_ids, body.folder_id)
 
 
-@router.post(
-    "/library/trash",
-    response_model=Library,
-    responses={
-        404: error_response("An unknown document id."),
-        422: error_response("doc_ids must be non-empty."),
-        500: error_response("Could not update the collection."),
-    },
-)
+@router.post("/library/trash", response_model=Library, responses=_SET_OP_RESPONSES)
 async def trash_papers(body: DocIdSet) -> Library:
     """Set-based soft-delete (Story 7.5 AC-1, AL-5.1, AD-L6): flip ``trashed``
     to ``True`` for every id in ``doc_ids``. ``folder_id``/``order`` and
     ``annotations.json``/``meta.json``/``source.pdf`` are untouched -- this is
     organizational only. Returns the whole updated ``Library`` in one
     round-trip. Unknown ``doc_id`` -> 404 ``"Document not found"``."""
-    with storage_errors("Could not update the collection"):
-        return storage.trash_papers(body.doc_ids)
+    return _set_op(storage.trash_papers, body.doc_ids)
 
 
-@router.post(
-    "/library/restore",
-    response_model=Library,
-    responses={
-        404: error_response("An unknown document id."),
-        422: error_response("doc_ids must be non-empty."),
-        500: error_response("Could not update the collection."),
-    },
-)
+@router.post("/library/restore", response_model=Library, responses=_SET_OP_RESPONSES)
 async def restore_papers(body: DocIdSet) -> Library:
     """Set-based restore (Story 7.5 AC-3, AL-5.2, AD-L6): flip ``trashed`` to
     ``False`` for every id in ``doc_ids``, returning it to its retained
@@ -156,42 +160,23 @@ async def restore_papers(body: DocIdSet) -> Library:
     by ``delete_folder``'s re-home, no extra guard needed here). Returns the
     whole updated ``Library`` in one round-trip. Unknown ``doc_id`` -> 404
     ``"Document not found"``."""
-    with storage_errors("Could not update the collection"):
-        return storage.restore_papers(body.doc_ids)
+    return _set_op(storage.restore_papers, body.doc_ids)
 
 
-@router.post(
-    "/library/star",
-    response_model=Library,
-    responses={
-        404: error_response("An unknown document id."),
-        422: error_response("doc_ids must be non-empty."),
-        500: error_response("Could not update the collection."),
-    },
-)
+@router.post("/library/star", response_model=Library, responses=_SET_OP_RESPONSES)
 async def star_papers(body: DocIdSet) -> Library:
     """Set-based star (Story 7.8 AC-1, AL-5, AD-L6): flip ``starred`` to
     ``True`` for every id in ``doc_ids``. ``folder_id``/``order``/``trashed``
     and ``annotations.json``/``meta.json``/``source.pdf`` are untouched -- this
     is organizational only. Returns the whole updated ``Library`` in one
     round-trip. Unknown ``doc_id`` -> 404 ``"Document not found"``."""
-    with storage_errors("Could not update the collection"):
-        return storage.star_papers(body.doc_ids)
+    return _set_op(storage.star_papers, body.doc_ids)
 
 
-@router.post(
-    "/library/unstar",
-    response_model=Library,
-    responses={
-        404: error_response("An unknown document id."),
-        422: error_response("doc_ids must be non-empty."),
-        500: error_response("Could not update the collection."),
-    },
-)
+@router.post("/library/unstar", response_model=Library, responses=_SET_OP_RESPONSES)
 async def unstar_papers(body: DocIdSet) -> Library:
     """Set-based unstar (Story 7.8 AC-1, AL-5, AD-L6): flip ``starred`` to
     ``False`` for every id in ``doc_ids``. Returns the whole updated
     ``Library`` in one round-trip. Unknown ``doc_id`` -> 404
     ``"Document not found"``."""
-    with storage_errors("Could not update the collection"):
-        return storage.unstar_papers(body.doc_ids)
+    return _set_op(storage.unstar_papers, body.doc_ids)

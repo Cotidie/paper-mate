@@ -13,8 +13,11 @@ This ``__init__`` is a thin facade over the package's focused modules:
 - ``atomic``            — the temp+rename atomic-write primitive.
 - ``pdf``               — the pypdf validation that gates every import.
 - ``meta_store``        — the per-document ``meta.json`` read/write.
-- ``library_index``     — the ``library.json`` index (AL-7 single serialized
-                          writer) + the shared meta-write/reindex core.
+- ``library_index``     — the ``library.json`` index core (AL-7 single
+                          serialized writer) + the shared meta-write/reindex core.
+- ``folders``           — the folder-tree ops (create/rename/delete).
+- ``paper_org``         — the set-based paper-org mutators (move/trash/restore/
+                          star/unstar) + single-entry purge.
 - ``annotations_store`` — the per-document ``annotations.json`` read/write.
 - ``documents``         — the public per-document operations (import, source
                           path, meta read, the three meta mutators).
@@ -47,14 +50,18 @@ from app.storage.errors import (
     StorageError,
     UnsupportedSchemaError,
 )
-from app.storage.library_index import (
-    LIBRARY_SCHEMA_VERSION,
+from app.storage.folders import (
     create_folder,
     delete_folder,
-    move_papers,
+    rename_folder,
+)
+from app.storage.library_index import (
+    LIBRARY_SCHEMA_VERSION,
     read_library,
     reconcile_library,
-    rename_folder,
+)
+from app.storage.paper_org import (
+    move_papers,
     restore_papers,
     star_papers,
     trash_papers,
