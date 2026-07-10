@@ -4,7 +4,7 @@ baseline_commit: 35cd6e5710d19d8c2c55b87a2ecc5632041ea75c
 
 # Story 7.12: Epic 7 structural refactor (modularize the whole organize/curate surface)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -133,7 +133,7 @@ Read these before starting; they prevent chasing ghosts.
 - [x] **Task 8: Version + status (AC: 8)**
   - [x] Bumped PATCH in `server/pyproject.toml` (`0.5.10` → `0.5.11`); re-ran `uv lock`. Only version touch; no MAJOR/MINOR, no schema-version change.
   - [ ] **Cross-model Codex `bmad-code-review` (AE-6)** on the diff; resolve High/Med before done. (Runs after dev-story per the workflow.)
-  - [ ] Branch `story-7-12-epic-7-structural-refactor` off `main` (cut at create-story). At PR merge, flip `sprint-status.yaml` `7-12-epic-7-structural-refactor` → `done` (AE3-1). This is the LAST Epic 7 story: after it merges, Epic 7 can close.
+  - [x] Branch `story-7-12-epic-7-structural-refactor` off `main` (cut at create-story). Flipped `sprint-status.yaml` `7-12-epic-7-structural-refactor` → `done` (AE3-1: normally at PR merge; flipped early on user request). This is the LAST Epic 7 story: Epic 7 can now close.
 
 ## Dev Notes
 
