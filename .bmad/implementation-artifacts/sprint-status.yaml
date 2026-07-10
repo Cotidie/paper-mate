@@ -249,21 +249,21 @@ development_status:
   7-12-epic-7-structural-refactor: done
   epic-7-retrospective: done
 
-  # Epic 8: Remote sync — DEFERRED, not decomposed into stories this sprint.
-  # LFR-25..29 captured in epics.md; runs its own discovery (trigger cadence,
-  # Drive OAuth on localhost/Docker, deletion/Trash propagation, interrupted-push
-  # consistency, credential encryption at rest) before any story is written.
-  epic-8: backlog
-  epic-8-retrospective: optional
+  # Remote sync — DEFERRED, UN-NUMBERED (was epic-8) as of 2026-07-11 correct-course
+  # (sprint-change-proposal-2026-07-11-deprioritize-sync.md; user: "not important right
+  # now"). Deprioritized, NOT deleted: capability stays captured in PRD F8/FR-25..29 +
+  # the reserved architecture sync seam; LFR-25..29 remain mapped in epics.md. No epic
+  # row until/unless it is picked up as a future epic.
 
-  # Epic 9: Reader fidelity round 2 (post-v1, Phase-1.5) — added 2026-07-07
-  # correct-course (sprint-change-proposal-2026-07-07-deferred-review.md): a
-  # deferred-work review pruned every reader-fidelity item that had shipped and
-  # promoted the one still-open reader bug (paragraph-vs-wrap copy, the
-  # mirror-image of Story 4.1's fix) into a fresh epic. No story file yet -> backlog.
-  epic-9: backlog
-  9-1-paragraph-aware-copy: backlog
-  epic-9-retrospective: optional
+  # Epic 8: Reader fidelity round 2 (post-v1, Phase-1.5) — added 2026-07-07 correct-course
+  # (sprint-change-proposal-2026-07-07-deferred-review.md) AS Epic 9; RENUMBERED 9 -> 8 on
+  # 2026-07-11 (correct-course: Remote sync un-numbered, this took its slot). A deferred-work
+  # review pruned every reader-fidelity item that had shipped and promoted the one still-open
+  # reader bug (paragraph-vs-wrap copy, the mirror-image of Story 4.1's fix) into this epic.
+  # No story file yet -> backlog.
+  epic-8: backlog
+  8-1-paragraph-aware-copy: backlog
+  epic-8-retrospective: optional
 
 action_items:
   - epic: 1
@@ -383,7 +383,7 @@ action_items:
     owner: "Wonseok"
     status: open
   - epic: 7
-    action: "AE7-4 (quality, carries AE6-1): DPR>1 cross-page smoke backfill (2.11 box-select, 3.3 cross-page grouped-delete) still unconfirmed; no Epic-7 occasion. Carry to the next epic touching cross-page PDF selection (Epic 9 reader-fidelity); adopt programmatic-Range + trusted-pointerup as the standard then"
+    action: "AE7-4 (quality, carries AE6-1): DPR>1 cross-page smoke backfill (2.11 box-select, 3.3 cross-page grouped-delete) still unconfirmed; no Epic-7 occasion. Carry to the next epic touching cross-page PDF selection (Epic 8 reader-fidelity, renumbered from Epic 9 on 2026-07-11); adopt programmatic-Range + trusted-pointerup as the standard then"
     owner: "Wonseok"
     status: open
   - epic: 7
