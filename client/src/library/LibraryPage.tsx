@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowCounterClockwise, Star, Trash, TrashSimple } from "@phosphor-icons/react";
 import "@/library/LibraryPage.css";
 import Toast from "@/components/Toast/Toast";
 import CollectionTable from "@/library/CollectionTable/CollectionTable";
 import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog";
 import EmptyDropzone from "@/components/EmptyDropzone/EmptyDropzone";
-import AddMenu from "@/library/AddMenu/AddMenu";
 import FolderPanel from "@/library/FolderPanel/FolderPanel";
-import MoveMenu from "@/library/MoveMenu";
-import DisplayMenu from "@/library/TableControls/DisplayMenu";
+import LibraryToolbar from "@/library/LibraryToolbar";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
 import { useAuthorsEdit } from "@/library/useAuthorsEdit";
@@ -25,55 +22,16 @@ import {
   recentGroupLabels,
   type FolderSelection,
 } from "@/library/folderFilter";
-import { stripPdfExtension } from "@/library/row";
-import { fetchHealth, type CollectionRow, type Folder } from "@/api/client";
-
-const PDF_EXTENSION = /\.pdf$/i;
+import {
+  emptySelectionMessage,
+  isPdfFile,
+  purgeDialogTitle,
+  selectionLabel,
+  visibleColumnsForSelection,
+} from "@/library/libraryLens";
+import { fetchHealth, type CollectionRow } from "@/api/client";
 
 type ToastState = { message: string; variant: "error" | "info" };
-
-/** The quiet empty-line copy for a filtered-to-nothing selection (Story 7.2:
- *  a small SHOULD, distinct from `EmptyDropzone`'s zero-library state). */
-function emptySelectionMessage(selection: FolderSelection): string {
-  if (selection.kind === "uncategorized") return "No uncategorized papers.";
-  if (selection.kind === "folder") return "No papers in this folder.";
-  if (selection.kind === "trash") return "Trash is empty.";
-  if (selection.kind === "recent") return "No recent papers.";
-  if (selection.kind === "starred") return "No starred papers.";
-  return "No papers to show.";
-}
-
-/** The toolbar count's "in ___" target (fix request: it read "in library" for
- *  every view, even a selected folder). Folders are a flat list keyed by id
- *  (no tree walk needed - a name lookup is a plain find). */
-function selectionLabel(selection: FolderSelection, folders: Folder[]): string {
-  if (selection.kind === "uncategorized") return "Uncategorized";
-  if (selection.kind === "folder") return folders.find((f) => f.id === selection.id)?.name ?? "folder";
-  if (selection.kind === "trash") return "Trash";
-  if (selection.kind === "recent") return "Recent";
-  if (selection.kind === "starred") return "Starred";
-  return "library";
-}
-
-/** A folder pick returns every file type in the directory tree; this filters
- *  it down to PDFs before handing anything to `uploadFiles` (a folder upload
- *  silently skips non-PDF clutter rather than surfacing a failure toast per
- *  non-PDF file). */
-function isPdfFile(file: File): boolean {
-  return file.type === "application/pdf" || PDF_EXTENSION.test(file.name);
-}
-
-/** Purge confirm title: names the one paper, or counts a bulk selection /
- *  Empty Trash (both funnel through the same dialog). */
-function purgeDialogTitle(targets: CollectionRow[]): string {
-  if (targets.length === 0) return "";
-  if (targets.length === 1) {
-    const target = targets[0];
-    const name = target.title ?? (target.filename ? stripPdfExtension(target.filename) : "Untitled");
-    return `Purge "${name}"`;
-  }
-  return `Purge ${targets.length} papers`;
-}
 
 /**
  * Library route (`/`, Story 6.1 shell + Story 6.3 table + Story 6.4 bulk
@@ -204,16 +162,9 @@ export default function LibraryPage() {
     () => applyTableView(filterPapers(papers, selection, recentNow)),
     [papers, selection, applyTableView, recentNow],
   );
-  // Inside a folder, the Location column is redundant (fix request): the
-  // folder IS the location, so it's suppressed regardless of the user's own
-  // Display-menu toggle. All/Recent/Starred/Trash still show it (a mixed set
-  // of folders/Uncategorized). The underlying `hiddenColumns` toggle state is
-  // untouched, so leaving the folder restores whatever the user had set.
+  // Folder view hides the redundant Location column (see `visibleColumnsForSelection`).
   const visibleColumns = useMemo(
-    () =>
-      selection.kind === "folder"
-        ? tableView.visibleColumns.filter((c) => c.key !== "location")
-        : tableView.visibleColumns,
+    () => visibleColumnsForSelection(tableView.visibleColumns, selection),
     [tableView.visibleColumns, selection],
   );
   // Toolbar Star state derives from the selection (AC-6): a mixed selection
@@ -311,77 +262,24 @@ export default function LibraryPage() {
           }}
         >
           {isTableLayout && (
-            <div className="library-toolbar">
-              {loading && papers.length === 0 && pending.length === 0 ? (
-                <span
-                  className="collection-table__skeleton-cell library-toolbar__count-skeleton"
-                  aria-hidden="true"
-                />
-              ) : (
-                <p className="library-toolbar__count">
-                  {visiblePapers.length} files in {selectionLabel(selection, folders)}
-                </p>
-              )}
-              <div className="library-toolbar__actions">
-                <DisplayMenu hiddenColumns={tableView.hiddenColumns} onToggleColumn={tableView.toggleColumn} />
-                {selection.kind === "trash" ? (
-                  <>
-                    <button
-                      type="button"
-                      className="toolbar-button"
-                      disabled={selectedIds.size === 0}
-                      onClick={handleRestoreRequest}
-                    >
-                      <ArrowCounterClockwise aria-hidden />
-                      Restore
-                    </button>
-                    <button
-                      type="button"
-                      className="toolbar-button"
-                      disabled={selectedIds.size === 0}
-                      onClick={() =>
-                        setPurgeTargets(visiblePapers.filter((p) => selectedIds.has(p.doc_id)))
-                      }
-                    >
-                      <Trash aria-hidden />
-                      Purge
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <MoveMenu
-                      folders={folders}
-                      onMove={(folderId) => handleMoveRequest(Array.from(selectedIds), folderId)}
-                      label="Move"
-                      disabled={selectedIds.size === 0}
-                    />
-                    <button
-                      type="button"
-                      className="toolbar-button"
-                      disabled={selectedIds.size === 0}
-                      aria-pressed={allStarred}
-                      onClick={handleStarRequest}
-                    >
-                      <Star aria-hidden weight={allStarred ? "fill" : "regular"} />
-                      {allStarred ? "Unstar" : "Star"}
-                    </button>
-                    <button
-                      type="button"
-                      className="toolbar-button"
-                      disabled={selectedIds.size === 0}
-                      onClick={handleDeleteRequest}
-                    >
-                      <TrashSimple aria-hidden />
-                      Delete
-                    </button>
-                  </>
-                )}
-                <AddMenu
-                  onFileUpload={() => fileInputRef.current?.click()}
-                  onFolderUpload={() => folderInputRef.current?.click()}
-                />
-              </div>
-            </div>
+            <LibraryToolbar
+              showCountSkeleton={loading && papers.length === 0 && pending.length === 0}
+              count={visiblePapers.length}
+              countLabel={selectionLabel(selection, folders)}
+              hiddenColumns={tableView.hiddenColumns}
+              onToggleColumn={tableView.toggleColumn}
+              isTrash={selection.kind === "trash"}
+              hasSelection={selectedIds.size > 0}
+              allStarred={allStarred}
+              folders={folders}
+              onMove={(folderId) => handleMoveRequest(Array.from(selectedIds), folderId)}
+              onStar={handleStarRequest}
+              onDelete={handleDeleteRequest}
+              onRestore={handleRestoreRequest}
+              onPurge={() => setPurgeTargets(visiblePapers.filter((p) => selectedIds.has(p.doc_id)))}
+              onFileUpload={() => fileInputRef.current?.click()}
+              onFolderUpload={() => folderInputRef.current?.click()}
+            />
           )}
           <input
             ref={fileInputRef}

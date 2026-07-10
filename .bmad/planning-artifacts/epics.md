@@ -1287,7 +1287,7 @@ DESIGN.md (line 567) explicitly leaves Phase-2 Library surfaces **not yet styled
 - **LFR-22** Delete = soft-delete to Trash; annotations retained → Epic 7
 - **LFR-23** Restore a Trash item → Epic 7
 - **LFR-24** Purge a Trash item permanently → Epic 7
-- **LFR-25..29** Remote sync (WebDAV/Google Drive, whole-dir mirror, LWW) → Epic 8 **(DEFERRED, not built this sprint)**
+- **LFR-25..29** Remote sync (WebDAV/Google Drive, whole-dir mirror, LWW) → deferred follow-on, UNNUMBERED (PRD F8/FR-25..29 + reserved architecture sync seam) **(DEFERRED; un-numbered 2026-07-11 correct-course, no longer "Epic 8")**
 - **LFR-30** Recent view (last-opened order, capped 50) → Epic 7 **(added 2026-07-07)**
 - **LFR-31** Star/unstar a paper; filled-star title marker + Starred view → Epic 7 **(added 2026-07-07)**
 - **LFR-32** Venue / Year / DOI columns (Crossref-sourced, sortable + hideable, new imports only) → Epic 7 **(added 2026-07-07)**
@@ -1308,9 +1308,9 @@ Shape the collection into nested custom folders, multi-select and batch-move pap
 **Architecture:** AL-5 (trash + folder lifecycle), AL-6 (folder + set-based org endpoints)
 **Goals:** G3 (find and open any paper in seconds)
 
-### Epic 8: Remote sync (DEFERRED: captured, NOT built this sprint)
-> A separate follow-on epic requiring its own discovery. A switchable sync-backend interface (WebDAV first, Google Drive a later adapter behind the same seam) that mirrors the whole `~/.paper-mate` directory (PDFs + metadata + folders + annotations) and converges across devices with last-write-wins by timestamp. Deferred per the PRD (F8) and architecture spine. Hard problems resolved in that epic's own discovery: trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest.
-**LFRs covered:** LFR-25, LFR-26, LFR-27, LFR-28, LFR-29: **not decomposed into stories this sprint**
+### Remote sync (DEFERRED, UNNUMBERED follow-on; was "Epic 8")
+> Removed from the numbered epic roadmap 2026-07-11 (correct-course, user: "not important right now"). Deprioritized, NOT deleted: the capability stays captured in PRD F8 (FR-25..29) and the architecture spine's reserved switchable-backend sync seam. A switchable sync-backend interface (WebDAV first, Google Drive a later adapter behind the same seam) that mirrors the whole `~/.paper-mate` directory (PDFs + metadata + folders + annotations) and converges across devices with last-write-wins by timestamp. If picked up as a future epic it runs its own discovery: trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest.
+**LFRs covered:** LFR-25, LFR-26, LFR-27, LFR-28, LFR-29: **captured, not decomposed into stories, no epic number**
 
 ## Epic 6: The library becomes home
 
@@ -1907,15 +1907,15 @@ So that Epic 7 closes on legible modular seams instead of an over-large table co
 
 > **Out of scope (this story):** any new organize capability, column, or lens (7.9-7.11 are the feature stories; this is cleanup only); the descoped Note file-type (7.6). **Open design calls for create-story:** whether the shared optimistic-op seam is a hook factory vs a descriptor map; how far to split `CollectionTable` without over-fragmenting; whether the backend split is two modules (`folders` + `paper_org`) or a lighter dedupe-in-place; whether the Story 7.11 cell-type registry is already the right seam or needs further generalization.
 
-## Epic 8: Remote sync (DEFERRED)
+## Remote sync (DEFERRED, unnumbered)
 
-Not decomposed into stories this sprint. See the Library Epic List entry and the architecture spine's Deferred section. LFR-25..29 remain captured; the sync epic runs its own discovery (trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest) before any story is written.
+> Removed from the numbered epic roadmap 2026-07-11 (correct-course, user: "not important right now"). Deprioritized, NOT deleted: the capability stays captured in PRD F8 (FR-25..29) and the architecture spine's reserved switchable-backend sync seam; LFR-25..29 remain mapped. It runs its own discovery (trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest) if/when it is picked up as a future epic.
 
-## Epic 9: Reader fidelity round 2 (post-v1, Phase-1.5)
+## Epic 8: Reader fidelity round 2 (post-v1, Phase-1.5)
 
-> Added 2026-07-07 via correct-course (`sprint-change-proposal-2026-07-07-deferred-review.md`). A deferred-work review removed every reader-fidelity item that had since shipped (4.1 copy/selection + de-flake, 4.2A gutter split, 3.7 convert, 5.1 settings, 5.5 hide-all, 5.6 layered-Esc, 5.0/5.3/5.4 refactors, 3.1 memo move/resize, 7.8 Starred-lens column) and promoted the one still-open, still-wanted reader bug into this epic. Theme: a fidelity defect that survives on top of Story 4.1's copy fix. Same posture as Epic 4, fix correctness, do not add capability, no new FRs; sequenced post-v1.
+> Added 2026-07-07 via correct-course (`sprint-change-proposal-2026-07-07-deferred-review.md`) as Epic 9; RENUMBERED Epic 9 → Epic 8 on 2026-07-11 (correct-course: Remote sync un-numbered, this took its slot). A deferred-work review removed every reader-fidelity item that had since shipped (4.1 copy/selection + de-flake, 4.2A gutter split, 3.7 convert, 5.1 settings, 5.5 hide-all, 5.6 layered-Esc, 5.0/5.3/5.4 refactors, 3.1 memo move/resize, 7.8 Starred-lens column) and promoted the one still-open, still-wanted reader bug into this epic. Theme: a fidelity defect that survives on top of Story 4.1's copy fix. Same posture as Epic 4, fix correctness, do not add capability, no new FRs; sequenced post-v1.
 
-### Story 9.1: Paragraph-aware copy (join soft-wrapped lines)
+### Story 8.1: Paragraph-aware copy (join soft-wrapped lines)
 
 > deferred-work: "copied single-visual-line text copies as MULTIPLE clipboard lines" (2026-07-07). This is the mirror-image regression of the 4.1 fix: Story 4.1 faithfully reproduced pdf.js's `TextLayer`, which appends a `<br role="presentation">` after every text item with `hasEOL: true`. A PDF marks EVERY visually distinct line `hasEOL` (it carries no paragraph metadata), so a paragraph that soft-wraps across several lines now copies with a hard line break at every wrap, not just at real paragraph ends. Confirmed upstream (Firefox's built-in pdf.js viewer has the identical characteristic), not a Paper Mate regression.
 

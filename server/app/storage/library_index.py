@@ -1,4 +1,4 @@
-"""The collection index: ``library.json`` (AD-L1/AD-L7, Story 6.2).
+"""The collection index core: ``library.json`` (AD-L1/AD-L7, Story 6.2).
 
 ``library.json`` is the authoritative cross-doc index (folder tree, membership,
 trash, order) plus a non-authoritative meta-derived display cache, refreshed on
@@ -6,16 +6,21 @@ every write. Every mutation is a serialized read-modify-write under ONE
 process-level lock (AD-L7); reads are lock-free — the atomic temp+rename write
 means a reader always sees a complete old-or-new file, never a torn one.
 
-This module also homes ``update_meta_and_reindex`` — the shared write core that
-re-reads ``meta.json``, applies an update, guards the purge TOCTOU, writes, and
-refreshes the index cache under the same lock. It composes ``meta_store`` (calls
-are module-qualified so a test can monkeypatch ``meta_store.read`` and have the
-production TOCTOU path exercise the patched name).
+This module owns the index-*core*: the single serialized ``mutate_index`` writer
+and its lock, the read/default/write primitives, ``read_library``, the
+``_cache_from_meta`` projection, ``upsert_paper_entry``, ``reconcile_library``,
+and ``update_meta_and_reindex`` (the shared meta-write core). The folder-tree
+operations live in ``folders`` and the set-based paper-org mutators in
+``paper_org`` — both import ``mutate_index``/``read_library`` from here, so the
+lock stays the ONE obvious serialized ``library.json`` writer (AL-7).
+
+``update_meta_and_reindex`` composes ``meta_store`` (calls are module-qualified
+so a test can monkeypatch ``meta_store.read`` and have the production TOCTOU
+path exercise the patched name).
 """
 
 import json
 import threading
-import uuid
 from collections.abc import Callable
 
 from pydantic import ValidationError
@@ -27,7 +32,6 @@ from app.storage.errors import (
     CorruptLibraryError,
     CorruptMetadataError,
     DocumentNotFoundError,
-    FolderNotFoundError,
     StorageError,
 )
 
@@ -157,210 +161,6 @@ def read_library() -> Library:
     except (ValidationError, TypeError, KeyError) as exc:
         raise CorruptLibraryError(f"invalid library.json shape: {exc}") from exc
     return Library(papers=papers, folders=folders)
-
-
-def _find_folder(folders: list[dict], folder_id: str) -> dict | None:
-    return next((f for f in folders if f["id"] == folder_id), None)
-
-
-def _subtree_ids(folders: list[dict], root_id: str) -> set[str]:
-    """The target id plus every transitive descendant (walking ``parent_id``
-    edges), for a subtree delete (AL-5)."""
-    children_by_parent: dict[str | None, list[str]] = {}
-    for f in folders:
-        children_by_parent.setdefault(f["parent_id"], []).append(f["id"])
-    ids = {root_id}
-    frontier = [root_id]
-    while frontier:
-        for child_id in children_by_parent.get(frontier.pop(), []):
-            if child_id not in ids:
-                ids.add(child_id)
-                frontier.append(child_id)
-    return ids
-
-
-def create_folder(name: str, parent_id: str | None) -> Folder:
-    """Append a folder to the tree (AL-5, AL-7). ``parent_id``, if given, must
-    reference an existing folder, else ``FolderNotFoundError``. A blank/
-    whitespace ``name`` is rejected here too (``StorageError``), not just at
-    the route's Pydantic boundary, so a direct storage caller can't persist one."""
-
-    def _create(index: dict) -> dict:
-        clean_name = name.strip()
-        if not clean_name:
-            raise StorageError("Folder name required")
-        if parent_id is not None and _find_folder(index["folders"], parent_id) is None:
-            raise FolderNotFoundError(f"no folder with id {parent_id!r}")
-        index["folders"].append({"id": str(uuid.uuid4()), "name": clean_name, "parent_id": parent_id})
-        return index
-
-    index = mutate_index(_create)
-    return Folder.model_validate(index["folders"][-1])
-
-
-def rename_folder(folder_id: str, name: str) -> Folder:
-    """Change only a folder's ``name`` (AL-5). Membership is keyed by id, so
-    a rename never orphans a paper. Missing id -> ``FolderNotFoundError``. A
-    blank/whitespace ``name`` -> ``StorageError`` (see ``create_folder``)."""
-
-    def _rename(index: dict) -> dict:
-        clean_name = name.strip()
-        if not clean_name:
-            raise StorageError("Folder name required")
-        folder = _find_folder(index["folders"], folder_id)
-        if folder is None:
-            raise FolderNotFoundError(f"no folder with id {folder_id!r}")
-        folder["name"] = clean_name
-        return index
-
-    index = mutate_index(_rename)
-    return Folder.model_validate(_find_folder(index["folders"], folder_id))
-
-
-def delete_folder(folder_id: str) -> Library:
-    """Delete a folder and its whole subtree, re-homing every paper in it to
-    Uncategorized (AL-5, ratifies PRD A1: NEVER delete a paper). Missing id ->
-    ``FolderNotFoundError``. The removal + re-home run inside one ``mutate_index``
-    mutator, so the subtree delete is atomic under ``_index_lock``."""
-
-    def _delete(index: dict) -> dict:
-        if _find_folder(index["folders"], folder_id) is None:
-            raise FolderNotFoundError(f"no folder with id {folder_id!r}")
-        removed = _subtree_ids(index["folders"], folder_id)
-        index["folders"] = [f for f in index["folders"] if f["id"] not in removed]
-        for paper in index["papers"]:
-            if paper["folder_id"] in removed:
-                paper["folder_id"] = None
-        return index
-
-    mutate_index(_delete)
-    return read_library()
-
-
-def move_papers(doc_ids: list[str], folder_id: str | None) -> Library:
-    """Set-based move (AL-5, AL-6, AD-L6): assign every id in ``doc_ids`` to
-    ``folder_id`` (``None`` clears membership, i.e. Uncategorized). A move
-    replaces any prior folder, so a paper belongs to at most one folder.
-
-    Validation runs BEFORE any mutation inside the one ``mutate_index``
-    mutator: a bad ``folder_id`` -> ``FolderNotFoundError``, any unknown id in
-    ``doc_ids`` -> ``DocumentNotFoundError`` — either aborts with no partial
-    write (all-or-nothing). ``trashed``, ``order``, and every other paper are
-    untouched. Moving into the same folder is an idempotent no-op write."""
-
-    def _move(index: dict) -> dict:
-        if folder_id is not None and _find_folder(index["folders"], folder_id) is None:
-            raise FolderNotFoundError(f"no folder with id {folder_id!r}")
-        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
-        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
-        if missing:
-            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
-        for doc_id in doc_ids:
-            papers_by_id[doc_id]["folder_id"] = folder_id
-        return index
-
-    mutate_index(_move)
-    return read_library()
-
-
-def trash_papers(doc_ids: list[str]) -> Library:
-    """Set-based soft-delete (AL-5.1, AL-6, AD-L6): flip ``trashed`` to
-    ``True`` for every id in ``doc_ids``. Mirrors ``move_papers``'s
-    validate-before-mutate shape: any unknown id -> ``DocumentNotFoundError``,
-    all-or-nothing, no partial write. ``folder_id``, ``order``, and every
-    other paper are untouched (a trashed paper keeps its remembered folder)."""
-
-    def _trash(index: dict) -> dict:
-        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
-        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
-        if missing:
-            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
-        for doc_id in doc_ids:
-            papers_by_id[doc_id]["trashed"] = True
-        return index
-
-    mutate_index(_trash)
-    return read_library()
-
-
-def restore_papers(doc_ids: list[str]) -> Library:
-    """Set-based restore (AL-5.2, AL-6, AD-L6): flip ``trashed`` to ``False``
-    for every id in ``doc_ids``. Same validate-before-mutate shape as
-    ``move_papers``/``trash_papers``. ``folder_id`` is left as-is: it is the
-    remembered folder, and a folder deleted while a paper was trashed already
-    re-homed it to Uncategorized (``delete_folder`` re-homes every paper in
-    the removed subtree regardless of ``trashed``), so no dangling-folder
-    guard is needed here."""
-
-    def _restore(index: dict) -> dict:
-        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
-        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
-        if missing:
-            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
-        for doc_id in doc_ids:
-            papers_by_id[doc_id]["trashed"] = False
-        return index
-
-    mutate_index(_restore)
-    return read_library()
-
-
-def star_papers(doc_ids: list[str]) -> Library:
-    """Set-based star (AL-5, AL-6, AD-L6): flip ``starred`` to ``True`` for
-    every id in ``doc_ids``. Same validate-before-mutate shape as
-    ``trash_papers``/``restore_papers``. ``folder_id``, ``order``, ``trashed``,
-    and every other paper are untouched."""
-
-    def _star(index: dict) -> dict:
-        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
-        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
-        if missing:
-            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
-        for doc_id in doc_ids:
-            papers_by_id[doc_id]["starred"] = True
-        return index
-
-    mutate_index(_star)
-    return read_library()
-
-
-def unstar_papers(doc_ids: list[str]) -> Library:
-    """Set-based unstar (AL-5, AL-6, AD-L6): flip ``starred`` to ``False`` for
-    every id in ``doc_ids``. Same validate-before-mutate shape as
-    ``trash_papers``/``restore_papers``."""
-
-    def _unstar(index: dict) -> dict:
-        papers_by_id = {p["doc_id"]: p for p in index["papers"]}
-        missing = [doc_id for doc_id in doc_ids if doc_id not in papers_by_id]
-        if missing:
-            raise DocumentNotFoundError(f"no document with id {missing[0]!r}")
-        for doc_id in doc_ids:
-            papers_by_id[doc_id]["starred"] = False
-        return index
-
-    mutate_index(_unstar)
-    return read_library()
-
-
-def purge_entry(doc_id: str) -> Library:
-    """Drop a paper's ``library.json`` entry (AL-5.3, AL-7).
-
-    Thin helper so ``documents.purge_document`` can prune the index entry
-    under the same ``_index_lock`` it holds for the on-disk ``rmtree`` --
-    without exposing the lock object itself across the module boundary.
-    Caller MUST have already removed the on-disk dir (crash-safe order: dir
-    first, then entry -- see ``documents.purge_document``). Unknown id ->
-    ``DocumentNotFoundError``."""
-
-    def _purge(index: dict) -> dict:
-        before = len(index["papers"])
-        index["papers"] = [p for p in index["papers"] if p["doc_id"] != doc_id]
-        if len(index["papers"]) == before:
-            raise DocumentNotFoundError(f"no document with id {doc_id!r}")
-        return index
-
-    mutate_index(_purge)
-    return read_library()
 
 
 def reconcile_library() -> None:

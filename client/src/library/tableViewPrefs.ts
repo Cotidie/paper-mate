@@ -7,14 +7,11 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { COLUMNS, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, type ColumnKey } from "@/library/tableView";
 import {
-  COLUMNS,
-  MAX_COLUMN_WIDTH,
-  MIN_COLUMN_WIDTH,
   moveColumn as moveColumnInOrder,
   reorderColumns as reorderColumnsInOrder,
-  type ColumnKey,
-} from "@/library/tableView";
+} from "@/library/columnReorder";
 
 const DEFAULT_ORDER: ColumnKey[] = COLUMNS.map((c) => c.key);
 // File type hidden by default (Story 7.10 fix request; was DOI).

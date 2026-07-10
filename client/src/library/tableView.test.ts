@@ -1,12 +1,7 @@
 import { describe, it, expect } from "vitest";
-import {
-  COLUMNS,
-  moveColumn,
-  reorderColumns,
-  sortRows,
-  type ColumnKey,
-  type SortState,
-} from "@/library/tableView";
+import { COLUMNS, type ColumnKey, type SortState } from "@/library/tableView";
+import { sortRows } from "@/library/columnSort";
+import { moveColumn, reorderColumns } from "@/library/columnReorder";
 import type { CollectionRow } from "@/api/client";
 
 describe("COLUMNS order (Story 7.10 fix request)", () => {

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, type Dispatch, type SetStateAction } from "react";
 import {
   trashPapers as apiTrashPapers,
   restorePapers as apiRestorePapers,
   purgeDoc as apiPurgeDoc,
-  type CollectionRow,
   type Library,
 } from "@/api/client";
+import { patchField, removeRow, useOptimisticLibraryOp } from "./useOptimisticLibraryOp";
 
 interface UseTrashPapersOptions {
   /** Reconcile the collection (owned by `useCollection`). */
@@ -16,139 +16,44 @@ interface UseTrashPapersOptions {
 
 /**
  * The trash/restore/purge lifecycle (Story 7.5, AC-1/3/4) against
- * `POST /api/library/trash|restore` and `DELETE /api/docs/{id}`. Mirrors
- * `useMovePapers`: optimistic update, reconciled from the returned `Library`
- * on resolve, reverted on failure. A single monotonic `opSeqRef` is shared
- * across all three verbs so a slow trash can't clobber a faster later
- * restore of the same paper (or vice versa).
+ * `POST /api/library/trash|restore` and `DELETE /api/docs/{id}`. Three configs
+ * of the shared {@link useOptimisticLibraryOp} seam (Story 7.12 AC-3): each is
+ * optimistic, reconciled from the returned `Library`, reverted on failure.
+ * They share ONE `run`, so trash/restore/purge share one monotonic guard — a
+ * slow trash can't clobber a faster later restore of the same paper. `purge`
+ * is the row-remove variant ({@link removeRow}): it splices its removed row
+ * back at its old index on failure.
  */
 export function useTrashPapers({ setLibrary, onToast }: UseTrashPapersOptions) {
-  const mountedRef = useRef(true);
-  const opSeqRef = useRef(0);
-
-  useEffect(() => {
-    // StrictMode dev double-invokes effects; reset to true on setup, or the
-    // fake cleanup permanently latches this false (Epic 6 retro lesson).
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const run = useOptimisticLibraryOp({ setLibrary, onToast });
 
   const trashPapers = useCallback(
-    (docIds: string[]) => {
-      const seq = ++opSeqRef.current;
-      const priorTrashed = new Map<string, boolean>();
-
-      setLibrary((prev) => {
-        if (!prev) return prev;
-        const idSet = new Set(docIds);
-        return {
-          ...prev,
-          papers: prev.papers.map((p) => {
-            if (!idSet.has(p.doc_id)) return p;
-            priorTrashed.set(p.doc_id, p.trashed);
-            return { ...p, trashed: true };
-          }),
-        };
-      });
-
-      apiTrashPapers(docIds)
-        .then((library: Library) => {
-          if (!mountedRef.current || seq !== opSeqRef.current) return;
-          setLibrary(library);
-        })
-        .catch(() => {
-          if (!mountedRef.current || seq !== opSeqRef.current) return;
-          setLibrary((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  papers: prev.papers.map((p) =>
-                    priorTrashed.has(p.doc_id) ? { ...p, trashed: priorTrashed.get(p.doc_id)! } : p,
-                  ),
-                }
-              : prev,
-          );
-          onToast("Couldn't delete that paper.", "error");
-        });
-    },
-    [setLibrary, onToast],
+    (docIds: string[]) =>
+      run(
+        { apiFn: apiTrashPapers, patch: patchField("trashed", true), errorCopy: "Couldn't delete that paper." },
+        docIds,
+      ),
+    [run],
   );
 
   const restorePapers = useCallback(
-    (docIds: string[]) => {
-      const seq = ++opSeqRef.current;
-      const priorTrashed = new Map<string, boolean>();
-
-      setLibrary((prev) => {
-        if (!prev) return prev;
-        const idSet = new Set(docIds);
-        return {
-          ...prev,
-          papers: prev.papers.map((p) => {
-            if (!idSet.has(p.doc_id)) return p;
-            priorTrashed.set(p.doc_id, p.trashed);
-            return { ...p, trashed: false };
-          }),
-        };
-      });
-
-      apiRestorePapers(docIds)
-        .then((library: Library) => {
-          if (!mountedRef.current || seq !== opSeqRef.current) return;
-          setLibrary(library);
-          onToast("restored from Trash", "info");
-        })
-        .catch(() => {
-          if (!mountedRef.current || seq !== opSeqRef.current) return;
-          setLibrary((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  papers: prev.papers.map((p) =>
-                    priorTrashed.has(p.doc_id) ? { ...p, trashed: priorTrashed.get(p.doc_id)! } : p,
-                  ),
-                }
-              : prev,
-          );
-          onToast("Couldn't restore that paper.", "error");
-        });
-    },
-    [setLibrary, onToast],
+    (docIds: string[]) =>
+      run(
+        {
+          apiFn: apiRestorePapers,
+          patch: patchField("trashed", false),
+          errorCopy: "Couldn't restore that paper.",
+          successToast: { message: "restored from Trash", variant: "info" },
+        },
+        docIds,
+      ),
+    [run],
   );
 
   const purge = useCallback(
-    (docId: string) => {
-      const seq = ++opSeqRef.current;
-      let removedRow: CollectionRow | undefined;
-      let removedIndex = -1;
-
-      setLibrary((prev) => {
-        if (!prev) return prev;
-        removedIndex = prev.papers.findIndex((p) => p.doc_id === docId);
-        if (removedIndex === -1) return prev;
-        removedRow = prev.papers[removedIndex];
-        return { ...prev, papers: prev.papers.filter((p) => p.doc_id !== docId) };
-      });
-
-      apiPurgeDoc(docId)
-        .then((library: Library) => {
-          if (!mountedRef.current || seq !== opSeqRef.current) return;
-          setLibrary(library);
-        })
-        .catch(() => {
-          if (!mountedRef.current || seq !== opSeqRef.current) return;
-          setLibrary((prev) => {
-            if (!prev || !removedRow) return prev;
-            const papers = [...prev.papers];
-            papers.splice(Math.min(removedIndex, papers.length), 0, removedRow);
-            return { ...prev, papers };
-          });
-          onToast("Couldn't purge that paper.", "error");
-        });
-    },
-    [setLibrary, onToast],
+    (docId: string) =>
+      run({ apiFn: apiPurgeDoc, patch: removeRow, errorCopy: "Couldn't purge that paper." }, docId),
+    [run],
   );
 
   return { trashPapers, restorePapers, purge };
