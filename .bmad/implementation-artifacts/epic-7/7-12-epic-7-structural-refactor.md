@@ -132,7 +132,7 @@ Read these before starting; they prevent chasing ghosts.
 
 - [x] **Task 8: Version + status (AC: 8)**
   - [x] Bumped PATCH in `server/pyproject.toml` (`0.5.10` → `0.5.11`); re-ran `uv lock`. Only version touch; no MAJOR/MINOR, no schema-version change.
-  - [ ] **Cross-model Codex `bmad-code-review` (AE-6)** on the diff; resolve High/Med before done. (Runs after dev-story per the workflow.)
+  - [x] **Cross-model Codex `bmad-code-review` (AE-6)** on the `baseline..HEAD` diff (codex-cli 0.144.1, read-only sandbox, followed the skill's Blind Hunter / Edge Case Hunter / Acceptance Auditor layers). **Verdict: Approve — clean, no High/Med/Low.** Verified semantic preservation across the optimistic ops, the backend mutators, the cell renderers, the selection/drag invariants, AD-9 layering, and both backend landmines; client schema byte-identical. Backend pytest not run per the sandbox constraint (host run: 290 passed). Nothing to resolve.
   - [x] Branch `story-7-12-epic-7-structural-refactor` off `main` (cut at create-story). Flipped `sprint-status.yaml` `7-12-epic-7-structural-refactor` → `done` (AE3-1: normally at PR merge; flipped early on user request). This is the LAST Epic 7 story: Epic 7 can now close.
 
 ## Dev Notes
@@ -292,3 +292,4 @@ Pure structure-only refactor of the settled Epic 7 surface. No behavior/API/sche
 ### Change Log
 
 - 2026-07-11: Epic 7 structural refactor implemented (Stories 5.0/5.3/5.4/6.8 precedent). Server: `library_index.py` → index-core + `folders.py` + `paper_org.py` behind the byte-identical `storage` facade, four bool-flip mutators onto one `_apply_to_papers` helper, `routes/library.py` set-op handlers/`responses=` deduped. Client: near-twin org-op hooks → one `useOptimisticLibraryOp` seam; `CollectionTable` decomposed (`ColumnHeader`/`TableSkeleton`/`useColumnDrag`/`useRowSelection`/`dragPreview`/`cells` registry) with `PaperRow`'s `switch` retired for AC-4; `LibraryPage` reduced to a composition root (`libraryLens`/`LibraryToolbar`); `tableView.ts` split into descriptor + `columnSort` + `columnReorder`. Contract byte-identical (openapi diff = `info.version` only; `schema.d.ts` unchanged). Suites green (backend 290, client 1376, typecheck, no-raw-values). Live re-smoke passed. Version 0.5.10 → 0.5.11. Status → review.
+- 2026-07-11: Cross-model Codex `bmad-code-review` (AE-6) on the diff → Approve, clean (no High/Med/Low). Status → done (flipped early on user request; normally at PR merge).
