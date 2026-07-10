@@ -117,7 +117,7 @@ def apply_extraction(
     doc_id: str,
     *,
     title: str | None,
-    authors: str | None,
+    authors_list: list[str],
     status: DocStatus,
     doi: str | None,
     venue: str | None,
@@ -125,8 +125,10 @@ def apply_extraction(
 ) -> None:
     """Persist a background extraction's result — the ONLY writer of it (AD-L2).
 
-    ``authors`` is the display string (storage owns the domain ``list[str]``
-    -> ``str`` join). A doc purged mid-extraction raises
+    ``authors_list`` is the domain's honest ``list[str]`` shape (Story 7.11);
+    storage/the model derive the joined ``authors`` display string from it
+    (moved out of the extraction route, aligning code with this docstring's
+    long-standing claim). A doc purged mid-extraction raises
     ``DocumentNotFoundError``; the orchestrator swallows it (best-effort,
     never a crash). Storage imports nothing from ``domain``.
     """
@@ -134,7 +136,7 @@ def apply_extraction(
         doc_id,
         {
             "title": title,
-            "authors": authors,
+            "authors_list": authors_list,
             "status": status,
             "doi": doi,
             "venue": venue,
@@ -143,11 +145,12 @@ def apply_extraction(
     )
 
 
-def update_doc_meta(doc_id: str, updates: dict[str, str | int | None]) -> DocMeta:
+def update_doc_meta(doc_id: str, updates: dict[str, str | int | list[str] | None]) -> DocMeta:
     """Persist a user-driven title/authors/venue/year edit (Story 6.6, AC-2/
-    AC-8/AC-9; venue/year added by a Story 7.9 fix request).
+    AC-8/AC-9; venue/year added by a Story 7.9 fix request; ``authors`` ->
+    ``authors_list`` in Story 7.11).
 
-    ``updates`` keys are ⊆ ``{"title", "authors", "venue", "year"}``; the
+    ``updates`` keys are ⊆ ``{"title", "authors_list", "venue", "year"}``; the
     string fields are already normalized (``.strip()``, empty -> ``None``)
     by the route. Reuses the same
     re-read/TOCTOU-guard/write/reindex core as ``apply_extraction`` — never a

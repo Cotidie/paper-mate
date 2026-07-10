@@ -10,9 +10,11 @@ OpenAPI by an injection in ``app.main`` (no endpoint references yet), and the
 client consumes a generated type for its in-memory store.
 """
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.authors import join_authors, split_authors
 
 #: The document extraction lifecycle (AD-L4, Story 6.5): a new import lands
 #: ``extracting``; the background pipeline settles it to ``ready`` (Crossref
@@ -67,6 +69,15 @@ class DocMeta(BaseModel):
     via defaults. A 6.2 import has no extraction pipeline yet, so it lands
     immediately at ``status="ready"`` with ``authors=None``; Story 6.5 drives
     the ``extracting -> ready | enrich-skipped | parse-failed`` transitions.
+
+    Story 7.11: ``authors_list`` is the authoritative multi-value field
+    (additive, default ``[]``, no ``schema_version`` bump); ``authors`` is
+    now a derived display cache, always the join of ``authors_list``, never
+    independently authored. Two validators keep the invariant: a
+    ``mode="before"`` legacy heal (a pre-7.11 file has ``authors`` but no
+    ``authors_list`` key at all -> split it), and a ``mode="after"`` forward
+    derive (``authors_list`` -> ``authors``, the single writer of the
+    string). See ``app.authors`` for the join/split delimiter.
     """
 
     filename: str
@@ -75,6 +86,7 @@ class DocMeta(BaseModel):
     added: str  # ISO-8601 UTC
     last_opened: str  # ISO-8601 UTC
     authors: str | None = None
+    authors_list: list[str] = []
     file_type: Literal["pdf", "note"] = "pdf"
     status: DocStatus = "ready"
     # Additive (Story 7.9, no schema_version bump): meta-derived, Crossref-
@@ -85,6 +97,34 @@ class DocMeta(BaseModel):
     year: int | None = None
     schema_version: int = 1
 
+    @model_validator(mode="before")
+    @classmethod
+    def _heal_legacy_authors(cls, data: Any) -> Any:
+        """Pre-7.11 back-compat: no ``authors_list`` KEY at all -> split the
+        legacy joined ``authors`` string. Key-ABSENCE (not a `None` value) is
+        the signal: a raw dict missing the key entirely is a pre-7.11
+        ``meta.json``; a dict that carries the key with an explicit `None`
+        (e.g. a malformed/adversarial PATCH payload reaching the write path)
+        must NOT be healed here, or it would resurrect a stale `authors`
+        string (Codex review, AE-6). Rejecting that case is `authors_list`'s
+        own field validation (`list[str]`, not `... | None`), which surfaces
+        as a loud error rather than silently reviving deleted authors. Key
+        presence (not emptiness) is also what makes an explicit clear
+        (``authors_list=[]``, written by every 7.11+ writer) safe: it is
+        never mistaken for a legacy read."""
+        if isinstance(data, dict) and "authors_list" not in data:
+            authors = data.get("authors")
+            if authors:
+                data = {**data, "authors_list": split_authors(authors)}
+        return data
+
+    @model_validator(mode="after")
+    def _derive_authors(self) -> "DocMeta":
+        """``authors_list`` is the single authority; ``authors`` is always
+        its derived join (never independently authored)."""
+        self.authors = join_authors(self.authors_list)
+        return self
+
 
 class Doc(DocMeta):
     """API representation of an imported document = ``doc_id`` + its metadata."""
@@ -94,9 +134,15 @@ class Doc(DocMeta):
 
 class DocPatch(BaseModel):
     """Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6; ``venue``/
-    ``year`` added by a Story 7.9 fix request): a partial title/authors/
-    venue/year edit. Request-only (no route returns it) — surfaced into
-    OpenAPI by the route's body parameter, not by a model injection.
+    ``year`` added by a Story 7.9 fix request; ``authors`` replaced by
+    ``authors_list`` in Story 7.11): a partial title/authors/venue/year edit.
+    Request-only (no route returns it) — surfaced into OpenAPI by the route's
+    body parameter, not by a model injection.
+
+    ``authors_list`` is a FULL-LIST replacement, not an add/remove op: the
+    client computes the new complete author list (add appends, remove drops)
+    and sends the whole thing, so "no author silently lost" holds by
+    construction.
 
     All fields default unset so ``model_dump(exclude_unset=True)`` yields
     only what the client actually sent (true PATCH semantics: a title-only
@@ -109,7 +155,7 @@ class DocPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = None
-    authors: str | None = None
+    authors_list: list[str] | None = None
     venue: str | None = None
     year: int | None = None
 
@@ -199,6 +245,12 @@ class CollectionRow(BaseModel):
     doc_id: str
     title: str | None
     authors: str | None
+    # Additive (Story 7.11, no schema_version bump): the authoritative
+    # multi-value display projection (peer of `doi`/`venue`/`year`); `authors`
+    # (above) stays as the derived join, still what `sortKey` sorts on.
+    # Optional so a pre-existing library.json entry cached before this field
+    # existed still validates; reconcile_library backfills it.
+    authors_list: list[str] = []
     added: str  # ISO-8601 UTC
     # Additive (Recent lens, no schema_version bump): the client orders the
     # Recent view by this. Optional so a pre-existing library.json entry

@@ -31,12 +31,11 @@ def run_extraction(doc_id: str, pdf_bytes: bytes) -> None:
             final, status = extracted, "enrich-skipped"
         else:
             final, status = extracted, "parse-failed"
-        authors = ", ".join(final.authors) or None  # storage owns list->display
         try:
             storage.apply_extraction(
                 doc_id,
                 title=final.title,
-                authors=authors,
+                authors_list=final.authors,  # storage/model own list->display
                 status=status,
                 doi=final.doi,
                 venue=final.venue,
@@ -51,7 +50,7 @@ def run_extraction(doc_id: str, pdf_bytes: bytes) -> None:
             storage.apply_extraction(
                 doc_id,
                 title=None,
-                authors=None,
+                authors_list=[],
                 status="parse-failed",
                 doi=None,
                 venue=None,

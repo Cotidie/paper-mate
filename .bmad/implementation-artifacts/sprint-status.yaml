@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-08 (create-story: 7-11-author-tag-column -> ready-for-dev)"
+last_updated: "2026-07-10 (dev-story: 7-11-author-tag-column -> review)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -238,7 +238,7 @@ development_status:
   # surfaced as a first-class list (additive contract + meta.json schema decision),
   # editable add/remove chips, filter-by-tag; colors deferred. Introduces the
   # cell-type dispatch seam that 7-12 later consolidates. No story file yet -> backlog.
-  7-11-author-tag-column: ready-for-dev
+  7-11-author-tag-column: review
   # 7-12: Epic 7 structural refactor, now the LAST story so it refactors the WHOLE
   # epic surface (incl. 7.9 columns + 7.10 prefs store + 7.11 cell-type/tag seam):
   # decompose CollectionTable + LibraryPage + the near-twin op hooks (client) and

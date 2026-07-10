@@ -12,6 +12,7 @@ from app.models import (
     CollectionRow,
     DocIdSet,
     DocMeta,
+    DocPatch,
     Folder,
     Library,
     MoveRequest,
@@ -213,6 +214,97 @@ def test_doc_meta_round_trips_doi_venue_year() -> None:
     assert meta.year == 2017
 
 
+def test_doc_meta_authors_list_is_authoritative_derives_join() -> None:
+    """Story 7.11, AC-2: `authors_list` -> `authors` (the derived join, single
+    writer of the string), via the `mode="after"` validator."""
+    meta = DocMeta(
+        filename="f.pdf",
+        page_count=1,
+        added="t",
+        last_opened="t",
+        authors_list=["Ada Lovelace", "Alan Turing"],
+    )
+    assert meta.authors_list == ["Ada Lovelace", "Alan Turing"]
+    assert meta.authors == "Ada Lovelace, Alan Turing"
+
+
+def test_doc_meta_legacy_authors_string_heals_to_authors_list() -> None:
+    """Story 7.11, AC-6: a pre-7.11 payload (joined `authors` string, no
+    `authors_list` key at all) self-heals via the `mode="before"` validator."""
+    meta = DocMeta.model_validate(
+        {
+            "filename": "f.pdf",
+            "page_count": 1,
+            "added": "t",
+            "last_opened": "t",
+            "authors": "Ada Lovelace, Alan Turing",
+        }
+    )
+    assert meta.authors_list == ["Ada Lovelace", "Alan Turing"]
+    assert meta.authors == "Ada Lovelace, Alan Turing"
+
+
+def test_doc_meta_explicit_clear_does_not_resurrect_from_stale_authors() -> None:
+    """Story 7.11 (decision 1): when the `authors_list` KEY is present (even
+    as `[]`), the legacy heal must NOT fire even if a stale `authors` string
+    is also present - an explicit clear derives `authors=None`, never
+    resurrecting the old joined string."""
+    meta = DocMeta.model_validate(
+        {
+            "filename": "f.pdf",
+            "page_count": 1,
+            "added": "t",
+            "last_opened": "t",
+            "authors_list": [],
+            "authors": "Stale Author",
+        }
+    )
+    assert meta.authors_list == []
+    assert meta.authors is None
+
+
+def test_doc_meta_explicit_none_authors_list_key_present_rejected_not_healed() -> None:
+    """Codex review (High, AE-6): the `authors_list` KEY being present with an
+    explicit `None` value (distinct from the key being ABSENT) must NOT
+    trigger the legacy heal - that would resurrect a stale `authors` string
+    from a malformed/adversarial payload. It is rejected by `authors_list`'s
+    own field type (`list[str]`, not `... | None`)."""
+    with pytest.raises(ValidationError):
+        DocMeta.model_validate(
+            {
+                "filename": "f.pdf",
+                "page_count": 1,
+                "added": "t",
+                "last_opened": "t",
+                "authors_list": None,
+                "authors": "Stale Author",
+            }
+        )
+
+
+def test_doc_meta_authors_list_defaults_empty_when_missing() -> None:
+    """Story 7.11: additive, no `schema_version` bump - a bare DocMeta (as a
+    pre-7.11 v1 meta.json with no `authors` at all would validate) fills in
+    the default."""
+    meta = DocMeta(filename="f.pdf", page_count=1, added="t", last_opened="t")
+    assert meta.authors_list == []
+    assert meta.authors is None
+
+
+def test_doc_patch_accepts_authors_list() -> None:
+    """Story 7.11: `DocPatch.authors_list` replaces the old `authors` string
+    field - a full-list replacement."""
+    patch = DocPatch(authors_list=["Ada Lovelace"])
+    assert patch.authors_list == ["Ada Lovelace"]
+
+
+def test_doc_patch_rejects_legacy_authors_field() -> None:
+    """Story 7.11: the old `authors: str` field is gone; `extra="forbid"`
+    rejects it loudly instead of silently dropping it."""
+    with pytest.raises(ValidationError):
+        DocPatch(authors="Ada Lovelace")
+
+
 def test_folder_round_trips() -> None:
     folder = Folder(id="11111111-1111-1111-1111-111111111111", name="Reading List")
     assert folder.parent_id is None
@@ -341,6 +433,41 @@ def test_collection_row_defaults_doi_venue_year_when_missing() -> None:
     assert row.doi is None
     assert row.venue is None
     assert row.year is None
+
+
+def test_collection_row_accepts_and_round_trips_authors_list() -> None:
+    """Story 7.11, AC-2: additive, authoritative multi-value display cache,
+    peer of `doi`/`venue`/`year`; `authors` stays the derived join, unchanged."""
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors="Ada Lovelace, Alan Turing",
+        authors_list=["Ada Lovelace", "Alan Turing"],
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+    )
+    assert row.authors_list == ["Ada Lovelace", "Alan Turing"]
+
+
+def test_collection_row_defaults_authors_list_when_missing() -> None:
+    """A dict missing `authors_list` (a pre-existing library.json entry cached
+    before the field existed) still validates; reconcile backfills it."""
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+    )
+    assert row.authors_list == []
 
 
 def test_library_wraps_papers_and_folders() -> None:

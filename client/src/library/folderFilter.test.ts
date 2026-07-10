@@ -19,6 +19,7 @@ function row(overrides: Partial<CollectionRow>): CollectionRow {
     doc_id: "d",
     title: "T",
     authors: null,
+    authors_list: [],
     added: "2026-07-06T00:00:00Z",
     file_type: "pdf",
     status: "ready",

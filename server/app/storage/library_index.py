@@ -25,6 +25,7 @@ from app.storage import meta_store, paths
 from app.storage.atomic import atomic_write
 from app.storage.errors import (
     CorruptLibraryError,
+    CorruptMetadataError,
     DocumentNotFoundError,
     FolderNotFoundError,
     StorageError,
@@ -93,6 +94,7 @@ def _cache_from_meta(meta: DocMeta) -> dict:
     return {
         "title": meta.title,
         "authors": meta.authors,
+        "authors_list": meta.authors_list,
         "added": meta.added,
         "last_opened": meta.last_opened,
         "file_type": meta.file_type,
@@ -444,7 +446,27 @@ def update_meta_and_reindex(doc_id: str, updates: dict) -> DocMeta:
         current = meta_store.read(doc_dir)
         if current is None:
             raise DocumentNotFoundError(f"no document metadata for doc_id {doc_id!r}")
-        updated = current.model_copy(update=updates)
+        # Re-validate rather than `current.model_copy(update=updates)` (Story
+        # 7.11: `model_copy` does NOT re-run validators, so an `authors_list`
+        # update would leave the derived `authors` string stale). Re-running
+        # `DocMeta`'s validators here keeps the derive/heal invariant on every
+        # write; `current.model_dump()` always emits the `authors_list` key,
+        # so the `mode="before"` legacy heal never fires on this path, and an
+        # explicit clear (`authors_list=[]`) correctly derives `authors=None`
+        # without resurrecting from a stale `authors` string.
+        #
+        # A caller passing an update that fails DocMeta's own field validation
+        # (e.g. an explicit `authors_list: None` from a malformed PATCH -
+        # DocPatch's contract type is `list[str] | None` for "field not sent",
+        # not a real null state; the route normalizes a legitimate clear to
+        # `[]`) must still answer the single `{ detail }` envelope (AR-11,
+        # Codex review AE-6), not an unhandled 500 leaking a raw pydantic
+        # error - map it into the StorageError taxonomy `storage_errors`
+        # already translates for every route.
+        try:
+            updated = DocMeta.model_validate({**current.model_dump(), **updates})
+        except ValidationError as exc:
+            raise CorruptMetadataError(f"invalid meta update for doc_id {doc_id!r}: {exc}") from exc
         # Guard the TOCTOU window: a purge between the read above and the write
         # below must NOT recreate the dir (create_parents=False) and re-index a
         # meta-only ghost row. Re-check first so the common purge is a clean

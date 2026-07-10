@@ -11,6 +11,7 @@ import {
 } from "@/library/row";
 import type { ColumnDef } from "@/library/tableView";
 import EditableCell from "./EditableCell";
+import TagCell from "./TagCell";
 
 /**
  * One settled row of the collection table. A plain row click selects only
@@ -54,22 +55,34 @@ export default function PaperRow({
   onStartEdit,
   onCommit,
   onCancel,
+  onFilterByAuthor,
+  onCommitAuthors,
   trashLens = false,
   locationLabel,
 }: {
   row: CollectionRow;
   visibleColumns: ColumnDef[];
   armed: boolean;
-  editingField: EditableField | null;
+  /** `"authors"` is a valid cursor value even though it left `EditableField`
+   *  (Story 7.11: the tag editor commits a `string[]`, not a plain-string
+   *  `EditableCell` edit) - the arm→edit CURSOR tracking is a UI concern
+   *  shared by every editable cell type, distinct from the PATCH payload
+   *  shape `EditableField` describes. */
+  editingField: EditableField | "authors" | null;
   checked: boolean;
   onRowClick: () => void;
   onRowClickCapture: (e: React.MouseEvent<HTMLTableRowElement>) => void;
   onArm: () => void;
   onOpen: () => void;
   onDragStart: (e: React.DragEvent<HTMLTableRowElement>) => void;
-  onStartEdit: (field: EditableField) => void;
+  onStartEdit: (field: EditableField | "authors") => void;
   onCommit: (field: EditableField, value: string, viaBlur: boolean) => void;
   onCancel: () => void;
+  /** A chip click (Story 7.11, AC-5): narrows the table to rows containing
+   *  this author. Never arms or edits (see `TagCell`'s own doc comment). */
+  onFilterByAuthor: (author: string) => void;
+  /** The tag editor's commit (Story 7.11, AC-4): the NEW FULL author list. */
+  onCommitAuthors: (authors: string[]) => void;
   /** Trash lens (fix request: Restore/Purge moved to the toolbar, bulk over
    *  the selection - a row itself carries no action button). A trashed row
    *  still isn't opened, and isn't draggable onto a folder drop target. */
@@ -87,8 +100,31 @@ export default function PaperRow({
   const editable = row.status !== "extracting";
 
   // A plain inline switch (Story 7.10 Dev Notes: this is the ordered-render
-  // seam, not the general cellType registry - that's Story 7.11's job).
+  // seam, not the general cellType registry - that's Story 7.12's job).
+  // The `tag` cellType (Author, the only one this story) dispatches through
+  // `TagCell` as a guard BEFORE the switch (Codex review, Med, AC-1: "the
+  // table dispatches on [cellType]" - not on `col.key`); every other column
+  // keeps its bespoke per-key markup in the switch below.
   function renderCell(col: ColumnDef): ReactNode {
+    if (col.cellType === "tag") {
+      // The cell-type seam (Story 7.11, AC-1): Author is the only `tag`
+      // column this story, dispatched through `TagCell` rather than the
+      // plain-string `EditableCell` every other editable column uses.
+      return (
+        <TagCell
+          key={col.key}
+          authors={row.authors_list}
+          editable={editable}
+          armed={armed}
+          isEditing={editingField === "authors"}
+          onStartEdit={() => onStartEdit("authors")}
+          onArm={onArm}
+          onFilterByAuthor={onFilterByAuthor}
+          onCommit={onCommitAuthors}
+          onCancel={onCancel}
+        />
+      );
+    }
     switch (col.key) {
       case "title":
         return (
@@ -125,25 +161,6 @@ export default function PaperRow({
                 Open
               </button>
             )}
-          </EditableCell>
-        );
-      case "authors":
-        return (
-          <EditableCell
-            key="authors"
-            className="collection-table__authors"
-            title={row.authors ?? undefined}
-            field="authors"
-            editable={editable}
-            armed={armed}
-            isEditing={editingField === "authors"}
-            seedValue={seedFieldValue(row, "authors")}
-            onStartEdit={() => onStartEdit("authors")}
-            onArm={onArm}
-            onCommit={(value, viaBlur) => onCommit("authors", value, viaBlur)}
-            onCancel={onCancel}
-          >
-            {row.authors ?? ""}
           </EditableCell>
         );
       case "venue":

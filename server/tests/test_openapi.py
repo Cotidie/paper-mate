@@ -55,7 +55,7 @@ def test_openapi_contains_doc_patch_model_and_path() -> None:
     assert "DocPatch" in schema["components"]["schemas"]
     patch = schema["components"]["schemas"]["DocPatch"]
     assert "title" in patch["properties"]
-    assert "authors" in patch["properties"]
+    assert "authors_list" in patch["properties"]
     assert "patch" in schema["paths"]["/api/docs/{doc_id}"]
 
 

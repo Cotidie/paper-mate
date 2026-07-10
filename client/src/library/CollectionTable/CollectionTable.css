@@ -267,8 +267,107 @@
 
 .collection-table__authors {
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* The Author tag cell (Story 7.11, AC-3): chips wrap, but the cell CLIPS at
+   one row's worth of height rather than growing the row taller (matches
+   every other cell staying single-line - "reflowing the row frame" is
+   exactly what this avoids). A `+N more` affordance for an overflowing
+   author list is a deferred follow-up, not built here (smallest correct
+   structure this story needs). */
+.tag-cell__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tag-chip-gap);
+  max-height: var(--collection-table-row-height);
+  overflow: hidden;
+}
+
+/* Color-ready (decision, Story 7.11): a uniform fill token this story: a
+   per-author color assignment is a deferred follow-up that would swap this
+   one token, not restructure the component. */
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  background: var(--tag-chip-bg);
+  color: var(--tag-chip-color);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-leading);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: var(--tag-chip-padding-y) var(--tag-chip-padding-x);
   white-space: nowrap;
+}
+
+/* A chip in the settled cell is a click-to-filter trigger (AC-5); one inside
+   the editor (below) is read-only text plus its own remove control, so it is
+   never itself a `<button>` there - only the settled-cell chip needs a
+   pointer/hover affordance. */
+button.tag-chip {
+  cursor: pointer;
+}
+
+button.tag-chip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--focus-ring-width);
+}
+
+/* The armed cell's tag editor (Story 7.11, AC-4/AC-7): a "select or create"
+   input plus each existing author as a removable chip, mirroring
+   `.collection-table__edit-input`'s surface/border/focus treatment so it
+   reads as the same inline-edit affordance as Title/Venue/Year. */
+.tag-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xxs);
+}
+
+.tag-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tag-chip-remove-size);
+  height: var(--tag-chip-remove-size);
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tag-chip__remove svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tag-chip__remove:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: var(--focus-ring-width);
+}
+
+.tag-editor__input {
+  flex: 1 1 var(--tag-editor-input-min-width);
+  min-width: var(--tag-editor-input-min-width);
+  box-sizing: border-box;
+  background: var(--color-surface-card);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-leading);
+  border: var(--hairline-width) solid var(--color-hairline-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) var(--space-xs);
+}
+
+.tag-editor__input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--color-ink);
+  border-color: var(--color-ink);
 }
 
 .collection-table__location {
@@ -395,9 +494,20 @@
    mouse-triggered and heuristic-flipped-visible cases. */
 .collection-table__title:focus,
 .collection-table__authors:focus,
-.collection-table__title:focus-visible,
-.collection-table__authors:focus-visible {
+.collection-table__title:focus-visible {
   outline: none;
+}
+
+/* Codex review (Med, AE-6): AC-7 requires the Author cell's chips/editor to
+   be keyboard-operable WITH VISIBLE FOCUS - unlike Title, unsuppressed here.
+   A genuine Tab-to-this-cell (no prior click) still needs a real indicator;
+   the row's own armed/checked tint only covers the CLICK-THEN-arm path the
+   comment above describes. `:focus` (mouse-triggered) stays suppressed, so
+   the documented Chromium stray-keydown quirk for a click-then-modifier
+   sequence is unaffected. */
+.collection-table__authors:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink);
+  outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
 /* Hover/focus-revealed Open button (Story 7.2 fix request reverted the

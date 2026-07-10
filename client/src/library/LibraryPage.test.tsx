@@ -42,6 +42,7 @@ function fakeDoc(doc_id: string, filename: string, title: string | null = null):
     page_count: 1,
     added: "2026-07-05T00:00:00+00:00",
     last_opened: "2026-07-05T00:00:00+00:00",
+    authors_list: [],
     file_type: "pdf",
     status: "ready",
     schema_version: 1,
@@ -53,6 +54,7 @@ function rowFromDoc(doc: api.Doc, order: number): api.CollectionRow {
     doc_id: doc.doc_id,
     title: doc.title ?? null,
     authors: null,
+    authors_list: doc.authors_list,
     added: doc.added,
     file_type: doc.file_type,
     status: doc.status,
@@ -87,6 +89,7 @@ const fakeRow: api.CollectionRow = {
   doc_id: "c".repeat(64),
   title: "Attention Is All You Need",
   authors: "Vaswani et al.",
+  authors_list: ["Vaswani et al."],
   added: "2026-07-05T00:00:00+00:00",
   file_type: "pdf",
   status: "ready",
@@ -441,6 +444,7 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
       doc_id,
       title,
       authors: null,
+      authors_list: [],
       added: "2026-07-05T00:00:00+00:00",
       file_type: "pdf",
       status,
@@ -773,6 +777,7 @@ describe("Folder filter + move (Story 7.2)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
       status: "ready",
@@ -1108,6 +1113,110 @@ describe("Folder filter + move (Story 7.2)", () => {
   });
 });
 
+describe("Author tag filter (Story 7.11, AC-5)", () => {
+  function libraryRow(overrides: Partial<api.CollectionRow>): api.CollectionRow {
+    return {
+      doc_id: "p".repeat(64),
+      title: "A Paper",
+      authors: null,
+      authors_list: [],
+      added: "2026-07-06T00:00:00+00:00",
+      file_type: "pdf",
+      status: "ready",
+      folder_id: null,
+      trashed: false,
+      starred: false,
+      order: 0,
+      ...overrides,
+    };
+  }
+
+  it("clicking an author chip narrows the table + count; the clear affordance restores all rows", async () => {
+    const alice = libraryRow({
+      doc_id: "a".repeat(64),
+      title: "Alice's Paper",
+      authors: "Alice Author",
+      authors_list: ["Alice Author"],
+      order: 0,
+    });
+    const bob = libraryRow({
+      doc_id: "b".repeat(64),
+      title: "Bob's Paper",
+      authors: "Bob Author",
+      authors_list: ["Bob Author"],
+      order: 1,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [alice, bob], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Alice's Paper")).toBeTruthy());
+    expect(screen.getByText("Bob's Paper")).toBeTruthy();
+    expect(screen.getByText("2 files in Recent")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Alice Author"));
+
+    expect(screen.getByText("Alice's Paper")).toBeTruthy();
+    expect(screen.queryByText("Bob's Paper")).toBeNull();
+    expect(screen.getByText("1 files in Recent")).toBeTruthy();
+    expect(screen.getByText("Author: Alice Author")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear author filter" }));
+
+    expect(screen.getByText("Alice's Paper")).toBeTruthy();
+    expect(screen.getByText("Bob's Paper")).toBeTruthy();
+    expect(screen.getByText("2 files in Recent")).toBeTruthy();
+    expect(screen.queryByText("Author: Alice Author")).toBeNull();
+  });
+
+  it("a legacy row (only a joined authors string, no authors_list from a pre-7.11 import) still shows a chip to filter by (back-compat, AC-6)", async () => {
+    // Simulates the backend's `mode="before"` self-heal already having derived
+    // `authors_list` by the time it reaches the client (Story 7.11 decision 3):
+    // the client itself never re-splits a joined string, it only ever reads
+    // `authors_list` - this fixture stands in for that already-healed read.
+    const legacy = libraryRow({
+      doc_id: "l".repeat(64),
+      title: "Legacy Paper",
+      authors: "Legacy Author",
+      authors_list: ["Legacy Author"],
+      order: 0,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [legacy], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Legacy Paper")).toBeTruthy());
+
+    expect(screen.getByText("Legacy Author")).toBeTruthy();
+    fireEvent.click(screen.getByText("Legacy Author"));
+    expect(screen.getByText("1 files in Recent")).toBeTruthy();
+  });
+
+  it("clicking an author chip clears the current selection (Codex review, High: a hidden row must not stay selected for a toolbar action)", async () => {
+    const alice = libraryRow({
+      doc_id: "a".repeat(64),
+      title: "Alice's Paper",
+      authors: "Alice Author",
+      authors_list: ["Alice Author"],
+      order: 0,
+    });
+    const bob = libraryRow({
+      doc_id: "b".repeat(64),
+      title: "Bob's Paper",
+      authors: "Bob Author",
+      authors_list: ["Bob Author"],
+      order: 1,
+    });
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [alice, bob], folders: [] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByText("Bob's Paper")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("Bob's Paper")); // select Bob's row
+    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByText("Alice Author")); // filter narrows Bob out of view
+
+    expect(screen.queryByText("Bob's Paper")).toBeNull();
+    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe("Add dropdown (File upload / Folder upload)", () => {
   it("opens the Add menu and uploads via the File upload item", async () => {
     // The Add control lives in the toolbar row, which only shows once the
@@ -1185,6 +1294,7 @@ describe("Display, Sort controls (Story 7.4)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
       status: "ready",
@@ -1201,7 +1311,12 @@ describe("Display, Sort controls (Story 7.4)", () => {
   }
 
   it("Display: hiding a column omits its header and cells without touching the others", async () => {
-    const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
+    const paper = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Only Paper",
+      authors: "Some Author",
+      authors_list: ["Some Author"],
+    });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
@@ -1242,7 +1357,12 @@ describe("Display, Sort controls (Story 7.4)", () => {
   });
 
   it("Column header dropdown: Hide from a header's own menu omits that column (fix request: clickable headers)", async () => {
-    const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
+    const paper = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Only Paper",
+      authors: "Some Author",
+      authors_list: ["Some Author"],
+    });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
@@ -1255,7 +1375,12 @@ describe("Display, Sort controls (Story 7.4)", () => {
   });
 
   it("Column header dropdown: Move right persists the column order across a remount (Story 7.10, AC-1/AC-3)", async () => {
-    const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
+    const paper = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Only Paper",
+      authors: "Some Author",
+      authors_list: ["Some Author"],
+    });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
@@ -1376,6 +1501,7 @@ describe("Trash (Story 7.5)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
       status: "ready",
@@ -1552,6 +1678,7 @@ describe("Trash (Story 7.5)", () => {
       page_count: 1,
       added: "2026-07-06T00:00:00+00:00",
       last_opened: "2026-07-07T00:00:00+00:00",
+      authors_list: [],
       file_type: "pdf",
       status: "ready",
       schema_version: 1,
@@ -1572,6 +1699,7 @@ describe("Recent (Story 7.7)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       last_opened: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
@@ -1773,6 +1901,7 @@ describe("Star (Story 7.8)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
       status: "ready",

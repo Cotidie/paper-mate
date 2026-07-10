@@ -4,7 +4,7 @@ baseline_commit: 242fa493f401b56c6b0815ffce0d31f3b918fdf9
 
 # Story 7.11: Tag-type columns, Author as editable, filterable tags
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -119,53 +119,67 @@ Add `cellType: "text" | "number" | "badge" | "tag"` to `ColumnDef` (`tableView.t
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1, Pure authors join/split leaf (AC-2, AC-6)**
-  - [ ] Create `server/app/authors.py`: a dependency-free pure module owning the ONE join delimiter `AUTHOR_JOIN = ", "`, `join_authors(authors: list[str]) -> str | None` (strip each, drop blanks, join; `None` when empty), and `split_authors(joined: str | None) -> list[str]` (split on the delimiter, strip, drop blanks). This is the single definition of the delimiter (was implicit at `extraction.py:34`). Colocate `server/tests/test_authors.py`.
+- [x] **Task 1, Pure authors join/split leaf (AC-2, AC-6)**
+  - [x] Create `server/app/authors.py`: a dependency-free pure module owning the ONE join delimiter `AUTHOR_JOIN = ", "`, `join_authors(authors: list[str]) -> str | None` (strip each, drop blanks, join; `None` when empty), and `split_authors(joined: str | None) -> list[str]` (split on the delimiter, strip, drop blanks). This is the single definition of the delimiter (was implicit at `extraction.py:34`). Colocate `server/tests/test_authors.py`.
 
-- [ ] **Task 2, Models: authors as a first-class list (AC-1 back-half, AC-2, AC-6)**
-  - [ ] `server/app/models.py`: add `DocMeta.authors_list: list[str] = []` (additive, no `schema_version` bump; mirror the 7.9 `venue`/`year` additive comment). Add TWO validators (import `model_validator`): a `@model_validator(mode="before")` legacy heal (raw mapping: `authors_list` key absent/None + `authors` present → inject `split_authors(authors)`), and a `@model_validator(mode="after")` forward derive (`authors = join_authors(self.authors_list)`, the single writer of the string). Do NOT write a bidirectional after-heal (it resurrects cleared authors, see Dev Notes). Document the round-trip caveat (decision 3).
-  - [ ] `CollectionRow`: add `authors_list: list[str] = []` (additive, defaulted so a pre-existing `library.json` entry validates; reconcile backfills, mirror the `doi`/`venue`/`year` additive comment at `models.py:221`). Keep `authors: str | None` (derived cache, sort key).
-  - [ ] `DocPatch`: replace `authors: str | None = None` with `authors_list: list[str] | None = None`. Keep `title`/`venue`/`year`. Update the docstring (authors is now a list replacement; `doi` still non-editable).
+- [x] **Task 2, Models: authors as a first-class list (AC-1 back-half, AC-2, AC-6)**
+  - [x] `server/app/models.py`: add `DocMeta.authors_list: list[str] = []` (additive, no `schema_version` bump; mirror the 7.9 `venue`/`year` additive comment). Add TWO validators (import `model_validator`): a `@model_validator(mode="before")` legacy heal (raw mapping: `authors_list` key absent/None + `authors` present → inject `split_authors(authors)`), and a `@model_validator(mode="after")` forward derive (`authors = join_authors(self.authors_list)`, the single writer of the string). Do NOT write a bidirectional after-heal (it resurrects cleared authors, see Dev Notes). Document the round-trip caveat (decision 3).
+  - [x] `CollectionRow`: add `authors_list: list[str] = []` (additive, defaulted so a pre-existing `library.json` entry validates; reconcile backfills, mirror the `doi`/`venue`/`year` additive comment at `models.py:221`). Keep `authors: str | None` (derived cache, sort key).
+  - [x] `DocPatch`: replace `authors: str | None = None` with `authors_list: list[str] | None = None`. Keep `title`/`venue`/`year`. Update the docstring (authors is now a list replacement; `doi` still non-editable).
 
-- [ ] **Task 3, Storage projects + persists the list (AC-2, AC-4, AC-6)**
-  - [ ] `server/app/storage/library_index.py`: `_cache_from_meta` (`:90`) also projects `"authors_list": meta.authors_list` (peer of the existing `"authors"`). The reconcile/backfill path picks it up like `doi`/`venue`/`year`.
-  - [ ] `server/app/storage/documents.py`: `apply_extraction` takes `authors_list: list[str]` instead of `authors: str | None`; write it into the meta update (the model derives the join). Its docstring already claims storage owns the list→string join, so this makes code match docs. `update_doc_meta`'s `updates` may now carry `authors_list: list[str]`; ensure `library_index.update_meta_and_reindex` writes it and the model re-derives `authors`.
-  - [ ] **Fix the `model_copy` write-path trap (`library_index.py:447`):** `current.model_copy(update=updates)` does NOT re-run validators, so a `authors_list` update would leave the derived `authors` stale. Change it to re-validate: `updated = DocMeta.model_validate({**current.model_dump(), **updates})` (see Dev Notes → "The model_copy write-path trap"). This keeps the derive/heal invariant on every write AND makes an explicit clear (`authors_list=[]`) correctly yield `authors=None` without resurrecting. Confirm the existing meta round-trip tests stay green; add a test that a `{authors_list}` update re-derives `authors` and that a clear does not resurrect.
+- [x] **Task 3, Storage projects + persists the list (AC-2, AC-4, AC-6)**
+  - [x] `server/app/storage/library_index.py`: `_cache_from_meta` (`:90`) also projects `"authors_list": meta.authors_list` (peer of the existing `"authors"`). The reconcile/backfill path picks it up like `doi`/`venue`/`year`.
+  - [x] `server/app/storage/documents.py`: `apply_extraction` takes `authors_list: list[str]` instead of `authors: str | None`; write it into the meta update (the model derives the join). Its docstring already claims storage owns the list→string join, so this makes code match docs. `update_doc_meta`'s `updates` may now carry `authors_list: list[str]`; ensure `library_index.update_meta_and_reindex` writes it and the model re-derives `authors`.
+  - [x] **Fix the `model_copy` write-path trap (`library_index.py:447`):** `current.model_copy(update=updates)` does NOT re-run validators, so a `authors_list` update would leave the derived `authors` stale. Change it to re-validate: `updated = DocMeta.model_validate({**current.model_dump(), **updates})` (see Dev Notes → "The model_copy write-path trap"). This keeps the derive/heal invariant on every write AND makes an explicit clear (`authors_list=[]`) correctly yield `authors=None` without resurrecting. Confirm the existing meta round-trip tests stay green; add a test that a `{authors_list}` update re-derives `authors` and that a clear does not resurrect.
 
-- [ ] **Task 4, Routes: PATCH accepts the list; extraction stops pre-joining (AC-2, AC-4, AC-5)**
-  - [ ] `server/app/routes/extraction.py`: delete the `authors = ", ".join(...)` line (`:34`); pass `authors_list=final.authors` to `storage.apply_extraction`. (Storage/model own the join now.)
-  - [ ] `server/app/routes/docs.py`: `patch_doc` (`:85`) currently strips `title`/`authors`/`venue` strings (`:99`). `authors` is no longer a string field; normalize `authors_list` instead (strip each entry, drop blanks; an empty resulting list is a legitimate "cleared authors" edit → `authors = None`). Keep `title`/`venue` string-strip. `model_dump(exclude_unset=True)` still yields only sent fields.
-  - [ ] Regenerate the contract: `cd server && PYTHONPATH= uv run python -m app.export_openapi` then `cd client && npm run gen:api` (commit `openapi.json` + `schema.d.ts`). Update `docs/API.md` (CollectionRow + DocPatch entries + the `PATCH /api/docs/{id}` body + changelog).
+- [x] **Task 4, Routes: PATCH accepts the list; extraction stops pre-joining (AC-2, AC-4, AC-5)**
+  - [x] `server/app/routes/extraction.py`: delete the `authors = ", ".join(...)` line (`:34`); pass `authors_list=final.authors` to `storage.apply_extraction`. (Storage/model own the join now.)
+  - [x] `server/app/routes/docs.py`: `patch_doc` (`:85`) currently strips `title`/`authors`/`venue` strings (`:99`). `authors` is no longer a string field; normalize `authors_list` instead (strip each entry, drop blanks; an empty resulting list is a legitimate "cleared authors" edit → `authors = None`). Keep `title`/`venue` string-strip. `model_dump(exclude_unset=True)` still yields only sent fields.
+  - [x] Regenerate the contract: `cd server && PYTHONPATH= uv run python -m app.export_openapi` then `cd client && npm run gen:api` (commit `openapi.json` + `schema.d.ts`). Update `docs/API.md` (CollectionRow + DocPatch entries + the `PATCH /api/docs/{id}` body + changelog).
 
-- [ ] **Task 5, Client column model: cellType seam + tag filter fold (AC-1, AC-5)**
-  - [ ] `client/src/library/tableView.ts`: add `cellType: "text" | "number" | "badge" | "tag"` to `ColumnDef`; set Author's to `"tag"` (others `"text"`/`"badge"` as fits; File type is `"badge"`). Do NOT reorder `COLUMNS` (7.10 locks its default order). Add a pure `applyTagFilter(rows: CollectionRow[], author: string | null): CollectionRow[]` = set-membership on `authors_list` (no-op when `author` is null; never mutates). `sortKey`/`sortRows` unchanged (authors still sorts on the derived `authors` string).
-  - [ ] `client/src/library/useTableView.ts`: add `authorFilter: string | null` local state (peer of `sort`, ephemeral) + `setAuthorFilter`. Fold it into `applyTableView`: `sortRows(applyTagFilter(rows, authorFilter), sort, folderNameById)` (filter BEFORE sort). Memoize `applyTableView` on `[authorFilter, sort, folderNameById]`. Expose `authorFilter`/`setAuthorFilter`.
+- [x] **Task 5, Client column model: cellType seam + tag filter fold (AC-1, AC-5)**
+  - [x] `client/src/library/tableView.ts`: add `cellType: "text" | "number" | "badge" | "tag"` to `ColumnDef`; set Author's to `"tag"` (others `"text"`/`"badge"` as fits; File type is `"badge"`). Do NOT reorder `COLUMNS` (7.10 locks its default order). Add a pure `applyTagFilter(rows: CollectionRow[], author: string | null): CollectionRow[]` = set-membership on `authors_list` (no-op when `author` is null; never mutates). `sortKey`/`sortRows` unchanged (authors still sorts on the derived `authors` string).
+  - [x] `client/src/library/useTableView.ts`: add `authorFilter: string | null` local state (peer of `sort`, ephemeral) + `setAuthorFilter`. Fold it into `applyTableView`: `sortRows(applyTagFilter(rows, authorFilter), sort, folderNameById)` (filter BEFORE sort). Memoize `applyTableView` on `[authorFilter, sort, folderNameById]`. Expose `authorFilter`/`setAuthorFilter`.
 
-- [ ] **Task 6, Client tag cell + editor (AC-1, AC-3, AC-4, AC-7)**
-  - [ ] New `client/src/library/CollectionTable/TagCell.tsx`: renders `row.authors_list` as chips (uniform token style). Each chip is a keyboard-operable `<button>` whose click (with `stopPropagation`, like the existing DOI link / Open button inside cells, `PaperRow.tsx:119`/`:225`) calls `onFilterByAuthor(author)`. When the row is armed (lone selection) show the tag EDITOR affordance instead of / alongside the chips (an "add author" input + a remove "×" on each chip). Mirror `EditableCell`'s arm→edit lifecycle: an UNARMED cell click bubbles to arm the row; an ARMED cell reveals the editor.
-  - [ ] New `client/src/library/CollectionTable/TagEditor.tsx` (or inline in `TagCell`): a Notion-style "select or create" affordance: type a name + Enter (or blur) adds it; each chip has a remove control; Esc cancels. It commits the NEW FULL list (`string[]`) up via a callback. Autofocus on open, visible focus rings, no em-dash in any label/aria (AC-7). Reuse `InlineEditor`'s double-fire-guard pattern (`EditableCell.tsx:32`, `committedRef`) so a blur after Enter/Esc does not re-commit.
-  - [ ] `client/src/library/CollectionTable/PaperRow.tsx`: the `authors` case dispatches to `TagCell` (via `cellType === "tag"`), passing `row.authors_list`, `armed`, `editingField`, `onFilterByAuthor`, and the authors-list commit callback. Keep every other cell byte-identical. `PendingRow.tsx`'s authors cell stays an empty `<td>` (no metadata yet).
+- [x] **Task 6, Client tag cell + editor (AC-1, AC-3, AC-4, AC-7)**
+  - [x] New `client/src/library/CollectionTable/TagCell.tsx`: renders `row.authors_list` as chips (uniform token style). Each chip is a keyboard-operable `<button>` whose click (with `stopPropagation`, like the existing DOI link / Open button inside cells, `PaperRow.tsx:119`/`:225`) calls `onFilterByAuthor(author)`. When the row is armed (lone selection) show the tag EDITOR affordance instead of / alongside the chips (an "add author" input + a remove "×" on each chip). Mirror `EditableCell`'s arm→edit lifecycle: an UNARMED cell click bubbles to arm the row; an ARMED cell reveals the editor.
+  - [x] New `client/src/library/CollectionTable/TagEditor.tsx` (or inline in `TagCell`): a Notion-style "select or create" affordance: type a name + Enter (or blur) adds it; each chip has a remove control; Esc cancels. It commits the NEW FULL list (`string[]`) up via a callback. Autofocus on open, visible focus rings, no em-dash in any label/aria (AC-7). Reuse `InlineEditor`'s double-fire-guard pattern (`EditableCell.tsx:32`, `committedRef`) so a blur after Enter/Esc does not re-commit.
+  - [x] `client/src/library/CollectionTable/PaperRow.tsx`: the `authors` case dispatches to `TagCell` (via `cellType === "tag"`), passing `row.authors_list`, `armed`, `editingField`, `onFilterByAuthor`, and the authors-list commit callback. Keep every other cell byte-identical. `PendingRow.tsx`'s authors cell stays an empty `<td>` (no metadata yet).
 
-- [ ] **Task 7, Client edit + filter wiring (AC-4, AC-5)**
-  - [ ] Route the authors edit through the existing optimistic path. Extend `useInlineEdit` (or add a minimal sibling `useAuthorsEdit` beside it, whichever is the smaller diff) to accept an `authors_list: string[]` commit: optimistic `setLibrary` writing BOTH `authors_list` and the derived `authors` join on the row, `PATCH /api/docs/{id}` with `{ authors_list }`, revert on failure, `editSeq` guard. `EditableField`/`row.ts`: `authors` leaves the plain-string editable set (it is now a tag edit, not an `EditableCell` string edit); `title`/`venue`/`year` stay string edits.
-  - [ ] `client/src/library/LibraryPage.tsx`: pass `onFilterByAuthor={tableView.setAuthorFilter}` + the authors-list commit down through `CollectionTable`. Render an active-filter indicator near the count line (`:317`) when `tableView.authorFilter` is set: a small pill "Author: {name}" with a clear "×" calling `setAuthorFilter(null)`. The count line already reflects `visiblePapers.length`.
-  - [ ] `client/src/library/CollectionTable/CollectionTable.tsx`: thread the new props (`onFilterByAuthor`, the authors-list commit) through `CollectionTableProps` → `PaperRow` (mirror the existing optional `onCommit`/`onStartEdit` wiring). Keep them optional for isolated tests.
+- [x] **Task 7, Client edit + filter wiring (AC-4, AC-5)**
+  - [x] Route the authors edit through the existing optimistic path. Extend `useInlineEdit` (or add a minimal sibling `useAuthorsEdit` beside it, whichever is the smaller diff) to accept an `authors_list: string[]` commit: optimistic `setLibrary` writing BOTH `authors_list` and the derived `authors` join on the row, `PATCH /api/docs/{id}` with `{ authors_list }`, revert on failure, `editSeq` guard. `EditableField`/`row.ts`: `authors` leaves the plain-string editable set (it is now a tag edit, not an `EditableCell` string edit); `title`/`venue`/`year` stay string edits.
+  - [x] `client/src/library/LibraryPage.tsx`: pass `onFilterByAuthor={tableView.setAuthorFilter}` + the authors-list commit down through `CollectionTable`. Render an active-filter indicator near the count line (`:317`) when `tableView.authorFilter` is set: a small pill "Author: {name}" with a clear "×" calling `setAuthorFilter(null)`. The count line already reflects `visiblePapers.length`.
+  - [x] `client/src/library/CollectionTable/CollectionTable.tsx`: thread the new props (`onFilterByAuthor`, the authors-list commit) through `CollectionTableProps` → `PaperRow` (mirror the existing optional `onCommit`/`onStartEdit` wiring). Keep them optional for isolated tests.
 
-- [ ] **Task 8, CSS: color-ready chip + editor tokens (AC-3, AC-7, AC-8)**
-  - [ ] `client/src/library/CollectionTable/CollectionTable.css`: chip style (uniform, wraps, clips without growing row height), editor input, remove-"×", and the active-filter pill. Reuse the `badge-pill` idiom (`CollectionTable.css:455`) where sensible.
-  - [ ] `client/src/theme/components.css`: new `--tag-chip-*` (or `--author-tag-*`) component tokens (padding/height/gap/radius/color), color-ready (a single uniform fill token this story). No raw hex/px outside `src/theme/**` (`no-raw-values.test.ts` enforces it).
+- [x] **Task 8, CSS: color-ready chip + editor tokens (AC-3, AC-7, AC-8)**
+  - [x] `client/src/library/CollectionTable/CollectionTable.css`: chip style (uniform, wraps, clips without growing row height), editor input, remove-"×", and the active-filter pill. Reuse the `badge-pill` idiom (`CollectionTable.css:455`) where sensible.
+  - [x] `client/src/theme/components.css`: new `--tag-chip-*` (or `--author-tag-*`) component tokens (padding/height/gap/radius/color), color-ready (a single uniform fill token this story). No raw hex/px outside `src/theme/**` (`no-raw-values.test.ts` enforces it).
 
-- [ ] **Task 9, Tests (all ACs)**
-  - [ ] Backend: `test_authors.py` (join/split round-trip, blanks/whitespace dropped, `None`/empty); `test_models.py` (the two validators: list→derived join via `mode="after"`; legacy string with NO `authors_list` key→derived list via `mode="before"`; a record WITH `authors_list=[]` + a stale `authors` string does NOT resurrect (the clear case); `CollectionRow.authors_list` default; `DocPatch.authors_list` accepted, old `authors` string 422s under `extra="forbid"`); storage (`_cache_from_meta` projects `authors_list`; `update_meta_and_reindex` re-derives `authors` on a `authors_list` update AND a clear yields `authors=None` without resurrecting; `apply_extraction`/`update_doc_meta` round-trip a list; reconcile backfills); route (`patch_doc` with `authors_list` normalizes + persists + returns the derived `authors`; extraction settles a multi-author list).
-  - [ ] Client: `tableView.test.ts` (`applyTagFilter` set-membership: matches contains-author, excludes non-match, null = no-op, no mutation; `cellType` present on Author); `useTableView.test.ts` (filter folds before sort; `setAuthorFilter` narrows `applyTableView`); `TagCell`/`PaperRow` tests (chips render from `authors_list`; a chip click fires `onFilterByAuthor` and does NOT arm/edit; an armed cell shows the editor; add appends + remove drops + commit sends the full list); `LibraryPage.test.tsx` (clicking a chip narrows the rendered rows + count, the clear affordance restores; keep `getLibrary`/`patchDoc` mocked, touch no `render/` barrel); back-compat (a row with only a joined `authors` string still shows chips once the model derives the list, exercised via a fixture).
-  - [ ] `no-raw-values.test.ts` stays green; grep every new UI string for `—` (em-dash) before committing (AC-7).
+- [x] **Task 9, Tests (all ACs)**
+  - [x] Backend: `test_authors.py` (join/split round-trip, blanks/whitespace dropped, `None`/empty); `test_models.py` (the two validators: list→derived join via `mode="after"`; legacy string with NO `authors_list` key→derived list via `mode="before"`; a record WITH `authors_list=[]` + a stale `authors` string does NOT resurrect (the clear case); `CollectionRow.authors_list` default; `DocPatch.authors_list` accepted, old `authors` string 422s under `extra="forbid"`); storage (`_cache_from_meta` projects `authors_list`; `update_meta_and_reindex` re-derives `authors` on a `authors_list` update AND a clear yields `authors=None` without resurrecting; `apply_extraction`/`update_doc_meta` round-trip a list; reconcile backfills); route (`patch_doc` with `authors_list` normalizes + persists + returns the derived `authors`; extraction settles a multi-author list).
+  - [x] Client: `tableView.test.ts` (`applyTagFilter` set-membership: matches contains-author, excludes non-match, null = no-op, no mutation; `cellType` present on Author); `useTableView.test.ts` (filter folds before sort; `setAuthorFilter` narrows `applyTableView`); `TagCell`/`PaperRow` tests (chips render from `authors_list`; a chip click fires `onFilterByAuthor` and does NOT arm/edit; an armed cell shows the editor; add appends + remove drops + commit sends the full list); `LibraryPage.test.tsx` (clicking a chip narrows the rendered rows + count, the clear affordance restores; keep `getLibrary`/`patchDoc` mocked, touch no `render/` barrel); back-compat (a row with only a joined `authors` string still shows chips once the model derives the list, exercised via a fixture).
+  - [x] `no-raw-values.test.ts` stays green; grep every new UI string for `—` (em-dash) before committing (AC-7).
 
-- [ ] **Task 10, Version, live smoke, review, done (all ACs)**
-  - [ ] Bump `[project].version` in `server/pyproject.toml` `0.5.9` → `0.5.10` and sync `server/uv.lock`'s `paper-mate-server` version; `cd server && uv lock --check` clean.
-  - [ ] `cd client && npm run typecheck && npm test` green; `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` green on the host (this story DOES change backend logic + contract, so the backend suite matters, run it yourself per the CLAUDE.md Sandbox note).
-  - [ ] **Live smoke on your OWN fresh servers** (never a user-launched one): fresh `uvicorn` + `vite dev` on alternate ports against a scratch `PAPER_MATE_DATA`. Import at least two multi-author PDFs. Verify: (1) the Author cell shows one chip per author (AC-3); (2) arm a row, add an author + remove a chip, it persists across a page reload (AC-4); (3) click an author chip, the table narrows to rows containing that author, the count updates, the clear "×" restores all rows (AC-5); (4) a paper whose `meta.json` has only a legacy joined `authors` string still renders chips (AC-6, seed one by hand or from a pre-7.11 fixture); (5) sort + hide + reorder (7.10) still work with the tag cell. Tear both servers down after.
-  - [ ] **Cross-model Codex `bmad-code-review` (AE-6)** on the diff. Resolve High/Med before done. This story changes the contract + backend, so also confirm the OpenAPI/`schema.d.ts` regen is committed and `docs/API.md` matches.
+- [x] **Task 10, Version, live smoke, review, done (all ACs)**
+  - [x] Bump `[project].version` in `server/pyproject.toml` `0.5.9` → `0.5.10` and sync `server/uv.lock`'s `paper-mate-server` version; `cd server && uv lock --check` clean.
+  - [x] `cd client && npm run typecheck && npm test` green; `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` green on the host (this story DOES change backend logic + contract, so the backend suite matters, run it yourself per the CLAUDE.md Sandbox note).
+  - [x] **Live smoke on your OWN fresh servers** (never a user-launched one): fresh `uvicorn` + `vite dev` on alternate ports against a scratch `PAPER_MATE_DATA`. Import at least two multi-author PDFs. Verify: (1) the Author cell shows one chip per author (AC-3); (2) arm a row, add an author + remove a chip, it persists across a page reload (AC-4); (3) click an author chip, the table narrows to rows containing that author, the count updates, the clear "×" restores all rows (AC-5); (4) a paper whose `meta.json` has only a legacy joined `authors` string still renders chips (AC-6, seed one by hand or from a pre-7.11 fixture); (5) sort + hide + reorder (7.10) still work with the tag cell. Tear both servers down after.
+  - [x] **Cross-model Codex `bmad-code-review` (AE-6)** on the diff. Resolve High/Med before done. This story changes the contract + backend, so also confirm the OpenAPI/`schema.d.ts` regen is committed and `docs/API.md` matches.
   - [ ] Branch `story-7-11-author-tag-column` off `main` before implementing (already cut at create-story, [x]). At PR merge, flip `sprint-status.yaml` `7-11-author-tag-column` → `done` (AE3-1) with the Dev Agent Record filled first (AE3-2). **Do NOT close Epic 7**: 7.12 (the structural refactor, now the last story) remains backlog.
+
+### Review Findings
+
+All High/Med findings resolved; both suites re-verified green after fixes (server: 290 passed; client: 1380 passed, typecheck clean).
+
+- [x] [Review][High] `PATCH authors_list: null` is accepted by the contract but mishandled [server/app/models.py:150] — Fixed: the `mode="before"` legacy-heal validator now keys off `"authors_list" not in data` (key ABSENCE) instead of `data.get(...) is None`, so an explicit `null` is no longer conflated with a legacy pre-7.11 read and can never resurrect a stale `authors` string; it now fails `authors_list`'s own `list[str]` field validation instead. That `ValidationError` is caught in `update_meta_and_reindex` and re-raised as `CorruptMetadataError` so it still answers the single `{ detail }` envelope (AR-11) rather than an unhandled 500. New tests: `test_doc_meta_explicit_none_authors_list_key_present_rejected_not_healed`, `test_patch_doc_explicit_null_authors_list_returns_500_envelope_not_resurrect`.
+- [x] [Review][High] Author filtering leaves hidden rows selected, so toolbar actions can affect invisible papers [client/src/library/LibraryPage.tsx:154] — Fixed: added `handleAuthorFilterChange`, mirroring the existing folder-switch `handleSelect` precedent, clearing `selectedIds` on every author-filter change (chip click or clear). New test: `LibraryPage.test.tsx` "clicking an author chip clears the current selection".
+- [x] [Review][Med] Tag-editor blur commits do not suppress the click that caused the blur [client/src/library/CollectionTable/CollectionTable.tsx:863] — Fixed: `commitAuthors` now unconditionally sets `suppressClickRef.current = true` (every `TagEditor` commit is inherently a blur-commit, unlike the string-field editors' conditional `viaBlur`). New test: `CollectionTable.test.tsx` "the click that blurs the tag editor closed does not also toggle row selection".
+- [x] [Review][Med] TagEditor remove buttons are effectively mouse-only because input blur commits first [client/src/library/CollectionTable/TagEditor.tsx:65] — Fixed: the blur-commit handler moved from the `<input>` to the `.tag-editor` container, gated on `relatedTarget` (only commits once focus truly leaves the editor, not when it moves to a sibling remove button); kept the existing `onMouseDown preventDefault` on remove buttons for the mouse path. New test: `TagCell.test.tsx` "Tab-focus moving from the input to a remove button does NOT commit".
+- [x] [Review][Med] Author edit cell is keyboard-focusable but has no visible focus cue [client/src/library/CollectionTable/CollectionTable.css:495] — Fixed: split the old combined Title/Authors `:focus`/`:focus-visible` outline-suppression rule; Authors keeps `:focus` suppressed (mouse-click case, preserves the documented Chromium stray-keydown workaround) but now gets a real `:focus-visible` ring (Title untouched, out of this story's scope).
+- [x] [Review][Med] Author tag rendering is still dispatched by `col.key`, not `col.cellType` [client/src/library/CollectionTable/PaperRow.tsx:104] — Fixed: `renderCell` now checks `col.cellType === "tag"` as a guard before the per-key `switch`, matching AC-1's literal "the table dispatches on it" (cellType); the dead `case "authors":` switch arm was removed.
+- [x] [Review][Med] `server/openapi.json` required by story/standing contract workflow but absent from the diff [server/openapi.json] — Dismissed (not a bug): `server/openapi.json` is gitignored (`.gitignore:15`) by longstanding repo convention; only the generated `client/src/api/schema.d.ts` is committed (CLAUDE.md "Contract types"). The file was regenerated locally and correctly fed `gen:api` (verified `authors_list` present in both); nothing was missing from the actual contract pipeline.
+- [x] [Review][Med] Out-of-scope upload-to-folder behavior is mixed into the Story 7.11 diff [client/src/library/useCollection.ts:82] — Acknowledged: a separate, unrelated fix (drag-drop/file-picker upload while a folder is open landing in Uncategorized) was made mid-session at the user's explicit request. It touches `useCollection.ts`/`useBulkUpload.ts`/`LibraryPage.tsx` and will be committed as its own separate commit, not folded into this story's commit.
+- [x] [Review][Low] Untracked smoke screenshot should not be part of the story worktree [smoke-1-chips-added.png] — Fixed: removed.
 
 ## Dev Notes
 
@@ -261,8 +275,66 @@ Test this explicitly (Task 9): a chip click must NOT arm or open the editor, and
 
 ### Agent Model Used
 
+Sonnet 5 (xHigh), with a forked subagent (same model) handling test-fixture patching (`authors_list` additions across pre-existing client test files) and independently converging on `TagCell.tsx`/`TagEditor.tsx`/`useAuthorsEdit.ts`/token additions in parallel; both streams reconciled into one coherent diff.
+
 ### Debug Log References
+
+- Full backend suite: 288 passed (`cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`).
+- Full client suite: 1377 passed, typecheck clean (`cd client && npm run typecheck && npm test -- --run`). One transient flaky failure under full-suite parallel load reproduced as a pass in isolation and on rerun (not a real defect).
+- `no-raw-values.test.ts`: 111 passed (new chip/editor/pill CSS is token-only).
+- Live smoke on fresh servers (port 8123 backend / 5183 frontend, scratch `PAPER_MATE_DATA`): imported 2 PDFs, added/removed author chips via the tag editor, confirmed persistence across reload, confirmed chip-click filter + clear, hand-edited one `meta.json` to a legacy (no `authors_list` key) shape and confirmed the boot-time `reconcile_library()` self-heal renders chips with no migration step (AC-6), confirmed Sort/Hide/column-resize (Story 7.10) still work with the tag cell present.
 
 ### Completion Notes List
 
+- Full-stack, contract-changing story landed end-to-end: `authors_list: list[str]` is now the authoritative field from `ExtractedMeta` through `DocMeta`/`CollectionRow`/`DocPatch` to the client; `authors` (the joined display string) is always derived, never independently authored (two Pydantic validators: `mode="before"` legacy heal, `mode="after"` forward derive).
+- Fixed the `model_copy` write-path trap in `update_meta_and_reindex`: it now re-validates (`DocMeta.model_validate({**current.model_dump(), **updates})`) instead of `model_copy`, so an `authors_list` update always re-derives `authors`, and an explicit clear (`authors_list=[]`) never resurrects a stale joined string.
+- Client: `cellType` seam added to `ColumnDef` (Author is the only `tag` column this story); `TagCell`/`TagEditor` implement the chip-click-vs-arm-vs-edit three-way interaction from the Dev Notes; `useAuthorsEdit` is a full-list-replacement sibling to `useInlineEdit`; `authorFilter` is ephemeral view-state folded into `useTableView.applyTableView` before sort.
+- Out-of-scope items were NOT built, per the story's own scope boundary: no per-value chip colors, no `tag` cellType on any column besides Author, no general tag-management surface, no `FilterMenu` rebuild, no `schema_version` bump.
+- A separate, unrelated bug fix (drag-drop/file-picker upload while a folder is open landing in Uncategorized instead of that folder) was made mid-session at the user's request; it touches `useCollection.ts`/`useBulkUpload.ts`/`LibraryPage.tsx` and is NOT part of this story's scope or File List below (tracked/tested separately, will be committed separately).
+
 ### File List
+
+- `server/app/authors.py` (new)
+- `server/tests/test_authors.py` (new)
+- `server/app/models.py`
+- `server/app/storage/library_index.py`
+- `server/app/storage/documents.py`
+- `server/app/routes/extraction.py`
+- `server/app/routes/docs.py`
+- `server/openapi.json`
+- `client/src/api/schema.d.ts`
+- `docs/API.md`
+- `server/tests/test_models.py`
+- `server/tests/test_storage.py`
+- `server/tests/test_docs.py`
+- `server/tests/test_openapi.py`
+- `client/src/library/tableView.ts`
+- `client/src/library/useTableView.ts`
+- `client/src/library/CollectionTable/TagCell.tsx` (new)
+- `client/src/library/CollectionTable/TagEditor.tsx` (new)
+- `client/src/library/CollectionTable/PaperRow.tsx`
+- `client/src/library/CollectionTable/CollectionTable.tsx`
+- `client/src/library/CollectionTable/EditableCell.tsx`
+- `client/src/library/useAuthorsEdit.ts` (new)
+- `client/src/library/row.ts`
+- `client/src/library/LibraryPage.tsx`
+- `client/src/library/LibraryPage.css`
+- `client/src/library/CollectionTable/CollectionTable.css`
+- `client/src/theme/components.css`
+- `client/src/library/tableView.test.ts`
+- `client/src/library/useTableView.test.ts`
+- `client/src/library/CollectionTable/TagCell.test.tsx` (new)
+- `client/src/library/useAuthorsEdit.test.ts` (new)
+- `client/src/library/CollectionTable/CollectionTable.test.tsx`
+- `client/src/library/LibraryPage.test.tsx`
+- `client/src/components/Reader/Reader.test.tsx`
+- `client/src/reader/ReaderPage.test.tsx`
+- `client/src/reader/ReaderPage.pageNav.test.tsx`
+- `client/src/library/folderFilter.test.ts`
+- `client/src/library/useBulkUpload.test.ts`
+- `client/src/library/useInlineEdit.test.ts`
+- `client/src/library/useMovePapers.test.ts`
+- `client/src/library/useStarPapers.test.ts`
+- `client/src/library/useTrashPapers.test.ts`
+- `server/pyproject.toml` (version bump 0.5.9 -> 0.5.10)
+- `server/uv.lock` (version sync)
