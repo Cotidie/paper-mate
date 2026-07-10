@@ -1036,6 +1036,26 @@ describe("Folder filter + move (Story 7.2)", () => {
     expect(movePapers).toHaveBeenCalledWith([paper.doc_id], folderA.id);
   });
 
+  it("an upload made while a folder is open lands there, not Uncategorized (fix request)", async () => {
+    const doc = fakeDoc("g".repeat(64), "filed.pdf", "Filed Paper");
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [], folders: [folderA] });
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(doc);
+    const movePapers = vi
+      .spyOn(api, "movePapers")
+      .mockResolvedValue({ papers: [{ ...rowFromDoc(doc, 0), folder_id: folderA.id }], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Folder A" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Folder A" }));
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile("filed.pdf")] },
+    });
+
+    await waitFor(() => expect(screen.getByText("Filed Paper")).toBeTruthy());
+    expect(movePapers).toHaveBeenCalledWith([doc.doc_id], folderA.id);
+  });
+
   it("a same-page drag (row-move, column-reorder) over the main area does NOT show the file-drop dropzone border (fix request)", async () => {
     const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
