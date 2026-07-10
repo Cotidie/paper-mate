@@ -4,7 +4,7 @@ baseline_commit: 242fa493f401b56c6b0815ffce0d31f3b918fdf9
 
 # Story 7.11: Tag-type columns, Author as editable, filterable tags
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -291,6 +291,11 @@ Sonnet 5 (xHigh), with a forked subagent (same model) handling test-fixture patc
 - Client: `cellType` seam added to `ColumnDef` (Author is the only `tag` column this story); `TagCell`/`TagEditor` implement the chip-click-vs-arm-vs-edit three-way interaction from the Dev Notes; `useAuthorsEdit` is a full-list-replacement sibling to `useInlineEdit`; `authorFilter` is ephemeral view-state folded into `useTableView.applyTableView` before sort.
 - Out-of-scope items were NOT built, per the story's own scope boundary: no per-value chip colors, no `tag` cellType on any column besides Author, no general tag-management surface, no `FilterMenu` rebuild, no `schema_version` bump.
 - A separate, unrelated bug fix (drag-drop/file-picker upload while a folder is open landing in Uncategorized instead of that folder) was made mid-session at the user's request; it touches `useCollection.ts`/`useBulkUpload.ts`/`LibraryPage.tsx` and is NOT part of this story's scope or File List below (tracked/tested separately, will be committed separately).
+- **2026-07-11 (post-review fix requests):** Two follow-up fixes landed on this branch before merge:
+  1. **Row divider misalignment.** `.collection-table__title`/`.collection-table__location` set `display: flex` directly on the `<td>`, which opts a table cell out of the table's per-row height-stretch (only a real `display: table-cell` box participates); whenever another cell in the row (a wrapped Author chip list) grew the row taller, these two columns' `border-bottom` stayed short, staggering the divider line. Fixed by moving the flex layout onto an inner wrapper `<div>` and leaving the `<td>` itself a plain table-cell.
+  2. **AC-5 reversed: the click-to-filter-by-author affordance was removed**, per explicit user fix request ("it makes it hard to edit Authors"). `onFilterByAuthor`/`authorFilter`/`applyTagFilter` and the toolbar filter pill are deleted client-side (`tableView.ts`, `useTableView.ts`, `LibraryPage.tsx`, `CollectionTable.tsx`, `PaperRow.tsx`, `TagCell.tsx` + their tests); chips are now plain, non-interactive `<span>`s. AC-5 as written in this story is superseded - Author chips no longer filter, a cell click always arms/edits like every other column. A follow-up fix then handled overflow: `AuthorChips` (`TagCell.tsx`) measures chip widths in a `useLayoutEffect` and shows only what fits on one line plus a trailing "et al." (replacing the earlier wrap-then-clip layout, which left a sliver of a clipped 2nd-row chip visible).
+  3. Both fixes live-smoked on fresh scratch servers against the user's real `~/.paper-mate` library (multi-author real papers, not synthetic fixtures): confirmed zero row-bottom spread across every row, confirmed chip-click no longer filters (row count unchanged, chip click just arms the row), confirmed column drag-resize correctly reveals/hides chips + `et al.` live.
+- **2026-07-11:** PR #61 merged to `main` (`1791c0e`, squash, includes both post-review fixes above). Status set to done.
 
 ### File List
 
