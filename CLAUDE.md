@@ -74,7 +74,7 @@ Standing conventions from the Epic 1 retrospective (2026-06-29):
 `vMAJOR.MINOR.PATCH`. **Single source: `[project].version` in `server/pyproject.toml`** (read by `app/version.py` → `GET /api/health` → the top-bar badge; never hard-code a version elsewhere).
 
 - **PATCH +1** per story completed, or per standalone fix (no story). Bump once when the story reaches `done` (PR merge), not per commit. Resets to 0 on a MINOR bump.
-- **MINOR +1** per epic completed. Resets PATCH to 0. (Early on minor tracks the epic number: epic 1 done → `0.1.0`; they decouple after 1.0.)
+- **MINOR +1** per epic completed. Resets PATCH to 0. (Early on minor tracks the epic number: epic 1 done → `0.1.0`; they decouple after 1.0.) **Exception (user decision 2026-07-11): Epic 7's close does NOT take a MINOR bump — it stays on `0.5.x`. Do not bump to `0.6.0` at Epic 7 close.**
 - **MAJOR +1** on a compatibility break the previous MAJOR can't read — a persisted annotation-data format break (`~/.paper-mate`, AD-8) or an API-contract break (AD-3) — OR at the **v1 product launch** (Phase 1 complete → `1.0.0`).
 - Pre-launch stays in `0.x` (semver: unstable, anything may change). Current baseline: **`0.1.0`** (Epic 1 done).
 
