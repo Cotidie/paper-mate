@@ -18,6 +18,7 @@ const fakeDoc = (doc_id: string, filename: string): api.Doc => ({
   page_count: 1,
   added: "2026-07-05T00:00:00+00:00",
   last_opened: "2026-07-05T00:00:00+00:00",
+  authors_list: [],
   file_type: "pdf",
   status: "ready",
   schema_version: 1,
@@ -46,10 +47,28 @@ describe("useBulkUpload", () => {
     await waitFor(() => expect(result.current.pending.length).toBe(0));
 
     expect(uploadDoc).toHaveBeenCalledTimes(2);
-    expect(onResolved).toHaveBeenCalledWith(docA);
-    expect(onResolved).toHaveBeenCalledWith(docB);
+    expect(onResolved).toHaveBeenCalledWith(docA, null);
+    expect(onResolved).toHaveBeenCalledWith(docB, null);
     expect(onBatchSettled).toHaveBeenCalledTimes(1);
     expect(onFailed).not.toHaveBeenCalled();
+  });
+
+  it("passes the target folderId through to onResolved for every resolved file (fix request)", async () => {
+    const docA = fakeDoc("a".repeat(64), "a.pdf");
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(docA);
+
+    const onResolved = vi.fn();
+    const { result } = renderHook(() =>
+      useBulkUpload({ onResolved, onBatchSettled: vi.fn(), onFailed: vi.fn() }),
+    );
+
+    act(() => {
+      result.current.uploadFiles([pdfFile("a.pdf")], "folder-1");
+    });
+
+    await waitFor(() => expect(result.current.pending.length).toBe(0));
+
+    expect(onResolved).toHaveBeenCalledWith(docA, "folder-1");
   });
 
   it("isolates a per-file failure: the other file still resolves, failure count reported once", async () => {
@@ -72,7 +91,7 @@ describe("useBulkUpload", () => {
     await waitFor(() => expect(result.current.pending.length).toBe(0));
 
     expect(onResolved).toHaveBeenCalledTimes(1);
-    expect(onResolved).toHaveBeenCalledWith(goodDoc);
+    expect(onResolved).toHaveBeenCalledWith(goodDoc, null);
     expect(onBatchSettled).toHaveBeenCalledTimes(1);
     expect(onFailed).toHaveBeenCalledTimes(1);
     expect(onFailed).toHaveBeenCalledWith(1);

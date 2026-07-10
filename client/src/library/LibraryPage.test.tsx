@@ -42,6 +42,7 @@ function fakeDoc(doc_id: string, filename: string, title: string | null = null):
     page_count: 1,
     added: "2026-07-05T00:00:00+00:00",
     last_opened: "2026-07-05T00:00:00+00:00",
+    authors_list: [],
     file_type: "pdf",
     status: "ready",
     schema_version: 1,
@@ -53,6 +54,7 @@ function rowFromDoc(doc: api.Doc, order: number): api.CollectionRow {
     doc_id: doc.doc_id,
     title: doc.title ?? null,
     authors: null,
+    authors_list: doc.authors_list,
     added: doc.added,
     file_type: doc.file_type,
     status: doc.status,
@@ -87,6 +89,7 @@ const fakeRow: api.CollectionRow = {
   doc_id: "c".repeat(64),
   title: "Attention Is All You Need",
   authors: "Vaswani et al.",
+  authors_list: ["Vaswani et al."],
   added: "2026-07-05T00:00:00+00:00",
   file_type: "pdf",
   status: "ready",
@@ -441,6 +444,7 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
       doc_id,
       title,
       authors: null,
+      authors_list: [],
       added: "2026-07-05T00:00:00+00:00",
       file_type: "pdf",
       status,
@@ -773,6 +777,7 @@ describe("Folder filter + move (Story 7.2)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
       status: "ready",
@@ -1036,6 +1041,26 @@ describe("Folder filter + move (Story 7.2)", () => {
     expect(movePapers).toHaveBeenCalledWith([paper.doc_id], folderA.id);
   });
 
+  it("an upload made while a folder is open lands there, not Uncategorized (fix request)", async () => {
+    const doc = fakeDoc("g".repeat(64), "filed.pdf", "Filed Paper");
+    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [], folders: [folderA] });
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(doc);
+    const movePapers = vi
+      .spyOn(api, "movePapers")
+      .mockResolvedValue({ papers: [{ ...rowFromDoc(doc, 0), folder_id: folderA.id }], folders: [folderA] });
+    renderLibrary();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Folder A" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Folder A" }));
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile("filed.pdf")] },
+    });
+
+    await waitFor(() => expect(screen.getByText("Filed Paper")).toBeTruthy());
+    expect(movePapers).toHaveBeenCalledWith([doc.doc_id], folderA.id);
+  });
+
   it("a same-page drag (row-move, column-reorder) over the main area does NOT show the file-drop dropzone border (fix request)", async () => {
     const paper = libraryRow({ doc_id: "m".repeat(64), title: "Movable Paper", order: 0 });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [folderA] });
@@ -1165,6 +1190,7 @@ describe("Display, Sort controls (Story 7.4)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
       status: "ready",
@@ -1181,7 +1207,12 @@ describe("Display, Sort controls (Story 7.4)", () => {
   }
 
   it("Display: hiding a column omits its header and cells without touching the others", async () => {
-    const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
+    const paper = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Only Paper",
+      authors: "Some Author",
+      authors_list: ["Some Author"],
+    });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
@@ -1222,7 +1253,12 @@ describe("Display, Sort controls (Story 7.4)", () => {
   });
 
   it("Column header dropdown: Hide from a header's own menu omits that column (fix request: clickable headers)", async () => {
-    const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
+    const paper = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Only Paper",
+      authors: "Some Author",
+      authors_list: ["Some Author"],
+    });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
@@ -1235,7 +1271,12 @@ describe("Display, Sort controls (Story 7.4)", () => {
   });
 
   it("Column header dropdown: Move right persists the column order across a remount (Story 7.10, AC-1/AC-3)", async () => {
-    const paper = libraryRow({ doc_id: "1".repeat(64), title: "Only Paper", authors: "Some Author" });
+    const paper = libraryRow({
+      doc_id: "1".repeat(64),
+      title: "Only Paper",
+      authors: "Some Author",
+      authors_list: ["Some Author"],
+    });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
@@ -1356,6 +1397,7 @@ describe("Trash (Story 7.5)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
       status: "ready",
@@ -1532,6 +1574,7 @@ describe("Trash (Story 7.5)", () => {
       page_count: 1,
       added: "2026-07-06T00:00:00+00:00",
       last_opened: "2026-07-07T00:00:00+00:00",
+      authors_list: [],
       file_type: "pdf",
       status: "ready",
       schema_version: 1,
@@ -1552,6 +1595,7 @@ describe("Recent (Story 7.7)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       last_opened: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
@@ -1753,6 +1797,7 @@ describe("Star (Story 7.8)", () => {
       doc_id: "p".repeat(64),
       title: "A Paper",
       authors: null,
+      authors_list: [],
       added: "2026-07-06T00:00:00+00:00",
       file_type: "pdf",
       status: "ready",

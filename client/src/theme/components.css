@@ -212,6 +212,22 @@
   --badge-pill-padding-y: 4px;
   --badge-pill-padding-x: 10px;
 
+  /* tag-chip (Story 7.11): the Author cell's per-author chip, uniform +
+     color-ready (a single fill token this story; a future per-value color
+     assignment overrides `--tag-chip-bg`/`--tag-chip-color` per chip, not
+     this token's shape). Shared by the settled cell's chips and the armed
+     editor's chips (`--editable` variant adds the remove control's gap). */
+  --tag-chip-padding-y: 2px;
+  --tag-chip-padding-x: 8px;
+  --tag-chip-gap: 4px;
+  --tag-chip-bg: var(--color-surface-strong);
+  --tag-chip-color: var(--color-ink);
+  --tag-chip-remove-size: 12px;
+
+  /* tag-editor (Story 7.11): the armed Author cell's "select or create"
+     input, sized to sit inline with its own chips inside one table row. */
+  --tag-editor-input-min-width: 96px;
+
   /* collection-table (Story 6.3): row/column dims for the Library table + its
      loading skeleton, which must reserve the same layout. */
   --collection-table-row-height: 34px;

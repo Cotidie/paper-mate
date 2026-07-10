@@ -58,7 +58,8 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
     "page_count": 12,
     "added": "2026-06-28T00:00:00+00:00",
     "last_opened": "2026-06-28T00:00:00+00:00",
-    "authors": null,             // string | null; filled by background enrichment
+    "authors": null,             // string | null; derived join of authors_list, never authored directly
+    "authors_list": [],          // string[]; the authoritative multi-value field, filled by background enrichment
     "file_type": "pdf",          // "pdf" | "note"
     "status": "extracting",      // a new import; settles to ready | enrich-skipped | parse-failed
     "doi": null,                  // string | null; extraction-sourced, filled on settle
@@ -70,15 +71,20 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
 - **400** → `{ "detail": "Could not read PDF file" }` — corrupt, empty, or non-PDF bytes. Nothing is written.
 
 > `Doc` = `doc_id` + the on-disk `meta.json` schema (`DocMeta`:
-> `filename, title, page_count, added, last_opened, authors, file_type, status, doi, venue, year, schema_version`).
+> `filename, title, page_count, added, last_opened, authors, authors_list, file_type, status, doi, venue, year, schema_version`).
 > `doc_id` is the library folder name and is **not** stored inside `meta.json`
 > (AD-8). `authors`/`file_type`/`status` are additive (Story 6.2); `doi`/`venue`/`year`
-> are additive (Story 7.9, Crossref new-imports-only). A new import
-> lands at `status: "extracting"`; the background pipeline (Story 6.5) drives the
-> `extracting -> ready | enrich-skipped | parse-failed` transitions and fills
-> `authors` and (when Crossref matches) `doi`/`venue`/`year`. This import also
-> indexes the paper into `library.json` (see `GET /api/library` below) as
-> Uncategorized, untrashed, at the next order.
+> are additive (Story 7.9, Crossref new-imports-only). `authors_list` is additive
+> (Story 7.11, no `schema_version` bump): it is the authoritative multi-value
+> field; `authors` is always its derived join, never independently authored.
+> A pre-7.11 `meta.json` (a joined `authors` string, no `authors_list` key)
+> self-heals on read: `authors_list` is derived by splitting on `", "`
+> (best-effort — exact unless an author name itself contains `", "`). A new
+> import lands at `status: "extracting"`; the background pipeline (Story 6.5)
+> drives the `extracting -> ready | enrich-skipped | parse-failed` transitions
+> and fills `authors_list` and (when Crossref matches) `doi`/`venue`/`year`.
+> This import also indexes the paper into `library.json` (see `GET
+> /api/library` below) as Uncategorized, untrashed, at the next order.
 
 ### `GET /api/docs/{doc_id}` — get a document's own metadata
 
@@ -112,18 +118,22 @@ aborts an otherwise-readable open.
 ### `PATCH /api/docs/{doc_id}` — partially update title/authors/venue/year
 
 Correct a wrong `title`, `authors`, `venue`, or `year` in place (Story 6.6;
-`venue`/`year` added by a Story 7.9 fix request, AD-L6). `meta.json`
+`venue`/`year` added by a Story 7.9 fix request; `authors` -> `authors_list`
+in Story 7.11, AD-L6). `meta.json`
 is authoritative; the write also refreshes the `library.json` display cache
 (`GET /api/library` reflects the change with no separate read path). Editing
 never changes `status`, `page_count`, `added`, or `last_opened`. `doi` is
 NOT patchable here (link-only cell, Story 7.9's scope boundary).
 
-- **Request body:** `DocPatch` — `{ "title"?: string | null, "authors"?: string | null, "venue"?: string | null, "year"?: int | null }`.
+- **Request body:** `DocPatch` — `{ "title"?: string | null, "authors_list"?: string[] | null, "venue"?: string | null, "year"?: int | null }`.
   Only fields present in the body change (`exclude_unset` partial semantics);
-  a present empty/whitespace `title`/`authors`/`venue` normalizes to `null`
-  (Title falls back to the filename display fallback; Authors/Venue render
-  empty). `extra="forbid"`: a non-editable field (e.g. `status`, `doi`) is
-  rejected, not silently dropped.
+  a present empty/whitespace `title`/`venue` normalizes to `null` (Title
+  falls back to the filename display fallback; Venue renders empty).
+  `authors_list` is a **full-list replacement** (add appends, remove drops,
+  the client sends the whole intended list): each entry is stripped and
+  blanks are dropped, and an empty resulting list is a legitimate "cleared
+  authors" edit (derives `authors: null`), not a no-op. `extra="forbid"`: a
+  non-editable field (e.g. `status`, `doi`) is rejected, not silently dropped.
 - **200** → `Doc` (the full updated document, same shape as `GET /api/docs/{doc_id}`).
 - **400** → `{ "detail": "No fields to update" }` — empty body.
 - **404** → `{ "detail": "Document not found" }` — no `meta.json` for `doc_id`.
@@ -208,6 +218,7 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
         "doc_id": "40cb003b…c0347f4",
         "title": "A Paper",
         "authors": null,
+        "authors_list": [],
         "added": "2026-06-28T00:00:00+00:00",
         "last_opened": "2026-06-28T00:00:00+00:00",
         "file_type": "pdf",
@@ -230,7 +241,7 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 
 > `library.json` is the authoritative index for **cross-doc** state: the
 > folder tree, membership (paper → ≤1 folder), trash, star, and paper order. A
-> paper's **own** fields (title/authors/added/last_opened/file_type/status/
+> paper's **own** fields (title/authors/authors_list/added/last_opened/file_type/status/
 > filename/doi/venue/year) stay authoritative in its `meta.json`;
 > `CollectionRow`'s display fields are a non-authoritative cache of that
 > projection, refreshed from `meta.json` on every index write, so this
@@ -408,6 +419,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-10 (Story 7.11):** `authors` becomes a first-class list end-to-end. `DocMeta` and `CollectionRow` gain `authors_list: string[]` (additive, default `[]`, no `schema_version` bump); `authors` stays but is now always the derived join of `authors_list` (never independently authored). A pre-7.11 `meta.json`/`library.json` row (a joined `authors` string, no `authors_list` key) self-heals its list on read by splitting on `", "` (best-effort). `DocPatch.authors` is replaced by `DocPatch.authors_list: string[] | null` — a full-list replacement (the client sends the complete intended author list; an empty list is a legitimate clear, not a no-op). No new path; contract shape change on `Doc`/`CollectionRow`/`DocPatch`.
 - **2026-07-08 (Story 7.9 fix request):** venue/year/doi/authors gain an arXiv fallback during the existing background enrichment: when Crossref leaves `venue` unset AND the PDF carries an arXiv id (a stamp like `arXiv:2103.12345v2` found in the extracted text), arXiv's own record (via the `arxiv` client library) fills `venue` (its `journal_ref` if the preprint was later formally published, else the literal `"arXiv"`) and `year` (the submission year); when the PDF/Crossref left `doi`/`authors` empty too, arXiv's own self-assigned DOI (the deterministic `10.48550/arXiv.<id>` pattern) and its author list fill those in as well. Crossref, when it does have an answer, stays authoritative; the fallback only fires on a Crossref miss, and never overwrites a real extraction/Crossref-sourced value. No contract change (still the same `DocMeta`/`CollectionRow` fields from Story 7.9), no new path.
 - **2026-07-08 (Story 7.9 fix request):** `DocPatch` gains `venue: str | null`, `year: int | null` (additive; `PATCH /api/docs/{doc_id}` now edits Venue/Year inline alongside Title/Authors). `doi` stays NOT patchable (link-only cell). No new path, no `schema_version` bump.
 - **2026-07-08 (Story 7.9):** `CollectionRow` gains `doi: str | null`, `venue: str | null`, `year: int | null` (additive, all default `null`; `GET /api/library`'s `Library` response); `DocMeta` gains the same three fields (its `meta.json`-authoritative source); `ExtractedMeta` (internal, not in the OpenAPI schema) gains `venue`/`year` alongside its existing `doi`. Meta-derived cache (like `filename`/`last_opened`), projected through `_cache_from_meta` so it auto-seeds new imports and backfills a pre-existing row on the next reconcile. `venue`/`year` are captured from Crossref (`container-title[0]`, and the first of `issued`/`published-print`/`published-online`/`published` `date-parts[0][0]`) during the existing enrichment; `doi` stays the PDF-extraction-sourced value (not the matched Crossref work's `DOI`). Crossref new-imports-only: no backfill/re-enrich pass over the existing library. No new path, no `schema_version` bump.

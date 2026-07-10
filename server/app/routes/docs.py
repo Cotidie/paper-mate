@@ -83,8 +83,9 @@ async def get_doc(doc_id: str) -> Doc:
     },
 )
 async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
-    """Partially update a document's ``title``/``authors``/``venue``/``year``
-    (Story 6.6; ``venue``/``year`` added by a Story 7.9 fix request, AD-L6).
+    """Partially update a document's ``title``/``authors_list``/``venue``/
+    ``year`` (Story 6.6; ``venue``/``year`` added by a Story 7.9 fix request;
+    ``authors`` -> ``authors_list`` in Story 7.11, AD-L6).
 
     Only fields present in the request body change (``exclude_unset``); an
     empty body -> 400. A malformed/forbidden field (e.g. ``status``, ``doi``)
@@ -96,9 +97,13 @@ async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
     updates = patch.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
-    for field in ("title", "authors", "venue"):
+    for field in ("title", "venue"):
         if field in updates and updates[field] is not None:
             updates[field] = updates[field].strip() or None
+    if updates.get("authors_list") is not None:
+        # An empty resulting list is a legitimate "cleared authors" edit, not
+        # a no-op (the model derives `authors=None` from it).
+        updates["authors_list"] = [a.strip() for a in updates["authors_list"] if a.strip()]
     with storage_errors("Could not update document"):
         meta = storage.update_doc_meta(doc_id, updates)
     return Doc(doc_id=doc_id, **meta.model_dump())

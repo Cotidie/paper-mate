@@ -1,8 +1,13 @@
 import type { CollectionRow, Doc } from "@/api/client";
 
-/** The inline-editable metadata fields (Story 6.6; `venue`/`year` added by a
- *  Story 7.9 fix request). `doi` stays link-only, never inline-editable. */
-export type EditableField = "title" | "authors" | "venue" | "year";
+/** The inline-editable PLAIN-STRING metadata fields (Story 6.6; `venue`/
+ *  `year` added by a Story 7.9 fix request). `authors` left this set in
+ *  Story 7.11 (it is now a tag edit committing a `string[]` via `TagCell`/
+ *  `TagEditor`, not a single-string `EditableCell` edit - see
+ *  `useAuthorsEdit`); the row-arm→edit CURSOR still accepts `"authors"` as a
+ *  value (`PaperRow`'s `editingField` prop), just not through this type. `doi`
+ *  stays link-only, never inline-editable. */
+export type EditableField = "title" | "venue" | "year";
 
 /** A row's display status: the settled `CollectionRow["status"]` plus the
  *  client-only `"extracting"` overlay for an optimistic/in-flight row. Homed
@@ -80,6 +85,7 @@ export function docToRow(doc: Doc, papers: CollectionRow[]): CollectionRow {
     doc_id: doc.doc_id,
     title: doc.title ?? null,
     authors: doc.authors ?? null,
+    authors_list: doc.authors_list,
     added: doc.added,
     file_type: doc.file_type,
     status: doc.status,

@@ -12,12 +12,14 @@ interface QueuedFile extends PendingUpload {
 }
 
 interface UseBulkUploadOptions {
-  /** Fires once per file whose `POST /api/docs` resolves. */
-  onResolved: (doc: Doc) => void;
+  /** Fires once per file whose `POST /api/docs` resolves, with the folder
+   *  (if any) the batch targeted (fix request: drag/pick a file while a
+   *  folder is open lands it there instead of always Uncategorized). */
+  onResolved: (doc: Doc, folderId: string | null) => void;
   /** Fires exactly once after every upload in a batch has settled, with the
    *  `doc_id`s that resolved in THIS batch (Story 6.5: the caller scopes the
-   *  enrich-skipped notice to them). */
-  onBatchSettled: (resolvedDocIds: string[]) => void;
+   *  enrich-skipped notice to them) and the folder (if any) it targeted. */
+  onBatchSettled: (resolvedDocIds: string[], folderId: string | null) => void;
   /** Fires once per batch, only when at least one file failed to store. */
   onFailed: (count: number) => void;
 }
@@ -49,7 +51,7 @@ export function useBulkUpload({ onResolved, onBatchSettled, onFailed }: UseBulkU
   }, []);
 
   const uploadFiles = useCallback(
-    (files: File[]) => {
+    (files: File[], folderId: string | null = null) => {
       if (files.length === 0) return;
       const queued: QueuedFile[] = files.map((file) => ({
         tempId: newId(),
@@ -68,7 +70,7 @@ export function useBulkUpload({ onResolved, onBatchSettled, onFailed }: UseBulkU
           if (!mountedRef.current) return;
           resolvedDocIds.push(doc.doc_id);
           setPending((prev) => prev.filter((p) => p.tempId !== item.tempId));
-          onResolved(doc);
+          onResolved(doc, folderId);
         } catch {
           failedCount++;
           if (!mountedRef.current) return;
@@ -78,7 +80,7 @@ export function useBulkUpload({ onResolved, onBatchSettled, onFailed }: UseBulkU
         }
       }).then(() => {
         if (!mountedRef.current) return;
-        onBatchSettled(resolvedDocIds);
+        onBatchSettled(resolvedDocIds, folderId);
         if (failedCount > 0) onFailed(failedCount);
       });
     },

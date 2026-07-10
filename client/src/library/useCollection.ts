@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useBulkUpload } from "@/library/useBulkUpload";
 import { useSettlePolling } from "@/library/useSettlePolling";
 import { docToRow } from "@/library/row";
-import { getLibrary, type Doc, type Library } from "@/api/client";
+import { getLibrary, movePapers as apiMovePapers, type Doc, type Library } from "@/api/client";
 
 /** Poll `GET /api/library` while any row is still `extracting` (Story 6.5):
  *  slow enough not to hammer the backend, fast enough to feel live. The cap
@@ -80,10 +80,17 @@ export function useCollection({ onToast }: UseCollectionOptions) {
   }, [onToast]);
 
   const handleResolved = useCallback(
-    (doc: Doc) => {
+    (doc: Doc, folderId: string | null) => {
       setLibrary((prev) => {
         const papers = prev?.papers ?? [];
         const row = docToRow(doc, papers);
+        // Fix request: an upload dropped/picked while a folder is open lands
+        // there instead of always Uncategorized (`docToRow`'s default). This
+        // is just the immediate optimistic paint - the actual persistence
+        // (`import_pdf` itself always lands Uncategorized, AD-L4/L2, a
+        // background-task result with no folder context) happens once in
+        // `handleBatchSettled`, AFTER its own reconcile, so it always wins.
+        if (folderId !== null) row.folder_id = folderId;
         const existingIndex = papers.findIndex((p) => p.doc_id === doc.doc_id);
         const nextPapers =
           existingIndex >= 0 ? papers.map((p, i) => (i === existingIndex ? row : p)) : [...papers, row];
@@ -145,7 +152,7 @@ export function useCollection({ onToast }: UseCollectionOptions) {
   });
 
   const handleBatchSettled = useCallback(
-    (resolvedDocIds: string[]) => {
+    (resolvedDocIds: string[], folderId: string | null) => {
       // One authoritative reconcile after the batch (AC-7); then, if any row
       // is still extracting, poll GET /api/library until every row settles.
       const seq = ++fetchSeqRef.current;
@@ -160,12 +167,26 @@ export function useCollection({ onToast }: UseCollectionOptions) {
           } else {
             settleNotices(lib);
           }
+          // Fix request: persist the batch's folder assignment AFTER this
+          // reconcile (not from each `handleResolved`), so it always applies
+          // last and can never be clobbered by the reconcile racing ahead of
+          // it - `import_pdf` itself always lands a new doc Uncategorized
+          // (AD-L4/L2, a background-task result with no folder context).
+          if (folderId !== null && resolvedDocIds.length > 0) {
+            apiMovePapers(resolvedDocIds, folderId)
+              .then((moved) => {
+                if (mountedRef.current) setLibrary(moved);
+              })
+              .catch(() => {
+                onToast("Couldn't file the upload into that folder.", "error");
+              });
+          }
         })
         .catch(() => {
           // Best-effort: each resolved upload already landed via handleResolved.
         });
     },
-    [settlePoll.start, settleNotices],
+    [settlePoll.start, settleNotices, onToast],
   );
 
   const handleFailed = useCallback(

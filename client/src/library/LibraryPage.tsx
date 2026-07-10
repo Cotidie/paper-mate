@@ -12,6 +12,7 @@ import MoveMenu from "@/library/MoveMenu";
 import DisplayMenu from "@/library/TableControls/DisplayMenu";
 import { useCollection } from "@/library/useCollection";
 import { useInlineEdit } from "@/library/useInlineEdit";
+import { useAuthorsEdit } from "@/library/useAuthorsEdit";
 import { useMovePapers } from "@/library/useMovePapers";
 import { useTrashPapers } from "@/library/useTrashPapers";
 import { useStarPapers } from "@/library/useStarPapers";
@@ -112,6 +113,7 @@ export default function LibraryPage() {
   });
   const folders = library?.folders ?? [];
   const handleEditField = useInlineEdit({ library, setLibrary, onToast });
+  const handleEditAuthors = useAuthorsEdit({ library, setLibrary, onToast });
   const { movePapers } = useMovePapers({ setLibrary, onToast });
   const trash = useTrashPapers({ setLibrary, onToast });
   const star = useStarPapers({ setLibrary, onToast });
@@ -190,6 +192,9 @@ export default function LibraryPage() {
     if (trashedPapers.length === 0) return;
     setPurgeTargets(trashedPapers);
   }, [trashedPapers]);
+  // Fix request: an upload made while a folder is open should land there, not
+  // always Uncategorized. Every `uploadFiles` call site below passes this.
+  const uploadFolderId = selection.kind === "folder" ? selection.id : null;
   const isTableLayout = loading || papers.length > 0 || pending.length > 0;
   // The column filter + sort (Story 7.4) fold onto the folder-filtered array
   // HERE, so the same array CollectionTable paints is the one Story 7.3's
@@ -302,7 +307,7 @@ export default function LibraryPage() {
             if (files.length === 0) return;
             e.preventDefault();
             setDragOver(false);
-            uploadFiles(files);
+            uploadFiles(files, uploadFolderId);
           }}
         >
           {isTableLayout && (
@@ -389,7 +394,7 @@ export default function LibraryPage() {
               const files = Array.from(e.target.files ?? []);
               // Reset so re-picking the same file(s) after a failure refires change.
               e.target.value = "";
-              if (files.length > 0) uploadFiles(files);
+              if (files.length > 0) uploadFiles(files, uploadFolderId);
             }}
           />
           <input
@@ -401,7 +406,7 @@ export default function LibraryPage() {
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []).filter(isPdfFile);
               e.target.value = "";
-              if (files.length > 0) uploadFiles(files);
+              if (files.length > 0) uploadFiles(files, uploadFolderId);
             }}
           />
           {loading && papers.length === 0 && pending.length === 0 ? (
@@ -419,6 +424,7 @@ export default function LibraryPage() {
                 pendingRows={visiblePending}
                 onOpenRow={(docId) => navigate(`/reader/${docId}`)}
                 onEditField={handleEditField}
+                onCommitAuthors={handleEditAuthors}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
                 visibleColumns={visibleColumns}
@@ -436,7 +442,7 @@ export default function LibraryPage() {
               />
             )
           ) : loadFailed ? null : (
-            <EmptyDropzone onFiles={uploadFiles} />
+            <EmptyDropzone onFiles={(files) => uploadFiles(files, uploadFolderId)} />
           )}
         </main>
       </div>

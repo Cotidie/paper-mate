@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { COLUMNS, moveColumn, reorderColumns, sortRows, type ColumnKey, type SortState } from "@/library/tableView";
+import {
+  COLUMNS,
+  moveColumn,
+  reorderColumns,
+  sortRows,
+  type ColumnKey,
+  type SortState,
+} from "@/library/tableView";
 import type { CollectionRow } from "@/api/client";
 
 describe("COLUMNS order (Story 7.10 fix request)", () => {
@@ -22,6 +29,7 @@ function row(overrides: Partial<CollectionRow>): CollectionRow {
     doc_id: "d",
     title: "T",
     authors: null,
+    authors_list: [],
     added: "2026-07-06T00:00:00Z",
     file_type: "pdf",
     status: "ready",

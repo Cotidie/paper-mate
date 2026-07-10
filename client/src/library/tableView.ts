@@ -15,6 +15,13 @@ export interface ColumnDef {
    *  affordance, so hiding it would strand the only way to open/rename a paper. */
   hideable: boolean;
   sortable: boolean;
+  /** The cell-type dispatch seam (Story 7.11, AC-1): `PaperRow.renderCell`
+   *  dispatches its `"tag"` case (Author, the only one this story) through a
+   *  dedicated `TagCell`. Every other column keeps its bespoke per-key markup
+   *  (Title's Open button, DOI's link, Location's folder icon, File type's
+   *  badge) - this is the MINIMAL seam Story 7.12's consolidation formalizes,
+   *  not a general column registry yet. */
+  cellType: "text" | "number" | "badge" | "tag";
 }
 
 /** Column-width clamp range (Story 7.10, AC-5, code-review fix): shared by
@@ -35,14 +42,14 @@ export const MAX_COLUMN_WIDTH = 640;
 // `visibleColumns`/hidden-state or the Location per-lens suppression in
 // `LibraryPage.tsx`, which filter this array, not reorder it.
 export const COLUMNS: ColumnDef[] = [
-  { key: "title", label: "Title", hideable: false, sortable: true },
-  { key: "authors", label: "Authors", hideable: true, sortable: true },
-  { key: "venue", label: "Venue", hideable: true, sortable: true },
-  { key: "year", label: "Year", hideable: true, sortable: true },
-  { key: "doi", label: "DOI", hideable: true, sortable: true },
-  { key: "location", label: "Location", hideable: true, sortable: true },
-  { key: "added", label: "Added", hideable: true, sortable: true },
-  { key: "file_type", label: "File type", hideable: true, sortable: true },
+  { key: "title", label: "Title", hideable: false, sortable: true, cellType: "text" },
+  { key: "authors", label: "Authors", hideable: true, sortable: true, cellType: "tag" },
+  { key: "venue", label: "Venue", hideable: true, sortable: true, cellType: "text" },
+  { key: "year", label: "Year", hideable: true, sortable: true, cellType: "number" },
+  { key: "doi", label: "DOI", hideable: true, sortable: true, cellType: "text" },
+  { key: "location", label: "Location", hideable: true, sortable: true, cellType: "text" },
+  { key: "added", label: "Added", hideable: true, sortable: true, cellType: "text" },
+  { key: "file_type", label: "File type", hideable: true, sortable: true, cellType: "badge" },
 ];
 
 /** `Uncategorized` mirrors `FolderPanel`'s own copy for a null `folder_id`. */

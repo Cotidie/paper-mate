@@ -491,6 +491,7 @@ type CollectionTableProps =
       onOpenRow?: never;
       pendingRows?: never;
       onEditField?: never;
+      onCommitAuthors?: never;
       selectedIds?: never;
       onSelectionChange?: never;
       /** Defaults to every column (all `COLUMNS`) when omitted - existing
@@ -531,6 +532,9 @@ type CollectionTableProps =
        *  callbacks above). */
       onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
       onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
+      /** The Author tag editor's commit: the new full author list (AC-4).
+       *  Omit for isolated tests that don't exercise the tag editor. */
+      onCommitAuthors?: (docId: string, authors: string[]) => void;
       /** True in the Trash lens (Story 7.5): every row drops its Open button
        *  and its drag-to-folder affordance. Restore/Purge live in the
        *  toolbar, bulk over the selection (fix request), not per row. */
@@ -600,6 +604,7 @@ export default function CollectionTable(props: CollectionTableProps) {
     onResizeColumnKeyDown,
     onReorderColumn,
     onMoveColumn,
+    onCommitAuthors = () => {},
     trashLens = false,
     folders = EMPTY_FOLDERS,
     groupLabels,
@@ -634,7 +639,7 @@ export default function CollectionTable(props: CollectionTableProps) {
   useEffect(() => {
     if (selectedIds.size === 0) anchorRef.current = null;
   }, [selectedIds]);
-  const [editing, setEditing] = useState<{ docId: string; field: EditableField } | null>(null);
+  const [editing, setEditing] = useState<{ docId: string; field: EditableField | "authors" } | null>(null);
   // Live column-drag preview (fix request): the key being dragged and the
   // header currently resolved as the target, purely local render state -
   // not persisted, not the committed order (that only changes on drop via
@@ -829,7 +834,7 @@ export default function CollectionTable(props: CollectionTableProps) {
     commitSelected(next);
   }
 
-  function startEdit(docId: string, field: EditableField) {
+  function startEdit(docId: string, field: EditableField | "authors") {
     if (consumeSuppressedClick()) return;
     setEditing({ docId, field });
   }
@@ -845,6 +850,22 @@ export default function CollectionTable(props: CollectionTableProps) {
     const trimmed = value.trim();
     if (trimmed === currentFieldValue(row, field)) return; // AC-6: no-op guard
     onEditField(row.doc_id, field, trimmed || null); // AC-7: empty -> null
+  }
+
+  // The tag editor's commit (Story 7.11, AC-4): the no-op/never-lost guard
+  // lives in `useAuthorsEdit` itself (it already has the prior list to
+  // compare against). Unlike `commitEdit`, `TagEditor` only ever commits via
+  // its own blur (Enter just appends a chip, it never closes the editor) -
+  // so this is UNCONDITIONALLY a blur-commit, and must set the same
+  // suppress-click guard `commitEdit(..., viaBlur=true)` does (Codex review,
+  // Med): otherwise the very click that closes the editor also lands on
+  // whatever it closed onto, re-arming/opening/toggling it (the documented
+  // "click that finishes an edit shouldn't also chain into a new action"
+  // class of bug - see `suppressClickRef`'s own doc comment).
+  function commitAuthors(row: CollectionRow, authors: string[]) {
+    setEditing(null);
+    suppressClickRef.current = true;
+    onCommitAuthors(row.doc_id, authors);
   }
 
   // The whole <tr> is draggable, so a drag gesture starting on the Open
@@ -915,6 +936,7 @@ export default function CollectionTable(props: CollectionTableProps) {
                   onStartEdit={(field) => startEdit(row.doc_id, field)}
                   onCommit={(field, value, viaBlur) => commitEdit(row, field, value, viaBlur)}
                   onCancel={() => setEditing(null)}
+                  onCommitAuthors={(authors) => commitAuthors(row, authors)}
                   trashLens={trashLens}
                   locationLabel={locationLabel(row)}
                 />

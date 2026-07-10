@@ -79,8 +79,9 @@ export interface paths {
         head?: never;
         /**
          * Patch Doc
-         * @description Partially update a document's ``title``/``authors``/``venue``/``year``
-         *     (Story 6.6; ``venue``/``year`` added by a Story 7.9 fix request, AD-L6).
+         * @description Partially update a document's ``title``/``authors_list``/``venue``/
+         *     ``year`` (Story 6.6; ``venue``/``year`` added by a Story 7.9 fix request;
+         *     ``authors`` -> ``authors_list`` in Story 7.11, AD-L6).
          *
          *     Only fields present in the request body change (``exclude_unset``); an
          *     empty body -> 400. A malformed/forbidden field (e.g. ``status``, ``doi``)
@@ -421,6 +422,11 @@ export interface components {
             title: string | null;
             /** Authors */
             authors: string | null;
+            /**
+             * Authors List
+             * @default []
+             */
+            authors_list: string[];
             /** Added */
             added: string;
             /** Last Opened */
@@ -473,6 +479,11 @@ export interface components {
             /** Authors */
             authors?: string | null;
             /**
+             * Authors List
+             * @default []
+             */
+            authors_list: string[];
+            /**
              * File Type
              * @default pdf
              * @enum {string}
@@ -512,9 +523,15 @@ export interface components {
         /**
          * DocPatch
          * @description Request body for ``PATCH /api/docs/{doc_id}`` (Story 6.6; ``venue``/
-         *     ``year`` added by a Story 7.9 fix request): a partial title/authors/
-         *     venue/year edit. Request-only (no route returns it) — surfaced into
-         *     OpenAPI by the route's body parameter, not by a model injection.
+         *     ``year`` added by a Story 7.9 fix request; ``authors`` replaced by
+         *     ``authors_list`` in Story 7.11): a partial title/authors/venue/year edit.
+         *     Request-only (no route returns it) — surfaced into OpenAPI by the route's
+         *     body parameter, not by a model injection.
+         *
+         *     ``authors_list`` is a FULL-LIST replacement, not an add/remove op: the
+         *     client computes the new complete author list (add appends, remove drops)
+         *     and sends the whole thing, so "no author silently lost" holds by
+         *     construction.
          *
          *     All fields default unset so ``model_dump(exclude_unset=True)`` yields
          *     only what the client actually sent (true PATCH semantics: a title-only
@@ -526,8 +543,8 @@ export interface components {
         DocPatch: {
             /** Title */
             title?: string | null;
-            /** Authors */
-            authors?: string | null;
+            /** Authors List */
+            authors_list?: string[] | null;
             /** Venue */
             venue?: string | null;
             /** Year */

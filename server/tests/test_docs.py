@@ -113,6 +113,27 @@ def test_run_extraction_ready_path(data_root, monkeypatch):
     assert row.year == 2017
 
 
+def test_run_extraction_settles_multi_author_list(data_root, monkeypatch):
+    """Story 7.11, AC-2: extraction hands storage the domain `list[str]`
+    (no route-side join); the model derives `authors_list`/`authors` both."""
+    raw = make_pdf_bytes(pages=1, title="rough")
+    doc_id, _ = storage.import_pdf(raw, "rough.pdf")
+    monkeypatch.setattr(domain, "extract", lambda b: ExtractedMeta(title="rough"))
+    monkeypatch.setattr(
+        domain,
+        "enrich",
+        lambda m: ExtractedMeta(title="Corrected", authors=["Ada Lovelace", "Alan Turing"]),
+    )
+
+    run_extraction(doc_id, raw)
+
+    meta = storage.read_meta(doc_id)
+    assert meta.authors_list == ["Ada Lovelace", "Alan Turing"]
+    assert meta.authors == "Ada Lovelace, Alan Turing"
+    row = storage.read_library().papers[0]
+    assert row.authors_list == ["Ada Lovelace", "Alan Turing"]
+
+
 def test_run_extraction_enrich_skipped_path(data_root, monkeypatch):
     """AC-5: local fields found but enrich skipped -> "enrich-skipped", fields kept."""
     raw = make_pdf_bytes(pages=1, title="Local Title")
@@ -264,11 +285,64 @@ def test_patch_doc_authors_only_leaves_title_untouched(data_root):
         "doc_id"
     ]
 
-    resp = client.patch(f"/api/docs/{doc_id}", json={"authors": "Ada Lovelace"})
+    resp = client.patch(f"/api/docs/{doc_id}", json={"authors_list": ["Ada Lovelace"]})
     assert resp.status_code == 200
     body = resp.json()
+    assert body["authors_list"] == ["Ada Lovelace"]
     assert body["authors"] == "Ada Lovelace"
     assert body["title"] == "Keep Me"
+
+
+def test_patch_doc_authors_list_normalizes_and_allows_clearing(data_root):
+    """Story 7.11: each entry is stripped and blanks dropped; an empty
+    resulting list is a legitimate "cleared authors" edit, not a no-op."""
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("h.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"authors_list": ["  Ada Lovelace  ", "", "  "]})
+    assert resp.status_code == 200
+    assert resp.json()["authors_list"] == ["Ada Lovelace"]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"authors_list": []})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["authors_list"] == []
+    assert body["authors"] is None
+
+
+def test_patch_doc_explicit_null_authors_list_returns_500_envelope_not_resurrect(data_root):
+    """Codex review (High, AE-6): DocPatch.authors_list is `list[str] | None`
+    (the `None` default means "field not sent"), so a client can still send
+    an EXPLICIT `{"authors_list": null}` over the wire. This must not be
+    healed as a legacy read (which would resurrect a stale `authors` string)
+    and must not leak an unhandled pydantic error - it fails loudly through
+    the same single `{ detail }` envelope every storage failure uses."""
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("j.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+    client.patch(f"/api/docs/{doc_id}", json={"authors_list": ["Stale Author"]})
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"authors_list": None})
+
+    assert resp.status_code == 500
+    assert isinstance(resp.json()["detail"], str)
+    # The stale list from before this request must be untouched on disk.
+    assert storage.read_meta(doc_id).authors_list == ["Stale Author"]
+
+
+def test_patch_doc_legacy_authors_field_returns_422(data_root):
+    """Story 7.11: the old `authors: str` field is gone from DocPatch;
+    `extra="forbid"` rejects it loudly instead of a silent no-op."""
+    raw = make_pdf_bytes(pages=1, title="X")
+    doc_id = client.post("/api/docs", files={"file": ("i.pdf", raw, "application/pdf")}).json()[
+        "doc_id"
+    ]
+
+    resp = client.patch(f"/api/docs/{doc_id}", json={"authors": "Ada Lovelace"})
+    assert resp.status_code == 422
 
 
 def test_patch_doc_blank_title_clears_to_null(data_root):

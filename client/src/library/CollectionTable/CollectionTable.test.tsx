@@ -22,6 +22,7 @@ const rows: CollectionRow[] = [
     doc_id: "a".repeat(64),
     title: "Attention Is All You Need",
     authors: "Vaswani et al.",
+    authors_list: ["Vaswani et al."],
     added: "2026-07-05T12:00:00+00:00",
     file_type: "pdf",
     status: "ready",
@@ -34,6 +35,7 @@ const rows: CollectionRow[] = [
     doc_id: "b".repeat(64),
     title: null,
     authors: null,
+    authors_list: [],
     added: "2026-07-01T12:00:00+00:00",
     file_type: "note",
     status: "ready",
@@ -47,6 +49,7 @@ const rows: CollectionRow[] = [
     doc_id: "c".repeat(64),
     title: null,
     authors: null,
+    authors_list: [],
     added: "2026-07-01T12:00:00+00:00",
     file_type: "pdf",
     status: "ready",
@@ -198,6 +201,7 @@ describe("CollectionTable status visuals (Story 6.5)", () => {
       doc_id: "s".repeat(64),
       title: "A Title",
       authors: null,
+      authors_list: [],
       added: "2026-07-05T12:00:00+00:00",
       file_type: "pdf",
       status,
@@ -339,16 +343,44 @@ describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
     expect(screen.getByDisplayValue("Attention Is All You Need")).toBeTruthy();
   });
 
-  it("edits an Authors cell the same way (arm then edit)", () => {
-    const onEditField = vi.fn();
-    render(<CollectionTable rows={rows} onOpenRow={noop} onEditField={onEditField} />);
-    const cell = screen.getByText("Vaswani et al.");
+  it("arming then clicking the Authors cell opens the tag editor, same lifecycle as Title (Story 7.11)", () => {
+    const onCommitAuthors = vi.fn();
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onCommitAuthors={onCommitAuthors} />,
+    );
+    // A chip is plain, non-interactive text - the cell BACKGROUND click is
+    // what arms/opens the editor, so target the outer <td>.
+    const cell = screen.getByText("Vaswani et al.").closest("td")!;
     fireEvent.click(cell.closest("tr")!); // arm
-    fireEvent.click(cell); // edit
-    const input = screen.getByDisplayValue("Vaswani et al.") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "New Authors" } });
+    fireEvent.click(cell); // opens the tag editor
+    const input = screen.getByPlaceholderText("Add author") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "New Author" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onEditField).toHaveBeenCalledWith(rows[0].doc_id, "authors", "New Authors");
+    fireEvent.blur(input);
+    expect(onCommitAuthors).toHaveBeenCalledWith(rows[0].doc_id, ["Vaswani et al.", "New Author"]);
+  });
+
+  it("the click that blurs the tag editor closed does not also toggle row selection (Codex review: blur-commit must suppress its own click)", () => {
+    const onCommitAuthors = vi.fn();
+    render(
+      <CollectionTable rows={rows} onOpenRow={noop} onEditField={noop} onCommitAuthors={onCommitAuthors} />,
+    );
+    const cell = screen.getByText("Vaswani et al.").closest("td")!;
+    const row = cell.closest("tr")!;
+    fireEvent.click(row); // arm
+    expect(row.getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(cell); // opens the tag editor
+    const input = screen.getByPlaceholderText("Add author");
+
+    const addedCell = row.querySelector(".collection-table__added")!;
+    fireEvent.blur(input);
+    fireEvent.click(addedCell);
+
+    expect(screen.queryByPlaceholderText("Add author")).toBeNull(); // editor closed
+    // The click that closed the editor is consumed by the suppression
+    // guard, not treated as a fresh arm-toggle click - same class of bug
+    // already fixed for Title/Venue/Year (`commitEdit`'s `viaBlur` guard).
+    expect(row.getAttribute("aria-selected")).toBe("true");
   });
 
   it("an extracting row is not editable regardless of arm state (click leaves no input)", () => {
@@ -357,6 +389,7 @@ describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
         doc_id: "e".repeat(64),
         title: "Extracting Row",
         authors: null,
+        authors_list: [],
         added: "2026-07-05T12:00:00+00:00",
         file_type: "pdf",
         status,
@@ -1638,6 +1671,7 @@ describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", 
     doc_id: "f".repeat(64),
     title: "Foldered Paper",
     authors: null,
+    authors_list: [],
     added: "2026-07-05T12:00:00+00:00",
     file_type: "pdf",
     status: "ready",
@@ -1650,6 +1684,7 @@ describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", 
     doc_id: "u".repeat(64),
     title: "Uncategorized Paper",
     authors: null,
+    authors_list: [],
     added: "2026-07-05T12:00:00+00:00",
     file_type: "pdf",
     status: "ready",
@@ -1697,6 +1732,7 @@ describe("CollectionTable star marker (Story 7.8, AC-2)", () => {
     doc_id: "s".repeat(64),
     title: "Starred Paper",
     authors: null,
+    authors_list: [],
     added: "2026-07-05T12:00:00+00:00",
     file_type: "pdf",
     status: "ready",
@@ -1709,6 +1745,7 @@ describe("CollectionTable star marker (Story 7.8, AC-2)", () => {
     doc_id: "u".repeat(64),
     title: "Unstarred Paper",
     authors: null,
+    authors_list: [],
     added: "2026-07-05T12:00:00+00:00",
     file_type: "pdf",
     status: "ready",
@@ -1736,6 +1773,7 @@ describe("CollectionTable Venue/Year/DOI columns (Story 7.9)", () => {
     doc_id: "m".repeat(64),
     title: "Paper With Meta",
     authors: null,
+    authors_list: [],
     added: "2026-07-05T12:00:00+00:00",
     file_type: "pdf",
     status: "ready",
@@ -1751,6 +1789,7 @@ describe("CollectionTable Venue/Year/DOI columns (Story 7.9)", () => {
     doc_id: "n".repeat(64),
     title: "Paper Without Meta",
     authors: null,
+    authors_list: [],
     added: "2026-07-05T12:00:00+00:00",
     file_type: "pdf",
     status: "ready",
@@ -1837,6 +1876,7 @@ describe("CollectionTable inline edit Venue/Year (Story 7.9 fix request)", () =>
     doc_id: "v".repeat(64),
     title: "Editable Meta Paper",
     authors: null,
+    authors_list: [],
     added: "2026-07-05T12:00:00+00:00",
     file_type: "pdf",
     status: "ready",

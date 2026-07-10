@@ -3,7 +3,6 @@ import type { EditableField } from "@/library/row";
 
 const EDIT_ARIA_LABEL: Record<EditableField, string> = {
   title: "Edit title",
-  authors: "Edit authors",
   venue: "Edit venue",
   year: "Edit year",
 };
