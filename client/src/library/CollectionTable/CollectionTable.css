@@ -286,16 +286,45 @@
 /* The Author tag cell (Story 7.11, AC-3): chips wrap, but the cell CLIPS at
    one row's worth of height rather than growing the row taller (matches
    every other cell staying single-line - "reflowing the row frame" is
-   exactly what this avoids). A `+N more` affordance for an overflowing
-   author list is a deferred follow-up, not built here (smallest correct
-   structure this story needs). */
+   exactly what this avoids). `AuthorChips` (TagCell.tsx) measures how many
+   chips actually fit on that one visible line and renders only that many
+   plus an "et al." suffix - `max-height`/`overflow: hidden` here are a
+   defensive fallback only (a second-row chip should never actually reach
+   them), not the truncation mechanism itself (fix request: a clipped,
+   half-visible 2nd-row chip used to peek out from under the first). */
 .tag-cell__chips {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--tag-chip-gap);
   max-height: var(--collection-table-row-height);
   overflow: hidden;
+}
+
+.tag-cell__more {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-leading);
+  white-space: nowrap;
+}
+
+/* Invisible-but-measurable (AuthorChips, TagCell.tsx): pulls an element out
+   of the visible flex line (`position: absolute`, so it can't affect real
+   chip wrapping or take up flow space) while keeping it laid out (never
+   `display: none`) so its `offsetWidth` stays readable - the "et al." probe
+   before truncation is decided, and every chip beyond the computed fit
+   count (kept mounted, not un-rendered, so a later resize can re-measure
+   the full author list without a separate "go back to full" step). */
+.tag-cell__more--probe,
+.tag-chip--overflow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 /* Color-ready (decision, Story 7.11): a uniform fill token this story: a
