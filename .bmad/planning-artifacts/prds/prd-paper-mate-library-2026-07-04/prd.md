@@ -84,6 +84,10 @@ Sync is an exploratory, mostly-orthogonal capability. It is written down now bec
 - **FR-28** Conflicts resolve last-write-wins by timestamp (adequate for a single user on one device at a time).
 - **FR-29** Sync backends sit behind one switchable interface (WebDAV first, Google Drive a later adapter), mirroring the existing agent-abstraction seam.
 
+### F9: Download (added 2026-07-11 via correct-course, Epic 9 Story 9.1)
+
+- **FR-30** The user downloads a paper's original file from the Library to disk (byte-identical, local, fully offline). Reuses the existing served file (`GET /api/docs/{doc_id}/file`) with an attachment disposition. Downloading an *annotated* PDF is a separate feature (reader FR-26, export).
+
 ## Non-Functional Requirements
 
 - **NFR-1 Local-first.** Every Library feature works fully offline. The optional external metadata lookup is the only network call; it is opt-in and degrades gracefully when offline or failing.

@@ -60,14 +60,17 @@ FR IDs are global and stable.
 - **FR-15** Edit an existing annotation: move, resize, restyle (color), and re-edit text.
 - **FR-16** Undo / redo.
 - **FR-17** Delete an annotation.
+- **FR-25** *(post-v1, Epic 8 Story 8.4)* Attach a comment to a boxed region (comment on a `kind=rect` area, not only on text).
 
 ### FG-D · Annotation Bank
 
 - **FR-18** A separate Annotation Bank layout/drawer that toggles open/closed.
 - **FR-19** Lists all annotations in the document.
 - **FR-20** Click an entry to jump to that annotation's location.
+- **FR-23** *(post-v1, Epic 8 Story 8.2)* Filter the Bank by annotation type; the default view is comments only.
+- **FR-24** *(post-v1, Epic 8 Story 8.3)* Order the Bank in reading order: by page, then by on-page position.
 
-> v1 Bank is list + jump only. No filter, in-bank editing, search, or export.
+> v1 Bank shipped as list + jump only. FR-23/FR-24 (added 2026-07-11 via correct-course) add filter-by-type and reading-order sort post-v1. In-bank editing, search, and export stay deferred.
 
 ### FG-E · Persistence
 
@@ -90,7 +93,9 @@ FR IDs are global and stable.
 
 Lightweight roadmap for later versions (kept here so v1 architecture reserves room):
 
-- **Phase 2 — Reading Helper.** Inline previews from clicked references (`Figure N` / `Table N`, footnotes, citation markers `[1]`), paper-metadata extraction, export of PDF-with-highlights, folder-based Library page.
+- **Phase 2 — Reading Helper.** Inline previews from clicked references (`Figure N` / `Table N`, footnotes, citation markers `[1]`), paper-metadata extraction, export of PDF-with-highlights, folder-based Library page. Two of these are now named FRs, sequenced in Epic 9 (added 2026-07-11 via correct-course):
+  - **FR-26** *(Epic 9 Story 9.2)* Export a PDF containing the user's annotations (the export-with-highlights item, promoted).
+  - **FR-27** *(Epic 9 Story 9.3)* Inline preview of a clicked footnote, reference/citation (`[n]`), or `Figure N`/`Table N` mention, without leaving the reading position.
 - **Phase 3 — AI Companion (the north star).** Q&A against **local CLI agents only** (no hosted API), vendor-switchable (Claude / Codex / Antigravity) behind one interface, paper digest auto-injected into context, drag/click-to-chat that resolves the exact PDF location or a Figure/Table selection.
 
 Two through-lines the v1 build must not paint into a corner (detail in addendum):

@@ -1911,9 +1911,9 @@ So that Epic 7 closes on legible modular seams instead of an over-large table co
 
 > Removed from the numbered epic roadmap 2026-07-11 (correct-course, user: "not important right now"). Deprioritized, NOT deleted: the capability stays captured in PRD F8 (FR-25..29) and the architecture spine's reserved switchable-backend sync seam; LFR-25..29 remain mapped. It runs its own discovery (trigger cadence, Google Drive OAuth on a localhost/Docker app, deletion/Trash propagation, interrupted-push consistency, credential encryption at rest) if/when it is picked up as a future epic.
 
-## Epic 8: Reader fidelity round 2 (post-v1, Phase-1.5)
+## Epic 8: Reader & annotation polish, round 2 (post-v1, Phase-1.5)
 
-> Added 2026-07-07 via correct-course (`sprint-change-proposal-2026-07-07-deferred-review.md`) as Epic 9; RENUMBERED Epic 9 → Epic 8 on 2026-07-11 (correct-course: Remote sync un-numbered, this took its slot). A deferred-work review removed every reader-fidelity item that had since shipped (4.1 copy/selection + de-flake, 4.2A gutter split, 3.7 convert, 5.1 settings, 5.5 hide-all, 5.6 layered-Esc, 5.0/5.3/5.4 refactors, 3.1 memo move/resize, 7.8 Starred-lens column) and promoted the one still-open, still-wanted reader bug into this epic. Theme: a fidelity defect that survives on top of Story 4.1's copy fix. Same posture as Epic 4, fix correctness, do not add capability, no new FRs; sequenced post-v1.
+> Added 2026-07-07 via correct-course (`sprint-change-proposal-2026-07-07-deferred-review.md`) as Epic 9; RENUMBERED Epic 9 → Epic 8 on 2026-07-11 (correct-course: Remote sync un-numbered, this took its slot). A deferred-work review removed every reader-fidelity item that had since shipped (4.1 copy/selection + de-flake, 4.2A gutter split, 3.7 convert, 5.1 settings, 5.5 hide-all, 5.6 layered-Esc, 5.0/5.3/5.4 refactors, 3.1 memo move/resize, 7.8 Starred-lens column) and promoted the one still-open, still-wanted reader bug (Story 8.1). **BROADENED 2026-07-11 via correct-course (`sprint-change-proposal-2026-07-11-epic-8-9-stories.md`):** the epic's original "fix correctness, add no capability, no new FRs" charter is RETIRED. From a ten-request user batch (whose three heavyweight Phase-2 features were split into the new Epic 9), this epic now also holds Annotation-Bank capability (filter + reading-order sort), the comment-on-region completion, a Library venue-display refinement, and three reader defects. Story 8.1 (paragraph-aware copy) is kept verbatim; 8.2–8.8 are the new polish/defect stories. New reader FRs: FR-23 (Bank filter), FR-24 (Bank sort), FR-25 (comment on a region). Sequenced post-v1.
 
 ### Story 8.1: Paragraph-aware copy (join soft-wrapped lines)
 
@@ -1939,3 +1939,263 @@ So that pasting a passage keeps real paragraph breaks but joins wrapped lines wi
 **Then** it stays in `render/` (the text layer's owner, alongside Story 4.1's `render/textSelection.ts`), no annotation/anchor/store change; highlight/underline geometry (per-line rects via `anchor/collectTextRects`) is unaffected, and it does NOT reintroduce the 4.1 inter-line-space or trailing-punctuation defects (AR-9, regression-guard on 4.1)
 
 > **Out of scope (this story):** OCR / scanned-PDF handling (no geometry to read); reflowing or editing the PDF; any change to stored `anchor.text` semantics beyond what the copy path already captures. **Open design calls for create-story:** the exact heuristic signals + thresholds (settle in the spike); whether an ambiguous line defaults to join or break; whether to expose the raw-vs-joined behavior as a preference (default: joined, matching normal reader/browser copy).
+
+### Story 8.2: Annotation Bank filter by type (default comments) (added 2026-07-11)
+
+> User request: "the Annotation Bank should include all annotation types and let me filter by type, defaulting to comments only." Extends Story 3.6 (Bank lists each mark, ordered by `created_at`) and lifts the PRD's "v1 Bank is list + jump only, no filter" note. New **FR-23**.
+
+As a reader,
+I want the Annotation Bank to list every annotation type and let me filter by type, starting with comments only,
+So that I can focus on the annotations that matter to me without wading through every mark.
+
+**Acceptance Criteria:**
+
+**Given** a document with marks of several types (highlight, underline, pen, memo, comment, region)
+**When** the Bank is open
+**Then** it can list ALL types (each as `{component.bank-list-item}` with its type glyph + color dot + snippet + page), not only some (FR-19, FR-23, UX-DR9)
+
+**Given** the Bank
+**Then** a filter control selects which types are shown; the DEFAULT on open is comments only, and the reader can widen it to any subset or all types (FR-23, UX-DR9)
+
+**Given** a filter that hides every mark of a type
+**Then** the visible list updates without reflowing the canvas, and an empty result shows an empty-state message (e.g. "No comments yet." adapting to the active filter) (FR-23, NFR-1, UX-DR18)
+
+**Given** the filter selection
+**Then** it is view state (client-only); it does not mutate, reorder, or persist the annotation set, and it composes with the Story 8.3 sort (FR-23, AR-12)
+
+**Given** any new control label, tooltip, or empty-state copy
+**Then** no string contains an em-dash (UX-DR13)
+
+> **Out of scope:** in-bank editing, search, export (still deferred). **Open design calls for create-story:** the filter control shape (chips vs a multi-select menu); whether the comments-only default is remembered per session; exact empty-state copy per filter.
+
+### Story 8.3: Sort annotations in reading order (added 2026-07-11)
+
+> User request: "annotations sorted by page and their position on the page so that they follow the paper's reading order." Story 3.6 orders the Bank by `created_at` ascending; this changes the default ordering to spatial reading order. New **FR-24**.
+
+As a reader,
+I want Bank annotations ordered by page and then by their position on the page,
+So that they follow the paper's reading order instead of the order I happened to create them.
+
+**Acceptance Criteria:**
+
+**Given** annotations across several pages
+**When** the Bank lists them
+**Then** they sort by page ascending, then by on-page position within a page (top-to-bottom by the mark's anchor Y, then left-to-right by X for ties), so the list reads in paper order (FR-24, AR-12)
+
+**Given** a mark spanning a page boundary (a `group_id` split, AR-4)
+**Then** it sorts by its first (top-most, earliest-page) rect so a multi-page mark appears once at its start (FR-24, AR-4)
+
+**Given** a region (`kind=rect`) or pen (`kind=path`) mark
+**Then** its sort position derives from its bounding-box top-left, consistent with text marks (FR-24)
+
+**Given** the reading-order sort
+**Then** it composes with the Story 8.2 type filter and stays client-only view state (no store/contract change) (FR-24, AR-12)
+
+> **Out of scope:** a user-selectable sort menu (created-at vs reading-order) unless create-story decides reading-order should be a toggle rather than the sole order. **Open design calls:** whether reading-order fully replaces `created_at` ordering or is the new default with `created_at` as an option; the exact tie-break epsilon for near-equal Y.
+
+### Story 8.4: Comment on a boxed region (added 2026-07-11)
+
+> User request: "attach a comment to a boxed highlight so that I can annotate a specific visual region." Completes the seam Story 2.11 reserved (the region quick-box was speced to offer "comment") on the model Story 2.10 already supports (`type=comment`, `anchor kind=rect`). New **FR-25**.
+
+As a reader,
+I want to attach a comment to a boxed region,
+So that I can annotate a specific visual area (a figure, a table, a diagram) the way I comment on text.
+
+**Acceptance Criteria:**
+
+**Given** a boxed region (Story 2.11, `anchor kind=rect`) armed or selected
+**When** I choose the region quick-box's "comment" option
+**Then** a comment is attached to that region: `type=comment`, `anchor kind=rect {rect}`, `body=text`, created through the command path (FR-11, FR-12, FR-25, AR-5, AR-7)
+
+**Given** a region comment
+**When** I click its pin/marker
+**Then** a `{component.comment-bubble}` opens over the region for read/edit, keyboard-reachable and `Esc`-dismissable, focus moving in on open and back on close, without reflowing the canvas (FR-25, UX-DR8, UX-DR17, NFR-1)
+
+**Given** a region comment
+**When** I zoom
+**Then** the region box and its comment marker stay anchored at their exact PDF coordinates (NFR-3)
+
+**Given** a region comment
+**Then** it appears in the Annotation Bank (respecting the 8.2 filter as a comment) and sorts by the region's top-left in 8.3's reading order (FR-19, FR-24)
+
+> **Out of scope:** a snapshot/thumbnail of the region (reserved for Phase 2 per Story 2.11); commenting on non-rect, non-text marks. **Open design calls:** verify what Story 2.11 actually shipped for the region quick-box "comment" option and close the gap; the region-comment marker placement (corner pin vs centered) and how it reads distinctly from a text comment.
+
+### Story 8.5: Venue short name displayed, full name accessible (added 2026-07-11)
+
+> User request: "publication venues display a shortened name while keeping the full name accessible, so paper details stay compact but clear." Refines the Story 7.9 Venue column (LFR-32). No new FR.
+
+As a reader,
+I want the Venue column to show a shortened venue name with the full name still available,
+So that the table stays compact without losing the exact publication name.
+
+**Acceptance Criteria:**
+
+**Given** a paper with a known venue
+**When** the Venue cell renders
+**Then** it shows a shortened form (e.g. Crossref `short-container-title`, or a derived abbreviation when no short form exists), while the full venue name is accessible on hover/focus via `title` (LFR-32)
+
+**Given** the Crossref enrichment path (Story 7.9's `enrich()`)
+**Then** if `short-container-title` is captured, it is additive to `ExtractedMeta`/`DocMeta` (no `schema_version` bump; existing `meta.json` missing it still validates) and projected onto `CollectionRow`/`docs/API.md` like the existing venue field (LFR-32, AL-1)
+
+**Given** a paper with no short form
+**Then** the cell falls back to the full venue name (or a client-derived abbreviation), never blank when a full venue exists (LFR-32)
+
+**Given** sorting/filtering on Venue
+**Then** it behaves consistently with the chosen display value (decide short vs full as the sort key at create-story) (LFR-32)
+
+**Given** the short/full display strings
+**Then** neither contains an em-dash (L-UX-DR13)
+
+> **Out of scope:** backfilling short names for already-imported papers; a curated venue-abbreviation dictionary beyond Crossref's `short-container-title` + a simple derivation. **Open design calls:** short-name source (Crossref `short-container-title` captured server-side vs a client-side abbreviator); whether sort/filter key on short or full; whether existing rows re-enrich.
+
+### Story 8.6: Comment/memo preview size reflects its adjusted full size (added 2026-07-11)
+
+> User request: "a comment box's preview size should reflect its adjusted full size, so its appearance stays consistent between collapsed and expanded views." Defect on the memo/comment preview render (Story 2.9 memo + 2.10 comment + the 3.1 corner-resize; the preview render lives in `AnnotationInteraction`, `position:fixed`). No new FR.
+
+As a reader,
+I want a comment's collapsed preview to match the size I adjusted its full view to,
+So that its collapsed and expanded appearances stay consistent instead of snapping to a different size.
+
+**Acceptance Criteria:**
+
+**Given** a comment/memo whose full size was adjusted (resized via the Story 3.1 corner handles)
+**When** it renders in its collapsed/preview state
+**Then** the preview reflects the adjusted full size (its stored geometry), not a fixed preset, so collapsed and expanded read as the same box (FR-11, FR-15)
+
+**Given** the adjusted size
+**When** I reload and the mark is restored (Story 3.5)
+**Then** the preview still reflects the persisted adjusted size (NFR-3, AR-6)
+
+**Given** the preview render
+**Then** it stays within the fixed-overlay render path (no page reflow, no page-edge clipping regression) (NFR-1)
+
+> **Open design calls for create-story:** confirm whether "comment box" here means the textbox memo (2.9), the comment bubble (2.10), or both; the exact collapsed-vs-expanded states in play and which dimension (width/height) the preview must track; whether a min/max preview clamp applies.
+
+### Story 8.7: Immediate viewer resume on tab return (added 2026-07-11)
+
+> User request: "the paper viewer should respond immediately when I return from another browser tab, so my reading flow is not interrupted by lag." Defect: a stall on tab re-focus. Investigation-first. No new FR (defends NFR-2).
+
+As a reader,
+I want the viewer to respond immediately when I switch back from another browser tab,
+So that returning to the paper does not pause or lag.
+
+**Acceptance Criteria:**
+
+**Given** the reader open on a paper
+**When** I switch to another browser tab and back
+**Then** the viewer is interactive immediately on return, with no multi-frame stall before scroll/zoom/annotate respond (NFR-2)
+
+**Given** the story
+**Then** it STARTS with a root-cause diagnosis (background-tab rAF/timer throttling, the Story 1.7 render windowing recomputing all visible pages on re-focus, a paused render queue draining as a burst, or a stale-layout reflow) before committing a fix, since the mechanism determines the fix (NFR-2)
+
+**Given** the fix
+**Then** it is verified live by backgrounding and re-focusing the tab on a large (50+ page) paper at DPR>1, not only in a unit test
+
+**Given** the fix
+**Then** it does not regress scroll/zoom smoothness or the render-windowing behavior during normal (non-tab-switch) reading (NFR-2)
+
+> **Open design calls:** the actual root cause (settle in the diagnosis); whether the fix is in `render/` windowing, the rAF loop, or a `visibilitychange` handler.
+
+### Story 8.8: Empty-space drag does not select underlying text (added 2026-07-11)
+
+> User request: "dragging from empty page space should avoid selecting or copying underlying rows, so accidental selections do not occur." Defect adjacent to the deferred blank-space/multi-column selection note (deferred-work "story 2-5 blank-space text selection"). Scope-guarded to NOT reopen the full multi-column controller. No new FR (defends FR-13's intent).
+
+As a reader,
+I want a drag that starts in empty page space to do nothing to the text,
+So that I do not accidentally select or copy the nearby text lines.
+
+**Acceptance Criteria:**
+
+**Given** the pointer over empty page space (a margin/gutter/blank area with no glyph under it)
+**When** I press and drag from there
+**Then** it does NOT start a text selection that snaps to and grabs the nearest text lines ("rows"), so no accidental selection/copy of underlying text occurs (FR-13)
+
+**Given** a drag that starts ON text
+**Then** normal text selection is unchanged (this story only gates the empty-space ORIGIN case) (FR-13)
+
+**Given** the empty-space drag
+**Then** its behavior is defined (a no-op, or defers to the active tool such as pan/box) rather than a native text selection, decided at create-story (FR-13)
+
+**Given** the change
+**Then** it is live-smoked with an empty-margin drag AND a cross-column empty-gutter drag at DPR>1, and it does NOT reintroduce the full-page-highlight or cross-column leak the anchor layer guards
+
+> **Scope guard:** this is the narrow "empty-space drag origin" fix, NOT the deferred layered multi-column selection controller (that stays deferred). **Open design calls:** confirm "underlying rows" = PDF text lines (assumed) vs any table/list surface; the exact empty-space behavior (no-op vs tool-defer); how "empty space" is detected (no text node hit vs geometry).
+
+## Epic 9: Phase 2 kickoff, reading helper & paper portability (post-v1, Phase-2)
+
+> Added 2026-07-11 via correct-course (`sprint-change-proposal-2026-07-11-epic-8-9-stories.md`). The FIRST epic to cross the v1 → Phase-2 line. Split out of a ten-request user batch: the seven polish/defect items stayed in Epic 8; these three are net-new Phase-2 capabilities that each carry a new FR and (for 9.2/9.3) an architecture decision, so they were grouped here rather than folded into a fix-themed epic. Theme: get papers out of Paper Mate (download, export) and start the reading-helper preview through-line. 9.2 and 9.3 are SPIKE-FIRST (feasibility/design gate before commit) and want an architecture-spine note at create-story. New FRs: reader FR-26 (export), FR-27 (preview); Library FR-30 (download).
+
+### Story 9.1: Download a library paper's original file
+
+> User request: "download papers from my library so that I can save or access them outside Paper Mate." Reuses the existing `GET /api/docs/{doc_id}/file` served PDF (docs.py `get_doc_file`). Library **FR-30** (feature group F9).
+
+As a reader,
+I want to download a paper from my library,
+So that I can save or open it outside Paper Mate.
+
+**Acceptance Criteria:**
+
+**Given** a paper in the collection
+**When** I choose Download (a row action or the reader)
+**Then** the browser downloads its original PDF with a sensible filename (the original upload name or the paper title), reusing the existing `GET /api/docs/{doc_id}/file` served file with `Content-Disposition: attachment` (FR-30, NFR-1-Library)
+
+**Given** the download
+**Then** it is byte-identical to the stored original (no re-encoding), works fully offline (local file server, no network), and never triggers the row's open/arm gesture (FR-30, NFR-6-Library)
+
+**Given** a Trashed paper (Story 7.5)
+**Then** whether Download is offered there is a create-story call (default: collection only) (FR-30)
+
+**Given** the Download control label/tooltip
+**Then** it contains no em-dash (L-UX-DR13)
+
+> **Out of scope:** downloading an ANNOTATED PDF (that is Story 9.2, export); bulk/zip download of a multi-selection (create-story call). **Open design calls:** dedicated download route vs a `?download=1` flag on the existing file route; filename source (upload name vs title); whether download appears in the reader too.
+
+### Story 9.2: Export an annotated PDF (SPIKE-FIRST)
+
+> User request: "export a PDF containing my annotations so that I can preserve and share my marked-up paper." Promotes the Phase-2 "export-with-highlights" roadmap item into a named FR. Reader **FR-26**. Consumes AD-4 anchors. Starts with a flatten-path spike; the client-vs-server decision is an architecture-spine touch recorded at create-story.
+
+As a reader,
+I want to export a PDF that contains my annotations,
+So that I can preserve and share my marked-up paper.
+
+**Acceptance Criteria:**
+
+**Given** an annotated paper
+**When** I export
+**Then** I get a PDF file with the annotations rendered onto the pages (highlight/underline/pen/memo/comment/region), positioned at their exact PDF coordinates via the AD-4 anchors (FR-26, NFR-3)
+
+**Given** the story
+**Then** it STARTS with a flatten-path spike: prototype stamping annotations onto a real annotated paper and decide client (pdf-lib) vs server (pikepdf/pypdf/reportlab), recording the choice as an architecture-spine decision before the full build (FR-26, AD-4)
+
+**Given** a comment/memo (text body)
+**Then** the export represents it legibly (create-story: a PDF text annotation/popup vs a flattened box), and a pen stroke exports as its vector/raster path with alpha (FR-26)
+
+**Given** the export
+**Then** it is verified by exporting a real multi-page annotated paper and opening the result in an external PDF viewer to confirm placement across pages at DPR>1, not only a unit test
+
+> **Out of scope:** editable round-trip (re-importing the exported PDF back into Paper Mate's annotation model); export presets/filtering which annotations to include (unless the spike makes it cheap). **Open design calls:** client vs server flatten (the spike decides); how comments render; whether export is a new API route (then `docs/API.md`) or client-only.
+
+### Story 9.3: Inline footnote & reference preview (SPIKE-FIRST)
+
+> User request: "preview footnotes and references without leaving my current reading position so that I can check supporting information without interrupting my flow." The Phase-2 reading-helper through-line. Reader **FR-27**. Consumes AD-4 anchors. Starts with a resolver spike; the reading-helper resolver seam is an architecture-spine touch recorded at create-story.
+
+As a reader,
+I want to preview footnotes and references without leaving my reading position,
+So that I can check a supporting note or citation without losing my place.
+
+**Acceptance Criteria:**
+
+**Given** a footnote marker, a reference/citation marker (`[n]`), or a `Figure N`/`Table N` mention in the text
+**When** I click it
+**Then** a floating preview of the target (the footnote text, the reference entry, or the figure/table region) opens in place, without scrolling me away or reflowing the page (FR-27, NFR-1)
+
+**Given** the story
+**Then** it STARTS with a resolver spike: prototype detecting these markers in the pdf.js text layer and resolving each to its target region via the AD-4 anchor model, validated against 2–3 real papers (multi-column, numbered-and-named references), before building the preview UI (FR-27, AD-4)
+
+**Given** a preview
+**Then** it is dismissable (`Esc`/outside-click), keyboard-reachable, and stays anchored at correct coordinates across zoom (FR-27, NFR-3, UX-DR17)
+
+**Given** a marker whose target cannot be resolved
+**Then** it degrades gracefully (no preview / a muted "couldn't locate" affordance), never a broken or mis-placed popup (FR-27)
+
+> **Out of scope:** click-to-chat / AI targeting (Phase 3); synthesizing a reference list when the PDF has none; OCR for scanned PDFs. **Open design calls:** which marker classes ship first (footnotes vs `[n]` vs Figure/Table); detection strategy (regex over text-layer spans + geometry); the reading-helper resolver seam location (a new `render/`-adjacent module), recorded as an architecture-spine decision at create-story.

@@ -18,6 +18,13 @@
 // re-exported from the `render/` barrel — `renderPage` is what Reader/App
 // tests mock, so this stays a real, isolated, unit-testable module (AD-9: no
 // import from anchor/, annotations/, or store/).
+//
+// Story 8.1 adds one more `{ signal }`-scoped listener here: `copy`, which
+// rewrites the clipboard so a soft-wrapped paragraph pastes as one line (see
+// `paragraphCopy.ts`). It reuses this controller's registry/lifecycle rather
+// than standing up a second global listener manager.
+
+import { joinParagraphLines, measureSelectedLines } from "./paragraphCopy";
 
 /**
  * Shared across every live page card (mirrors `TextLayerBuilder`'s static
@@ -43,6 +50,26 @@ class TextSelectionController {
     this.#textLayers.set(div, endOfContent);
     this.#enableGlobalListener();
     return () => this.#unregister(div);
+  }
+
+  /**
+   * True only if EVERY text node `range` touches sits inside one of our
+   * registered text layers. Checking just the range's start/end containers
+   * (as an earlier version did) misses content interposed between them in
+   * document order — a range can start and end inside registered layers
+   * while still covering non-layer content along the way. Bounding the walk
+   * to `range.commonAncestorContainer` keeps this cheap (proportional to the
+   * selection, not the document).
+   */
+  #rangeStaysWithinTextLayers(range: Range): boolean {
+    const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => (range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+    });
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const layer = node.parentElement?.closest<HTMLElement>(".textLayer");
+      if (!layer || !this.#textLayers.has(layer)) return false;
+    }
+    return true;
   }
 
   #unregister(div: Element): void {
@@ -91,6 +118,35 @@ class TextSelectionController {
       "keyup",
       () => {
         if (!pointerDown) this.#textLayers.forEach(reset);
+      },
+      { signal },
+    );
+
+    document.addEventListener(
+      "copy",
+      (event: ClipboardEvent) => {
+        const selection = document.getSelection();
+        if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+        // A discontiguous multi-range selection (e.g. Firefox ctrl+drag) is
+        // rare, and the join heuristic operates over a single contiguous
+        // range's lines. Rather than silently keep only the first range,
+        // fall through to native copy so nothing is dropped.
+        if (selection.rangeCount !== 1) return;
+        const range = selection.getRangeAt(0);
+
+        // AC-5: only act when the range is entirely within OUR registered
+        // text layers. Anything else (a memo/comment editor, Bank text, app
+        // chrome, or a mixed selection spanning one of those) falls through
+        // to native copy untouched — no preventDefault.
+        if (!this.#rangeStaysWithinTextLayers(range)) return;
+
+        const lines = measureSelectedLines(selection);
+        if (lines.length === 0) return;
+        const joined = joinParagraphLines(lines);
+        if (!joined) return;
+
+        event.clipboardData?.setData("text/plain", joined);
+        event.preventDefault();
       },
       { signal },
     );

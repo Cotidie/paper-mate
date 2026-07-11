@@ -4,7 +4,7 @@
 // being enabled once and torn down only once the last div unregisters
 // (Story 4.1 AC-5, "no leak / lifecycle-safe").
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { textSelectionController } from "./textSelection";
 
 describe("TextSelectionController", () => {
@@ -70,5 +70,75 @@ describe("TextSelectionController", () => {
     const unregister = textSelectionController.register(div);
     unregister();
     expect(unregister).not.toThrow();
+  });
+});
+
+// Story 8.1 code-review fix: the AC-5 copy guard originally checked only a
+// range's start/end containers, which misses content interposed BETWEEN
+// them in document order. These tests exercise the fix (a full text-node
+// walk over the range) through the public `copy` event, not the private
+// `#rangeStaysWithinTextLayers` method directly.
+describe("TextSelectionController copy handler — full-range AC-5 guard", () => {
+  function makeTextLayerDiv(text: string): HTMLDivElement {
+    const div = document.createElement("div");
+    div.className = "textLayer";
+    const span = document.createElement("span");
+    span.textContent = text;
+    div.append(span);
+    return div;
+  }
+
+  function selectAcross(startEl: HTMLElement, endEl: HTMLElement): void {
+    const range = document.createRange();
+    range.setStart(startEl.firstChild!.firstChild!, 0);
+    range.setEnd(endEl.firstChild!.firstChild!, 3);
+    const selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function fireCopy(): Event {
+    const event = new Event("copy", { cancelable: true, bubbles: true });
+    document.dispatchEvent(event);
+    return event;
+  }
+
+  afterEach(() => {
+    document.getSelection()?.removeAllRanges();
+    document.body.innerHTML = "";
+  });
+
+  it("does NOT intercept a range that starts/ends inside registered layers but crosses unregistered content in between", () => {
+    const layerA = makeTextLayerDiv("start of selection");
+    const between = document.createElement("div"); // deliberately NOT registered
+    between.textContent = "unregistered content in between";
+    const layerB = makeTextLayerDiv("end of selection");
+    document.body.append(layerA, between, layerB);
+
+    const unregisterA = textSelectionController.register(layerA);
+    const unregisterB = textSelectionController.register(layerB);
+    selectAcross(layerA, layerB);
+
+    const event = fireCopy();
+    expect(event.defaultPrevented).toBe(false);
+
+    unregisterA();
+    unregisterB();
+  });
+
+  it("DOES intercept a legitimate selection spanning two ADJACENT registered text layers (no regression)", () => {
+    const layerA = makeTextLayerDiv("start of selection");
+    const layerB = makeTextLayerDiv("end of selection");
+    document.body.append(layerA, layerB);
+
+    const unregisterA = textSelectionController.register(layerA);
+    const unregisterB = textSelectionController.register(layerB);
+    selectAcross(layerA, layerB);
+
+    const event = fireCopy();
+    expect(event.defaultPrevented).toBe(true);
+
+    unregisterA();
+    unregisterB();
   });
 });
