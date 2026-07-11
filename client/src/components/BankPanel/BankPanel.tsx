@@ -27,7 +27,7 @@ function emptyMessage(activeTypes: ReadonlySet<Annotation["type"]>): string {
 /**
  * `{component.annotation-bank-panel}` (Story 3.6) — the read-only review/recall
  * surface: a 320px right overlay listing every mark in the current document,
- * ordered `created_at` ascending, click-to-jump. Mirrors `TocPanel` (open/close,
+ * ordered in reading order (page, then on-page position, Story 8.3), click-to-jump. Mirrors `TocPanel` (open/close,
  * Esc, internal scroll, `<button>` rows, empty state) but the data is genuinely
  * store-owned (unlike ToC's App-owned outline), so this component subscribes
  * directly (AD-9: keeps `App` thin, the same idiom `AnnotationLayer` uses).

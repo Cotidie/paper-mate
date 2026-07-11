@@ -8,9 +8,10 @@ import type { Annotation } from "@/api/client";
 import { pointsBounds } from "@/anchor";
 
 /** One Bank row: the display-ready projection of an annotation (or, for a
- *  two-page group, its earliest sibling). `topFraction` is a `[0,1]` page-box
- *  fraction (zoom-independent, AD-4) — `Reader.jumpToAnnotation` multiplies it
- *  by the live card height. */
+ *  two-page group, its earliest sibling). `topFraction`/`leftFraction` are
+ *  `[0,1]` page-box fractions (zoom-independent, AD-4) from the mark's
+ *  top-most rect — `Reader.jumpToAnnotation` multiplies `topFraction` by the
+ *  live card height; `leftFraction` feeds the reading-order sort (Story 8.3). */
 export interface BankItem {
   id: string;
   type: Annotation["type"];
@@ -21,6 +22,9 @@ export interface BankItem {
   page: number;
   pageIndex: number;
   topFraction: number;
+  /** The mark's left edge, paired with `topFraction` from the SAME rect (the
+   *  reading start). Used only for the reading-order sort's same-row tie-break. */
+  leftFraction: number;
 }
 
 /** Fallback label shown when a mark has no readable text of its own (an empty
@@ -66,19 +70,29 @@ function snippetOf(a: Annotation): { snippet: string; isPlaceholder: boolean } {
   return text ? { snippet: text, isPlaceholder: false } : { snippet: TYPE_LABEL[a.type], isPlaceholder: true };
 }
 
-/** The mark's top edge as a `[0,1]` page fraction, for the jump target: the
- *  min rect `y0` for a (possibly multi-line) text run, the rect's own `y0`
- *  for a region/memo/comment box, or the pen stroke's bbox `y0` (reusing the
- *  anchor service's `pointsBounds` — no coordinate math here, AD-9). */
-function topFractionOf(a: Annotation): number {
+/** The mark's top-left corner as `[0,1]` page fractions, both from the SAME
+ *  rect (D3: the reading start, not a Frankenstein of separate min-`y0` and
+ *  min-`x0`). For a (possibly multi-line) text run this is the rect with the
+ *  minimum `y0`; for a region/memo/comment box it is the rect's own
+ *  `{x0,y0}`; for a pen stroke it is the bbox top-left (reusing the anchor
+ *  service's `pointsBounds` — no coordinate math here, AD-9). Empty `rects`
+ *  falls back to `{top: 0, left: 0}`. `top` is the jump target
+ *  (`topFraction`) and MUST equal the old `topFractionOf`'s min-`y0`. */
+function anchorTopLeft(a: Annotation): { top: number; left: number } {
   const anchor = a.anchor;
-  if (anchor.kind === "rect") return anchor.rect.y0;
-  if (anchor.kind === "path") return pointsBounds(anchor.points).y0;
-  return anchor.rects.length > 0 ? Math.min(...anchor.rects.map((r) => r.y0)) : 0;
+  if (anchor.kind === "rect") return { top: anchor.rect.y0, left: anchor.rect.x0 };
+  if (anchor.kind === "path") {
+    const bounds = pointsBounds(anchor.points);
+    return { top: bounds.y0, left: bounds.x0 };
+  }
+  if (anchor.rects.length === 0) return { top: 0, left: 0 };
+  const topRect = anchor.rects.reduce((min, r) => (r.y0 < min.y0 ? r : min));
+  return { top: topRect.y0, left: topRect.x0 };
 }
 
 function toBankItem(a: Annotation): BankItem {
   const { snippet, isPlaceholder } = snippetOf(a);
+  const { top, left } = anchorTopLeft(a);
   return {
     id: a.id,
     type: a.type,
@@ -87,31 +101,90 @@ function toBankItem(a: Annotation): BankItem {
     isPlaceholder,
     page: a.anchor.page_index + 1,
     pageIndex: a.anchor.page_index,
-    topFraction: topFractionOf(a),
+    topFraction: top,
+    leftFraction: left,
   };
+}
+
+/** Same-row tolerance for the reading-order Y comparison (D2): a mark chains
+ *  into the CURRENT row (see the clustering pass in `bankItems` below) when
+ *  its `top` is within this of the row's most recently added member — a
+ *  typical line-height is ~0.015 of the page box, so this catches same-line
+ *  marks without merging adjacent lines. Validated against a real paper in
+ *  Task 5 live smoke; tune here if it proves off. */
+const READING_ORDER_Y_EPSILON = 0.01;
+
+/** Strict, transitive pre-sort — page ascending, then `top` ascending — used
+ *  ONLY to put marks into a stable top-to-bottom order for the row-clustering
+ *  pass below. Deliberately does NOT apply the epsilon band here: a pairwise
+ *  "within ε counts as equal" comparator is not transitive (three marks with
+ *  consecutive gaps each ≤ ε but a first/last gap > ε form a genuine cycle —
+ *  A ties B, B ties C, but A strictly precedes C), so `Array.sort` (which
+ *  assumes a total order) returns a different, non-deterministic result
+ *  depending on input order — violating AC-1's determinism (Codex review
+ *  finding; reproduced: the same 3 marks sorted differently across 4 input
+ *  permutations). Row membership must come from a one-directional chaining
+ *  pass over an already-sorted sequence, never a runtime pairwise epsilon
+ *  comparison. */
+function byPageThenTop(a: { pageIndex: number; top: number }, b: { pageIndex: number; top: number }): number {
+  if (a.pageIndex !== b.pageIndex) return a.pageIndex - b.pageIndex;
+  return a.top - b.top;
 }
 
 /**
  * The Bank's row list (AC #1): every `docId` annotation of any of the five
- * types, ordered `created_at` ascending (AR-12, matching `store.all()`),
- * with a two-page group (shared non-null `group_id`) collapsed to ONE row,
- * the first (earliest) sibling encountered after sorting, so the jump lands
+ * types, ordered in reading order (FR-24, AR-12) — page ascending, then
+ * top-to-bottom (epsilon-banded into "rows" by the clustering pass below),
+ * then left-to-right for same-row ties, with `created_at` as the final
+ * deterministic tie-break — with a two-page group (shared non-null
+ * `group_id`) collapsed to ONE row, the first sibling encountered after
+ * sorting (i.e. its earliest-page, top-most one, AC #2), so the jump lands
  * on its own page/anchor. Callers that want a subset (e.g. `BankPanel`'s
  * type filter) narrow the result with `filterBankItems`.
  */
 export function bankItems(annotations: Iterable<Annotation>, docId: string): BankItem[] {
-  const ordered = [...annotations]
+  const pairs = [...annotations]
     .filter((a) => a.doc_id === docId)
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    .map((a) => ({ annotation: a, item: toBankItem(a) }))
+    .sort((x, y) =>
+      byPageThenTop({ pageIndex: x.item.pageIndex, top: x.item.topFraction }, { pageIndex: y.item.pageIndex, top: y.item.topFraction }),
+    );
+
+  // Chain consecutive (now top-ordered) marks into "rows": a mark joins the
+  // current row when it is within ε of the PREVIOUS mark added to it, else
+  // starts a new row (and every page change always starts a new row). This
+  // one-directional pass can never contradict itself the way a pairwise
+  // epsilon comparator can (see `byPageThenTop` above).
+  let rowRank = -1;
+  let rowPage = -1;
+  let rowTop = -Infinity;
+  const withRow = pairs.map(({ annotation, item }) => {
+    if (item.pageIndex !== rowPage || item.topFraction - rowTop > READING_ORDER_Y_EPSILON) {
+      rowRank++;
+      rowPage = item.pageIndex;
+    }
+    rowTop = item.topFraction;
+    return { annotation, item, rowRank };
+  });
+
+  // Final order: page → row → left → `created_at` tie-break — every key here
+  // is a plain value comparison against a precomputed field, so (unlike the
+  // old pairwise-epsilon comparator) this is fully transitive.
+  withRow.sort((x, y) => {
+    if (x.item.pageIndex !== y.item.pageIndex) return x.item.pageIndex - y.item.pageIndex;
+    if (x.rowRank !== y.rowRank) return x.rowRank - y.rowRank;
+    if (x.item.leftFraction !== y.item.leftFraction) return x.item.leftFraction - y.item.leftFraction;
+    return x.annotation.created_at.localeCompare(y.annotation.created_at);
+  });
 
   const seenGroups = new Set<string>();
   const rows: BankItem[] = [];
-  for (const a of ordered) {
+  for (const { annotation: a, item } of withRow) {
     if (a.group_id != null) {
       if (seenGroups.has(a.group_id)) continue;
       seenGroups.add(a.group_id);
     }
-    rows.push(toBankItem(a));
+    rows.push(item);
   }
   return rows;
 }

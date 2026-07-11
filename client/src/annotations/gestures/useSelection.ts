@@ -268,17 +268,11 @@ export function useSelection(opts: {
         clearSelection();
       }
     };
-    // The box is position:fixed; once the canvas scrolls (incl. zoom recenters) it
-    // floats detached, so scrolling CLOSES the box — but the selection (ring) stays,
-    // since it rides the denormalized rect and re-derives glued (NFR-3).
-    const onScroll = () => setSelectionBoxOpen(false);
     document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("scroll", onScroll, true);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("scroll", onScroll, true);
     };
   }, [enabled, selectedAnno, clearSelection, deleteAnnotation]);
 
@@ -305,7 +299,20 @@ export function useSelection(opts: {
   // mark (left-aligned to its start) so the floating box never covers it. Reads
   // `effectiveAnchor` (not `selectedAnno.anchor` directly) so a move/resize drag
   // — live preview OR just-committed — is reflected immediately (bug fix above).
-  const selectionPoint = (): { x: number; y: number } => {
+  // `useCallback` (not a plain function): `repositionBox` below is ALSO a
+  // `useCallback` that calls this one, memoized separately on `isMemoSelected`
+  // — if this were a plain function (redefined fresh every render, the old
+  // shape), `repositionBox` would close over whichever `selectionPoint` existed
+  // the last time `isMemoSelected` actually changed, not the latest one, since
+  // `useCallback` discards a new closure whenever its deps compare equal. That
+  // stale closure kept its `effectiveAnchor` frozen from an EARLIER selection
+  // (or from mount, `null`), so re-anchoring on scroll (or even the plain
+  // open/zoom layout effect below, which also calls through `repositionBox`)
+  // recomputed the OLD mark's position instead of the newly selected one — a
+  // Bank jump to a highlight on another page landed the box at the stale
+  // point, clamped to the viewport's top-left corner (bug fix). Depend on
+  // every value actually read inside.
+  const selectionPoint = useCallback((): { x: number; y: number } => {
     if (!selectedAnno || !effectiveAnchor) return { x: 0, y: 0 };
     const page = getPagesRef.current().find((p) => p.pageIndex === effectiveAnchor.page_index);
     if (!page) return { x: 0, y: 0 };
@@ -341,7 +348,7 @@ export function useSelection(opts: {
       return { x: cardRect.left + r.left, y: cardRect.top + r.top };
     }
     return { x: 0, y: 0 };
-  };
+  }, [selectedAnno, effectiveAnchor, getPagesRef, scaleRef]);
 
   // The size step the memo size picker shows ARMED: the SELECTED memo's OWN size
   // (its rect, the single source per AD-5), NOT the session default — otherwise an
@@ -357,6 +364,23 @@ export function useSelection(opts: {
     }
     return best;
   };
+
+  // Re-clamp the box's position from the mark's LIVE screen point (position:
+  // fixed, so it needs re-anchoring on anything that moves it: open, zoom, a
+  // move/resize drag, OR a scroll — shared by the layout effect below and the
+  // scroll/resize tracking effect after it).
+  const repositionBox = useCallback(() => {
+    const el = selectionBoxRef.current;
+    if (!el) return;
+    const { x, y } = selectionPoint();
+    const rect = el.getBoundingClientRect();
+    // A memo's box sits to the LEFT of the mark, so shift by the box's own
+    // (measured) width + gap; every other kind anchors below and needs no shift.
+    const shiftedX = isMemoSelected ? x - rect.width - QUICK_BOX_GAP : x;
+    const c = clampToViewport(shiftedX, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
+    el.style.left = `${c.x}px`;
+    el.style.top = `${c.y}px`;
+  }, [isMemoSelected, selectionPoint]);
 
   // Focus moves INTO the selection box on open and RETURNS to the prior element on
   // close (same accessibility floor as the create box). Also nudges the box on-screen
@@ -375,14 +399,7 @@ export function useSelection(opts: {
         restoreSelectionFocusRef.current = (document.activeElement as HTMLElement | null) ?? document.body;
         el.querySelector<HTMLElement>("button")?.focus();
       }
-      const { x, y } = selectionPoint();
-      const rect = el.getBoundingClientRect();
-      // A memo's box sits to the LEFT of the mark, so shift by the box's own
-      // (measured) width + gap; every other kind anchors below and needs no shift.
-      const shiftedX = isMemoSelected ? x - rect.width - QUICK_BOX_GAP : x;
-      const c = clampToViewport(shiftedX, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
-      el.style.left = `${c.x}px`;
-      el.style.top = `${c.y}px`;
+      repositionBox();
     } else if (restoreSelectionFocusRef.current) {
       restoreSelectionFocusRef.current.focus?.();
       restoreSelectionFocusRef.current = null;
@@ -393,6 +410,24 @@ export function useSelection(opts: {
     // neither `selectedId` nor `scale` change from a plain move/resize).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showSelectionBox, selectedId, scale, effectiveAnchor]);
+
+  // Keep the box glued to the mark on scroll instead of closing it (mirrors
+  // `useCreateQuickBox`'s own Story 4.x fix for the sibling create popup, never
+  // backported here): the box is `position: fixed`, so without this it floats
+  // detached once the canvas scrolls. Closing on scroll (the old behavior) also
+  // self-closed the box the Annotation Bank jump had *just* opened, since
+  // `jumpToAnnotation`'s own smooth scroll fires 'scroll' events for its whole
+  // glide — the box opened and closed within a frame, reading as a blink, and
+  // the jump itself looked like it barely moved. Reposition fixes both.
+  useEffect(() => {
+    if (!showSelectionBox) return;
+    document.addEventListener("scroll", repositionBox, true);
+    window.addEventListener("resize", repositionBox);
+    return () => {
+      document.removeEventListener("scroll", repositionBox, true);
+      window.removeEventListener("resize", repositionBox);
+    };
+  }, [showSelectionBox, repositionBox]);
 
   return {
     selectedAnno,

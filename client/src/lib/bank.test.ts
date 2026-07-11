@@ -98,16 +98,126 @@ function commentMark(
   };
 }
 
-describe("bankItems (Story 3.6, AC #2, #4)", () => {
-  it("orders rows by created_at ascending", () => {
+describe("bankItems (Story 8.3, reading order)", () => {
+  it("AC-1: rows on different pages sort by page ascending, regardless of created_at", () => {
     const rows = bankItems(
       [
-        textMark("late", { created_at: "2026-06-29T00:00:09Z" }),
-        textMark("early", { created_at: "2026-06-29T00:00:01Z" }),
+        textMark("page2", {
+          created_at: "2026-06-29T00:00:01Z",
+          anchor: { kind: "text", page_index: 1, rects: [{ x0: 0.1, y0: 0.1, x1: 0.4, y1: 0.15 }], text: "x" },
+        }),
+        textMark("page1", {
+          created_at: "2026-06-29T00:00:09Z",
+          anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.9, x1: 0.4, y1: 0.95 }], text: "x" },
+        }),
       ],
       "doc-1",
     );
-    expect(rows.map((r) => r.id)).toEqual(["early", "late"]);
+    expect(rows.map((r) => r.id)).toEqual(["page1", "page2"]);
+  });
+
+  it("AC-1: rows on one page sort top-to-bottom by y0", () => {
+    const rows = bankItems(
+      [
+        textMark("bottom", {}, "x", [{ x0: 0.1, y0: 0.8, x1: 0.4, y1: 0.85 }]),
+        textMark("top", {}, "x", [{ x0: 0.1, y0: 0.1, x1: 0.4, y1: 0.15 }]),
+      ],
+      "doc-1",
+    );
+    expect(rows.map((r) => r.id)).toEqual(["top", "bottom"]);
+  });
+
+  it("AC-1: two marks at near-equal y0 (within epsilon) sort left-to-right by x0", () => {
+    const rows = bankItems(
+      [
+        textMark("right", {}, "x", [{ x0: 0.6, y0: 0.301, x1: 0.9, y1: 0.35 }]),
+        textMark("left", {}, "x", [{ x0: 0.1, y0: 0.3, x1: 0.4, y1: 0.35 }]),
+      ],
+      "doc-1",
+    );
+    expect(rows.map((r) => r.id)).toEqual(["left", "right"]);
+  });
+
+  it("AC-1: the epsilon band is transitive — a chain of near-equal-y marks sorts the same regardless of input order (Codex review finding)", () => {
+    // y0 = 0, 0.009, 0.018: each CONSECUTIVE pair is within the 0.01 epsilon,
+    // but the first/last pair (0.018 apart) is not — the classic case where a
+    // pairwise "within epsilon counts as equal" comparator is non-transitive
+    // (A ties B, B ties C, but A strictly precedes C), so `Array.sort` (which
+    // assumes a total order) can return a DIFFERENT result depending on the
+    // input's original order. Descending x0 makes the left-to-right tie-break
+    // disagree with the top-to-bottom order, so a non-transitive comparator
+    // would visibly disagree across permutations.
+    const a = textMark("a", {}, "x", [{ x0: 0.9, y0: 0, x1: 1.0, y1: 0.02 }]);
+    const b = textMark("b", {}, "x", [{ x0: 0.5, y0: 0.009, x1: 0.6, y1: 0.03 }]);
+    const c = textMark("c", {}, "x", [{ x0: 0.1, y0: 0.018, x1: 0.2, y1: 0.04 }]);
+    const permutations = [
+      [a, b, c],
+      [c, b, a],
+      [b, a, c],
+      [a, c, b],
+    ];
+    const results = permutations.map((marks) => bankItems(marks, "doc-1").map((r) => r.id));
+    for (const result of results) {
+      expect(result).toEqual(results[0]);
+    }
+  });
+
+  it("AC-1: two marks with identical (page, y0, x0) fall back to created_at order", () => {
+    const rows = bankItems(
+      [
+        textMark("later", { created_at: "2026-06-29T00:00:09Z" }, "x", [
+          { x0: 0.1, y0: 0.3, x1: 0.4, y1: 0.35 },
+        ]),
+        textMark("earlier", { created_at: "2026-06-29T00:00:01Z" }, "x", [
+          { x0: 0.1, y0: 0.3, x1: 0.4, y1: 0.35 },
+        ]),
+      ],
+      "doc-1",
+    );
+    expect(rows.map((r) => r.id)).toEqual(["earlier", "later"]);
+  });
+
+  it("AC-3: a region (kind=rect) and a pen (kind=path) sort by their bbox top-left, alongside text marks", () => {
+    const rows = bankItems(
+      [
+        textMark("text", {}, "x", [{ x0: 0.1, y0: 0.5, x1: 0.4, y1: 0.55 }]),
+        regionMark("region", { anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.3 } } }),
+        penMark("pen", {
+          anchor: {
+            kind: "path",
+            page_index: 0,
+            points: [
+              { x: 0.1, y: 0.8 },
+              { x: 0.2, y: 0.9 },
+            ],
+          },
+        }),
+      ],
+      "doc-1",
+    );
+    expect(rows.map((r) => r.id)).toEqual(["region", "text", "pen"]);
+  });
+
+  it("AC-3: a region and a pen on the SAME row sort by their bbox LEFT, not just Y (Codex review finding)", () => {
+    const rows = bankItems(
+      [
+        regionMark("region-right", {
+          anchor: { kind: "rect", page_index: 0, rect: { x0: 0.6, y0: 0.5, x1: 0.9, y1: 0.55 } },
+        }),
+        penMark("pen-left", {
+          anchor: {
+            kind: "path",
+            page_index: 0,
+            points: [
+              { x: 0.1, y: 0.5 },
+              { x: 0.2, y: 0.51 },
+            ],
+          },
+        }),
+      ],
+      "doc-1",
+    );
+    expect(rows.map((r) => r.id)).toEqual(["pen-left", "region-right"]);
   });
 
   it("dedups a group_id-shared pair into ONE row, keeping the earliest sibling", () => {
@@ -124,6 +234,27 @@ describe("bankItems (Story 3.6, AC #2, #4)", () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe("a");
+    expect(rows[0].pageIndex).toBe(0);
+  });
+
+  it("AC-2: dedup keeps the earliest-PAGE sibling even when it was created LAST", () => {
+    const rows = bankItems(
+      [
+        textMark("page1-sibling", {
+          group_id: "g1",
+          created_at: "2026-06-29T00:00:01Z",
+          anchor: { kind: "text", page_index: 1, rects: [{ x0: 0.1, y0: 0.1, x1: 0.4, y1: 0.15 }], text: "page2 half" },
+        }),
+        textMark("page0-sibling", {
+          group_id: "g1",
+          created_at: "2026-06-29T00:00:09Z",
+          anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.8, x1: 0.4, y1: 0.85 }], text: "page1 half" },
+        }),
+      ],
+      "doc-1",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe("page0-sibling");
     expect(rows[0].pageIndex).toBe(0);
   });
 
@@ -148,7 +279,7 @@ describe("bankItems (Story 3.6, AC #2, #4)", () => {
       ],
       "doc-1",
     );
-    expect(rows.map((r) => r.id)).toEqual(["pen", "underline", "highlight", "memo", "comment"]);
+    expect(new Set(rows.map((r) => r.id))).toEqual(new Set(["pen", "underline", "highlight", "memo", "comment"]));
   });
 
   describe("snippet selection", () => {
@@ -254,8 +385,8 @@ describe("filterBankItems (Story 8.2, AC #2, #4)", () => {
     expect(filterBankItems(rows, new Set(["comment"])).map((r) => r.id)).toEqual(["comment"]);
   });
 
-  it("a multi-type set includes exactly those types", () => {
-    expect(filterBankItems(rows, new Set(["pen", "memo"])).map((r) => r.id)).toEqual(["pen", "memo"]);
+  it("a multi-type set includes exactly those types, in reading order (memo top=.2, pen top=.5)", () => {
+    expect(filterBankItems(rows, new Set(["pen", "memo"])).map((r) => r.id)).toEqual(["memo", "pen"]);
   });
 
   it("the empty set yields []", () => {
@@ -264,5 +395,13 @@ describe("filterBankItems (Story 8.2, AC #2, #4)", () => {
 
   it("preserves input order (composes with sort)", () => {
     expect(filterBankItems(rows, new Set(BANK_FILTER_TYPES)).map((r) => r.id)).toEqual(rows.map((r: BankItem) => r.id));
+  });
+
+  it("AC-4: a filtered subset stays in reading order (composed filterBankItems(bankItems(...)))", () => {
+    const filtered = filterBankItems(rows, new Set(["underline", "highlight", "comment"]));
+    expect(filtered.map((r) => r.id)).toEqual(["underline", "highlight", "comment"]);
+    for (let i = 1; i < filtered.length; i++) {
+      expect(filtered[i].pageIndex).toBeGreaterThanOrEqual(filtered[i - 1].pageIndex);
+    }
   });
 });
