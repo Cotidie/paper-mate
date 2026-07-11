@@ -4,7 +4,7 @@ baseline_commit: ccf84e824ca31de67bf55434f64650d6dc64fccc
 
 # Story 8.3: Sort annotations in reading order
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -208,3 +208,4 @@ Claude Sonnet 5 (xHigh)
 | 2026-07-12 | Implemented Story 8.3: Bank ordering switched from `created_at` ascending to reading order (page, then epsilon-banded top-to-bottom, then left-to-right, `created_at` as final tie-break). 1399/1399 client tests pass; typecheck clean; live-smoked on own dev servers (8010/5183) with out-of-order marks across 3 pages plus a same-line epsilon check. Status → review. |
 | 2026-07-12 | Ad hoc (out of story scope, user-requested mid-session): fixed two related selected-mark quick-box bugs in `useSelection.ts` — closes-on-scroll self-closing a Bank jump's own box, and a stale-closure bug landing the box at the top-left corner on a cross-page jump. Both reproduced live and verified fixed. Kept as a separate commit from the Story 8.3 diff. |
 | 2026-07-12 | Codex `bmad-code-review` (`ccf84e8..HEAD`): 3 patch findings, all resolved. High: fixed a non-transitive epsilon comparator in `bank.ts` (reproduced input-order-dependent sorts, fixed with a pre-sort + row-clustering pass). Medium ×2: strengthened test coverage in `bank.test.ts` (same-row left-edge ordering) and `AnnotationInteraction.test.tsx` (actual position-change assertions, cross-page stale-closure regression). 1402/1402 client tests pass; typecheck clean. |
+| 2026-07-12 | PR #65 merged to `main`. `server/pyproject.toml` version bumped 0.5.14 → 0.5.15 (PATCH +1 per completed story). Status → done. |
