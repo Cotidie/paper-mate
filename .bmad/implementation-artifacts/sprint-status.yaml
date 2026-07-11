@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-11 (merge: correct-course broadened Epic 8 + added 8-2..8-8, new Epic 9 (9-1..9-3); PR #63 merged, 8-1-paragraph-aware-copy -> done)"
+last_updated: "2026-07-11 (create-story 8-2-annotation-bank-filter-by-type -> ready-for-dev)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -266,7 +266,7 @@ development_status:
   # yet -> backlog.
   epic-8: in-progress
   8-1-paragraph-aware-copy: done
-  8-2-annotation-bank-filter-by-type: backlog
+  8-2-annotation-bank-filter-by-type: ready-for-dev
   8-3-sort-annotations-reading-order: backlog
   8-4-comment-on-region: backlog
   8-5-venue-short-name: backlog
