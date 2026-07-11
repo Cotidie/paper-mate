@@ -4,7 +4,7 @@ baseline_commit: 37bd1efaa0d8fbb431cfabe8ae4670cc34f2d7e8
 
 # Story 8.5: Venue (Short) and Venue (Full) columns
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
