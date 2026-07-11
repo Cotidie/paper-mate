@@ -185,6 +185,17 @@ Claude Sonnet 5 (xHigh)
 - `BoxMode` is exported from `annotations/index.ts` (new symbol, not a `render/` export) so `Reader.tsx` can type its `boxMode` prop without reaching into `annotations/gestures/` directly (AD-9 layering) — confirmed both `vi.mock("@/render")` barrels (`App.test.tsx`, `Reader.test.tsx`) needed no changes.
 - Full regression green: `npm run typecheck` clean, `npm test` 68 files / 1413 tests passing (including `no-raw-values`), contract byte-identical (`git diff 7046832..HEAD -- client/src/api/schema.d.ts server/openapi.json` empty — no server/contract touch, D5). `server/uv.lock` re-synced via `uv lock` to match the `0.5.16` `pyproject.toml` bump (it had drifted to `0.5.14` on disk before this story).
 - Live smoke (Task 6) fully passed all sub-items (a)-(i) on the "Microsoft COCO" 15-page fixture at DPR=2, using an isolated scratch `PAPER_MATE_DATA` so the user's real library was never touched (see Debug Log). Screenshot saved to `.bmad/implementation-artifacts/8-4-region-comment-smoke.png`.
+- **Two post-initial-commit follow-up fixes** (user-requested, both committed before this record was updated — see commits `341a0e1`, `7636535`; version now `0.5.18`):
+  1. `341a0e1` — a box-comment got NO edit frame at all (`isEditable` excluded `type=comment` outright, a pre-8.4 exclusion this story never revisited): generalized `isEditable` to any `kind=rect` mark; the region/comment fill itself gained `data-edit-handle="move"` (drag the fill, not just the pin/grip); the live box-drag preview gained an opacity-tinted fill (previously dashed-border only); added a Memo opacity control (`AlphaRow`, mirroring Pen's), making `activeAlpha` per-tool (`Record<"pen"|"memo", number>`).
+  2. `7636535` — the new Memo opacity blended toward `--color-surface-card` (white/desaturation) instead of true transparency; changed to `color-mix(in srgb, color A%, transparent)` (the `rgba` equivalent) so a low-opacity memo actually shows the page content underneath.
+- **Cross-model Codex review (`bmad-code-review` via `codex exec`, `7046832..HEAD` = story commit + both follow-ups)**: 0 High, 2 Medium, 3 Low, 1 deferred. All 5 real findings fixed this session:
+  - Med — `useBoxGesture` read `boxMode` LIVE at pointerup; a mid-drag switch to the OTHER box mode (not through `null`) committed under the NEW mode instead of aborting. Fixed: snapshot the mode at pointerdown (`dragModeRef`), abort at pointerup if it no longer matches. Regression test added (`AnnotationInteraction.test.tsx`).
+  - Med (decision) — `341a0e1`'s `isEditable` widening was unconditional, so a CLICK-placed point-pin comment (`buildCommentPin`'s degenerate zero-area rect) also grew 4 resize handles on a zero-size frame. Decision: keep the widening for DRAWN box-comments only — `isEditable` now additionally requires a non-degenerate rect (`x0≠x1 || y0≠y1`) for `kind=rect`; a point pin keeps its pre-existing pin-drag move (`movable`), matching its original design. Existing test renamed/repointed to a real drawn-region fixture; a new test asserts no edit frame for the degenerate case.
+  - Low — this Dev Agent Record didn't describe the two follow-up commits (this entry).
+  - Low — `useCreateQuickBox`'s box-mode early-return in `onPointerUp` didn't null a stale `commentDownRef` candidate recorded before box mode turned on. Fixed: null it there too.
+  - Low — README.md / `create.ts` / `components.css` had stale comments describing the memo blend as toward-white; updated to describe the transparent blend (`7636535`).
+  - Deferred (pre-existing, not this story's regression) — `useBoxGesture` doesn't track the initiating `pointerId`; a second pointer could move/release an in-flight draft.
+  - Full regression re-verified green after the fixes: `npm run typecheck` clean, `npm test` 68 files / 1423 tests (up from 1413 — the two follow-ups' own tests plus this round's 3 new regression tests).
 
 ### File List
 
@@ -198,10 +209,19 @@ Claude Sonnet 5 (xHigh)
 - `client/src/annotations/AnnotationInteraction.test.tsx` (modified — updated `boxActive`→`boxMode` call sites + new box-comment/D3-suppression tests, Task 5)
 - `client/src/components/ToolRail/ToolRail.test.tsx` (modified — `boxComment`/`onSetBoxComment` prop plumbing + new Comment flyout tests, Task 5)
 - `client/src/reader/ReaderPage.test.tsx` (modified — new box-comment mode + mutual-exclusion tests, Task 5)
-- `client/src/annotations/README.md` (modified — Story 2.11 section updated for the box-comment generalization, Task 7)
-- `server/pyproject.toml` (modified — version `0.5.15` → `0.5.16`, Task 7)
-- `server/uv.lock` (modified — re-synced to `0.5.16`)
+- `client/src/annotations/README.md` (modified — Story 2.11 section updated for the box-comment generalization, Task 7; memo/pen-alpha sections corrected this review round)
+- `server/pyproject.toml` (modified — version `0.5.15` → `0.5.18` across the story commit + two follow-ups)
+- `server/uv.lock` (modified — re-synced across the version bumps)
 - `.bmad/implementation-artifacts/8-4-region-comment-smoke.png` (added — Task 6 live-smoke screenshot)
+- `client/src/annotations/AnnotationLayer.tsx` (modified — follow-up `341a0e1`: `isEditable` widened to `kind=rect`, fill gained `data-edit-handle="move"`; this review round: `isEditable` gated to non-degenerate rects for comments)
+- `client/src/annotations/AlphaRow.tsx`, `client/src/annotations/MemoBox.tsx`, `client/src/annotations/Annotations.css`, `client/src/theme/components.css` (modified — follow-ups `341a0e1`/`7636535`: per-tool memo opacity control + transparent blend; this review round: `components.css` comment corrected)
+- `client/src/annotations/create.ts`, `client/src/annotations/create.test.ts` (modified — follow-up `341a0e1`: memo `alpha` create param; this review round: doc-comment corrected)
+- `client/src/annotations/marks.ts`, `client/src/annotations/marks.test.ts`, `client/src/annotations/gestures/shared.ts`, `client/src/annotations/gestures/useMemoPlacement.ts`, `client/src/annotations/gestures/usePenGesture.ts`, `client/src/annotations/gestures/useSelection.ts`, `client/src/store/index.ts`, `client/src/store/index.test.ts` (modified — follow-up `341a0e1`: per-tool `activeAlpha`, `realphaAnnotation` guard widened to memo, box-drag preview fill)
+- `client/src/annotations/gestures/useEditGesture.test.ts`, `client/src/annotations/gestures/useUndoRedo.test.ts`, `client/src/hooks/useAutosave.test.ts` (modified — follow-up `341a0e1`: call-site updates for the `isEditable`/alpha changes)
+- `client/src/annotations/AnnotationLayer.test.tsx` (modified this review round — degenerate-rect edit-frame regression tests, Med finding 2)
+- `client/src/annotations/AnnotationInteraction.test.tsx` (modified this review round — mode-switch-mid-drag regression test, Med finding 1)
+- `client/src/annotations/gestures/useBoxGesture.ts` (modified this review round — `dragModeRef` snapshot-at-pointerdown fix, Med finding 1)
+- `client/src/annotations/gestures/useCreateQuickBox.ts` (modified this review round — null stale `commentDownRef` under box mode, Low finding 4)
 
 ## Change Log
 
@@ -209,3 +229,6 @@ Claude Sonnet 5 (xHigh)
 |------|--------|
 | 2026-07-12 | Story created (ready-for-dev) via bmad-create-story. Box comment = a MODE of the Comment tool (twin of box-highlight); `useBoxGesture` generalized to `boxMode: "highlight"|"comment"`; reuses `buildCommentPin` + the existing region-fill/comment-pin/bubble render + Bank filter/sort + command path. Client-only, contract byte-identical. |
 | 2026-07-12 | Implemented Tasks 1-7: generalized `useBoxGesture` (D2), added D3 create-suppression to `useCreateQuickBox`, threaded `boxMode`/`boxComment` through `AnnotationInteraction`/`Reader`/`ReaderPage`, added the Comment flyout's Text/Box picker to `ToolRail` (D1), full test coverage, live smoke on a real multi-page paper at DPR>1, docs + version bump (`0.5.15` → `0.5.16`). All ACs verified; ready for review. |
+| 2026-07-12 | Follow-up fix (`341a0e1`, `0.5.16`→`0.5.17`): box-comment move/resize (`isEditable` widened to any `kind=rect`, fill gained a move handle), live box-drag preview gained a tinted fill, added per-tool Memo opacity (`AlphaRow` twin of Pen's). |
+| 2026-07-12 | Follow-up fix (`7636535`, `0.5.17`→`0.5.18`): Memo opacity now blends toward transparent (`color-mix(..., transparent)`), not white — the earlier white blend only desaturated instead of showing the page through. |
+| 2026-07-12 | Cross-model Codex `bmad-code-review` (`codex exec`, range `7046832..HEAD`): 0 High, 2 Medium, 3 Low, 1 deferred. Fixed all 5 real findings: `useBoxGesture` mode-switch-mid-drag (snapshot mode at pointerdown), `isEditable` gated to non-degenerate rects so point-pin comments don't get resize handles (the `341a0e1` widening was meant for drawn box-comments only), stale `commentDownRef` under box mode, stale memo-opacity docs (README/create.ts/components.css), and this Dev Agent Record itself. Full regression re-verified green (68 files / 1423 tests). |

@@ -112,10 +112,10 @@ export function buildPenAnnotation(stroke: PenStroke, docId: string, opts: PenCr
 }
 
 /** The memo create request: the shared base + its opacity (user feature
- *  request, the memo twin of pen's alpha — the fill's blend-toward-white
+ *  request, the memo twin of pen's alpha — the fill's blend-toward-transparent
  *  strength, MemoBox.tsx). */
 export interface MemoCreateRequest extends CreateBase {
-  /** Fill transparency 0..1 (1 = fully saturated color, no white blend). */
+  /** Fill transparency 0..1 (1 = fully saturated color, no transparency blend). */
   alpha: number;
 }
 

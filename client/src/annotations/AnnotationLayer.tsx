@@ -159,8 +159,16 @@ export default function AnnotationLayer({
   // rect-kind comment must resize/move exactly like a region highlight, they
   // share the same anchor geometry). Text marks (kind=text, incl. a text-anchor
   // comment) are excluded — Story 3.8 re-resolves their run; moving a text rect
-  // would desync anchor.text.
-  const isEditable = (a: Annotation): boolean => a.anchor.kind === "path" || a.anchor.kind === "rect";
+  // would desync anchor.text. A click-placed comment pin is ALSO kind=rect but
+  // with a degenerate (zero-area) rect (`buildCommentPin`'s point placement,
+  // Story 2.10) — it already moves via its own pin drag handle (`movable`,
+  // below); excluded here so it doesn't ALSO grow four resize corners on a
+  // zero-size frame (Codex 8.4 review, Med finding 2), which would let a plain
+  // point pin silently balloon into a region.
+  const isEditable = (a: Annotation): boolean =>
+    a.anchor.kind === "path" ||
+    (a.anchor.kind === "rect" &&
+      (a.anchor.rect.x0 !== a.anchor.rect.x1 || a.anchor.rect.y0 !== a.anchor.rect.y1));
 
   // The one selected mark on THIS page that shows an edit frame (single selection).
   const editMark = marks.find((a) => a.id === selectedId && isEditable(a)) ?? null;

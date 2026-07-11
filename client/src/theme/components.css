@@ -169,11 +169,11 @@
   --memo-size-preview-medium: 18px;
   --memo-size-preview-large: 22px;
   /* The memo BACKGROUND's accent strength (user fix request: full-strength read
-     "thick") is a color-mix() ratio blending style.color toward surface-card
-     white, applied inline in MemoBox.tsx. Its strength is now the user-
-     adjustable `style.alpha` (fix request, the memo twin of pen's alpha —
-     AlphaRow), not a fixed token: no CSS var here anymore. The border stays
-     full-strength (unaffected) — only the fill softens. */
+     "thick") is a color-mix() ratio blending style.color toward transparent
+     (true alpha, not a white tint), applied inline in MemoBox.tsx. Its
+     strength is the user-adjustable `style.alpha` (fix request, the memo twin
+     of pen's alpha — AlphaRow), not a fixed token: no CSS var here anymore.
+     The border stays full-strength (unaffected) — only the fill softens. */
 
   /* annotation-comment-pin + comment-bubble (DESIGN.md components.annotation-
      comment-pin / comment-bubble): the white/ink ChatCircle badge straddling a

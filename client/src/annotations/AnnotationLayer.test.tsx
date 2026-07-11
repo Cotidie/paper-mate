@@ -644,6 +644,21 @@ describe("AnnotationLayer edit frame (Story 3.1)", () => {
     created_at: "2026-06-29T00:00:00+00:00",
     updated_at: "2026-06-29T00:00:00+00:00",
   });
+  // A DRAWN box-comment (Story 8.4): a real, non-degenerate region rect, same
+  // shape a box-comment drag builds via `buildCommentPin` fed the drag rect.
+  const boxComment = (id: string): Annotation => ({
+    id,
+    doc_id: "doc-1",
+    type: "comment",
+    group_id: null,
+    anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.2, x1: 0.5, y1: 0.4 } },
+    style: { color: "annotation-default", stroke_width: null, alpha: null },
+    body: "",
+    created_at: "2026-06-29T00:00:00+00:00",
+    updated_at: "2026-06-29T00:00:00+00:00",
+  });
+  // A CLICK-placed point pin (Story 2.10): `buildCommentPin` fed a point, so
+  // its rect is degenerate (x0===x1, y0===y1) — zero area, not a region.
   const commentPin = (id: string): Annotation => ({
     id,
     doc_id: "doc-1",
@@ -692,10 +707,20 @@ describe("AnnotationLayer edit frame (Story 3.1)", () => {
     expect(screen.queryByTestId("annotation-edit-frames-0")).toBeNull();
   });
 
-  it("shows a move grip + four corner handles for a selected kind=rect comment (fix request: a box-comment must resize/move exactly like a region highlight)", () => {
-    seedAndSelect(commentPin("c1"));
+  it("shows a move grip + four corner handles for a selected DRAWN box-comment (fix request: a box-comment must resize/move exactly like a region highlight)", () => {
+    seedAndSelect(boxComment("c1"));
     expect(screen.getByTestId("edit-handle-move-c1")).toBeTruthy();
     for (const c of ["nw", "ne", "sw", "se"]) expect(screen.getByTestId(`edit-handle-${c}-c1`)).toBeTruthy();
+  });
+
+  it("shows NO edit frame for a selected CLICK-placed comment pin (degenerate zero-area rect; it moves via its own pin drag handle, not a resize frame, Codex 8.4 review, Med finding 2)", () => {
+    seedAndSelect(commentPin("c1"));
+    expect(screen.queryByTestId("annotation-edit-frames-0")).toBeNull();
+    expect(screen.queryByTestId("edit-handle-move-c1")).toBeNull();
+    // Still movable via the pin itself (a SEPARATE affordance from the edit frame).
+    expect(
+      screen.getByTestId("annotation-comment-pin-c1").classList.contains("annotation-comment-pin--movable"),
+    ).toBe(true);
   });
 
   it("shows NO edit frame for a selected kind=text comment (its position derives from the text run, Story 3.8 territory)", () => {

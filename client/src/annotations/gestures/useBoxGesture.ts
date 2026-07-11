@@ -44,6 +44,13 @@ export function useBoxGesture(
   boxModeRef.current = boxMode;
   const boxDrawingRef = useRef(false);
   const boxStartRef = useRef<{ x: number; y: number } | null>(null);
+  // The mode a drag STARTED under, snapshotted at pointerdown. A hotkey/flyout
+  // switch mid-drag (e.g. comment-box → highlight-box, Codex 8.4 review, Med
+  // finding 1) mutates `boxModeRef` live without ever passing through null, so
+  // the pointerup handler must compare against the START mode, not re-read the
+  // current one, or it commits the WRONG mark type for a drag that began under
+  // a different mode.
+  const dragModeRef = useRef<BoxMode | null>(null);
   const [boxPreview, setBoxPreview] = useState<BoxPreview | null>(null);
 
   useEffect(() => {
@@ -51,6 +58,7 @@ export function useBoxGesture(
     const abort = () => {
       boxDrawingRef.current = false;
       boxStartRef.current = null;
+      dragModeRef.current = null;
       setBoxPreview(null);
     };
     const onDown = (e: PointerEvent) => {
@@ -65,6 +73,7 @@ export function useBoxGesture(
       )
         return;
       boxDrawingRef.current = true;
+      dragModeRef.current = boxModeRef.current;
       boxStartRef.current = { x: e.clientX, y: e.clientY };
       setBoxPreview({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY });
       e.preventDefault();
@@ -89,9 +98,12 @@ export function useBoxGesture(
       const start = boxStartRef.current;
       boxStartRef.current = null;
       setBoxPreview(null);
-      // Disarm mid-drag (tool switched): do not persist.
-      const mode = boxModeRef.current;
-      if (mode === null) return;
+      // Disarm mid-drag (tool switched to off, OR to the OTHER box mode without
+      // ever passing through null): commit under the mode the drag STARTED
+      // with, and only if it is still on. Do not persist otherwise.
+      const mode = dragModeRef.current;
+      dragModeRef.current = null;
+      if (mode === null || mode !== boxModeRef.current) return;
       // Below-threshold drag → stray click, no region.
       if (Math.hypot(e.clientX - start.x, e.clientY - start.y) < BOX_DRAG_THRESHOLD) return;
       const pages = getPagesRef.current();
@@ -166,6 +178,7 @@ export function useBoxGesture(
     if (boxMode === null && boxDrawingRef.current) {
       boxDrawingRef.current = false;
       boxStartRef.current = null;
+      dragModeRef.current = null;
       setBoxPreview(null);
     }
   }, [boxMode]);

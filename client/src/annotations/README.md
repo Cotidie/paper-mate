@@ -369,8 +369,10 @@ unchanged (one-shot create, not a sticky arm). The buttons are icon-only
 Alpha is the THIRD pen style axis (after color and stroke_width), stored as
 `style.alpha: float | null` on the `Style` model (Pydantic + generated TS
 contract). `null` is backward-compatible (renders at the 0.4 default, same
-as the highlighter opacity). Only pen marks carry a non-null alpha; all other
-marks store `null` (AR-5).
+as the highlighter opacity). At the time of this story, pen was the only mark
+that carried a non-null alpha (AR-5); memo gained its own per-tool alpha
+later (see the memo Opacity fix-request note above), so `style.alpha` is now
+non-null for pen OR `kind=rect && type=memo`.
 
 - `AlphaRow`: a 4-step row (Low 0.2 / Mid 0.4 / High 0.6 / Full 1.0),
   mirroring `StrokeWidthRow`. Swatches visualize the step opacity. Exported
@@ -379,8 +381,9 @@ marks store `null` (AR-5).
 - `store.activeAlpha` / `setActiveAlpha`: sticky default (last-choice-wins,
   same model as `activeColor`/`activeStrokeWidth`). Default = 0.4.
 - `store.realphaAnnotation`: per-mark alpha update (twin of
-  `restrokeAnnotation`), guarded to `anchor.kind === "path"` so a stale
-  selection id for a text mark is silently skipped.
+  `restrokeAnnotation`); as of the memo Opacity fix request, guarded to
+  `anchor.kind === "path"` (pen) OR `anchor.kind === "rect" && type === "memo"`,
+  so a stale selection id for a text mark is silently skipped.
 - `AnnotationLayer.renderPen`: each `<path>` now carries `fillOpacity` (per-stroke,
   NOT group opacity, so overlapping strokes at different alphas render correctly).
   `PEN_DEFAULT_ALPHA = 0.4` bridges the CSS token to the TS render path.

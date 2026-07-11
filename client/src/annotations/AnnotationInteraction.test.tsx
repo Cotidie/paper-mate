@@ -2130,6 +2130,28 @@ describe("AnnotationInteraction box-comment gesture (Story 8.4 — AC1,5, Design
     fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
   });
+
+  it("mid-drag boxMode switching to the OTHER mode (comment -> highlight) aborts the draft instead of committing the wrong type (Codex 8.4 review, Med finding 1)", () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    const { rerender } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="comment" rectReader={reader} />,
+    );
+
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+
+    // The mode flips directly to "highlight" mid-drag (e.g. a hotkey/flyout
+    // switch to the OTHER box mode) without ever passing through null.
+    rerender(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="highlight" rectReader={reader} />,
+    );
+
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    // Must NOT commit as a highlight (the drag started as a comment) — the
+    // whole draft is discarded, not silently retyped.
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
 });
 
 describe("AnnotationInteraction box mode suppresses useCreateQuickBox's comment create (Story 8.4, Design D3)", () => {

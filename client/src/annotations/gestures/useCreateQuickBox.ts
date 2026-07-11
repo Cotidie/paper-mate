@@ -278,8 +278,14 @@ export function useCreateQuickBox(opts: {
       // A box mode (box-highlight or box-comment, Story 8.4) is active:
       // `useBoxGesture` owns this drag/click's create, so this path must not
       // ALSO fall through to the text-comment create or the click-pin below
-      // (Design D3 — the single most likely double-create seam).
-      if (boxActiveRef.current) return;
+      // (Design D3 — the single most likely double-create seam). Also clear any
+      // candidate recorded by a pointerdown that landed BEFORE box mode turned
+      // on (mid-gesture toggle) — otherwise it survives as a stale coordinate
+      // for whichever pointerup next reads it (Codex 8.4 review, Low finding 4).
+      if (boxActiveRef.current) {
+        commentDownRef.current = null;
+        return;
+      }
       const selection = window.getSelection();
       const pages = rectsFromSelection(selection, getPagesRef.current(), scaleRef.current, rectReaderRef.current);
       const tool = armedToolRef.current;
