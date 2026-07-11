@@ -4,7 +4,7 @@ baseline_commit: 7046832fa2ad7c9de518b329c8ed25fb2bbf9957
 
 # Story 8.4: Comment on a boxed region
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -232,3 +232,4 @@ Claude Sonnet 5 (xHigh)
 | 2026-07-12 | Follow-up fix (`341a0e1`, `0.5.16`→`0.5.17`): box-comment move/resize (`isEditable` widened to any `kind=rect`, fill gained a move handle), live box-drag preview gained a tinted fill, added per-tool Memo opacity (`AlphaRow` twin of Pen's). |
 | 2026-07-12 | Follow-up fix (`7636535`, `0.5.17`→`0.5.18`): Memo opacity now blends toward transparent (`color-mix(..., transparent)`), not white — the earlier white blend only desaturated instead of showing the page through. |
 | 2026-07-12 | Cross-model Codex `bmad-code-review` (`codex exec`, range `7046832..HEAD`): 0 High, 2 Medium, 3 Low, 1 deferred. Fixed all 5 real findings: `useBoxGesture` mode-switch-mid-drag (snapshot mode at pointerdown), `isEditable` gated to non-degenerate rects so point-pin comments don't get resize handles (the `341a0e1` widening was meant for drawn box-comments only), stale `commentDownRef` under box mode, stale memo-opacity docs (README/create.ts/components.css), and this Dev Agent Record itself. Full regression re-verified green (68 files / 1423 tests). |
+| 2026-07-11 | PR #66 ("Feat: Comment on Boxed Regions") merged to `main`. Status: review -> done. Version stays `0.5.18` (already PATCH-bumped once for story completion, `0.5.15`->`0.5.16`, plus two standalone-fix bumps during review, `0.5.16`->`0.5.17`->`0.5.18` — no further bump at merge). |
