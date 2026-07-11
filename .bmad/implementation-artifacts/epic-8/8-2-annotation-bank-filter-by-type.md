@@ -4,7 +4,7 @@ baseline_commit: ecfacfc74f2567889bbf4470d0b45368a8e8021a
 
 # Story 8.2: Annotation Bank filter by type (default comments)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -53,28 +53,40 @@ This story does two things to the existing Annotation Bank (Story 3.6):
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Widen `bankItems` to all five types** (AC: 1)
-  - [ ] In `client/src/lib/bank.ts`, remove the `BANK_TYPES` restriction so `bankItems` returns rows for all five `Annotation["type"]` values (keep the `doc_id` filter, the `group_id` dedup, and the `created_at` ordering exactly as-is). Delete `BANK_TYPES` and its comment; do not leave it dead.
-  - [ ] Confirm `toBankItem`/`snippetOf`/`topFractionOf` need no change (they already branch on anchor kind for all types). Underline rows use `anchor.text`; pen rows fall back to the `"Pen stroke"` label + `pointsBounds`.
-- [ ] **Task 2 — Add the pure type-filter derivation** (AC: 2, 4)
-  - [ ] Add a small pure helper to `bank.ts` (leaf module, AD-9 — no store/DOM) that narrows a `BankItem[]` to an active set of types, e.g. `filterBankItems(items: BankItem[], activeTypes: ReadonlySet<Annotation["type"]>): BankItem[]`. Keep `bankItems` (all rows) and the filter as separate single-responsibility functions so Story 8.3's re-sort drops in without entangling the filter.
-  - [ ] Export a canonical ordered list/const of the five types (for building the control) and the comments-only default, so `BankPanel` and tests share one source of truth (no re-listing the enum inline).
-- [ ] **Task 3 — Filter control + default in `BankPanel`** (AC: 2, 3, 5)
-  - [ ] Own the active-types set as client view state in `BankPanel` via `useState`, initialized to comments-only. `BankPanel` returns `null` when `!open` (it unmounts on close), so this state naturally resets to the comments-only default on each open, satisfying AC-2. (See Open Design Call 2 if the default should instead be remembered per session.)
-  - [ ] Render the filter control in the panel header region (see Open Design Call 1 for shape). Each type toggle is a real `<button>` with `aria-pressed`, a visible glyph + label (reuse `TYPE_ICON`/`TYPE_LABEL`), keyboard-operable.
-  - [ ] Compose in render: `filterBankItems(bankItems(annotations.values(), docId), activeTypes)`.
-- [ ] **Task 4 — Filter-adaptive empty state** (AC: 3, 5)
-  - [ ] Replace the single `"No annotations yet."` with a message that adapts to the active filter (comments-only → "No comments yet."; a broader/empty selection → a general "No annotations match this filter." — settle exact copy per Open Design Call 3). No em-dash.
-  - [ ] Keep the empty state inside the panel; the canvas never reflows (NFR-1).
-- [ ] **Task 5 — Styling via tokens** (AC: 1, 2)
-  - [ ] Style the filter control in `BankPanel.css`, tokens only (raw hex/px live in `theme/**` only — `src/no-raw-values.test.ts` enforces this). Reuse existing tokens where they fit (e.g. the `tag-chip` family, `--space-*`, `--color-*`); add new `--bank-filter-*` tokens to `client/src/theme/components.css` only if a genuinely new dimension is needed.
-- [ ] **Task 6 — Tests** (AC: 1, 2, 3, 4)
-  - [ ] **Flip the regression guard:** `client/src/lib/bank.test.ts:140` currently asserts "excludes pen strokes and underlines; only highlight/memo/comment appear". After Task 1 that is wrong — rewrite it to assert all five types now produce rows (order preserved by `created_at`).
-  - [ ] Unit-test `filterBankItems`: comments-only narrows to comment rows; a multi-type set includes exactly those; the empty set yields `[]`; filtering preserves the input order (so it composes with sort).
-  - [ ] Add `BankPanel` component tests (the component has NONE today — CodeGraph flags "no covering tests"): default open shows comments only; toggling a type chip reveals/hides that type's rows; a filter matching nothing shows the adaptive empty state; the filter never calls any store mutator.
-  - [ ] Run `cd client && npm test` and `npm run typecheck` — both green.
-- [ ] **Task 7 — Live smoke** (AC: 1, 2, 3)
-  - [ ] With your OWN fresh dev servers (never a user-launched/Docker one — CLAUDE.md), on a paper carrying at least one of each type: open the Bank → confirm comments-only default; toggle chips → confirm pen/underline/highlight/memo rows appear and jump+select correctly (a Bank row click still runs `handleBankJump` = jump + flash + select); confirm the adaptive empty state; confirm the canvas never reflows while filtering. This is a light single-view smoke; no cross-page selection is involved (that is 8.4/8.8's concern, not this story).
+- [x] **Task 1 — Widen `bankItems` to all five types** (AC: 1)
+  - [x] In `client/src/lib/bank.ts`, remove the `BANK_TYPES` restriction so `bankItems` returns rows for all five `Annotation["type"]` values (keep the `doc_id` filter, the `group_id` dedup, and the `created_at` ordering exactly as-is). Delete `BANK_TYPES` and its comment; do not leave it dead.
+  - [x] Confirm `toBankItem`/`snippetOf`/`topFractionOf` need no change (they already branch on anchor kind for all types). Underline rows use `anchor.text`; pen rows fall back to the `"Pen stroke"` label + `pointsBounds`.
+- [x] **Task 2 — Add the pure type-filter derivation** (AC: 2, 4)
+  - [x] Add a small pure helper to `bank.ts` (leaf module, AD-9 — no store/DOM) that narrows a `BankItem[]` to an active set of types, e.g. `filterBankItems(items: BankItem[], activeTypes: ReadonlySet<Annotation["type"]>): BankItem[]`. Keep `bankItems` (all rows) and the filter as separate single-responsibility functions so Story 8.3's re-sort drops in without entangling the filter.
+  - [x] Export a canonical ordered list/const of the five types (for building the control) and the comments-only default, so `BankPanel` and tests share one source of truth (no re-listing the enum inline).
+- [x] **Task 3 — Filter control + default in `BankPanel`** (AC: 2, 3, 5)
+  - [x] Own the active-types set as client view state in `BankPanel` via `useState`, initialized to comments-only. `BankPanel` returns `null` when `!open` (it unmounts on close), so this state naturally resets to the comments-only default on each open, satisfying AC-2. (See Open Design Call 2 if the default should instead be remembered per session.)
+  - [x] Render the filter control in the panel header region (see Open Design Call 1 for shape). Each type toggle is a real `<button>` with `aria-pressed`, a visible glyph + label (reuse `TYPE_ICON`/`TYPE_LABEL`), keyboard-operable.
+  - [x] Compose in render: `filterBankItems(bankItems(annotations.values(), docId), activeTypes)`.
+- [x] **Task 4 — Filter-adaptive empty state** (AC: 3, 5)
+  - [x] Replace the single `"No annotations yet."` with a message that adapts to the active filter (comments-only → "No comments yet."; a broader/empty selection → a general "No annotations match this filter." — settle exact copy per Open Design Call 3). No em-dash.
+  - [x] Keep the empty state inside the panel; the canvas never reflows (NFR-1).
+- [x] **Task 5 — Styling via tokens** (AC: 1, 2)
+  - [x] Style the filter control in `BankPanel.css`, tokens only (raw hex/px live in `theme/**` only — `src/no-raw-values.test.ts` enforces this). Reuse existing tokens where they fit (e.g. the `tag-chip` family, `--space-*`, `--color-*`); add new `--bank-filter-*` tokens to `client/src/theme/components.css` only if a genuinely new dimension is needed.
+- [x] **Task 6 — Tests** (AC: 1, 2, 3, 4)
+  - [x] **Flip the regression guard:** `client/src/lib/bank.test.ts:140` currently asserts "excludes pen strokes and underlines; only highlight/memo/comment appear". After Task 1 that is wrong — rewrite it to assert all five types now produce rows (order preserved by `created_at`).
+  - [x] Unit-test `filterBankItems`: comments-only narrows to comment rows; a multi-type set includes exactly those; the empty set yields `[]`; filtering preserves the input order (so it composes with sort).
+  - [x] Add `BankPanel` component tests (the component has NONE today — CodeGraph flags "no covering tests"): default open shows comments only; toggling a type chip reveals/hides that type's rows; a filter matching nothing shows the adaptive empty state; the filter never calls any store mutator.
+  - [x] Run `cd client && npm test` and `npm run typecheck` — both green.
+- [x] **Task 7 — Live smoke** (AC: 1, 2, 3)
+  - [x] With your OWN fresh dev servers (never a user-launched/Docker one — CLAUDE.md), on a paper carrying at least one of each type: open the Bank → confirm comments-only default; toggle chips → confirm pen/underline/highlight/memo rows appear and jump+select correctly (a Bank row click still runs `handleBankJump` = jump + flash + select); confirm the adaptive empty state; confirm the canvas never reflows while filtering. This is a light single-view smoke; no cross-page selection is involved (that is 8.4/8.8's concern, not this story).
+
+### Review Findings
+
+Reviewed by Codex (`codex exec` running the `bmad-code-review` workflow standalone, per CLAUDE.md's auto-review convention: story file + working-tree diff since HEAD only carried the story-creation commit + sprint-status path, non-interactive). 0 decision-needed, 2 patch, 0 defer, 12 dismissed as noise. Codex independently ran `npm test`/`typecheck` and confirmed 68/68 files, 1393/1393 tests green before reviewing. Both patch findings verified against source and fixed in this session.
+
+- [x] [Review][Patch] Reset the filter before repaint on Bank reopen to prevent stale rows from flashing [client/src/components/BankPanel/BankPanel.tsx:65]
+- [x] [Review][Patch] Use the canonical Bank filter type constants in tests instead of re-listing the type universe inline [client/src/components/BankPanel/BankPanel.test.tsx:276]
+
+**Fix 1 — stale-filter flash on reopen.** The reset-effect (Completion Notes above) used a passive `useEffect`, which fires AFTER the browser paints. Since the component instance persists across close/reopen, the very first open-transition frame would still render with whatever filter was active when the panel was last closed, a visible one-frame flash of stale rows, before the effect fired and reset it back to comments-only. Switched to `useLayoutEffect`, which fires synchronously after DOM mutations but before paint, so the reset is applied before the browser ever shows a frame.
+- **Fix 2 — tests re-listing the five-type universe inline.** Three sites (`bank.test.ts:266`, `BankPanel.test.tsx:212`, `BankPanel.test.tsx:276`) hard-coded `["highlight", "underline", "pen", "memo", "comment"]` or a 4-of-5 subset instead of importing `BANK_FILTER_TYPES`, contrary to Task 2's explicit single-source-of-truth requirement. All three now derive from `BANK_FILTER_TYPES` (the AC-1 test uses `.filter((t) => t !== "comment")` for its 4-of-5 case, since comment is already active by default).
+
+Both fixes verified: full suite 1393/1393 pass (68 files), `npm run typecheck` clean, re-ran `bank.test.ts` + `BankPanel.test.tsx` in isolation (43/43) after the change.
 
 ## Dev Notes
 
@@ -132,8 +144,43 @@ Vitest + Testing Library (`npm test`). Follow the existing `bank.test.ts` fixtur
 
 ### Agent Model Used
 
+Claude Sonnet 5 (xHigh)
+
 ### Debug Log References
+
+- **Design Call 2's premise was wrong; fixed with an explicit reset effect, not a bare `useState`.** The story's Dev Notes/Design Call 2 both assumed `BankPanel` "unmounts on close." Checked `ReaderPage.tsx:457` directly: it renders `<BankPanel open={bankOpen} .../>` unconditionally (never `{bankOpen && <BankPanel/>}`), so the component instance persists across close/reopen; only its internal `if (!open) return null` skips output. A bare `useState(DEFAULT_BANK_FILTER)` would therefore NOT reset on reopen. Fixed with a `useEffect(() => { if (open) setActiveTypes(DEFAULT_BANK_FILTER); }, [open])` keyed on the open-transition. Added a dedicated regression test ("reopening resets the filter back to comments only") that rerenders the SAME component instance closed then open and asserts the reset, since a naive test that remounts fresh would not have caught this.
+- **Docker container collision during live smoke.** A `paper-mate-paper-mate-1` container (bind-mounted, `--reload`, `/app/.venv`) started on `127.0.0.1:8000` mid-session, racing my own `uv run uvicorn --port 8000` and winning the bind; my first health check response was actually the container's, not mine (CLAUDE.md's explicit "never reuse a found-running server" trap). Caught it via `ps aux` (path `/app/.venv/...` vs. host `.venv`) and `docker ps`, then relaunched both servers on alternate ports (backend 8010, frontend 5183 with `PAPER_MATE_API_TARGET=http://127.0.0.1:8010`) so the smoke was verifiably against this working tree.
 
 ### Completion Notes List
 
+- **Task 1:** Removed `BANK_TYPES` and its filter clause from `bankItems`; the function now returns rows for all five types, doc/dedup/order logic untouched. Flipped the pre-existing `bank.test.ts` regression guard (was asserting pen/underline exclusion) to assert all five appear.
+- **Task 2:** Added `filterBankItems` (pure, order-preserving) plus `BANK_FILTER_TYPES` (canonical five-type order: highlight, underline, pen, memo, comment) and `DEFAULT_BANK_FILTER` (comment-only `Set`) to `bank.ts`, all exported as the single source `BankPanel` and tests share.
+- **Task 3/4:** `BankPanel` owns `activeTypes` state, a chip row (`role="group"`, one real `<button aria-pressed>` per type, `TYPE_ICON`/`TYPE_LABEL` reused) under the header, and an `emptyMessage()` helper for the adaptive empty state. See the Debug Log entry above for the reopen-reset fix this required.
+- **Task 5:** Styled via existing tokens only, no new `--bank-filter-*` custom properties were needed: `--tag-chip-*` (Story 7.11) for chip shape/spacing, the `.pill[aria-pressed="true"]` idiom (`ReaderPage.css`) for the pressed/unpressed state, plus `--hairline-width`/`--radius-pill`/`--space-*`/`--type-caption-*`. `no-raw-values.test.ts` passes.
+- **Open Design Calls, as decided:**
+  1. Filter shape: the recommended 5-chip horizontal row under the title. Implemented as-is.
+  2. Session default: reset every open, per AC-2's literal reading. Implemented via the reset-effect described in Debug Log (the "free via unmount" rationale in the story notes does not hold for this codebase; see above).
+  3. Empty-state copy: exactly the recommended two strings ("No comments yet." / "No annotations match this filter.").
+  4. Region as a facet: not implemented; region highlights/comments filter under their real `type` as recommended.
+- **Pre-existing tests broken by the new comments-only default, and how each was fixed** (all used highlight-type fixtures and implicitly assumed the old "show everything" behavior):
+  - `BankPanel.test.tsx`: rewritten. Generic rendering/behavior tests (empty state, one row, dedup, doc-scoping, jump, Esc, close, button-tag checks) now use a `commentMark` fixture so they exercise the new default directly instead of fighting it. The three placeholder/Region-label tests (which genuinely need `type: "highlight"`) now click `bank-filter-highlight`/`bank-filter-memo` first to widen the filter, then assert. Added 11 new tests for Story 8.2 (AC-1..AC-5, the store-mutator-never-called guard, and the reopen-reset regression). 23/23 pass.
+  - `ReaderPage.test.tsx`: the two "Annotation Bank" tests that seed a highlight-type `mark()` and expect it listed now click `bank-filter-highlight` before asserting the row exists. No other `mark()` call sites in that file touch Bank rendering.
+- Full suite: 1393/1393 client tests pass (68 files), `npm run typecheck` clean. No server-side change (no `server/` files touched, no `gen:api` regen needed).
+- **Live smoke** (own fresh servers on 8010/5183 after the Docker collision above; fixture PDF `1903.03295v2.pdf` seeded via the API with one annotation of each of the five types): confirmed comments-only default (only the comment chip pressed, only the comment row listed); toggled all four other chips and confirmed all five rows appeared; clicked the newly-surfaced pen row and confirmed it jumps + flashes/selects on the page (`handleBankJump` unchanged); toggled all five chips off and confirmed the generic empty state ("No annotations match this filter.") with the canvas unchanged underneath (no reflow); closed and reopened the panel and confirmed the filter reset back to comments-only. Zero console errors/warnings.
+
 ### File List
+
+- `client/src/lib/bank.ts` (modified: removed `BANK_TYPES`; widened `bankItems`; added `BANK_FILTER_TYPES`, `DEFAULT_BANK_FILTER`, `filterBankItems`)
+- `client/src/lib/bank.test.ts` (modified: flipped the pen/underline-exclusion guard; added a `filterBankItems` describe block)
+- `client/src/components/BankPanel/BankPanel.tsx` (modified: filter state + reset effect, chip row, adaptive empty state)
+- `client/src/components/BankPanel/BankPanel.css` (modified: `.bank-panel__filter`/`.bank-filter-chip` styling)
+- `client/src/components/BankPanel/BankPanel.test.tsx` (modified: rewritten fixtures for the comments-only default; added Story 8.2 filter test suite)
+- `client/src/reader/ReaderPage.test.tsx` (modified: widened the filter in the two Bank tests that list a highlight-type mark)
+- `.bmad/implementation-artifacts/sprint-status.yaml` (modified: `8-2-annotation-bank-filter-by-type` → in-progress, then review)
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-11 | Implemented Story 8.2: widened `bankItems` to all five annotation types, added `filterBankItems` + `BankPanel` type-filter chip row (default comments only, resets on every reopen), adaptive empty-state copy. Fixed pre-existing `BankPanel.test.tsx`/`ReaderPage.test.tsx` fixtures broken by the new default. 1393/1393 client tests pass; typecheck clean; live-smoked on own dev servers (8010/5183) with one annotation of each type. Status → review. |
+| 2026-07-11 | Addressed Codex `bmad-code-review` findings (2 patch, both resolved): reset-filter effect switched `useEffect` → `useLayoutEffect` (prevented a stale-rows flash on Bank reopen); three test sites (`bank.test.ts`, `BankPanel.test.tsx`) switched from re-listing the five annotation types inline to importing `BANK_FILTER_TYPES`. 1393/1393 tests pass; typecheck clean. Status → review. |
