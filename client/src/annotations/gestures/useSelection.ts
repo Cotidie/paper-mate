@@ -40,9 +40,6 @@ export interface SelectionApi {
    *  does NOT clear the selection so the comment's bubble opens for the same mark. */
   convertSelected: () => void;
   deleteSelected: () => void;
-  /** Session-default fallbacks for the rows when a mark's field is null. */
-  activeStrokeWidth: number;
-  activeAlpha: number;
 }
 
 export function useSelection(opts: {
@@ -69,8 +66,6 @@ export function useSelection(opts: {
   const setActiveStrokeWidth = useAnnotationStore((s) => s.setActiveStrokeWidth);
   const setActiveAlpha = useAnnotationStore((s) => s.setActiveAlpha);
   const setActiveMemoSize = useAnnotationStore((s) => s.setActiveMemoSize);
-  const activeStrokeWidth = useAnnotationStore((s) => s.activeStrokeWidth);
-  const activeAlpha = useAnnotationStore((s) => s.activeAlpha);
   const activeMemoSize = useAnnotationStore((s) => s.activeMemoSize);
 
   const selectionBoxRef = useRef<HTMLDivElement | null>(null);
@@ -164,14 +159,16 @@ export function useSelection(opts: {
     [restrokeAnnotation, selectedGroupIds, setActiveStrokeWidth],
   );
 
-  // Re-alpha the selected pen mark (Story 2.13). Also sets the default; KEEPS the
-  // box open (only the picker's step menu collapses).
+  // Re-alpha the selected pen or memo mark (Story 2.13; memo added by fix
+  // request). Also sets that tool's OWN default (per-tool, mirrors recolor);
+  // KEEPS the box open (only the picker's step menu collapses).
   const realphaSelected = useCallback(
     (alpha: number) => {
+      if (!selectedAnno || (selectedAnno.type !== "pen" && selectedAnno.type !== "memo")) return;
       realphaAnnotation(selectedGroupIds(), alpha, new Date().toISOString());
-      setActiveAlpha(alpha);
+      setActiveAlpha(selectedAnno.type, alpha);
     },
-    [realphaAnnotation, selectedGroupIds, setActiveAlpha],
+    [selectedAnno, realphaAnnotation, selectedGroupIds, setActiveAlpha],
   );
 
   // Resize the selected memo (Story 2.9). The SizeRow gives a scale-1.0 px preset;
@@ -442,7 +439,5 @@ export function useSelection(opts: {
     resizeSelected,
     convertSelected,
     deleteSelected,
-    activeStrokeWidth,
-    activeAlpha,
   };
 }

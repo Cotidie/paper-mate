@@ -11,9 +11,11 @@ type RailProps = {
   boxHighlight: boolean;
   boxComment: boolean;
   activeStrokeWidth: number;
-  activeAlpha: number;
+  activeAlpha: Record<"pen" | "memo", number>;
   collapsed: boolean;
 };
+
+const DEFAULT_ALPHA: Record<"pen" | "memo", number> = { pen: 0.4, memo: 0.4 };
 
 const DEFAULT_COLORS: Record<AnnotationTool, string> = {
   highlight: "annotation-default",
@@ -47,7 +49,7 @@ function renderRail(over: Partial<RailProps> = {}) {
     boxHighlight: false,
     boxComment: false,
     activeStrokeWidth: 4,
-    activeAlpha: 0.4,
+    activeAlpha: DEFAULT_ALPHA,
     collapsed: false,
     ...over,
   };
@@ -266,7 +268,7 @@ describe("ToolRail", () => {
         onSetBoxComment={vi.fn()}
         activeStrokeWidth={4}
         onPickStrokeWidth={vi.fn()}
-        activeAlpha={0.4}
+        activeAlpha={DEFAULT_ALPHA}
         onPickAlpha={vi.fn()}
         collapsed={false}
         onToggleCollapse={vi.fn()}
@@ -468,7 +470,7 @@ describe("ToolRail", () => {
   });
 
   it("the pen sub-toolbox shows the color row + collapsible thickness and opacity pickers (Story 2.13)", () => {
-    armPen({ activeColors: colorsFor("pen", "annotation-green"), activeStrokeWidth: 8, activeAlpha: 0.4 });
+    armPen({ activeColors: colorsFor("pen", "annotation-green"), activeStrokeWidth: 8, activeAlpha: DEFAULT_ALPHA });
     const flyout = screen.getByTestId("pen-flyout");
     expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
     expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
@@ -497,11 +499,11 @@ describe("ToolRail", () => {
     expect(screen.queryByTestId("stroke-width-8")).toBeNull();
   });
 
-  it("picking an alpha calls onPickAlpha, KEEPS the flyout open, and collapses the step menu (Story 2.13)", () => {
-    const { onPickAlpha } = armPen({ activeAlpha: 0.4 });
+  it("picking an alpha calls onPickAlpha with the PEN tool, KEEPS the flyout open, and collapses the step menu (Story 2.13)", () => {
+    const { onPickAlpha } = armPen({ activeAlpha: DEFAULT_ALPHA });
     fireEvent.click(screen.getByTestId("alpha-trigger"));
     fireEvent.click(screen.getByTestId("alpha-0.6"));
-    expect(onPickAlpha).toHaveBeenCalledWith(0.6);
+    expect(onPickAlpha).toHaveBeenCalledWith("pen", 0.6);
     // Flyout stays open; only the inner opacity step menu collapses.
     expect(screen.getByTestId("pen-flyout")).toBeTruthy();
     expect(screen.queryByTestId("alpha-0.6")).toBeNull();
@@ -552,13 +554,15 @@ describe("ToolRail", () => {
     expect(btn.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("the memo sub-toolbox shows the color swatch row only (Story 3.1 dropped the size picker)", () => {
+  it("the memo sub-toolbox shows the color swatch row + opacity picker (Story 3.1 dropped the size picker; fix request added opacity)", () => {
     armMemo({ activeColors: colorsFor("memo", "annotation-green") });
     const flyout = screen.getByTestId("memo-flyout");
     expect(flyout.querySelectorAll(".color-swatch")).toHaveLength(5);
     expect(screen.getByTestId("color-swatch-annotation-green").className).toContain("color-swatch--armed");
     // No size control: a memo lands at a default square and resizes via corner handles.
     expect(screen.queryByTestId("memo-size-trigger")).toBeNull();
+    // Opacity is a collapsed trigger, same convention as Pen's.
+    expect(screen.getByTestId("alpha-trigger")).toBeTruthy();
   });
 
   it("picking a memo color calls onPickColor for MEMO ONLY and closes the flyout", () => {
@@ -566,6 +570,16 @@ describe("ToolRail", () => {
     fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
     expect(onPickColor).toHaveBeenCalledWith("memo", "annotation-pink");
     expect(screen.queryByTestId("memo-flyout")).toBeNull();
+  });
+
+  it("picking a memo alpha calls onPickAlpha with the MEMO tool, KEEPS the flyout open (fix request)", () => {
+    const { onPickAlpha } = armMemo({ activeAlpha: DEFAULT_ALPHA });
+    fireEvent.click(screen.getByTestId("alpha-trigger"));
+    expect(screen.getByTestId("alpha-0.4").className).toContain("alpha-step--armed");
+    fireEvent.click(screen.getByTestId("alpha-0.6"));
+    expect(onPickAlpha).toHaveBeenCalledWith("memo", 0.6);
+    expect(screen.getByTestId("memo-flyout")).toBeTruthy();
+    expect(screen.queryByTestId("alpha-0.6")).toBeNull();
   });
 
   it("re-clicking the active Memo button toggles its sub-toolbox, never disarms; Esc / switch-away close it", () => {

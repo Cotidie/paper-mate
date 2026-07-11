@@ -564,6 +564,7 @@ export function useCreateQuickBox(opts: {
             now,
             newId,
             color: defaultsRef.current.colors.memo,
+            alpha: defaultsRef.current.alpha.memo,
           });
           addAnnotation(created);
           window.getSelection()?.removeAllRanges();

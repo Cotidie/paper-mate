@@ -187,6 +187,16 @@ Story 2.9 (memo tool) is the FIRST `kind=rect` tool AND the first mark with a
   The selection quick-box is type-aware: a selected memo shows `ColorSwatchRow` +
   `SizeRow` + delete, anchored below the box. The memo's own textarea is the inline
   text-input the AC names; color/size are the quick-box rows.
+- **Opacity (fix request, post-3.1):** `SizeRow` was later dropped (a memo resizes via
+  the Story 3.1 edit frame's corner handles instead), and an `AlphaRow` was added in
+  its place — the memo twin of Pen's opacity (Story 2.13). `activeAlpha` in the store
+  is PER-TOOL (`Record<"pen"|"memo", number>`, mirrors `activeColors`'s per-tool
+  split), so tuning one tool's default never touches the other's. `style.alpha`
+  (0..1) sets the strength of the `color-mix()` that blends `style.color` toward
+  `--color-surface-card` in `MemoBox.tsx` — 1 = fully saturated color, 0 = white; a
+  memo created before this feature (`alpha: null`) falls back to 35%, the old fixed
+  ratio. `realphaAnnotation`'s guard covers `kind=path` (pen) OR
+  `kind=rect && type=memo`.
 
 ## Story 2.10 — comment (text+pin OR pin, + bubble)
 
@@ -282,7 +292,12 @@ generalization; this section describes the shared mechanics both modes ride.
   classes, hit-tests) working.
 - Rubber-band preview: `boxPreview` state in client coordinates renders as a
   `.box-preview` fixed div (dashed border, `pointer-events:none`, `z-index:40`),
-  tinted to the active mode's own color (Highlight's or Comment's).
+  tinted to the active mode's own color (Highlight's or Comment's). Fix request: the
+  border-only preview read as an empty outline; a nested `.box-preview__fill` child
+  at `--annotation-highlight-opacity` (the same token the committed region fill's
+  group uses) now previews the fill too, so the live drag matches the mark about to
+  land. Kept as a separate child (not `opacity` on the whole element) so the dashed
+  border itself stays crisp/full-opacity.
 - `M` / `m` arms Highlight with box mode on (UX-DR15); `V`/`Esc` return to cursor (AD-11).
   Box-comment has no hotkey (Story 8.4 Decision D4) — the flyout's Box option is the
   only affordance.
@@ -448,14 +463,21 @@ this surface). NO autosave (3.4).
   transient store `dragPreview` (no per-pointermove commit); commits ONE
   `setAnnotationGeometry` on release (so 3.2's zundo records one undo step). Aborts on
   Esc / pointercancel / blur WITHOUT committing.
-- **The edit frame (`AnnotationLayer`).** For the selected pen/memo/region mark: a move
+- **The edit frame (`AnnotationLayer`).** For the selected pen/memo/region mark
+  (`isEditable = kind==="path" || kind==="rect"`, fix request: originally excluded
+  `type==="comment"`, so a rect-kind — box — comment had NO frame at all; now ANY
+  rect mark gets one, comment included, matching a region highlight exactly): a move
   grip (a pill above the frame, so it never fights a memo's textarea) + four corner
   handles, positioned via the anchor service so they ride zoom (NFR-3). Handles are
   `<button>`s → the doc-level deselect/create handlers skip them (`isExempt`), keeping
   the mark selected during a drag. `dragPreview` makes the mark + frame follow the
-  pointer live. **Text marks get NO frame**: free-moving a text rect would desync
-  `anchor.text` from the glyphs (Story 3.8 re-resolves the run instead); text marks
-  keep restyle + double-click re-edit + delete only.
+  pointer live. The region/comment FILL itself is ALSO a move handle (fix request:
+  carries `data-edit-handle="move"`/`data-edit-id` unconditionally, mirroring the
+  comment pin's + the memo wrapper's existing "click selects, drag moves" pattern) —
+  so dragging the highlighted area directly moves it, not only the frame's grip.
+  **Text marks get NO frame**: free-moving a text rect would desync `anchor.text`
+  from the glyphs (Story 3.8 re-resolves the run instead); text marks keep restyle +
+  double-click re-edit + delete only.
 - **Re-edit convergence (AE-3).** Memo double-click focuses its textarea; comment
   re-edit is the existing pin→bubble. Both write `body` via `retextAnnotation`. Audit
   confirmed every mutation (retext / recolor / restroke / realpha / resize / geometry /

@@ -111,6 +111,14 @@ export function buildPenAnnotation(stroke: PenStroke, docId: string, opts: PenCr
   };
 }
 
+/** The memo create request: the shared base + its opacity (user feature
+ *  request, the memo twin of pen's alpha — the fill's blend-toward-white
+ *  strength, MemoBox.tsx). */
+export interface MemoCreateRequest extends CreateBase {
+  /** Fill transparency 0..1 (1 = fully saturated color, no white blend). */
+  alpha: number;
+}
+
 /**
  * Build ONE memo `Annotation` (AD-5: `memo → rect`). The FIRST `kind=rect` mark
  * and the FIRST mark with a non-null `body`: it starts as `""` and updates as the
@@ -118,15 +126,15 @@ export function buildPenAnnotation(stroke: PenStroke, docId: string, opts: PenCr
  * `page_index`), so `group_id` is null. `stroke_width` is path-only style, so it
  * stays null; the size lives in the rect, not in style.
  */
-export function buildMemoAnnotation(memo: RectPlacement, docId: string, opts: CreateBase): Annotation {
-  const { now, newId, color } = opts;
+export function buildMemoAnnotation(memo: RectPlacement, docId: string, opts: MemoCreateRequest): Annotation {
+  const { now, newId, color, alpha } = opts;
   return {
     id: newId(),
     doc_id: docId,
     type: "memo",
     group_id: null,
     anchor: { kind: "rect", page_index: memo.page_index, rect: memo.rect },
-    style: { color, stroke_width: null, alpha: null },
+    style: { color, stroke_width: null, alpha },
     body: "",
     created_at: now,
     updated_at: now,

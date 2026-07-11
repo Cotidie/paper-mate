@@ -57,8 +57,10 @@ export const MARK_DESCRIPTORS: Record<AnnotationTool, MarkDescriptor> = {
     type: "memo",
     kind: "rect",
     // size:false since Story 3.1 — the preset SizeRow chooser was removed; a memo
-    // resizes via the edit frame's corner handles. The quick-box is recolor + delete.
-    quickBox: { strokeWidth: false, alpha: false, size: false, usesBubble: false, ariaLabel: "Memo actions" },
+    // resizes via the edit frame's corner handles. alpha:true (fix request): the
+    // memo's own opacity/tint-strength row, the memo twin of pen's alpha. The
+    // quick-box is recolor + alpha + delete.
+    quickBox: { strokeWidth: false, alpha: true, size: false, usesBubble: false, ariaLabel: "Memo actions" },
   },
   comment: {
     type: "comment",

@@ -100,11 +100,12 @@ export default function ToolRail({
   activeStrokeWidth: number;
   /** Set the active pen stroke width (the default new strokes land in). */
   onPickStrokeWidth: (width: number) => void;
-  /** The active pen stroke alpha (store-backed; Story 2.13). The Pen tool's
-   *  sub-toolbox shows this armed and sets it via `onPickAlpha`. */
-  activeAlpha: number;
-  /** Set the active pen alpha (the default new strokes land in). */
-  onPickAlpha: (alpha: number) => void;
+  /** The active pen/memo alpha, PER TOOL (store-backed; Story 2.13, memo added
+   *  by fix request). Each tool's sub-toolbox shows its OWN entry armed and sets
+   *  it via `onPickAlpha`. */
+  activeAlpha: Record<"pen" | "memo", number>;
+  /** Set the active alpha for ONE tool (the default new marks land in). */
+  onPickAlpha: (tool: "pen" | "memo", alpha: number) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
   /** Opens the Settings modal (Story 5.1). The Gear trigger sits at the
@@ -391,7 +392,7 @@ export default function ToolRail({
                 without re-opening the flyout. Color, like every other tool, closes
                 it. */}
             <StrokeWidthRow value={activeStrokeWidth} onPick={onPickStrokeWidth} />
-            <AlphaRow value={activeAlpha} onPick={onPickAlpha} />
+            <AlphaRow value={activeAlpha.pen} onPick={(a) => onPickAlpha("pen", a)} />
           </ToolFlyout>
         )}
       </div>
@@ -427,6 +428,11 @@ export default function ToolRail({
                 setFlyoutOpen(false);
               }}
             />
+            {/* Hairline + opacity picker (fix request): the memo twin of the Pen
+                flyout's divider + AlphaRow above. Keeps the flyout OPEN on pick
+                (only its own step menu collapses), same convention as Pen. */}
+            <div className="tool-flyout__divider" data-testid="memo-picker-divider" />
+            <AlphaRow value={activeAlpha.memo} onPick={(a) => onPickAlpha("memo", a)} label="Memo opacity" />
           </ToolFlyout>
         )}
       </div>

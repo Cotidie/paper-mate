@@ -14,12 +14,13 @@ import type { MemoSize } from "@/store";
 import { isControlTarget } from "@/lib/domFocus";
 
 /** The live active-tool defaults a create gesture reads at commit time. `colors`
- *  is keyed per tool (each tool remembers its own last-picked color); a gesture
- *  that creates one specific type reads its own slot (e.g. `colors.pen`). */
+ *  and `alpha` are keyed per tool (each tool remembers its own last-picked
+ *  value); a gesture that creates one specific type reads its own slot (e.g.
+ *  `colors.pen`, `alpha.memo`). */
 export interface ActiveDefaults {
   colors: Record<AnnotationTool, string>;
   strokeWidth: number;
-  alpha: number;
+  alpha: Record<"pen" | "memo", number>;
   memoSize: MemoSize;
 }
 

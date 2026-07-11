@@ -96,7 +96,12 @@ export default function MemoBox({
         // full-strength read "thick") by blending toward the surface-card white
         // via color-mix — the border stays full-strength for contrast/legibility,
         // only the fill lightens. Ink-black body text stays legible either way.
-        backgroundColor: `color-mix(in srgb, var(--color-${anno.style.color}) var(--annotation-memo-bg-mix), var(--color-surface-card))`,
+        // The blend strength is now a user-adjustable opacity (fix request, the
+        // memo twin of pen's alpha, AlphaRow in the rail flyout + selection
+        // quick-box): style.alpha 0..1 becomes the color-mix percentage directly
+        // (1 = fully saturated color, no white blend). `?? 0.35` is the fallback
+        // for a memo created before this feature (the old fixed mix ratio).
+        backgroundColor: `color-mix(in srgb, var(--color-${anno.style.color}) ${(anno.style.alpha ?? 0.35) * 100}%, var(--color-surface-card))`,
       }}
     >
       <button

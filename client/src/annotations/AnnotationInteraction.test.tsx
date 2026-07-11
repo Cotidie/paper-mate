@@ -77,6 +77,7 @@ beforeEach(() =>
       comment: "annotation-default",
     },
     activeStrokeWidth: 8,
+    activeAlpha: { pen: 0.4, memo: 0.4 },
     activeMemoSize: DEFAULT_MEMO_SIZE,
   }),
 );
@@ -868,13 +869,15 @@ describe("AnnotationInteraction pen selection quick-box (Story 2.8 — AC2,6)", 
     expect(useAnnotationStore.getState().annotations.get("p1")!.style.color).toBe("annotation-pink");
   });
 
-  it("picking an alpha re-alphas the pen mark + updates the default, KEEPS the box open (Story 2.13)", async () => {
+  it("picking an alpha re-alphas the pen mark + updates the PEN default (per-tool), KEEPS the box open (Story 2.13)", async () => {
     setup(penMark("p1", "annotation-blue", 4));
     await screen.findByTestId("selection-quick-box");
     fireEvent.click(screen.getByTestId("alpha-trigger"));
     fireEvent.click(screen.getByTestId("alpha-0.6"));
     expect(useAnnotationStore.getState().annotations.get("p1")!.style.alpha).toBe(0.6);
-    expect(useAnnotationStore.getState().activeAlpha).toBe(0.6);
+    expect(useAnnotationStore.getState().activeAlpha.pen).toBe(0.6);
+    // The memo default is untouched (per-tool split, fix request).
+    expect(useAnnotationStore.getState().activeAlpha.memo).toBe(0.4);
     // The quick-box stays open (only the inner step menu collapses); the mark stays selected.
     expect(screen.getByTestId("selection-quick-box")).toBeTruthy();
     expect(screen.queryByTestId("alpha-0.6")).toBeNull();
@@ -1398,6 +1401,21 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     await screen.findByTestId("selection-quick-box");
     fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
     expect(useAnnotationStore.getState().annotations.get("m1")!.style.color).toBe("annotation-blue");
+  });
+
+  it("a selected memo's quick-box re-alphas it + updates the MEMO default (per-tool, fix request), KEEPS the box open", async () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "n", "annotation-default"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    await screen.findByTestId("selection-quick-box");
+    fireEvent.click(screen.getByTestId("alpha-trigger"));
+    fireEvent.click(screen.getByTestId("alpha-0.6"));
+    expect(useAnnotationStore.getState().annotations.get("m1")!.style.alpha).toBe(0.6);
+    expect(useAnnotationStore.getState().activeAlpha.memo).toBe(0.6);
+    // The pen default is untouched (per-tool split).
+    expect(useAnnotationStore.getState().activeAlpha.pen).toBe(0.4);
+    expect(screen.getByTestId("selection-quick-box")).toBeTruthy();
   });
 
   it("a selected memo's quick-box is the VERTICAL variant (user fix request: horizontal-below covered the collapse toggle); a highlight's is not", async () => {
@@ -1940,6 +1958,22 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     fireEvent.pointerUp(document, { button: 0, clientX: 64, clientY: 80 });
 
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("the live box-preview shows a FILL (not just the dashed border), tinted to the active color (fix request)", () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("highlight", "annotation-green");
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="highlight" rectReader={reader} />);
+
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    const preview = screen.getByTestId("box-preview");
+    expect(preview.style.borderColor).toBe("var(--color-annotation-green)");
+    const fill = preview.querySelector(".box-preview__fill") as HTMLElement | null;
+    expect(fill).toBeTruthy();
+    expect(fill!.style.backgroundColor).toBe("var(--color-annotation-green)");
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
   });
 
   it("pointerdown on an existing mark does NOT start a box drag (click-selects instead)", () => {

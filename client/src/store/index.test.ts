@@ -36,7 +36,7 @@ beforeEach(() => {
     },
     activeStrokeWidth: 4,
     activeMemoSize: DEFAULT_MEMO_SIZE,
-    activeAlpha: 0.4,
+    activeAlpha: { pen: 0.4, memo: 0.4 },
   });
   // Reset temporal history so undo/redo state never leaks between tests.
   useAnnotationStore.temporal.getState().clear();
@@ -397,10 +397,12 @@ describe("pen alpha + realpha (Story 2.13)", () => {
     };
   }
 
-  it("defaults activeAlpha to 0.4 and setActiveAlpha remembers the last choice", () => {
-    expect(useAnnotationStore.getState().activeAlpha).toBe(0.4);
-    useAnnotationStore.getState().setActiveAlpha(0.8);
-    expect(useAnnotationStore.getState().activeAlpha).toBe(0.8);
+  it("defaults activeAlpha to 0.4 for both pen and memo; setActiveAlpha remembers the last choice PER TOOL", () => {
+    expect(useAnnotationStore.getState().activeAlpha).toEqual({ pen: 0.4, memo: 0.4 });
+    useAnnotationStore.getState().setActiveAlpha("pen", 0.8);
+    expect(useAnnotationStore.getState().activeAlpha).toEqual({ pen: 0.8, memo: 0.4 });
+    useAnnotationStore.getState().setActiveAlpha("memo", 0.6);
+    expect(useAnnotationStore.getState().activeAlpha).toEqual({ pen: 0.8, memo: 0.6 });
   });
 
   it("realphaAnnotation changes style.alpha + bumps updated_at, keyed by id", () => {
@@ -419,13 +421,22 @@ describe("pen alpha + realpha (Story 2.13)", () => {
     expect(useAnnotationStore.getState().annotations.size).toBe(0);
   });
 
-  it("realphaAnnotation guards non-path marks (a stale text id is untouched)", () => {
+  it("realphaAnnotation guards non-path/non-memo marks (a stale text id is untouched)", () => {
     const s = useAnnotationStore.getState();
     s.addAnnotation(textMark("h", "2026-06-29T00:00:01Z"));
     useAnnotationStore.getState().realphaAnnotation(["h"], 0.8, "2026-06-29T12:00:00Z");
     const h = useAnnotationStore.getState().annotations.get("h")!;
     expect(h.style.alpha).toBeNull();
     expect(h.updated_at).toBe("2026-06-29T00:00:01Z");
+  });
+
+  it("realphaAnnotation ALSO changes a memo's style.alpha (fix request, the memo twin of pen alpha)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.2 }, "2026-06-29T00:00:01Z"));
+    useAnnotationStore.getState().realphaAnnotation(["m"], 0.8, "2026-06-29T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.style.alpha).toBe(0.8);
+    expect(m.updated_at).toBe("2026-06-29T12:00:00Z");
   });
 });
 

@@ -283,26 +283,36 @@ export default function AnnotationInteraction({
     <>
       {penPreview && previewPath && (
         <svg className="pen-preview" data-testid="pen-preview" aria-hidden="true">
-          <path d={previewPath} fill={`var(--color-${activeColors.pen})`} fillOpacity={activeAlpha} />
+          <path d={previewPath} fill={`var(--color-${activeColors.pen})`} fillOpacity={activeAlpha.pen} />
         </svg>
       )}
-      {boxPreview && (
-        <div
-          className="box-preview"
-          data-testid="box-preview"
-          aria-hidden="true"
-          style={{
-            left: Math.min(boxPreview.x0, boxPreview.x1),
-            top: Math.min(boxPreview.y0, boxPreview.y1),
-            width: Math.abs(boxPreview.x1 - boxPreview.x0),
-            height: Math.abs(boxPreview.y1 - boxPreview.y0),
-            // Tinted to the mode's OWN default color (highlight vs comment), same
-            // branch useBoxGesture's commit uses, so the live drag preview matches
-            // the mark it is about to create.
-            borderColor: `var(--color-${boxMode === "comment" ? activeColors.comment : activeColors.highlight})`,
-          }}
-        />
-      )}
+      {boxPreview &&
+        (() => {
+          // Tinted to the mode's OWN default color (highlight vs comment), same
+          // branch useBoxGesture's commit uses, so the live drag preview matches
+          // the mark it is about to create.
+          const previewColor = `var(--color-${boxMode === "comment" ? activeColors.comment : activeColors.highlight})`;
+          return (
+            <div
+              className="box-preview"
+              data-testid="box-preview"
+              aria-hidden="true"
+              style={{
+                left: Math.min(boxPreview.x0, boxPreview.x1),
+                top: Math.min(boxPreview.y0, boxPreview.y1),
+                width: Math.abs(boxPreview.x1 - boxPreview.x0),
+                height: Math.abs(boxPreview.y1 - boxPreview.y0),
+                borderColor: previewColor,
+              }}
+            >
+              {/* Fix request (live drag preview only showed a border): a fill at the
+                  SAME opacity token the committed region fill's group uses, so the
+                  drag preview reads as a real (not-yet-created) highlight/comment
+                  region, not just an outline. */}
+              <div className="box-preview__fill" style={{ backgroundColor: previewColor }} />
+            </div>
+          );
+        })()}
       {multiSelectPreview && (
         // The marquee rubber-band, neutral (ink) styling — not tinted to any
         // annotation-tool accent, since this drag SELECTS existing marks rather
@@ -430,13 +440,17 @@ export default function AnnotationInteraction({
               box accent (border). */}
           <ColorSwatchRow value={selectedAnno.style.color} onPick={recolorSelected} />
           {/* Rows come from the mark's descriptor (Story 5.0): pen → stroke-width +
-              alpha, memo → size, text marks → none. Armed to each mark's current
-              value (memos store size as their rect, not a style field). */}
+              alpha, memo → alpha (fix request), text marks → none. Armed to each
+              mark's current value. */}
           {selectedSpec.strokeWidth && (
             <StrokeWidthRow value={selectedAnno.style.stroke_width ?? activeStrokeWidth} onPick={restrokeSelected} />
           )}
           {selectedSpec.alpha && (
-            <AlphaRow value={selectedAnno.style.alpha ?? activeAlpha} onPick={realphaSelected} />
+            <AlphaRow
+              value={selectedAnno.style.alpha ?? activeAlpha[selectedAnno.type as "pen" | "memo"]}
+              onPick={realphaSelected}
+              label={selectedAnno.type === "memo" ? "Memo opacity" : "Pen opacity"}
+            />
           )}
           <span className="quick-box__divider" aria-hidden="true" />
           {/* Turn into comment (Story 3.7, AC1): text-highlight only — a region

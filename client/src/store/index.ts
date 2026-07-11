@@ -35,6 +35,10 @@ import { temporal } from "zundo";
 import type { Annotation } from "@/api/client";
 import type { AnnotationTool } from "@/lib/tools";
 
+/** The two tools whose marks carry a user-adjustable `style.alpha`: pen
+ *  (Story 2.13) and memo (fix request, the memo twin). */
+type AlphaTool = "pen" | "memo";
+
 /** A memo box-size preset (Story 2.9). The box dimensions ARE the memo's size:
  *  the rect the placement bakes (and `resizeMemoAnnotation` rewrites) carries
  *  them, so there is NO contract field for size (AD-5). `width`/`height` are
@@ -143,15 +147,17 @@ export interface AnnotationStore {
   activeMemoSize: MemoSize;
   /** Set the active/default memo size (remembers the last choice). */
   setActiveMemoSize: (size: MemoSize) => void;
-  /** The active pen stroke alpha (Story 2.13): the DEFAULT transparency new pen
-   *  strokes land in (0..1, where 1 is fully opaque). The alpha twin of
-   *  `activeStrokeWidth` — set by the Pen tool's alpha sub-toolbox OR by
-   *  re-alphaing an existing mark (last-choice-wins). Default = highlighter
-   *  opacity (0.4) so new strokes sit over text like a highlighter. Client-only,
-   *  not persisted. */
-  activeAlpha: number;
-  /** Set the active/default pen alpha (remembers the last choice). */
-  setActiveAlpha: (alpha: number) => void;
+  /** The active pen/memo alpha (Story 2.13; memo added by user feature request),
+   *  PER TOOL (mirrors `activeColors` — split per-tool for the same reason:
+   *  changing one tool's opacity must not silently change another's): the
+   *  DEFAULT transparency new marks land in (0..1, where 1 is fully opaque/
+   *  saturated). Set by each tool's own alpha sub-toolbox OR by re-alphaing an
+   *  existing mark of that type (last-choice-wins). Default = 0.4 for both
+   *  (highlighter-strength for pen; close to the memo's pre-feature fixed
+   *  35% white-blend for memo). Client-only, not persisted. */
+  activeAlpha: Record<AlphaTool, number>;
+  /** Set the active/default alpha for ONE tool (remembers the last choice). */
+  setActiveAlpha: (tool: AlphaTool, alpha: number) => void;
   /** Select an annotation by id, or clear with `null`. Also clears any active
    *  multi-selection (mutual exclusion with `multiSelectedIds`). */
   select: (id: string | null) => void;
@@ -215,11 +221,12 @@ export interface AnnotationStore {
    *  selection quick-box's stroke-width row. Width is scale-1.0 CSS px. Same
    *  creation-time-edit rationale: no command stack yet (Epic 3 folds it in). */
   restrokeAnnotation: (ids: string[], width: number, now: string) => void;
-  /** Re-alpha one or more pen annotations (by id) to a new transparency and bump
-   *  `updated_at` — the alpha twin of `restrokeAnnotation`, from the pen
-   *  selection quick-box's alpha row. Guarded to `kind=path` (alpha is pen-only
-   *  in the UI; do not write it onto text/rect marks). Same creation-time-edit
-   *  rationale: no command stack yet (Epic 3 folds it in). */
+  /** Re-alpha one or more pen/memo annotations (by id) to a new transparency and
+   *  bump `updated_at` — the alpha twin of `restrokeAnnotation`, from the
+   *  selection quick-box's alpha row. Guarded to `kind=path` (pen) or
+   *  `kind=rect && type=memo` (alpha is pen/memo-only in the UI; do not write it
+   *  onto text/region marks). Same creation-time-edit rationale: no command
+   *  stack yet (Epic 3 folds it in). */
   realphaAnnotation: (ids: string[], alpha: number, now: string) => void;
   /** Set a memo's `body` text and bump `updated_at` — called on every keystroke
    *  via the temporal pause/resume coalescing (Story 3.2) so a full editing session
@@ -352,9 +359,11 @@ export const useAnnotationStore = create<AnnotationStore>()(
       // Default memo size = the medium preset (scale-1.0 px); see MEMO_SIZES.
       activeMemoSize: DEFAULT_MEMO_SIZE,
       setActiveMemoSize: (size) => set({ activeMemoSize: size }),
-      // Default alpha = highlighter opacity (0.4); mirrors --annotation-highlight-opacity.
-      activeAlpha: 0.4,
-      setActiveAlpha: (alpha) => set({ activeAlpha: alpha }),
+      // Default alpha = highlighter opacity (0.4) for both; mirrors
+      // --annotation-highlight-opacity (pen) resp. the memo's old fixed 35% mix.
+      activeAlpha: { pen: 0.4, memo: 0.4 },
+      setActiveAlpha: (tool, alpha) =>
+        set((state) => ({ activeAlpha: { ...state.activeAlpha, [tool]: alpha } })),
       // Mutual exclusion (AD-12 extended, user feature request): selecting one
       // mode always clears the other, so a stale selection can never linger in
       // both places (e.g. a leftover multi-selection ring surviving a plain
@@ -433,10 +442,13 @@ export const useAnnotationStore = create<AnnotationStore>()(
         })),
       realphaAnnotation: (ids, alpha, now) =>
         set((state) => ({
-          // alpha is path-only style (AR-5): never write it onto a text/region mark,
-          // even if a stale id is passed. Guard skips a non-path mark untouched.
+          // alpha is pen/memo-only style: never write it onto a text/region-
+          // highlight/comment mark, even if a stale id is passed. Guard skips
+          // anything else untouched.
           annotations: patchAnnotations(state.annotations, ids, now, (a) =>
-            a.anchor.kind === "path" ? { ...a, style: { ...a.style, alpha } } : null,
+            a.anchor.kind === "path" || (a.anchor.kind === "rect" && a.type === "memo")
+              ? { ...a, style: { ...a.style, alpha } }
+              : null,
           ),
         })),
       retextAnnotation: (id, body, now) =>

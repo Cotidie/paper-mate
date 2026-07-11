@@ -1,15 +1,17 @@
-// AlphaRow — the pen Opacity picker (Story 2.13), the alpha twin of
-// StrokeWidthRow. COLLAPSIBLE like SizeRow: an ICON-ONLY trigger (an ink disc filled
-// at the current alpha, WRAPPED in a hairline ring so the fade reads as opacity —
-// toolrail-glyph sized, no caret, no text) that expands a small floating menu to the
-// RIGHT of fixed alpha levels as ink squares whose fill-opacity previews the
-// transparency; the applied alpha shows the 2px ink armed ring. Keyboard-reachable
-// (it lives inside the rail flyout / quick-box `role="menu"`); the meaning lives in
-// the aria-label / tooltip, not visible text (the rail stays icon-only).
+// AlphaRow — the Opacity picker (Story 2.13, pen; fix request extended it to
+// Memo), the alpha twin of StrokeWidthRow. COLLAPSIBLE like SizeRow: an
+// ICON-ONLY trigger (an ink disc filled at the current alpha, WRAPPED in a
+// hairline ring so the fade reads as opacity — toolrail-glyph sized, no caret,
+// no text) that expands a small floating menu to the RIGHT of fixed alpha
+// levels as ink squares whose fill-opacity previews the transparency; the
+// applied alpha shows the 2px ink armed ring. Keyboard-reachable (it lives
+// inside the rail flyout / quick-box `role="menu"`); the meaning lives in the
+// aria-label / tooltip (the `label` prop, "Pen opacity" or "Memo opacity"),
+// not visible text (the rail stays icon-only).
 //
 // Alpha values mirror the --pen-alpha-* tokens (no raw numbers in the component;
-// the token layer owns them). Shared by the Pen rail flyout AND the pen selection
-// quick-box.
+// the token layer owns them). Shared by the Pen AND Memo rail flyouts, and both
+// tools' selection quick-boxes.
 
 import { useState } from "react";
 import "./Annotations.css";
@@ -33,23 +35,27 @@ const STEPS: Step[] = [
 export default function AlphaRow({
   value,
   onPick,
+  label = "Pen opacity",
 }: {
   /** The alpha currently applied (its step shows armed; the trigger previews it). */
   value: number;
   /** Called with the chosen alpha when a step is picked. */
   onPick: (alpha: number) => void;
+  /** Accessible name / tooltip prefix (fix request: reused for Memo's opacity
+   *  row too, "Memo opacity"). Defaults to the original Pen wording. */
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const current = STEPS.find((s) => s.alpha === value) ?? STEPS[1];
   return (
-    <div className="alpha-row" role="group" aria-label="Pen opacity">
+    <div className="alpha-row" role="group" aria-label={label}>
       <button
         type="button"
         className="pen-picker__trigger"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Pen opacity: ${current.label}`}
-        title={`Pen opacity (${current.label})`}
+        aria-label={`${label}: ${current.label}`}
+        title={`${label} (${current.label})`}
         data-testid="alpha-trigger"
         onClick={() => setOpen((o) => !o)}
       >
@@ -61,7 +67,7 @@ export default function AlphaRow({
       </button>
 
       {open && (
-        <div className="pen-picker__menu" role="menu" aria-label="Pen opacity">
+        <div className="pen-picker__menu" role="menu" aria-label={label}>
           {STEPS.map((s) => {
             const armed = value === s.alpha;
             return (
