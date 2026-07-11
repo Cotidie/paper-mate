@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, CaretDown, CaretUp, EyeSlash, X } from "@phosphor-icons/react";
+import { CaretDown, CaretUp, EyeSlash, X } from "@phosphor-icons/react";
 import { usePopover } from "@/library/usePopover";
 import type { ColumnDef, ColumnKey, SortState } from "@/library/tableView";
 import { COLUMN_DRAG_MIME, buildColumnDragPreview } from "./dragPreview";
@@ -52,12 +52,11 @@ export function ColumnGroup({ columns, widths }: { columns: ColumnDef[]; widths?
   );
 }
 
-/** A clickable header: opens a per-column dropdown (Sort ASC/DESC, Move
- *  left/right, Hide) mirroring the reference product's column-header menu.
- *  Each instance owns its own `usePopover` so multiple headers can each have
- *  (only one at a time, per-instance) open state. Closes on pick - a
- *  one-shot action menu, like `MoveMenu`, not a stays-open toggle panel like
- *  `DisplayMenu`.
+/** A clickable header: opens a per-column dropdown (Sort ASC/DESC, Hide)
+ *  mirroring the reference product's column-header menu. Each instance owns
+ *  its own `usePopover` so multiple headers can each have (only one at a time,
+ *  per-instance) open state. Closes on pick - a one-shot action menu, like
+ *  `MoveMenu`, not a stays-open toggle panel like `DisplayMenu`.
  *
  *  Drag-to-reorder (Story 7.10, AC-1): every column except Title is
  *  `draggable`, using a dedicated `COLUMN_DRAG_MIME` payload (mirrors the
@@ -65,13 +64,13 @@ export function ColumnGroup({ columns, widths }: { columns: ColumnDef[]; widths?
  *  another shows a drop indicator (`data-drop-target`, "before" or "after"
  *  depending on drag direction - matches `reorderColumns`'s array-move
  *  semantics, see `CollectionTable`'s `dropIndicator` memo) and calls
- *  `onReorderColumn` on drop - both the drag affordance and the keyboard
- *  Move left/right items are omitted when `onReorderColumn`/`onMoveColumn`
- *  aren't supplied (same optional-prop pattern as `onResizeStart`), so
- *  isolated tests that don't exercise reorder see no new draggable/menu
- *  surface. Title is never a drag source or a drop target: nothing drops
- *  before it (the reorder helpers also clamp this, but excluding Title here
- *  keeps the affordance honest - hovering it never implies a drop there). */
+ *  `onReorderColumn` on drop - the drag affordance is omitted when
+ *  `onReorderColumn` isn't supplied (same optional-prop pattern as
+ *  `onResizeStart`), so isolated tests that don't exercise reorder see no new
+ *  draggable surface. Title is never a drag source or a drop target: nothing
+ *  drops before it (the reorder helpers also clamp this, but excluding Title
+ *  here keeps the affordance honest - hovering it never implies a drop
+ *  there). */
 function ColumnHeaderCell({
   col,
   sort,
@@ -80,9 +79,6 @@ function ColumnHeaderCell({
   onResizeStart,
   onResizeKeyDown,
   onReorderColumn,
-  onMoveColumn,
-  canMoveLeft,
-  canMoveRight,
   dropIndicator,
   onColumnDragStart,
   onColumnDragEnd,
@@ -96,9 +92,6 @@ function ColumnHeaderCell({
   onResizeStart?: (key: ColumnKey, e: React.PointerEvent) => void;
   onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
   onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
-  onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
-  canMoveLeft: boolean;
-  canMoveRight: boolean;
   /** Set when `CollectionTable` has resolved THIS column as the live-preview
    *  drop target (fix request: driven by lifted state, not local "did
    *  dragover fire on me" tracking - see the module doc comment above for
@@ -231,36 +224,6 @@ function ColumnHeaderCell({
                 Clear sort
               </button>
             )}
-            {reorderable && onMoveColumn && canMoveLeft && (
-              <button
-                type="button"
-                role="menuitem"
-                className="table-control__item"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  close();
-                  onMoveColumn(col.key, "left");
-                }}
-              >
-                <ArrowLeft aria-hidden />
-                Move left
-              </button>
-            )}
-            {reorderable && onMoveColumn && canMoveRight && (
-              <button
-                type="button"
-                role="menuitem"
-                className="table-control__item"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  close();
-                  onMoveColumn(col.key, "right");
-                }}
-              >
-                <ArrowRight aria-hidden />
-                Move right
-              </button>
-            )}
             {col.hideable && (
               <button
                 type="button"
@@ -296,10 +259,7 @@ function ColumnHeaderCell({
 
 /** Renders the active sort column's caret. Headers are clickable
  *  (`ColumnHeaderCell`) when `onSortChange`/`onToggleColumn` are supplied;
- *  otherwise (the loading skeleton) they render as plain static text.
- *  `canMoveLeft`/`canMoveRight` (Story 7.10, AC-2) are derived from each
- *  column's own index in `columns`: index 1 (immediately right of the
- *  pinned Title) can't move left, and the last index can't move right. */
+ *  otherwise (the loading skeleton) they render as plain static text. */
 export function TableHead({
   columns,
   sort,
@@ -308,7 +268,6 @@ export function TableHead({
   onResizeStart,
   onResizeKeyDown,
   onReorderColumn,
-  onMoveColumn,
   dropIndicator,
   onColumnDragStart,
   onColumnDragEnd,
@@ -322,7 +281,6 @@ export function TableHead({
   onResizeStart?: (key: ColumnKey, e: React.PointerEvent) => void;
   onResizeKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
   onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
-  onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
   dropIndicator?: { key: ColumnKey; side: "before" | "after" } | null;
   onColumnDragStart?: (key: ColumnKey) => void;
   onColumnDragEnd?: () => void;
@@ -332,7 +290,7 @@ export function TableHead({
   return (
     <thead>
       <tr>
-        {columns.map((col, idx) =>
+        {columns.map((col) =>
           onSortChange && onToggleColumn ? (
             <ColumnHeaderCell
               key={col.key}
@@ -343,9 +301,6 @@ export function TableHead({
               onResizeStart={onResizeStart}
               onResizeKeyDown={onResizeKeyDown}
               onReorderColumn={onReorderColumn}
-              onMoveColumn={onMoveColumn}
-              canMoveLeft={idx > 1}
-              canMoveRight={idx < columns.length - 1}
               dropIndicator={dropIndicator?.key === col.key ? dropIndicator.side : null}
               onColumnDragStart={onColumnDragStart}
               onColumnDragEnd={onColumnDragEnd}

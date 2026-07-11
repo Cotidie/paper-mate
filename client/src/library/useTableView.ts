@@ -19,7 +19,6 @@ export function useTableView(folders: Folder[] = []) {
   const order = useTableViewPrefs((s) => s.order);
   const hidden = useTableViewPrefs((s) => s.hidden);
   const toggleHidden = useTableViewPrefs((s) => s.toggleHidden);
-  const moveColumn = useTableViewPrefs((s) => s.moveColumn);
   const reorderColumns = useTableViewPrefs((s) => s.reorderColumns);
   const [sort, setSort] = useState<SortState | null>(null);
   const folderNameById = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
@@ -48,7 +47,6 @@ export function useTableView(folders: Folder[] = []) {
     sort,
     setSort,
     applyTableView,
-    moveColumn,
     reorderColumns,
   };
 }

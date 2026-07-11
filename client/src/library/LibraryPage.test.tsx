@@ -1270,35 +1270,6 @@ describe("Display, Sort controls (Story 7.4)", () => {
     expect(screen.queryByText("Some Author")).toBeNull();
   });
 
-  it("Column header dropdown: Move right persists the column order across a remount (Story 7.10, AC-1/AC-3)", async () => {
-    const paper = libraryRow({
-      doc_id: "1".repeat(64),
-      title: "Only Paper",
-      authors: "Some Author",
-      authors_list: ["Some Author"],
-    });
-    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
-    renderLibrary();
-    await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
-
-    const headerTextsDefault = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
-    expect(headerTextsDefault).toEqual(["Title", "Authors", "Venue", "Year", "DOI", "Location", "Added"]);
-
-    fireEvent.click(screen.getByRole("button", { name: "Authors" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Move right" }));
-
-    const headerTextsReordered = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
-    expect(headerTextsReordered).toEqual(["Title", "Venue", "Authors", "Year", "DOI", "Location", "Added"]);
-
-    cleanup();
-    vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
-    renderLibrary();
-    await waitFor(() => expect(screen.getByText("Only Paper")).toBeTruthy());
-
-    const headerTextsAfterRemount = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
-    expect(headerTextsAfterRemount).toEqual(headerTextsReordered);
-  });
-
   it("Column header dropdown: Sort DESC from a header's own menu reorders rows", async () => {
     const alpha = libraryRow({ doc_id: "1".repeat(64), title: "Alpha Paper", order: 0 });
     const beta = libraryRow({ doc_id: "2".repeat(64), title: "Beta Paper", order: 1 });

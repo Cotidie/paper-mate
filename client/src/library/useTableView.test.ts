@@ -35,7 +35,7 @@ describe("useTableView (Story 7.9/7.10, AC-7)", () => {
 
 describe("useTableView persisted order (Story 7.10, AC-3/AC-4)", () => {
   it("visibleColumns reflects a persisted reorder", () => {
-    act(() => useTableViewPrefs.getState().moveColumn("venue", "left"));
+    act(() => useTableViewPrefs.getState().reorderColumns("venue", "authors"));
     const { result } = renderHook(() => useTableView());
     expect(result.current.visibleColumns.map((c) => c.key)).toEqual([
       "title",
@@ -47,12 +47,6 @@ describe("useTableView persisted order (Story 7.10, AC-3/AC-4)", () => {
       "added",
       // file_type hidden by default
     ]);
-  });
-
-  it("moveColumn updates visibleColumns order", () => {
-    const { result } = renderHook(() => useTableView());
-    act(() => result.current.moveColumn("venue", "left"));
-    expect(result.current.visibleColumns.map((c) => c.key)[1]).toBe("venue");
   });
 
   it("reorderColumns updates visibleColumns order", () => {

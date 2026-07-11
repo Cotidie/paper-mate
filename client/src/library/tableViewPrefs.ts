@@ -8,10 +8,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { COLUMNS, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, type ColumnKey } from "@/library/tableView";
-import {
-  moveColumn as moveColumnInOrder,
-  reorderColumns as reorderColumnsInOrder,
-} from "@/library/columnReorder";
+import { reorderColumns as reorderColumnsInOrder } from "@/library/columnReorder";
 
 const DEFAULT_ORDER: ColumnKey[] = COLUMNS.map((c) => c.key);
 // File type hidden by default (Story 7.10 fix request; was DOI).
@@ -76,8 +73,6 @@ function reconcile(order: unknown, hidden: unknown, widths: unknown): Reconciled
 }
 
 interface TableViewPrefsState extends ReconciledPrefs {
-  /** Keyboard reorder (the header popover's "Move left"/"Move right"). */
-  moveColumn: (key: ColumnKey, dir: "left" | "right") => void;
   /** Pointer drag-and-drop reorder (drop `fromKey` onto `toKey`'s header). */
   reorderColumns: (fromKey: ColumnKey, toKey: ColumnKey) => void;
   /** Title is never hideable - a no-op, mirrors the old `useTableView`'s guard. */
@@ -92,9 +87,6 @@ export const useTableViewPrefs = create<TableViewPrefsState>()(
   persist(
     (set) => ({
       ...reconcile(undefined, undefined, undefined),
-      moveColumn(key, dir) {
-        set((state) => ({ order: moveColumnInOrder(state.order, key, dir) }));
-      },
       reorderColumns(fromKey, toKey) {
         set((state) => ({ order: reorderColumnsInOrder(state.order, fromKey, toKey) }));
       },

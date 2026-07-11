@@ -56,12 +56,10 @@ type CollectionTableProps =
        *  both are supplied; omit for isolated tests that don't care. */
       onResizeColumnStart?: (key: ColumnKey, e: React.PointerEvent) => void;
       onResizeColumnKeyDown?: (key: ColumnKey, e: React.KeyboardEvent) => void;
-      /** Column headers grow drag-to-reorder + a "Move left"/"Move right"
-       *  menu (Story 7.10, AC-1/AC-2) when supplied; omit for isolated tests
-       *  that don't exercise reorder (same optional pattern as the resize
-       *  callbacks above). */
+      /** Column headers grow drag-to-reorder (Story 7.10, AC-1) when supplied;
+       *  omit for isolated tests that don't exercise reorder (same optional
+       *  pattern as the resize callbacks above). */
       onReorderColumn?: (fromKey: ColumnKey, toKey: ColumnKey) => void;
-      onMoveColumn?: (key: ColumnKey, dir: "left" | "right") => void;
       /** The Author tag editor's commit: the new full author list (AC-4).
        *  Omit for isolated tests that don't exercise the tag editor. */
       onCommitAuthors?: (docId: string, authors: string[]) => void;
@@ -120,7 +118,6 @@ export default function CollectionTable(props: CollectionTableProps) {
     onResizeColumnStart,
     onResizeColumnKeyDown,
     onReorderColumn,
-    onMoveColumn,
     onCommitAuthors = () => {},
     trashLens = false,
     folders = EMPTY_FOLDERS,
@@ -210,7 +207,6 @@ export default function CollectionTable(props: CollectionTableProps) {
           onResizeStart={onResizeColumnStart}
           onResizeKeyDown={onResizeColumnKeyDown}
           onReorderColumn={onReorderColumn}
-          onMoveColumn={onMoveColumn}
           dropIndicator={dropIndicator}
           onColumnDragStart={handleColumnDragStart}
           onColumnDragEnd={handleColumnDragEnd}

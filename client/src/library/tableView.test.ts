@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { COLUMNS, type ColumnKey, type SortState } from "@/library/tableView";
 import { sortRows } from "@/library/columnSort";
-import { moveColumn, reorderColumns } from "@/library/columnReorder";
+import { reorderColumns } from "@/library/columnReorder";
 import type { CollectionRow } from "@/api/client";
 
 describe("COLUMNS order (Story 7.10 fix request)", () => {
@@ -157,63 +157,6 @@ const DEFAULT_ORDER: ColumnKey[] = [
   "file_type",
   "doi",
 ];
-
-describe("moveColumn (Story 7.10, AC-1/AC-2/AC-4)", () => {
-  it("moves a column left", () => {
-    expect(moveColumn(DEFAULT_ORDER, "venue", "left")).toEqual([
-      "title",
-      "venue",
-      "authors",
-      "year",
-      "location",
-      "added",
-      "file_type",
-      "doi",
-    ]);
-  });
-
-  it("moves a column right", () => {
-    expect(moveColumn(DEFAULT_ORDER, "authors", "right")).toEqual([
-      "title",
-      "venue",
-      "authors",
-      "year",
-      "location",
-      "added",
-      "file_type",
-      "doi",
-    ]);
-  });
-
-  it("Title never moves (no-op)", () => {
-    expect(moveColumn(DEFAULT_ORDER, "title", "right")).toEqual(DEFAULT_ORDER);
-    expect(moveColumn(DEFAULT_ORDER, "title", "left")).toEqual(DEFAULT_ORDER);
-  });
-
-  it("the column immediately right of Title cannot move left (would displace Title)", () => {
-    expect(moveColumn(DEFAULT_ORDER, "authors", "left")).toEqual(DEFAULT_ORDER);
-  });
-
-  it("the rightmost column cannot move right", () => {
-    expect(moveColumn(DEFAULT_ORDER, "doi", "right")).toEqual(DEFAULT_ORDER);
-  });
-
-  it("returns a new array and never mutates the input", () => {
-    const original = [...DEFAULT_ORDER];
-    const next = moveColumn(DEFAULT_ORDER, "venue", "left");
-    expect(DEFAULT_ORDER).toEqual(original);
-    expect(next).not.toBe(DEFAULT_ORDER);
-  });
-
-  it("an unknown key is a no-op", () => {
-    expect(moveColumn(DEFAULT_ORDER, "nope" as ColumnKey, "left")).toEqual(DEFAULT_ORDER);
-  });
-
-  it("a malformed input order (Title not at index 0) is pinned first before the move, never further displaced (code-review fix)", () => {
-    const malformed: ColumnKey[] = ["authors", "title", "venue"];
-    expect(moveColumn(malformed, "venue", "left")).toEqual(["title", "venue", "authors"]);
-  });
-});
 
 describe("reorderColumns (Story 7.10, AC-1/AC-4)", () => {
   it("a forward drag (fromKey left of toKey) moves fromKey to occupy toKey's original slot, landing AFTER it", () => {

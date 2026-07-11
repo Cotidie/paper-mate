@@ -22,20 +22,6 @@ describe("useTableViewPrefs defaults (Story 7.10, AC-3/AC-5)", () => {
 });
 
 describe("useTableViewPrefs actions", () => {
-  it("moveColumn delegates to the pure helper and updates order", () => {
-    useTableViewPrefs.getState().moveColumn("venue", "left");
-    expect(useTableViewPrefs.getState().order).toEqual([
-      "title",
-      "venue",
-      "authors",
-      "year",
-      "doi",
-      "location",
-      "added",
-      "file_type",
-    ]);
-  });
-
   it("reorderColumns delegates to the pure helper and updates order", () => {
     useTableViewPrefs.getState().reorderColumns("doi", "authors");
     expect(useTableViewPrefs.getState().order).toEqual([
@@ -68,7 +54,7 @@ describe("useTableViewPrefs actions", () => {
   });
 
   it("reset restores every default", () => {
-    useTableViewPrefs.getState().moveColumn("venue", "left");
+    useTableViewPrefs.getState().reorderColumns("venue", "authors");
     useTableViewPrefs.getState().toggleHidden("authors");
     useTableViewPrefs.getState().setWidth("venue", 260);
     useTableViewPrefs.getState().reset();
@@ -79,7 +65,7 @@ describe("useTableViewPrefs actions", () => {
   });
 
   it("persists order/hidden/widths to localStorage under the versioned key", () => {
-    useTableViewPrefs.getState().moveColumn("venue", "left");
+    useTableViewPrefs.getState().reorderColumns("venue", "authors");
     const raw = localStorage.getItem("paper-mate:table-view");
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw as string);
