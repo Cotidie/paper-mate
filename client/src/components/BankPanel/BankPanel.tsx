@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { X, Highlighter, TextUnderline, PencilSimple, TextT, ChatCircle, type Icon } from "@phosphor-icons/react";
 import { useAnnotationStore } from "@/store";
-import { bankItems, TYPE_LABEL, type BankItem } from "@/lib/bank";
+import { bankItems, filterBankItems, TYPE_LABEL, BANK_FILTER_TYPES, DEFAULT_BANK_FILTER, type BankItem } from "@/lib/bank";
+import type { Annotation } from "@/api/client";
 import "./BankPanel.css";
 
 /** The rail's own per-tool glyph (ToolRail.tsx), reused so a Bank row reads as
@@ -13,6 +14,15 @@ const TYPE_ICON: Record<BankItem["type"], Icon> = {
   memo: TextT,
   comment: ChatCircle,
 };
+
+/** Empty-state copy, adapted to the active filter (Story 8.2 AC #3). The
+ *  comments-only default (the common case: an unread paper with no comments
+ *  yet) gets its own line; any other selection reads generically so the
+ *  message never needs to enumerate an arbitrary type subset. */
+function emptyMessage(activeTypes: ReadonlySet<Annotation["type"]>): string {
+  if (activeTypes.size === 1 && activeTypes.has("comment")) return "No comments yet.";
+  return "No annotations match this filter.";
+}
 
 /**
  * `{component.annotation-bank-panel}` (Story 3.6) — the read-only review/recall
@@ -34,6 +44,7 @@ export default function BankPanel({
   onClose: () => void;
 }) {
   const annotations = useAnnotationStore((s) => s.annotations);
+  const [activeTypes, setActiveTypes] = useState<ReadonlySet<Annotation["type"]>>(DEFAULT_BANK_FILTER);
 
   // Esc closes (UX-DR17), mirroring TocPanel verbatim. Listener mounted only
   // while open.
@@ -46,9 +57,31 @@ export default function BankPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  // `ReaderPage` always renders `<BankPanel open={bankOpen} .../>` — this
+  // component instance stays mounted across close/reopen (only its render
+  // output disappears below), so `useState`'s initial value alone would NOT
+  // reset the filter on a reopen. Reset explicitly on the open transition
+  // (AC #2: "the DEFAULT every time the Bank opens is comments only").
+  // `useLayoutEffect`, not `useEffect`: a passive effect fires AFTER the
+  // browser paints, so the very first open-transition frame would still
+  // show whatever filter was active when the panel was last closed (a
+  // stale-rows flash) before snapping back to comments-only.
+  useLayoutEffect(() => {
+    if (open) setActiveTypes(DEFAULT_BANK_FILTER);
+  }, [open]);
+
   if (!open) return null;
 
-  const rows = bankItems(annotations.values(), docId);
+  function toggleType(type: Annotation["type"]) {
+    setActiveTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+
+  const rows = filterBankItems(bankItems(annotations.values(), docId), activeTypes);
 
   return (
     <aside className="bank-panel" data-testid="bank-panel" aria-label="Annotation bank">
@@ -66,9 +99,31 @@ export default function BankPanel({
         </button>
       </div>
 
+      <div className="bank-panel__filter" role="group" aria-label="Filter by annotation type">
+        {BANK_FILTER_TYPES.map((type) => {
+          const ChipIcon = TYPE_ICON[type];
+          const pressed = activeTypes.has(type);
+          return (
+            <button
+              key={type}
+              type="button"
+              className="bank-filter-chip"
+              data-testid={`bank-filter-${type}`}
+              aria-pressed={pressed}
+              aria-label={TYPE_LABEL[type]}
+              title={TYPE_LABEL[type]}
+              onClick={() => toggleType(type)}
+            >
+              <ChipIcon aria-hidden className="bank-filter-chip__icon" />
+              <span className="bank-filter-chip__label">{TYPE_LABEL[type]}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {rows.length === 0 ? (
         <p className="bank-panel__empty" data-testid="bank-empty">
-          No annotations yet.
+          {emptyMessage(activeTypes)}
         </p>
       ) : (
         <ul className="bank-panel__list">

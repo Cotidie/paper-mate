@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { bankItems } from "./bank";
+import { bankItems, filterBankItems, BANK_FILTER_TYPES, type BankItem } from "./bank";
 import type { Annotation, Rect } from "@/api/client";
 
 function textMark(
@@ -137,7 +137,7 @@ describe("bankItems (Story 3.6, AC #2, #4)", () => {
     expect(rows.map((r) => r.id)).toEqual(["mine"]);
   });
 
-  it("excludes pen strokes and underlines; only highlight/memo/comment appear", () => {
+  it("lists all five types: pen and underline appear alongside highlight/memo/comment", () => {
     const rows = bankItems(
       [
         penMark("pen"),
@@ -148,7 +148,7 @@ describe("bankItems (Story 3.6, AC #2, #4)", () => {
       ],
       "doc-1",
     );
-    expect(rows.map((r) => r.id)).toEqual(["highlight", "memo", "comment"]);
+    expect(rows.map((r) => r.id)).toEqual(["pen", "underline", "highlight", "memo", "comment"]);
   });
 
   describe("snippet selection", () => {
@@ -235,5 +235,34 @@ describe("bankItems (Story 3.6, AC #2, #4)", () => {
 
   it("returns [] for no annotations", () => {
     expect(bankItems([], "doc-1")).toEqual([]);
+  });
+});
+
+describe("filterBankItems (Story 8.2, AC #2, #4)", () => {
+  const rows = bankItems(
+    [
+      penMark("pen", { created_at: "2026-06-29T00:00:01Z" }),
+      textMark("underline", { type: "underline", created_at: "2026-06-29T00:00:02Z" }),
+      textMark("highlight", { created_at: "2026-06-29T00:00:03Z" }),
+      memoMark("memo", "note", { created_at: "2026-06-29T00:00:04Z" }),
+      commentMark("comment", "reply", "rect", { created_at: "2026-06-29T00:00:05Z" }),
+    ],
+    "doc-1",
+  );
+
+  it("comments-only narrows to just the comment row", () => {
+    expect(filterBankItems(rows, new Set(["comment"])).map((r) => r.id)).toEqual(["comment"]);
+  });
+
+  it("a multi-type set includes exactly those types", () => {
+    expect(filterBankItems(rows, new Set(["pen", "memo"])).map((r) => r.id)).toEqual(["pen", "memo"]);
+  });
+
+  it("the empty set yields []", () => {
+    expect(filterBankItems(rows, new Set())).toEqual([]);
+  });
+
+  it("preserves input order (composes with sort)", () => {
+    expect(filterBankItems(rows, new Set(BANK_FILTER_TYPES)).map((r) => r.id)).toEqual(rows.map((r: BankItem) => r.id));
   });
 });

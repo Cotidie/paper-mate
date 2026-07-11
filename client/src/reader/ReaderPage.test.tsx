@@ -696,6 +696,9 @@ describe("Annotation Bank (Story 3.6)", () => {
     await openedApp();
     act(() => useAnnotationStore.getState().addAnnotation(mark("a1", fakeDoc.doc_id)));
     fireEvent.click(screen.getByRole("button", { name: "Annotation bank" }));
+    // `mark()` is a highlight; the Bank's filter defaults to comments only
+    // (Story 8.2 AC #2), so widen it before asserting the row is listed.
+    fireEvent.click(screen.getByTestId("bank-filter-highlight"));
     expect(screen.getByTestId("bank-row-a1")).toBeTruthy();
   });
 
@@ -703,6 +706,7 @@ describe("Annotation Bank (Story 3.6)", () => {
     await openedApp();
     act(() => useAnnotationStore.getState().addAnnotation(mark("a1", fakeDoc.doc_id)));
     fireEvent.click(screen.getByRole("button", { name: "Annotation bank" }));
+    fireEvent.click(screen.getByTestId("bank-filter-highlight"));
     fireEvent.click(screen.getByTestId("bank-row-a1"));
     expect(useAnnotationStore.getState().flashId).toBe("a1");
     expect(useAnnotationStore.getState().selectedId).toBe("a1");

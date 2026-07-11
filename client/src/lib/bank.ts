@@ -35,9 +35,13 @@ export const TYPE_LABEL: Record<Annotation["type"], string> = {
   comment: "Comment",
 };
 
-/** The types the Bank surfaces. Pen strokes and underlines are excluded: they
- *  never produce a row, regardless of how many exist in the document. */
-const BANK_TYPES: ReadonlySet<Annotation["type"]> = new Set(["highlight", "memo", "comment"]);
+/** The five-value type universe (Story 8.2 AC #1), in the Bank's canonical
+ *  display order. The single source `BankPanel` builds its filter chips from
+ *  and tests assert against, so nobody re-lists the enum inline. */
+export const BANK_FILTER_TYPES: readonly Annotation["type"][] = ["highlight", "underline", "pen", "memo", "comment"];
+
+/** The filter's default on every Bank open (AC #2): comments only. */
+export const DEFAULT_BANK_FILTER: ReadonlySet<Annotation["type"]> = new Set(["comment"]);
 
 /** Trim outer whitespace and collapse internal newlines to a single space, so
  *  a multi-line note reads as one line in the row (visual truncation is CSS
@@ -88,15 +92,16 @@ function toBankItem(a: Annotation): BankItem {
 }
 
 /**
- * The Bank's row list (AC #2): every `docId` annotation of a `BANK_TYPES`
- * type (pen and underline never appear), ordered `created_at` ascending
- * (AR-12, matching `store.all()`), with a two-page group (shared non-null
- * `group_id`) collapsed to ONE row — the first (earliest) sibling
- * encountered after sorting, so the jump lands on its own page/anchor.
+ * The Bank's row list (AC #1): every `docId` annotation of any of the five
+ * types, ordered `created_at` ascending (AR-12, matching `store.all()`),
+ * with a two-page group (shared non-null `group_id`) collapsed to ONE row,
+ * the first (earliest) sibling encountered after sorting, so the jump lands
+ * on its own page/anchor. Callers that want a subset (e.g. `BankPanel`'s
+ * type filter) narrow the result with `filterBankItems`.
  */
 export function bankItems(annotations: Iterable<Annotation>, docId: string): BankItem[] {
   const ordered = [...annotations]
-    .filter((a) => a.doc_id === docId && BANK_TYPES.has(a.type))
+    .filter((a) => a.doc_id === docId)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   const seenGroups = new Set<string>();
@@ -109,4 +114,14 @@ export function bankItems(annotations: Iterable<Annotation>, docId: string): Ban
     rows.push(toBankItem(a));
   }
   return rows;
+}
+
+/**
+ * Narrows a row list to the active types (Story 8.2 AC #2, #4). Pure and
+ * order-preserving: this is view state only, it never reorders or mutates,
+ * so it composes with the Story 8.3 reading-order sort regardless of which
+ * runs first.
+ */
+export function filterBankItems(items: BankItem[], activeTypes: ReadonlySet<Annotation["type"]>): BankItem[] {
+  return items.filter((item) => activeTypes.has(item.type));
 }

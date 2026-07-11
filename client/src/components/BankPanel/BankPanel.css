@@ -61,6 +61,50 @@
   background: var(--color-surface-strong);
 }
 
+/* Type filter (Story 8.2, AC #2): a row of toggle chips under the header,
+   reusing the tag-chip token family (Story 7.11) for shape/spacing and the
+   .pill[aria-pressed] idiom (ReaderPage.css) for the pressed/unpressed
+   state, so the control reads as the same "armed toggle" affordance as the
+   top-bar ToC/Bank pills rather than inventing a third pattern. */
+.bank-panel__filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tag-chip-gap);
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: var(--hairline-width) solid var(--color-hairline);
+}
+
+.bank-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  background: transparent;
+  color: var(--color-muted);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-leading);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-pill);
+  padding: var(--tag-chip-padding-y) var(--tag-chip-padding-x);
+  cursor: pointer;
+}
+
+.bank-filter-chip:hover {
+  background: var(--color-surface-strong);
+}
+
+.bank-filter-chip[aria-pressed="true"] {
+  background: var(--tag-chip-bg);
+  color: var(--tag-chip-color);
+  border-color: transparent;
+}
+
+.bank-filter-chip__icon {
+  width: var(--bank-icon-size);
+  height: var(--bank-icon-size);
+  display: block;
+}
+
 /* The scrollable row list; the panel scrolls, the canvas never moves (NFR-1). */
 .bank-panel__list {
   list-style: none;
