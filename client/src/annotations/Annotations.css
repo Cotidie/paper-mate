@@ -825,6 +825,9 @@
   /* `fixed`, not `absolute` — same page-edge-clipping bug fix as `.comment-bubble`
      above (both now render from AnnotationInteraction, viewport-relative `pos`). */
   position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
   width: var(--comment-bubble-width);
   padding: var(--space-sm);
   background-color: var(--color-surface-card);
@@ -853,6 +856,15 @@
 
 .comment-preview__text:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-ink);
+}
+
+/* Once the preview reflects a MANUAL size (the persisted bubble_width/bubble_height
+   from a corner-handle resize on the full CommentBubble), the box height is fixed
+   instead of auto-sized to content — the textarea fills it via flex and scrolls its
+   own overflow, the same treatment as `.comment-bubble__text--manual-size`. */
+.comment-preview__text--manual-size {
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 /* size-row (Story 2.9): the COLLAPSIBLE memo box-size picker. A compact trigger

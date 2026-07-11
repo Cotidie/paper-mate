@@ -76,6 +76,10 @@ export default function CommentPreview({
 
   const boxRef = useRef<HTMLDivElement | null>(null);
   const body = anno.body ?? "";
+  // Mirrors CommentBubble's own manualWidth/manualHeight read (CommentBubble.tsx:73-74),
+  // minus the live resizeDraft — the preview has no resize handle of its own.
+  const manualWidth = anno.style.bubble_width ?? null;
+  const manualHeight = anno.style.bubble_height ?? null;
   // Auto-position clamp: the same treatment as CommentBubble (nudged back
   // on-screen near a viewport edge). jsdom has no layout (rect all-zero) → a
   // no-op there, matching CommentBubble's own guard.
@@ -91,7 +95,7 @@ export default function CommentPreview({
     const dy = c.y - r.top;
     if (dx !== 0) el.style.left = `${pos.left + dx}px`;
     if (dy !== 0) el.style.top = `${pos.top + dy}px`;
-  }, [visible, body, pos.left, pos.top]);
+  }, [visible, body, pos.left, pos.top, manualWidth, manualHeight]);
 
   if (!visible) return null;
   return (
@@ -99,12 +103,20 @@ export default function CommentPreview({
       ref={boxRef}
       className="comment-preview"
       data-testid={`comment-preview-${anno.id}`}
-      style={{ left: pos.left, top: pos.top, transform: PIN_OFFSET_TRANSFORM }}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        transform: PIN_OFFSET_TRANSFORM,
+        ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),
+        ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
+      }}
       onPointerEnter={onHoverEnter}
       onPointerLeave={onHoverLeave}
     >
       <textarea
-        className="comment-preview__text"
+        className={
+          manualHeight !== null ? "comment-preview__text comment-preview__text--manual-size" : "comment-preview__text"
+        }
         data-testid={`comment-preview-body-${anno.id}`}
         aria-label="Comment"
         value={body}

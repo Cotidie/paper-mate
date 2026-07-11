@@ -246,6 +246,13 @@ genuinely new pieces are a `body` param, a pin button, and a `CommentBubble`.
   `ColorSwatchRow` only (color, no width/size); `C` arms it. Client-only — the
   contract already carries `type:"comment"`/`kind=text`/`kind=rect`/`body`, so the
   tracked OpenAPI + generated TS types stay byte-identical.
+- **Story 8.6 (preview size fix):** `CommentPreview` (the HOVER-triggered compact
+  twin of `CommentBubble`, shown while a comment is not selected) reads the same
+  persisted `style.bubble_width`/`bubble_height` the full bubble already
+  reads+writes via its corner-handle resize, so the collapsed preview renders at
+  the SAME adjusted size as the full bubble instead of snapping back to the
+  220px default. A comment that was never resized (both fields null) still shows
+  the compact default preview, unchanged.
 
 ## Story 2.11 -- box-highlight a region (generalized in Story 8.4 to box-comment)
 
