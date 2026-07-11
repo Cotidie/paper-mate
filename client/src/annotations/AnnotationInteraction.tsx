@@ -29,7 +29,7 @@ import { strokeOutline, svgPathFromOutline } from "./pen";
 import type { AnnotationTool } from "./machine";
 import type { GestureContext } from "./gestures/shared";
 import { usePenGesture } from "./gestures/usePenGesture";
-import { useBoxGesture } from "./gestures/useBoxGesture";
+import { useBoxGesture, type BoxMode } from "./gestures/useBoxGesture";
 import { useMemoPlacement } from "./gestures/useMemoPlacement";
 import { useEditGesture } from "./gestures/useEditGesture";
 import { useSelection } from "./gestures/useSelection";
@@ -52,7 +52,7 @@ export default function AnnotationInteraction({
   scale,
   enabled,
   armedTool = null,
-  boxActive = false,
+  boxMode = null,
   multiSelectActive = false,
   rectReader,
 }: {
@@ -67,10 +67,11 @@ export default function AnnotationInteraction({
   /** The armed annotation tool (single source in App; null = cursor mode). The
    *  machine carries it through so the quick-box knows its mode and stays sticky. */
   armedTool?: AnnotationTool | null;
-  /** True when box-highlight mode is on (Highlight active + box mode). Box is a
-   *  MODE of Highlight, not its own tool; this separate signal lets the box-drag
-   *  gesture gate on it (the armed tool is "highlight", but a box drag, not text). */
-  boxActive?: boolean;
+  /** The active box mode: Highlight's box-highlight or Comment's box-comment
+   *  (Story 8.4), or null while no box mode is on. Box is a MODE of its tool,
+   *  not its own tool; this separate signal lets the box-drag gesture gate on
+   *  it (the armed tool is "highlight"/"comment", but a box drag, not text). */
+  boxMode?: BoxMode | null;
   /** True when the Box-select pointer tool is armed (user feature request): lets
    *  `useMultiSelectGesture`'s marquee drag gate on it. A pointer tool (like
    *  cursor/hand), not a mode of an annotation tool — `armedTool` stays null while
@@ -151,11 +152,12 @@ export default function AnnotationInteraction({
     addAnnotation,
     select,
   };
-  // Pen freehand gesture (Story 2.8) + box-highlight drag (Story 2.11), each
-  // encapsulated as its own hook (Story 5.0). The hooks own their synchronous
-  // draft refs + live-preview state and bind their own document handlers.
+  // Pen freehand gesture (Story 2.8) + the box drag (Story 2.11; generalized to
+  // highlight OR comment, Story 8.4), each encapsulated as its own hook (Story
+  // 5.0). The hooks own their synchronous draft refs + live-preview state and
+  // bind their own document handlers.
   const { penPreview } = usePenGesture(gestureCtx, armedTool);
-  const { boxPreview } = useBoxGesture(gestureCtx, boxActive);
+  const { boxPreview } = useBoxGesture(gestureCtx, boxMode);
   useMemoPlacement(gestureCtx);
   // Drag-handle move/resize of a selected pen/rect mark (Story 3.1), PLUS the
   // group-move path for a box-select multi-selection (user feature request). A
@@ -202,6 +204,7 @@ export default function AnnotationInteraction({
     armedTool,
     armedToolRef,
     rectReaderRef,
+    boxActive: boxMode != null,
   });
 
   // Belt-and-suspenders (Story 5.5): `active` already suppressed every gesture
@@ -280,23 +283,36 @@ export default function AnnotationInteraction({
     <>
       {penPreview && previewPath && (
         <svg className="pen-preview" data-testid="pen-preview" aria-hidden="true">
-          <path d={previewPath} fill={`var(--color-${activeColors.pen})`} fillOpacity={activeAlpha} />
+          <path d={previewPath} fill={`var(--color-${activeColors.pen})`} fillOpacity={activeAlpha.pen} />
         </svg>
       )}
-      {boxPreview && (
-        <div
-          className="box-preview"
-          data-testid="box-preview"
-          aria-hidden="true"
-          style={{
-            left: Math.min(boxPreview.x0, boxPreview.x1),
-            top: Math.min(boxPreview.y0, boxPreview.y1),
-            width: Math.abs(boxPreview.x1 - boxPreview.x0),
-            height: Math.abs(boxPreview.y1 - boxPreview.y0),
-            borderColor: `var(--color-${activeColors.highlight})`,
-          }}
-        />
-      )}
+      {boxPreview &&
+        (() => {
+          // Tinted to the mode's OWN default color (highlight vs comment), same
+          // branch useBoxGesture's commit uses, so the live drag preview matches
+          // the mark it is about to create.
+          const previewColor = `var(--color-${boxMode === "comment" ? activeColors.comment : activeColors.highlight})`;
+          return (
+            <div
+              className="box-preview"
+              data-testid="box-preview"
+              aria-hidden="true"
+              style={{
+                left: Math.min(boxPreview.x0, boxPreview.x1),
+                top: Math.min(boxPreview.y0, boxPreview.y1),
+                width: Math.abs(boxPreview.x1 - boxPreview.x0),
+                height: Math.abs(boxPreview.y1 - boxPreview.y0),
+                borderColor: previewColor,
+              }}
+            >
+              {/* Fix request (live drag preview only showed a border): a fill at the
+                  SAME opacity token the committed region fill's group uses, so the
+                  drag preview reads as a real (not-yet-created) highlight/comment
+                  region, not just an outline. */}
+              <div className="box-preview__fill" style={{ backgroundColor: previewColor }} />
+            </div>
+          );
+        })()}
       {multiSelectPreview && (
         // The marquee rubber-band, neutral (ink) styling — not tinted to any
         // annotation-tool accent, since this drag SELECTS existing marks rather
@@ -424,13 +440,17 @@ export default function AnnotationInteraction({
               box accent (border). */}
           <ColorSwatchRow value={selectedAnno.style.color} onPick={recolorSelected} />
           {/* Rows come from the mark's descriptor (Story 5.0): pen → stroke-width +
-              alpha, memo → size, text marks → none. Armed to each mark's current
-              value (memos store size as their rect, not a style field). */}
+              alpha, memo → alpha (fix request), text marks → none. Armed to each
+              mark's current value. */}
           {selectedSpec.strokeWidth && (
             <StrokeWidthRow value={selectedAnno.style.stroke_width ?? activeStrokeWidth} onPick={restrokeSelected} />
           )}
           {selectedSpec.alpha && (
-            <AlphaRow value={selectedAnno.style.alpha ?? activeAlpha} onPick={realphaSelected} />
+            <AlphaRow
+              value={selectedAnno.style.alpha ?? activeAlpha[selectedAnno.type as "pen" | "memo"]}
+              onPick={realphaSelected}
+              label={selectedAnno.type === "memo" ? "Memo opacity" : "Pen opacity"}
+            />
           )}
           <span className="quick-box__divider" aria-hidden="true" />
           {/* Turn into comment (Story 3.7, AC1): text-highlight only — a region

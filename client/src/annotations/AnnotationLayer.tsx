@@ -154,11 +154,21 @@ export default function AnnotationLayer({
       ? dragPreview.anchor
       : (groupDragPreview?.find((g) => g.id === a.id)?.anchor ?? a.anchor);
 
-  // A mark that gets drag-handle move/resize in Story 3.1: pen (path) + rect
-  // memo/region. Comments (bubble-edited) and text marks (Story 3.8 re-resolves
-  // their run) are excluded — moving a text rect would desync anchor.text.
+  // A mark that gets drag-handle move/resize in Story 3.1: pen (path) + any
+  // kind=rect mark (memo / region highlight / box-comment — fix request: a
+  // rect-kind comment must resize/move exactly like a region highlight, they
+  // share the same anchor geometry). Text marks (kind=text, incl. a text-anchor
+  // comment) are excluded — Story 3.8 re-resolves their run; moving a text rect
+  // would desync anchor.text. A click-placed comment pin is ALSO kind=rect but
+  // with a degenerate (zero-area) rect (`buildCommentPin`'s point placement,
+  // Story 2.10) — it already moves via its own pin drag handle (`movable`,
+  // below); excluded here so it doesn't ALSO grow four resize corners on a
+  // zero-size frame (Codex 8.4 review, Med finding 2), which would let a plain
+  // point pin silently balloon into a region.
   const isEditable = (a: Annotation): boolean =>
-    a.anchor.kind === "path" || (a.anchor.kind === "rect" && a.type !== "comment");
+    a.anchor.kind === "path" ||
+    (a.anchor.kind === "rect" &&
+      (a.anchor.rect.x0 !== a.anchor.rect.x1 || a.anchor.rect.y0 !== a.anchor.rect.y1));
 
   // The one selected mark on THIS page that shows an edit frame (single selection).
   const editMark = marks.find((a) => a.id === selectedId && isEditable(a)) ?? null;
@@ -168,6 +178,13 @@ export default function AnnotationLayer({
   // opacity group; the comment's pin is rendered separately in renderComment).
   // The .annotation-highlight class gives it the 2.5 selection hit-test, hover ring,
   // and selected ring, so recolor/delete from the selection quick-box work for free.
+  // Fix request: the fill ITSELF is a move handle — carries the SAME
+  // data-edit-handle/data-edit-id pair the edit-frame's move grip uses,
+  // UNCONDITIONALLY (mirrors the comment pin's + the memo wrapper's existing
+  // dual-purpose click/drag pattern, "even unselected"): a plain click still
+  // selects (useEditGesture's own slop threshold lets a sub-5px press through as
+  // a click), a real drag moves it — and self-selects on release if it wasn't
+  // already selected, same as memo's empty-space drag.
   const renderRegion = (a: Annotation) => {
     const anchor = effAnchor(a);
     if (anchor.kind !== "rect") return null;
@@ -185,6 +202,8 @@ export default function AnnotationLayer({
         key={a.id}
         className={cls}
         data-testid={`annotation-mark-${a.id}`}
+        data-edit-handle="move"
+        data-edit-id={a.id}
         onPointerEnter={() => setHovered(a.id)}
         onPointerLeave={() => setHovered(null)}
         onClick={() => select(a.id)}

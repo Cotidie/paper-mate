@@ -41,7 +41,7 @@ beforeEach(() => {
     },
     activeStrokeWidth: 8,
     activeMemoSize: DEFAULT_MEMO_SIZE,
-    activeAlpha: 0.4,
+    activeAlpha: { pen: 0.4, memo: 0.4 },
   });
   useAnnotationStore.temporal.getState().clear();
 });

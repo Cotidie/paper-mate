@@ -85,11 +85,12 @@ describe("buildPenAnnotation (Story 2.8 + 2.13, AD-5 pen → path)", () => {
   });
 });
 
-describe("buildMemoAnnotation (Story 2.9, AD-5 memo → rect)", () => {
+describe("buildMemoAnnotation (Story 2.9, AD-5 memo → rect; alpha added by fix request)", () => {
   const memoOpts = (newId: () => string) => ({
     now: "2026-06-29T00:00:00+00:00",
     newId,
     color: "annotation-blue",
+    alpha: 0.4,
   });
   const placement = { page_index: 3, rect: { x0: 0.2, y0: 0.3, x1: 0.5, y1: 0.45 } };
 
@@ -105,9 +106,14 @@ describe("buildMemoAnnotation (Story 2.9, AD-5 memo → rect)", () => {
     expect(a.updated_at).toBe(a.created_at);
   });
 
-  it("carries the accent color; stroke_width stays null (memo has no stroke)", () => {
+  it("carries the accent color + alpha; stroke_width stays null (memo has no stroke)", () => {
     const a = buildMemoAnnotation(placement, "doc-1", memoOpts(counter()));
-    expect(a.style).toEqual({ color: "annotation-blue", stroke_width: null, alpha: null });
+    expect(a.style).toEqual({ color: "annotation-blue", stroke_width: null, alpha: 0.4 });
+  });
+
+  it("carries a non-default alpha when specified", () => {
+    const a = buildMemoAnnotation(placement, "doc-1", { ...memoOpts(counter()), alpha: 0.8 });
+    expect(a.style.alpha).toBe(0.8);
   });
 });
 

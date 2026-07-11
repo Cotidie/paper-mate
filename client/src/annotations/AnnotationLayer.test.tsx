@@ -288,11 +288,15 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(body.value).toBe("a note");
     expect(screen.getByTestId("memo-collapse-toggle-m1")).toBeTruthy();
     // Accent (border AND background, user request) is on the OUTER wrapper. The
-    // border is full-strength; the background is SOFTENED via color-mix (a later
-    // user fix request: full-strength read "thick").
+    // border is full-strength; the background mixes toward TRANSPARENT (fix
+    // request: true see-through alpha, not a lighten-toward-white tint — an
+    // earlier version mixed toward --color-surface-card, which only desaturated
+    // the box and never let the page content underneath show). The mix strength
+    // is style.alpha (fix request, user-adjustable) — null (no alpha set) falls
+    // back to 35%, the mark's old fixed ratio.
     expect(mark.style.borderColor).toBe("var(--color-annotation-pink)");
     expect(mark.style.backgroundColor).toBe(
-      "color-mix(in srgb, var(--color-annotation-pink) var(--annotation-memo-bg-mix), var(--color-surface-card))",
+      "color-mix(in srgb, var(--color-annotation-pink) 35%, transparent)",
     );
     // denormalize at scale 1: left=0.1*600=60, top=0.2*800=160, w=0.4*600=240, minHeight=0.2*800=160.
     expect(mark.style.left).toBe("60px");
@@ -302,6 +306,16 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     // Lives in the memos group, outside the decorative aria-hidden mark groups.
     expect(container.querySelector(".annotation-memos")!.contains(mark)).toBe(true);
     expect(container.querySelector(".annotation-highlights")!.contains(mark)).toBe(false);
+  });
+
+  it("a memo's background mix strength tracks its OWN style.alpha (fix request: TRUE transparency, page content shows through at low alpha)", () => {
+    const m = { ...memoMark("m2", 0), style: { color: "annotation-blue", stroke_width: null, alpha: 0.6 } };
+    useAnnotationStore.getState().addAnnotation(m);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const mark = screen.getByTestId("annotation-mark-m2");
+    expect(mark.style.backgroundColor).toBe(
+      "color-mix(in srgb, var(--color-annotation-blue) 60%, transparent)",
+    );
   });
 
   it("a memo re-derives position on zoom (NFR-3)", () => {
@@ -570,6 +584,18 @@ describe("AnnotationLayer region fills (Story 2.11 — AC3,4,6)", () => {
     expect(useAnnotationStore.getState().selectedId).toBe("r4");
   });
 
+  it("the region fill carries data-edit-handle=move + data-edit-id UNCONDITIONALLY (fix request: drag the highlighted area itself to move it, mirroring the comment pin/memo wrapper's existing pattern), for BOTH a highlight and a comment region", () => {
+    useAnnotationStore.getState().addAnnotation(regionHighlight("r6"));
+    useAnnotationStore.getState().addAnnotation(regionComment("rc6"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const highlightFill = screen.getByTestId("annotation-mark-r6");
+    expect(highlightFill.getAttribute("data-edit-handle")).toBe("move");
+    expect(highlightFill.getAttribute("data-edit-id")).toBe("r6");
+    const commentFill = screen.getByTestId("annotation-mark-rc6");
+    expect(commentFill.getAttribute("data-edit-handle")).toBe("move");
+    expect(commentFill.getAttribute("data-edit-id")).toBe("rc6");
+  });
+
   it("hover adds --hovered class; select adds --selected class (AC6)", () => {
     useAnnotationStore.getState().addAnnotation(regionHighlight("r5"));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
@@ -618,6 +644,21 @@ describe("AnnotationLayer edit frame (Story 3.1)", () => {
     created_at: "2026-06-29T00:00:00+00:00",
     updated_at: "2026-06-29T00:00:00+00:00",
   });
+  // A DRAWN box-comment (Story 8.4): a real, non-degenerate region rect, same
+  // shape a box-comment drag builds via `buildCommentPin` fed the drag rect.
+  const boxComment = (id: string): Annotation => ({
+    id,
+    doc_id: "doc-1",
+    type: "comment",
+    group_id: null,
+    anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.2, x1: 0.5, y1: 0.4 } },
+    style: { color: "annotation-default", stroke_width: null, alpha: null },
+    body: "",
+    created_at: "2026-06-29T00:00:00+00:00",
+    updated_at: "2026-06-29T00:00:00+00:00",
+  });
+  // A CLICK-placed point pin (Story 2.10): `buildCommentPin` fed a point, so
+  // its rect is degenerate (x0===x1, y0===y1) — zero area, not a region.
   const commentPin = (id: string): Annotation => ({
     id,
     doc_id: "doc-1",
@@ -666,9 +707,37 @@ describe("AnnotationLayer edit frame (Story 3.1)", () => {
     expect(screen.queryByTestId("annotation-edit-frames-0")).toBeNull();
   });
 
-  it("shows NO edit frame for a selected comment pin (bubble-edited)", () => {
+  it("shows a move grip + four corner handles for a selected DRAWN box-comment (fix request: a box-comment must resize/move exactly like a region highlight)", () => {
+    seedAndSelect(boxComment("c1"));
+    expect(screen.getByTestId("edit-handle-move-c1")).toBeTruthy();
+    for (const c of ["nw", "ne", "sw", "se"]) expect(screen.getByTestId(`edit-handle-${c}-c1`)).toBeTruthy();
+  });
+
+  it("shows NO edit frame for a selected CLICK-placed comment pin (degenerate zero-area rect; it moves via its own pin drag handle, not a resize frame, Codex 8.4 review, Med finding 2)", () => {
     seedAndSelect(commentPin("c1"));
+    expect(screen.queryByTestId("annotation-edit-frames-0")).toBeNull();
     expect(screen.queryByTestId("edit-handle-move-c1")).toBeNull();
+    // Still movable via the pin itself (a SEPARATE affordance from the edit frame).
+    expect(
+      screen.getByTestId("annotation-comment-pin-c1").classList.contains("annotation-comment-pin--movable"),
+    ).toBe(true);
+  });
+
+  it("shows NO edit frame for a selected kind=text comment (its position derives from the text run, Story 3.8 territory)", () => {
+    const textComment: Annotation = {
+      id: "c2",
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }], text: "x" },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: "",
+      created_at: "2026-06-29T00:00:00+00:00",
+      updated_at: "2026-06-29T00:00:00+00:00",
+    };
+    seedAndSelect(textComment);
+    expect(screen.queryByTestId("edit-handle-move-c2")).toBeNull();
+    expect(screen.queryByTestId("annotation-edit-frames-0")).toBeNull();
   });
 
   it("renders no edit frame when nothing is selected", () => {

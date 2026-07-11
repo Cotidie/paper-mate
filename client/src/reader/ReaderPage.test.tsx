@@ -380,6 +380,41 @@ describe("tool rail + tool keys (Story 1.8)", () => {
     expect(screen.getByTestId("highlight-box-toggle").getAttribute("aria-checked")).toBe("false");
   });
 
+  it("the Comment flyout's Box option arms box-comment mode (no hotkey, Story 8.4/D4); switching tools away resets it", async () => {
+    await openReader();
+    const comment = () => screen.getByTestId("tool-comment-button");
+    // One click arms Comment AND opens its flyout (the unified open-on-tool-change
+    // mechanism); the Text option starts armed (plain text/click mode).
+    fireEvent.click(comment());
+    expect(comment().className).toContain("tool-button--armed");
+    expect(screen.getByTestId("comment-text-toggle").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByTestId("comment-box-toggle").getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByTestId("comment-box-toggle"));
+    expect(screen.getByTestId("comment-box-toggle").getAttribute("aria-checked")).toBe("true");
+    // Switching away from Comment (Escape → cursor) resets box-comment; re-arming
+    // Comment always starts back in plain text mode (mirrors box-highlight's reset).
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(comment());
+    expect(screen.getByTestId("comment-text-toggle").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByTestId("comment-box-toggle").getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("box-highlight and box-comment are mutually exclusive (modes of different tools; only one activeTool at a time)", async () => {
+    await openReader();
+    // Arm box-highlight (M), then switch to Comment: Highlight's box mode resets
+    // (activeTool leaves Highlight) and Comment starts in plain text mode.
+    fireEvent.keyDown(document, { key: "m" });
+    expect(screen.getByTestId("highlight-box-toggle").getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByTestId("tool-comment-button"));
+    expect(screen.getByTestId("comment-text-toggle").getAttribute("aria-checked")).toBe("true");
+    // Arm box-comment, then switch back to Highlight: box-comment resets and
+    // Highlight starts in plain text mode too.
+    fireEvent.click(screen.getByTestId("comment-box-toggle"));
+    expect(screen.getByTestId("comment-box-toggle").getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByTestId("tool-highlight-button"));
+    expect(screen.getByTestId("highlight-text-toggle").getAttribute("aria-checked")).toBe("true");
+  });
+
   it("Escape defers to the overlay when a mark is selected (does not disarm the tool); a second Escape then returns to cursor (Story 5.6, layered Esc)", async () => {
     await openReader();
     const hi = () => screen.getByTestId("tool-highlight-button");

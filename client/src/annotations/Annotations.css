@@ -133,6 +133,18 @@
   border: var(--hairline-width) dashed;
 }
 
+/* Fix request: the live drag preview only showed the dashed border, no fill, so
+   it read as an empty outline rather than a preview of the mark about to land.
+   A nested absolutely-positioned div at the SAME opacity token the committed
+   region fill's group (.annotation-highlights) uses — kept separate from the
+   parent so the dashed BORDER stays full-opacity/crisp while only the fill
+   fades. */
+.box-preview__fill {
+  position: absolute;
+  inset: 0;
+  opacity: var(--annotation-highlight-opacity);
+}
+
 /* The live box-select MARQUEE preview (user feature request): a fixed rubber-
    band rect while the drag is in progress. Neutral styling — NOT tinted to any
    tool accent (unlike box-preview above, which previews a mark that WILL be

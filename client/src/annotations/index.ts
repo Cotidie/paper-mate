@@ -6,6 +6,10 @@
 
 export { default as AnnotationLayer } from "./AnnotationLayer";
 export { default as AnnotationInteraction } from "./AnnotationInteraction";
+// The box-drag gesture's mode (Story 8.4: highlight OR comment), re-exported so
+// Reader can type its own `boxMode` passthrough prop without reaching into
+// annotations/gestures/ directly (AD-9 layering).
+export type { BoxMode } from "./gestures/useBoxGesture";
 // The shared color-swatch row (DESIGN.md#color-swatch). Reused by the overlay's
 // selection quick-box AND, from Story 2.6, the rail's Highlight color sub-toolbox.
 export { default as ColorSwatchRow } from "./ColorSwatchRow";

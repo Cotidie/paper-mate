@@ -9,7 +9,7 @@ import { usePageViewport } from "@/render/usePageViewport";
 // overlay to the live page-card geometry + scale; the overlay lives in
 // annotations/ and consumes anchor/ + store/ — render/ stays annotation-free
 // (AD-9). Importing the view here does NOT make render/ annotation-aware.
-import { AnnotationInteraction, type AnnotationTool } from "@/annotations";
+import { AnnotationInteraction, type AnnotationTool, type BoxMode } from "@/annotations";
 import type { PageCardRef } from "@/anchor";
 // Reader's own interaction concerns (Story 5.3 extraction, mirrors the Story
 // 5.0 `annotations/gestures/*` pattern): zoom, pan, and page-nav each own
@@ -51,7 +51,7 @@ export default function Reader({
   doc,
   panArmed,
   armedTool,
-  boxActive,
+  boxMode,
   multiSelectActive,
   onVisiblePageChange,
   onZoomChange,
@@ -65,10 +65,11 @@ export default function Reader({
   /** The armed annotation tool (App owns it; null = cursor). Passed straight to
    * the overlay interaction; the Reader itself does no annotation logic (AD-9). */
   armedTool?: AnnotationTool | null;
-  /** True when box-highlight mode is on (Highlight active + box mode). Box is a
-   * MODE of Highlight, not its own tool; this is the explicit signal the overlay's
+  /** The active box mode: Highlight's box-highlight or Comment's box-comment
+   * (Story 8.4), or null/undefined while no box mode is on. Box is a MODE of
+   * its tool, not its own tool; this is the explicit signal the overlay's
    * box-drag gesture gates on. Passed straight to the overlay. */
-  boxActive?: boolean;
+  boxMode?: BoxMode | null;
   /** True when the Box-select pointer tool is armed (user feature request): a
    * marquee drag selects existing annotations for bulk Move/Delete. Passed
    * straight to the overlay's `useMultiSelectGesture`. */
@@ -248,7 +249,7 @@ export default function Reader({
           scale={scale}
           enabled={phase === "ready"}
           armedTool={armedTool ?? null}
-          boxActive={boxActive ?? false}
+          boxMode={boxMode ?? null}
           multiSelectActive={multiSelectActive ?? false}
         />
       )}

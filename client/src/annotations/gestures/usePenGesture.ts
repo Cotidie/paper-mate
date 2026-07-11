@@ -105,7 +105,7 @@ export function usePenGesture(
         newId,
         color: defaultsRef.current.colors.pen,
         strokeWidth: defaultsRef.current.strokeWidth,
-        alpha: defaultsRef.current.alpha,
+        alpha: defaultsRef.current.alpha.pen,
       });
       addAnnotation(created);
       // Pen does NOT auto-select on release (unlike highlight/memo/comment): drawing

@@ -62,6 +62,7 @@ export function useMemoPlacement(ctx: GestureContext): void {
         now: new Date().toISOString(),
         newId,
         color: defaultsRef.current.colors.memo,
+        alpha: defaultsRef.current.alpha.memo,
       });
       addAnnotation(created);
       select(created.id);
