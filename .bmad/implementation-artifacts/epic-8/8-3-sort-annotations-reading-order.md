@@ -4,7 +4,7 @@ baseline_commit: ccf84e824ca31de67bf55434f64650d6dc64fccc
 
 # Story 8.3: Sort annotations in reading order
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -57,33 +57,33 @@ Story 3.6 built the Annotation Bank ordered by `created_at` ascending. This stor
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Add the paired top-left sort key to `bank.ts`** (AC: 1, 3)
-  - [ ] Replace `topFractionOf(a)` (`bank.ts:73`) with a single helper that returns the top-most rect's **both** coordinates, e.g. `anchorTopLeft(a: Annotation): { top: number; left: number }`. For `kind=rect` → `{ top: rect.y0, left: rect.x0 }`; `kind=path` → `pointsBounds(points)` `{ top: y0, left: x0 }`; `kind=text` → the rect with the minimum `y0` (the reading start), returning **that same rect's** `x0` (not a separate global-min `x0`, which could come from a different line). Empty `rects` → `{ top: 0, left: 0 }` (preserves today's fallback).
-  - [ ] Keep `topFraction`'s meaning identical (min-`y0`) so the jump target (`usePageNav.jumpToAnnotation`, which multiplies `topFraction * card.clientHeight`) is byte-unchanged. `anchorTopLeft().top` MUST equal the old `topFractionOf` result.
-  - [ ] Add `leftFraction: number` to the `BankItem` interface (`bank.ts:14`) with a short doc comment; set both `topFraction` and `leftFraction` in `toBankItem` from one `anchorTopLeft(a)` call.
+- [x] **Task 1 — Add the paired top-left sort key to `bank.ts`** (AC: 1, 3)
+  - [x] Replace `topFractionOf(a)` (`bank.ts:73`) with a single helper that returns the top-most rect's **both** coordinates, e.g. `anchorTopLeft(a: Annotation): { top: number; left: number }`. For `kind=rect` → `{ top: rect.y0, left: rect.x0 }`; `kind=path` → `pointsBounds(points)` `{ top: y0, left: x0 }`; `kind=text` → the rect with the minimum `y0` (the reading start), returning **that same rect's** `x0` (not a separate global-min `x0`, which could come from a different line). Empty `rects` → `{ top: 0, left: 0 }` (preserves today's fallback).
+  - [x] Keep `topFraction`'s meaning identical (min-`y0`) so the jump target (`usePageNav.jumpToAnnotation`, which multiplies `topFraction * card.clientHeight`) is byte-unchanged. `anchorTopLeft().top` MUST equal the old `topFractionOf` result.
+  - [x] Add `leftFraction: number` to the `BankItem` interface (`bank.ts:14`) with a short doc comment; set both `topFraction` and `leftFraction` in `toBankItem` from one `anchorTopLeft(a)` call.
 
-- [ ] **Task 2 — Swap the `bankItems` comparator to reading order** (AC: 1, 2, 4)
-  - [ ] In `bankItems` (`bank.ts:102`), replace the `created_at.localeCompare` sort with a reading-order comparator: `pageIndex` asc → **epsilon-banded** `topFraction` → `leftFraction` asc → `created_at.localeCompare` as the final stable tie-break. See "Design decisions → Epsilon band" for the comparator shape and the ε value to validate.
-  - [ ] **Sort BEFORE the group dedup, as today.** The existing loop keeps the first-seen row per `group_id`; because the comparator now sorts by page first, the first-seen sibling is the earliest-page one, which satisfies AC-2 for free. Do not add group-specific logic.
-  - [ ] The comparator needs each mark's `created_at` for the final tie-break, which `BankItem` does not carry (and should not — it is a display projection). Structure the function so the annotation is still in hand at compare time (e.g. project to `{ annotation, item }` pairs, sort the pairs, then dedup + emit `item`), rather than adding `created_at` to `BankItem`. Recompute `anchorTopLeft` once, not twice.
-  - [ ] Rewrite the `bankItems` docstring (currently "ordered `created_at` ascending, AR-12"): it now orders by reading order, with `created_at` as a deterministic tie-break only.
+- [x] **Task 2 — Swap the `bankItems` comparator to reading order** (AC: 1, 2, 4)
+  - [x] In `bankItems` (`bank.ts:102`), replace the `created_at.localeCompare` sort with a reading-order comparator: `pageIndex` asc → **epsilon-banded** `topFraction` → `leftFraction` asc → `created_at.localeCompare` as the final stable tie-break. See "Design decisions → Epsilon band" for the comparator shape and the ε value to validate.
+  - [x] **Sort BEFORE the group dedup, as today.** The existing loop keeps the first-seen row per `group_id`; because the comparator now sorts by page first, the first-seen sibling is the earliest-page one, which satisfies AC-2 for free. Do not add group-specific logic.
+  - [x] The comparator needs each mark's `created_at` for the final tie-break, which `BankItem` does not carry (and should not — it is a display projection). Structure the function so the annotation is still in hand at compare time (e.g. project to `{ annotation, item }` pairs, sort the pairs, then dedup + emit `item`), rather than adding `created_at` to `BankItem`. Recompute `anchorTopLeft` once, not twice.
+  - [x] Rewrite the `bankItems` docstring (currently "ordered `created_at` ascending, AR-12"): it now orders by reading order, with `created_at` as a deterministic tie-break only.
 
-- [ ] **Task 3 — Reconcile the two now-stale "created_at ordering" notes** (AC: 1)
-  - [ ] Update the `BankPanel` component docstring (`BankPanel.tsx:31`) that says "ordered `created_at` ascending" → reading order.
-  - [ ] Update the architecture-spine descriptive line: `.bmad/planning-artifacts/architecture/architecture-paper-mate-2026-06-28/ARCHITECTURE-SPINE.md:136` reads "Annotation Bank order = `created_at` ascending." Change to reading order (page, then on-page position; `created_at` tie-break). This is a one-line doc reconciliation in the same change (AE7-3: reconcile docs alongside the behavior change, not later).
+- [x] **Task 3 — Reconcile the two now-stale "created_at ordering" notes** (AC: 1)
+  - [x] Update the `BankPanel` component docstring (`BankPanel.tsx:31`) that says "ordered `created_at` ascending" → reading order.
+  - [x] Update the architecture-spine descriptive line: `.bmad/planning-artifacts/architecture/architecture-paper-mate-2026-06-28/ARCHITECTURE-SPINE.md:136` reads "Annotation Bank order = `created_at` ascending." Change to reading order (page, then on-page position; `created_at` tie-break). This is a one-line doc reconciliation in the same change (AE7-3: reconcile docs alongside the behavior change, not later).
 
-- [ ] **Task 4 — Tests** (AC: 1, 2, 3, 4)
-  - [ ] **Flip the ordering guard:** `bank.test.ts:102` ("orders rows by created_at ascending") is now false. Replace it with reading-order tests: (a) rows on different pages sort by page ascending regardless of `created_at`; (b) rows on one page sort top-to-bottom by `y0`; (c) two marks at near-equal `y0` sort left-to-right by `x0` (exercise the epsilon band); (d) two marks with identical `(page, y0, x0)` fall back to `created_at` order (deterministic tie-break). The existing `textMark`/`regionMark`/`penMark`/`memoMark`/`commentMark` builders already accept `rects`/`anchor` overrides with distinct `x0`/`y0`, so seed positions directly.
-  - [ ] **AC-2 dedup test with earliest-page ≠ earliest-created:** seed a `group_id` pair where the page-0 sibling was created **after** the page-1 sibling, and assert the surviving row is the page-0 (earliest-page) one. (Today's dedup test at `bank.test.ts:113` happens to make earliest-page and earliest-created the same mark, so it does not prove reading-order dedup; add the distinguishing case.)
-  - [ ] **AC-3:** assert a region (`kind=rect`) and a pen (`kind=path`) sort by their bbox top-left relative to text marks.
-  - [ ] **AC-4 compose-with-filter:** a filtered subset (via `filterBankItems`) is still in reading order (the `filterBankItems` "preserves input order" test at `bank.test.ts:265` already covers order-preservation; add one asserting the composed `filterBankItems(bankItems(...))` output is reading-ordered).
-  - [ ] **Audit any order-dependent assertion that assumed `created_at` order.** The multi-type `filterBankItems` test at `bank.test.ts:242` seeds pen/underline/highlight/memo/comment with ascending `created_at` and all on page 0 with distinct `y0`; under reading order the row order changes. If it asserts a specific order, update it; if it only asserts membership, leave it. Grep the suite for any Bank order assumption. `BankPanel.test.tsx` / `ReaderPage.test.tsx` seed at most one or two marks, so their order assertions are unlikely to break, but re-run them.
-  - [ ] Run `cd client && npm test` and `npm run typecheck` — both green.
+- [x] **Task 4 — Tests** (AC: 1, 2, 3, 4)
+  - [x] **Flip the ordering guard:** `bank.test.ts:102` ("orders rows by created_at ascending") is now false. Replace it with reading-order tests: (a) rows on different pages sort by page ascending regardless of `created_at`; (b) rows on one page sort top-to-bottom by `y0`; (c) two marks at near-equal `y0` sort left-to-right by `x0` (exercise the epsilon band); (d) two marks with identical `(page, y0, x0)` fall back to `created_at` order (deterministic tie-break). The existing `textMark`/`regionMark`/`penMark`/`memoMark`/`commentMark` builders already accept `rects`/`anchor` overrides with distinct `x0`/`y0`, so seed positions directly.
+  - [x] **AC-2 dedup test with earliest-page ≠ earliest-created:** seed a `group_id` pair where the page-0 sibling was created **after** the page-1 sibling, and assert the surviving row is the page-0 (earliest-page) one. (Today's dedup test at `bank.test.ts:113` happens to make earliest-page and earliest-created the same mark, so it does not prove reading-order dedup; add the distinguishing case.)
+  - [x] **AC-3:** assert a region (`kind=rect`) and a pen (`kind=path`) sort by their bbox top-left relative to text marks.
+  - [x] **AC-4 compose-with-filter:** a filtered subset (via `filterBankItems`) is still in reading order (the `filterBankItems` "preserves input order" test at `bank.test.ts:265` already covers order-preservation; add one asserting the composed `filterBankItems(bankItems(...))` output is reading-ordered).
+  - [x] **Audit any order-dependent assertion that assumed `created_at` order.** The multi-type `filterBankItems` test at `bank.test.ts:242` seeds pen/underline/highlight/memo/comment with ascending `created_at` and all on page 0 with distinct `y0`; under reading order the row order changes. If it asserts a specific order, update it; if it only asserts membership, leave it. Grep the suite for any Bank order assumption. `BankPanel.test.tsx` / `ReaderPage.test.tsx` seed at most one or two marks, so their order assertions are unlikely to break, but re-run them.
+  - [x] Run `cd client && npm test` and `npm run typecheck` — both green.
 
-- [ ] **Task 5 — Live smoke** (AC: 1, 2, 3)
-  - [ ] With your OWN fresh dev servers (never a user-launched / Docker one — CLAUDE.md; Story 8.2 hit exactly this trap when a `--reload` container grabbed port 8000), on a **multi-page** paper: create marks out of reading order (e.g. a comment low on page 3, a highlight high on page 1, an underline mid page 2, a region + pen on page 1) and confirm the Bank lists them page 1 → 3, top-to-bottom within each page. Widen the 8.2 filter to all types so every mark is visible.
-  - [ ] Validate the epsilon band on a **real paper**: put two marks on the same visual text line (e.g. a highlight on the left half, an underline on the right half) and confirm they read left-to-right, not swapped by a hair of `y0` difference. This is the ε acceptance check (see Design decisions); tune ε here if needed, do not ship an unvalidated constant.
-  - [ ] Confirm a Bank row click still jumps + flashes + selects (`handleBankJump` unchanged) and that filtering + sorting never reflows the canvas (NFR-1).
+- [x] **Task 5 — Live smoke** (AC: 1, 2, 3)
+  - [x] With your OWN fresh dev servers (never a user-launched / Docker one — CLAUDE.md; Story 8.2 hit exactly this trap when a `--reload` container grabbed port 8000), on a **multi-page** paper: create marks out of reading order (e.g. a comment low on page 3, a highlight high on page 1, an underline mid page 2, a region + pen on page 1) and confirm the Bank lists them page 1 → 3, top-to-bottom within each page. Widen the 8.2 filter to all types so every mark is visible.
+  - [x] Validate the epsilon band on a **real paper**: put two marks on the same visual text line (e.g. a highlight on the left half, an underline on the right half) and confirm they read left-to-right, not swapped by a hair of `y0` difference. This is the ε acceptance check (see Design decisions); tune ε here if needed, do not ship an unvalidated constant.
+  - [x] Confirm a Bank row click still jumps + flashes + selects (`handleBankJump` unchanged) and that filtering + sorting never reflows the canvas (NFR-1).
 
 ## Design decisions (made at create-story; record any change in Completion Notes)
 
@@ -159,8 +159,36 @@ Vitest + Testing Library (`cd client && npm test`; `npm run typecheck`). The ord
 
 ### Agent Model Used
 
+Claude Sonnet 5 (xHigh)
+
 ### Debug Log References
+
+- **Data-root env var mistake, caught and cleaned up before it mattered.** For the Task 5 live smoke, `PAPER_MATE_DATA_DIR` was used to point the backend at an isolated data dir — the actual variable `paths.py` reads is `PAPER_MATE_DATA`, so the wrong name silently no-op'd and the backend defaulted to the user's real `~/.paper-mate` store. One fixture PDF (`1903.03295v2.pdf`) landed in the user's real library via `POST /api/docs` before this was noticed. Caught by inspecting `~/.paper-mate/library.json` (real papers dated back to 2026-06-28, clearly not test data) before creating any annotations there. Cleaned up via `POST /api/library/trash` (reversible, not a hard delete) rather than touching the file store directly, then relaunched both servers with the correct `PAPER_MATE_DATA` pointed at an isolated scratch dir for the rest of the smoke.
+- **Mid-smoke, the user reported a live bug in their own separate session** (Bank row click on a highlight: quick-box flashes and closes almost instantly, jump reads as barely moving) on a Docker-served build unrelated to this story's in-progress edits. Traced to `useSelection.ts`'s document-level `scroll` listener, which closed the selected-mark quick-box on ANY scroll — including the Bank jump's own `jumpToAnnotation` smooth-scroll, so `select()` opening the box and the jump's first scroll tick closing it raced within a frame. `useCreateQuickBox.ts` had already fixed the identical problem for the CREATE popup (its own comment cites "Story 4.x fix": track scroll/zoom instead of closing), but the fix was never backported to the selected-mark box. Applied the same reposition-on-scroll pattern here (see File List) — out of this story's scope (FR-24/AR-12 reading order only), done as a direct ad hoc fix per explicit user request mid-session, kept as a separate change from Story 8.3's own diff.
 
 ### Completion Notes List
 
+- **Task 1:** Added `anchorTopLeft(a)` to `bank.ts`, replacing `topFractionOf`; returns `{top, left}` from the SAME rect (min-`y0` for `kind=text`, the rect's own `{x0,y0}` for `kind=rect`, `pointsBounds` for `kind=path`). `leftFraction` added to `BankItem`; `topFraction`'s value is unchanged (verified: the existing "min y0 across all rects" unit test still passes byte-for-byte).
+- **Task 2:** `bankItems` now sorts `{annotation, item}` pairs (so `created_at` stays available for the tie-break without adding it to `BankItem`) through a `readingOrderCompare`: `pageIndex` asc → epsilon-banded `topFraction` (ε=0.01 page-fraction) → `leftFraction` asc → `created_at` tie-break. Dedup still runs AFTER the sort, unchanged, so AC-2 (earliest-page sibling wins) falls out for free.
+- **Task 3:** `BankPanel.tsx:31` and `ARCHITECTURE-SPINE.md:136` both updated from "`created_at` ascending" to reading order.
+- **Task 4:** Flipped the stale `created_at`-order guard and added reading-order tests for AC-1 (cross-page, top-to-bottom, epsilon left-to-right, tie-break), AC-2 (earliest-page ≠ earliest-created dedup), AC-3 (region/pen bbox sort), and AC-4 (filter composes with the sort). Two pre-existing tests asserted a SPECIFIC row order that reading order now changes: `bank.test.ts`'s "lists all five types" test (its own name says it's a membership check) switched to a `Set` comparison; `bank.test.ts`'s `filterBankItems` "multi-type set" test updated its expected order to match (`memo` before `pen`, since memo's `topFraction=0.2` sorts before pen's `0.5`). 1399/1399 client tests pass (68 files); `npm run typecheck` clean.
+- **Task 5:** Live-smoked on own fresh servers (backend 8010, frontend 5183 — see Debug Log for the data-root mistake and recovery) against a 10-page fixture PDF (`1903.03295v2.pdf`). Created a highlight + comment + pen stroke on page 1, an underline mid-page-2, and a comment low on page 3, all out of creation order; widened the Bank filter to all five types and confirmed the list reads page 1 → 2 → 3, top-to-bottom within each page. Epsilon check: a highlight on the left half and an underline on the right half of the SAME visual line in the abstract sorted left-to-right (not swapped by the sub-pixel `y0` difference between a highlight's fill-rect top and an underline's baseline-rect top) — ε=0.01 holds, no retune needed. Confirmed a Bank row click still jumps + flashes + selects, and (after the ad hoc fix above) the selected-mark quick-box now survives the jump's own scroll and lands correctly positioned on the target mark. No console errors; no canvas reflow observed.
+
 ### File List
+
+- `client/src/lib/bank.ts` (modified: `topFractionOf` → `anchorTopLeft`; added `leftFraction` to `BankItem`; `bankItems` comparator swapped from `created_at` to reading order)
+- `client/src/lib/bank.test.ts` (modified: flipped the `created_at`-order guard; added AC-1..AC-4 reading-order tests; updated two order-dependent assertions that reading order legitimately changes)
+- `client/src/components/BankPanel/BankPanel.tsx` (modified: docstring line only, "ordered `created_at` ascending" → reading order)
+- `.bmad/planning-artifacts/architecture/architecture-paper-mate-2026-06-28/ARCHITECTURE-SPINE.md` (modified: one descriptive line, Bank order note)
+- `.bmad/implementation-artifacts/sprint-status.yaml` (modified: `8-3-sort-annotations-reading-order` → in-progress, then review)
+
+**Out of this story's scope — ad hoc bug fix, per explicit user request mid-session (see Debug Log); kept as a separate commit from the above:**
+
+- `client/src/annotations/gestures/useSelection.ts` (modified: the selected-mark quick-box repositions on scroll instead of closing, matching `useCreateQuickBox`'s existing pattern; fixes the box self-closing on a Bank jump's own scroll)
+- `client/src/annotations/AnnotationInteraction.test.tsx` (modified: updated the one test that asserted the old close-on-scroll behavior to assert the box now stays open and repositions)
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-12 | Implemented Story 8.3: Bank ordering switched from `created_at` ascending to reading order (page, then epsilon-banded top-to-bottom, then left-to-right, `created_at` as final tie-break). 1399/1399 client tests pass; typecheck clean; live-smoked on own dev servers (8010/5183) with out-of-order marks across 3 pages plus a same-line epsilon check. Status → review. |

@@ -8,9 +8,10 @@ import type { Annotation } from "@/api/client";
 import { pointsBounds } from "@/anchor";
 
 /** One Bank row: the display-ready projection of an annotation (or, for a
- *  two-page group, its earliest sibling). `topFraction` is a `[0,1]` page-box
- *  fraction (zoom-independent, AD-4) — `Reader.jumpToAnnotation` multiplies it
- *  by the live card height. */
+ *  two-page group, its earliest sibling). `topFraction`/`leftFraction` are
+ *  `[0,1]` page-box fractions (zoom-independent, AD-4) from the mark's
+ *  top-most rect — `Reader.jumpToAnnotation` multiplies `topFraction` by the
+ *  live card height; `leftFraction` feeds the reading-order sort (Story 8.3). */
 export interface BankItem {
   id: string;
   type: Annotation["type"];
@@ -21,6 +22,9 @@ export interface BankItem {
   page: number;
   pageIndex: number;
   topFraction: number;
+  /** The mark's left edge, paired with `topFraction` from the SAME rect (the
+   *  reading start). Used only for the reading-order sort's same-row tie-break. */
+  leftFraction: number;
 }
 
 /** Fallback label shown when a mark has no readable text of its own (an empty
@@ -66,19 +70,29 @@ function snippetOf(a: Annotation): { snippet: string; isPlaceholder: boolean } {
   return text ? { snippet: text, isPlaceholder: false } : { snippet: TYPE_LABEL[a.type], isPlaceholder: true };
 }
 
-/** The mark's top edge as a `[0,1]` page fraction, for the jump target: the
- *  min rect `y0` for a (possibly multi-line) text run, the rect's own `y0`
- *  for a region/memo/comment box, or the pen stroke's bbox `y0` (reusing the
- *  anchor service's `pointsBounds` — no coordinate math here, AD-9). */
-function topFractionOf(a: Annotation): number {
+/** The mark's top-left corner as `[0,1]` page fractions, both from the SAME
+ *  rect (D3: the reading start, not a Frankenstein of separate min-`y0` and
+ *  min-`x0`). For a (possibly multi-line) text run this is the rect with the
+ *  minimum `y0`; for a region/memo/comment box it is the rect's own
+ *  `{x0,y0}`; for a pen stroke it is the bbox top-left (reusing the anchor
+ *  service's `pointsBounds` — no coordinate math here, AD-9). Empty `rects`
+ *  falls back to `{top: 0, left: 0}`. `top` is the jump target
+ *  (`topFraction`) and MUST equal the old `topFractionOf`'s min-`y0`. */
+function anchorTopLeft(a: Annotation): { top: number; left: number } {
   const anchor = a.anchor;
-  if (anchor.kind === "rect") return anchor.rect.y0;
-  if (anchor.kind === "path") return pointsBounds(anchor.points).y0;
-  return anchor.rects.length > 0 ? Math.min(...anchor.rects.map((r) => r.y0)) : 0;
+  if (anchor.kind === "rect") return { top: anchor.rect.y0, left: anchor.rect.x0 };
+  if (anchor.kind === "path") {
+    const bounds = pointsBounds(anchor.points);
+    return { top: bounds.y0, left: bounds.x0 };
+  }
+  if (anchor.rects.length === 0) return { top: 0, left: 0 };
+  const topRect = anchor.rects.reduce((min, r) => (r.y0 < min.y0 ? r : min));
+  return { top: topRect.y0, left: topRect.x0 };
 }
 
 function toBankItem(a: Annotation): BankItem {
   const { snippet, isPlaceholder } = snippetOf(a);
+  const { top, left } = anchorTopLeft(a);
   return {
     id: a.id,
     type: a.type,
@@ -87,31 +101,59 @@ function toBankItem(a: Annotation): BankItem {
     isPlaceholder,
     page: a.anchor.page_index + 1,
     pageIndex: a.anchor.page_index,
-    topFraction: topFractionOf(a),
+    topFraction: top,
+    leftFraction: left,
   };
+}
+
+/** Same-row tolerance for the reading-order Y comparison (D2): two rects
+ *  whose `top` differ by less than this count as one "row" and order by
+ *  `left` instead — a typical line-height is ~0.015 of the page box, so this
+ *  catches same-line marks without merging adjacent lines. Validated against
+ *  a real paper in Task 5 live smoke; tune here if it proves off. */
+const READING_ORDER_Y_EPSILON = 0.01;
+
+/** page ascending, then epsilon-banded top (same "row" ties go to `left`
+ *  ascending), then `created_at` as the final deterministic tie-break. */
+function readingOrderCompare(
+  a: { pageIndex: number; top: number; left: number; createdAt: string },
+  b: { pageIndex: number; top: number; left: number; createdAt: string },
+): number {
+  if (a.pageIndex !== b.pageIndex) return a.pageIndex - b.pageIndex;
+  if (Math.abs(a.top - b.top) > READING_ORDER_Y_EPSILON) return a.top - b.top;
+  if (a.left !== b.left) return a.left - b.left;
+  return a.createdAt.localeCompare(b.createdAt);
 }
 
 /**
  * The Bank's row list (AC #1): every `docId` annotation of any of the five
- * types, ordered `created_at` ascending (AR-12, matching `store.all()`),
- * with a two-page group (shared non-null `group_id`) collapsed to ONE row,
- * the first (earliest) sibling encountered after sorting, so the jump lands
- * on its own page/anchor. Callers that want a subset (e.g. `BankPanel`'s
- * type filter) narrow the result with `filterBankItems`.
+ * types, ordered in reading order (FR-24, AR-12) — page ascending, then
+ * top-to-bottom, then left-to-right for same-row ties, with `created_at` as
+ * the final deterministic tie-break — with a two-page group (shared
+ * non-null `group_id`) collapsed to ONE row, the first sibling encountered
+ * after sorting (i.e. its earliest-page, top-most one, AC #2), so the jump
+ * lands on its own page/anchor. Callers that want a subset (e.g.
+ * `BankPanel`'s type filter) narrow the result with `filterBankItems`.
  */
 export function bankItems(annotations: Iterable<Annotation>, docId: string): BankItem[] {
   const ordered = [...annotations]
     .filter((a) => a.doc_id === docId)
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    .map((a) => ({ annotation: a, item: toBankItem(a) }))
+    .sort((x, y) =>
+      readingOrderCompare(
+        { pageIndex: x.item.pageIndex, top: x.item.topFraction, left: x.item.leftFraction, createdAt: x.annotation.created_at },
+        { pageIndex: y.item.pageIndex, top: y.item.topFraction, left: y.item.leftFraction, createdAt: y.annotation.created_at },
+      ),
+    );
 
   const seenGroups = new Set<string>();
   const rows: BankItem[] = [];
-  for (const a of ordered) {
+  for (const { annotation: a, item } of ordered) {
     if (a.group_id != null) {
       if (seenGroups.has(a.group_id)) continue;
       seenGroups.add(a.group_id);
     }
-    rows.push(toBankItem(a));
+    rows.push(item);
   }
   return rows;
 }

@@ -133,7 +133,7 @@ graph TD
 | Colors | Reference DESIGN.md annotation-accent tokens (`{colors.annotation-*}`), not raw hex. |
 | API shape | REST/JSON under `/api`; resources `/api/docs`, `/api/docs/{doc_id}`, `/api/docs/{doc_id}/file`, `/api/docs/{doc_id}/annotations`. |
 | Errors | One envelope only — FastAPI default `{ "detail": string }` for every error (validation errors mapped to the same shape); client surfaces via `{component.toast}` (EXPERIENCE.md). |
-| Store shape | Client store keys annotations by `id` (map); Annotation Bank order = `created_at` ascending. |
+| Store shape | Client store keys annotations by `id` (map); Annotation Bank order = reading order (page, then on-page position; `created_at` tie-break, Story 8.3). |
 | Annotation mutation | Only via the client command stack, incl. restyle (AD-7). |
 | Disk writes | Only via the storage module, atomic (temp + rename) (AD-8, AD-9). |
 | Client API access | Only via generated OpenAPI client (AD-3, AD-9). |
