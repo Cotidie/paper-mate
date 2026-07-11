@@ -345,11 +345,38 @@
   white-space: nowrap;
 }
 
-/* The armed cell's tag editor (Story 7.11, AC-4/AC-7): a "select or create"
-   input plus each existing author as a removable chip, mirroring
-   `.collection-table__edit-input`'s surface/border/focus treatment so it
-   reads as the same inline-edit affordance as Title/Venue/Year. */
+/* The Author tag editor panel (fix request: editing must not grow the row).
+   Floated OVER the cell by `FloatingCellEditor` (position: fixed, anchored via
+   inline top/left), so table layout never reflows. Mirrors the column-menu
+   popover surface (card background, hairline, card shadow, rounded) so it
+   reads as the same floating control; a very long author list scrolls inside
+   the panel rather than pushing it off-screen. */
+.floating-cell-editor {
+  position: fixed;
+  z-index: 5;
+  box-sizing: border-box;
+  max-width: 90vw;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--color-surface-card);
+  border: var(--hairline-width) solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-xs);
+}
+
+/* Inside the panel: existing authors wrap as removable chips ABOVE a full-width
+   "select or create" input, mirroring `.collection-table__edit-input`'s
+   surface/border/focus treatment so it reads as the same edit affordance as
+   Title/Venue/Year. */
 .tag-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-xs);
+}
+
+.tag-editor__chips {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -380,7 +407,7 @@
 }
 
 .tag-editor__input {
-  flex: 1 1 var(--tag-editor-input-min-width);
+  width: 100%;
   min-width: var(--tag-editor-input-min-width);
   box-sizing: border-box;
   background: var(--color-surface-card);

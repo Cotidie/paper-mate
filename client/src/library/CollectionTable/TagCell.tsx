@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import TagEditor from "./TagEditor";
+import FloatingCellEditor from "./FloatingCellEditor";
 
 /**
  * The settled cell's chip list (fix request): renders every author as a
@@ -112,15 +113,23 @@ export default function TagCell({
   onCommit: (authors: string[]) => void;
   onCancel: () => void;
 }) {
+  const cellRef = useRef<HTMLTableCellElement>(null);
+  const chips = <AuthorChips authors={authors} />;
+
+  // Editing keeps the STATIC cell in place (chips, one-line height) and floats
+  // the editor over it (fix request: the old inline editor stacked chips
+  // vertically and grew the row, reflowing the whole table). The panel is
+  // anchored to this cell via `FloatingCellEditor`.
   if (isEditing) {
     return (
-      <td className="collection-table__authors">
-        <TagEditor authors={authors} onCommit={onCommit} onCancel={onCancel} />
+      <td ref={cellRef} className="collection-table__authors" title={authors.join(", ") || undefined}>
+        {chips}
+        <FloatingCellEditor anchorRef={cellRef}>
+          <TagEditor authors={authors} onCommit={onCommit} onCancel={onCancel} />
+        </FloatingCellEditor>
       </td>
     );
   }
-
-  const chips = <AuthorChips authors={authors} />;
 
   if (!editable) {
     return (

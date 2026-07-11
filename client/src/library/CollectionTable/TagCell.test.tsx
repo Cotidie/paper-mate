@@ -75,10 +75,14 @@ describe("TagCell cell-arm/edit (Story 7.11, Dev Notes)", () => {
 });
 
 describe("TagCell editor (Story 7.11, AC-4/AC-7)", () => {
-  it("shows the tag editor instead of chips when isEditing", () => {
+  it("floats the tag editor when isEditing while the static cell stays in place (row does not grow)", () => {
     renderCell({ isEditing: true });
+    // The floating editor: an input plus each author as a removable chip.
     expect(screen.getByPlaceholderText("Add author")).toBeTruthy();
-    expect(screen.getByText("Ada Lovelace")).toBeTruthy();
+    expect(screen.getByLabelText("Remove Ada Lovelace")).toBeTruthy();
+    // The static cell keeps rendering its chips underneath (no reflow), so the
+    // author text is present in BOTH the cell and the editor.
+    expect(screen.getAllByText("Ada Lovelace").length).toBe(2);
   });
 
   it("typing a name and pressing Enter adds a chip; commit (on blur) sends the full new list", () => {
