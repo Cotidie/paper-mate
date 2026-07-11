@@ -5,10 +5,11 @@ import { reorderColumns } from "@/library/columnReorder";
 import type { CollectionRow } from "@/api/client";
 
 describe("COLUMNS order (Story 7.10 fix request)", () => {
-  it("Title, Authors, Venue, Year, DOI, Location, Added, File type", () => {
+  it("Title, Authors, Venue (Short), Venue (Full), Year, DOI, Location, Added, File type", () => {
     expect(COLUMNS.map((c) => c.key)).toEqual([
       "title",
       "authors",
+      "venue_short",
       "venue",
       "year",
       "doi",
@@ -113,6 +114,33 @@ describe("sortRows", () => {
     ];
     expect(sortRows(rows, { column: "venue", direction: "asc" }).map((r) => r.doc_id)).toEqual(["2", "1", "3"]);
     expect(sortRows(rows, { column: "venue", direction: "desc" }).map((r) => r.doc_id)).toEqual(["1", "2", "3"]);
+  });
+
+  it("sorts Venue (Short) by the short value, empty last in either direction", () => {
+    const rows = [
+      row({ doc_id: "1", venue_short: "Zeta" }),
+      row({ doc_id: "2", venue_short: "alpha" }),
+      row({ doc_id: "3", venue_short: null, venue: null }),
+    ];
+    expect(sortRows(rows, { column: "venue_short", direction: "asc" }).map((r) => r.doc_id)).toEqual([
+      "2",
+      "1",
+      "3",
+    ]);
+    expect(sortRows(rows, { column: "venue_short", direction: "desc" }).map((r) => r.doc_id)).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+  });
+
+  it("sorts Venue (Short) with no fallback to the full venue (user decision 2026-07-12): a row with only a full venue sorts as empty", () => {
+    const rows = [
+      row({ doc_id: "1", venue_short: null, venue: "Zeta Journal" }),
+      row({ doc_id: "2", venue_short: "alpha" }),
+    ];
+    expect(sortRows(rows, { column: "venue_short", direction: "asc" }).map((r) => r.doc_id)).toEqual(["2", "1"]);
+    expect(sortRows(rows, { column: "venue_short", direction: "desc" }).map((r) => r.doc_id)).toEqual(["2", "1"]);
   });
 
   it("sorts Year numerically, not lexically, empty last in either direction", () => {

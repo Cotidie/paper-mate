@@ -121,6 +121,7 @@ def apply_extraction(
     status: DocStatus,
     doi: str | None,
     venue: str | None,
+    venue_short: str | None,
     year: int | None,
 ) -> None:
     """Persist a background extraction's result — the ONLY writer of it (AD-L2).
@@ -140,6 +141,7 @@ def apply_extraction(
             "status": status,
             "doi": doi,
             "venue": venue,
+            "venue_short": venue_short,
             "year": year,
         },
     )

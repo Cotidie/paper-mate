@@ -2,8 +2,9 @@
 
 ``extract`` is exercised against PDFs built in-code with PyMuPDF (no committed
 binaries); ``enrich`` is exercised with a fake ``httpx.Client`` (patched on
-``crossref``), a fake arXiv client (patched on ``arxiv_enrich``), and with
-injected fake enrichers — these tests NEVER hit the real network.
+``crossref`` and ``semantic_scholar``), a fake arXiv client (patched on
+``arxiv_enrich``), and with injected fake enrichers — these tests NEVER hit
+the real network.
 """
 
 import datetime
@@ -11,11 +12,12 @@ import datetime
 import pymupdf
 import pytest
 
-from app.domain import arxiv_enrich, crossref
+from app.domain import arxiv_enrich, crossref, semantic_scholar
 from app.domain.arxiv_enrich import ArxivEnricher
 from app.domain.crossref import CrossrefEnricher
 from app.domain.enrich import enrich
 from app.domain.extract import extract
+from app.domain.semantic_scholar import SemanticScholarEnricher
 from app.models import ExtractedMeta
 
 # --- PDF builders (in-code, deterministic) ---------------------------------
@@ -208,6 +210,21 @@ def fake_httpx(monkeypatch):
     return install
 
 
+@pytest.fixture
+def fake_semantic_scholar_httpx(monkeypatch):
+    """Mirrors ``fake_httpx`` but installs on ``semantic_scholar`` (a separate
+    module, a separate patch target, same ``_FakeClient``/``_FakeResponse``
+    shape)."""
+    _FakeClient.calls = []
+
+    def install(handler):
+        monkeypatch.setattr(
+            semantic_scholar.httpx, "Client", lambda *a, **k: _FakeClient(handler)
+        )
+
+    return install
+
+
 def test_enrich_skips_without_doi_or_title_and_makes_no_call(fake_httpx):
     def handler(url, params):  # pragma: no cover - must never run
         raise AssertionError("enrich must not call the network with nothing to query")
@@ -360,7 +377,14 @@ def test_enrich_falls_back_to_title_when_doi_misses(fake_httpx):
         )
 
     fake_httpx(handler)
-    result = enrich(ExtractedMeta(title="Found By Title", doi="10.0000/miss"))
+    # `crossref.httpx` and `semantic_scholar.httpx` are the same shared module
+    # object, so `fake_httpx`'s patch also covers the default
+    # `SemanticScholarEnricher`'s client; inject a no-network stub so this
+    # test's call-count assertion stays about the Crossref calls only.
+    result = enrich(
+        ExtractedMeta(title="Found By Title", doi="10.0000/miss"),
+        venue_short_fetcher=_RaisingVenueShortFetcher(),
+    )
     assert result != "skipped"
     assert result.title == "Found By Title"
     # Both the DOI lookup and the title fallback were attempted.
@@ -410,6 +434,49 @@ def test_meta_from_work_no_container_title_yields_venue_none():
     assert meta is not None
     assert meta.venue is None
     assert meta.year is None
+
+
+# --- _short_venue_from_work (Story 8.5) --------------------------------------
+
+
+def test_short_venue_from_work_prefers_short_container_title():
+    work = {"short-container-title": ["CHI"], "event": {"acronym": "CHI '25"}}
+    assert crossref._short_venue_from_work(work) == "CHI"
+
+
+def test_short_venue_from_work_falls_back_to_year_stripped_acronym():
+    # Verified live: DOI 10.1145/3706598.3713941 returns an empty
+    # short-container-title but event.acronym == "CHI '25".
+    assert crossref._short_venue_from_work({"event": {"acronym": "CHI '25"}}) == "CHI"
+    assert crossref._short_venue_from_work({"event": {"acronym": "WWW 2024"}}) == "WWW"
+
+
+def test_short_venue_from_work_none_when_neither_exists():
+    assert crossref._short_venue_from_work({}) is None
+    assert crossref._short_venue_from_work({"short-container-title": [], "event": {}}) is None
+
+
+def test_short_venue_from_work_acronym_without_year_passes_through_unchanged():
+    assert crossref._short_venue_from_work({"event": {"acronym": "NeurIPS"}}) == "NeurIPS"
+
+
+def test_short_venue_from_work_falls_back_to_container_title_parenthetical_acronym():
+    # Verified live: DOI 10.1109/iccv.2017.226's `event` has no `acronym`
+    # key at all (only name/location/start/end), but `container-title` ends
+    # in "(ICCV)".
+    work = {
+        "container-title": ["2017 IEEE International Conference on Computer Vision (ICCV)"],
+        "event": {"name": "2017 IEEE International Conference on Computer Vision (ICCV)"},
+    }
+    assert crossref._short_venue_from_work(work) == "ICCV"
+
+
+def test_short_venue_from_work_container_title_acronym_rejects_non_acronym_parentheticals():
+    # A bare year, or a mixed-case/spaced parenthetical, is not a clean
+    # acronym - degrades to None rather than a wrong guess.
+    assert crossref._short_venue_from_work({"container-title": ["Some Proceedings (2020)"]}) is None
+    assert crossref._short_venue_from_work({"container-title": ["Some Proceedings (Volume 1)"]}) is None
+    assert crossref._short_venue_from_work({"container-title": ["Some Proceedings (SAC '19)"]}) is None
 
 
 # --- arxiv_enrich (fix request): venue/year fallback for a Crossref-less preprint --
@@ -506,6 +573,9 @@ def test_enrich_arxiv_fallback_fires_when_crossref_skips_entirely(fake_httpx):
     assert result != "skipped"
     assert result.title == "A Preprint"  # Crossref skipped: original title kept
     assert result.venue == "arXiv"
+    # User fix request: arXiv-only (no journal_ref) -> Venue (Short) matches
+    # Venue (Full), both "arXiv".
+    assert result.venue_short == "arXiv"
     assert result.year == 2021
     # PDF carried no DOI/authors either: arXiv-only, so its own record fills both in.
     assert result.doi == "10.48550/arXiv.2103.12345"
@@ -530,6 +600,7 @@ def test_enrich_arxiv_fallback_fires_when_crossref_has_no_venue(fake_httpx):
     assert result.title == "A Paper"
     assert result.doi == "10.1/x"  # untouched: DOI stays extraction-sourced
     assert result.venue == "arXiv"
+    assert result.venue_short == "arXiv"  # user fix request: matches Venue (Full)
     assert result.year == 2020
     # Crossref's own author list came back empty: arXiv's fills in.
     assert result.authors == ["Grace Hopper"]
@@ -563,6 +634,62 @@ def test_enrich_arxiv_fallback_never_fires_without_an_arxiv_id(fake_httpx):
     fake_httpx(lambda url, params: _FakeResponse(200, {"message": {"items": []}}))
     result = enrich(ExtractedMeta(title="No ArXiv Id"), arxiv_fetcher=_RaisingArxivFetcher())
     assert result == "skipped"  # no arxiv_id to route the fallback on
+
+
+def test_enrich_arxiv_only_paper_gets_venue_short_arxiv_without_a_semantic_scholar_lookup(fake_httpx):
+    """User fix request: a paper that exists on arXiv only (no journal_ref -
+    ArxivFetcher.fetch's own fallback to the literal ARXIV_VENUE) gets
+    venue_short filled to "arXiv" directly, matching venue, rather than
+    staying blank or triggering the Semantic Scholar fallback (which would
+    only look up arXiv's own self-assigned DOI anyway)."""
+
+    def handler(url, params):
+        raise crossref.httpx.ConnectError("offline")
+
+    fake_httpx(handler)
+
+    class FakeArxiv:
+        def fetch(self, arxiv_id: str) -> tuple[str | None, int | None, list[str]]:
+            return arxiv_enrich.ARXIV_VENUE, 2021, []
+
+    result = enrich(
+        ExtractedMeta(title="A Preprint", arxiv_id="2103.12345"),
+        arxiv_fetcher=FakeArxiv(),
+        venue_short_fetcher=_RaisingVenueShortFetcher(),
+    )
+    assert result != "skipped"
+    assert result.venue == "arXiv"
+    assert result.venue_short == "arXiv"
+
+
+def test_enrich_arxiv_fallback_with_a_journal_ref_does_not_force_venue_short_to_arxiv(fake_httpx):
+    """The venue_short == "arXiv" shortcut only applies when the arXiv
+    fallback's venue IS the literal ARXIV_VENUE (no journal_ref). A formally-
+    published journal_ref still goes through the normal Semantic-Scholar-by-
+    DOI cascade below - it is NOT forced to "arXiv"."""
+
+    def handler(url, params):
+        raise crossref.httpx.ConnectError("offline")
+
+    fake_httpx(handler)
+
+    class FakeArxiv:
+        def fetch(self, arxiv_id: str) -> tuple[str | None, int | None, list[str]]:
+            return "IEEE Access, vol. 7, 2019", 2019, []
+
+    class FakeVenueShort:
+        def fetch(self, doi: str) -> str | None:
+            assert doi == "10.48550/arXiv.2103.12345"
+            return "IEEE Access"
+
+    result = enrich(
+        ExtractedMeta(title="A Preprint", arxiv_id="2103.12345"),
+        arxiv_fetcher=FakeArxiv(),
+        venue_short_fetcher=FakeVenueShort(),
+    )
+    assert result != "skipped"
+    assert result.venue == "IEEE Access, vol. 7, 2019"
+    assert result.venue_short == "IEEE Access"
 
 
 def test_enrich_arxiv_fallback_failure_leaves_crossref_result_unchanged(fake_httpx):
@@ -616,6 +743,193 @@ def test_enrich_arxiv_doi_fill_only_fires_alongside_a_successful_venue_fallback(
     )
     assert result != "skipped"
     assert result.doi is None  # Crossref found no DOI; arXiv fallback never ran to fill one either
+
+
+# --- semantic_scholar (Story 8.5 fix request): venue-acronym fallback -------
+
+
+def test_semantic_scholar_enricher_returns_acronym_shaped_alternate_name(fake_semantic_scholar_httpx):
+    def handler(url, params):
+        assert url == "https://api.semanticscholar.org/graph/v1/paper/DOI:10.1109/iccv.2017.226"
+        assert params == {"fields": "publicationVenue"}
+        return _FakeResponse(
+            200,
+            {"publicationVenue": {"name": "IEEE International Conference on Computer Vision", "alternate_names": ["ICCV", "IEEE Int Conf Comput Vis"]}},
+        )
+
+    fake_semantic_scholar_httpx(handler)
+    assert SemanticScholarEnricher().fetch("10.1109/iccv.2017.226") == "ICCV"
+
+
+def test_semantic_scholar_enricher_scans_past_a_non_acronym_first_entry(fake_semantic_scholar_httpx):
+    """Code-review fix: `alternate_names` is NOT ordered acronym-first.
+    Verified live: DOI 10.18653/v1/2020.acl-main.1 returns the bare acronym
+    ("ACL") at index 2, behind two longer non-acronym-shaped variants."""
+
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {
+                "publicationVenue": {
+                    "name": "Annual Meeting of the Association for Computational Linguistics",
+                    "alternate_names": [
+                        "Annu Meet Assoc Comput Linguistics",
+                        "Meeting of the Association for Computational Linguistics",
+                        "ACL",
+                        "Meet Assoc Comput Linguistics",
+                    ],
+                }
+            },
+        )
+
+    fake_semantic_scholar_httpx(handler)
+    assert SemanticScholarEnricher().fetch("10.18653/v1/2020.acl-main.1") == "ACL"
+
+
+def test_semantic_scholar_enricher_none_when_no_alternate_name_is_acronym_shaped(fake_semantic_scholar_httpx):
+    fake_semantic_scholar_httpx(
+        lambda url, params: _FakeResponse(
+            200, {"publicationVenue": {"alternate_names": ["IEEE Int Conf Comput Vis", "ICCV Workshops"]}}
+        )
+    )
+    assert SemanticScholarEnricher().fetch("10.1/x") is None
+
+
+def test_semantic_scholar_enricher_none_on_empty_or_missing_alternate_names(fake_semantic_scholar_httpx):
+    fake_semantic_scholar_httpx(lambda url, params: _FakeResponse(200, {"publicationVenue": {"alternate_names": []}}))
+    assert SemanticScholarEnricher().fetch("10.1/x") is None
+
+    fake_semantic_scholar_httpx(lambda url, params: _FakeResponse(200, {}))
+    assert SemanticScholarEnricher().fetch("10.1/x") is None
+
+
+def test_semantic_scholar_enricher_none_on_non_200(fake_semantic_scholar_httpx):
+    fake_semantic_scholar_httpx(lambda url, params: _FakeResponse(404, {}))
+    assert SemanticScholarEnricher().fetch("10.1/x") is None
+
+
+def test_semantic_scholar_enricher_none_on_network_failure(fake_semantic_scholar_httpx):
+    def handler(url, params):
+        raise crossref.httpx.ConnectError("offline")
+
+    fake_semantic_scholar_httpx(handler)
+    assert SemanticScholarEnricher().fetch("10.1/x") is None
+
+
+class _RaisingVenueShortFetcher:
+    """A fetcher that fails the test if called - proves the Semantic Scholar
+    fallback never fires when it isn't supposed to."""
+
+    def fetch(self, doi: str) -> str | None:
+        raise AssertionError("Semantic Scholar fallback must not fire here")
+
+
+def test_enrich_semantic_scholar_fallback_fills_venue_short_when_crossref_leaves_it_unset(fake_httpx):
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {
+                "message": {
+                    "title": ["A Paper"],
+                    "author": [],
+                    "container-title": ["2017 IEEE International Conference on Computer Vision"],
+                    "issued": {"date-parts": [[2017]]},
+                }
+            },
+        )
+
+    fake_httpx(handler)
+
+    class FakeVenueShort:
+        def fetch(self, doi: str) -> str | None:
+            assert doi == "10.1109/iccv.2017.226"
+            return "ICCV"
+
+    result = enrich(
+        ExtractedMeta(title="A Paper", doi="10.1109/iccv.2017.226"),
+        venue_short_fetcher=FakeVenueShort(),
+    )
+    assert result != "skipped"
+    assert result.venue_short == "ICCV"
+    assert result.venue == "2017 IEEE International Conference on Computer Vision"  # untouched
+
+
+def test_enrich_semantic_scholar_fallback_never_fires_when_crossref_already_has_a_short_venue(fake_httpx):
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {
+                "message": {
+                    "title": ["A Paper"],
+                    "author": [],
+                    "container-title": ["Proceedings of the 2025 CHI Conference"],
+                    "short-container-title": ["CHI"],
+                    "issued": {"date-parts": [[2025]]},
+                }
+            },
+        )
+
+    fake_httpx(handler)
+    result = enrich(
+        ExtractedMeta(title="A Paper", doi="10.1145/xyz"),
+        venue_short_fetcher=_RaisingVenueShortFetcher(),
+    )
+    assert result != "skipped"
+    assert result.venue_short == "CHI"  # Crossref's own short form, untouched
+
+
+def test_enrich_semantic_scholar_fallback_never_fires_without_a_doi(fake_httpx):
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {"message": {"items": [{"title": ["A Paper"], "author": [], "container-title": ["Some Journal"]}]}},
+        )
+
+    fake_httpx(handler)
+    result = enrich(
+        ExtractedMeta(title="A Paper"),  # no doi extracted, and Crossref's title-query result carries none either
+        venue_short_fetcher=_RaisingVenueShortFetcher(),
+    )
+    assert result != "skipped"
+    assert result.doi is None
+    assert result.venue_short is None
+
+
+def test_enrich_semantic_scholar_fallback_never_fires_on_a_total_skip(fake_httpx):
+    def handler(url, params):
+        raise crossref.httpx.ConnectError("offline")
+
+    fake_httpx(handler)
+    result = enrich(ExtractedMeta(title="A Paper"), venue_short_fetcher=_RaisingVenueShortFetcher())
+    assert result == "skipped"
+
+
+def test_enrich_semantic_scholar_fallback_failure_leaves_result_unchanged(fake_httpx):
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {
+                "message": {
+                    "title": ["A Paper"],
+                    "author": [],
+                    "container-title": ["Some Journal"],
+                    "issued": {"date-parts": [[2020]]},
+                }
+            },
+        )
+
+    fake_httpx(handler)
+
+    class FailingVenueShort:
+        def fetch(self, doi: str) -> str | None:
+            return None
+
+    result = enrich(
+        ExtractedMeta(title="A Paper", doi="10.1/x"),
+        venue_short_fetcher=FailingVenueShort(),
+    )
+    assert result != "skipped"
+    assert result.venue_short is None
 
 
 _FORBIDDEN_IMPORTS = {"os", "pathlib", "app.storage"}

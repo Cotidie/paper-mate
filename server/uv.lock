@@ -335,7 +335,7 @@ wheels = [
 
 [[package]]
 name = "paper-mate-server"
-version = "0.5.18"
+version = "0.5.19"
 source = { editable = "." }
 dependencies = [
     { name = "arxiv" },

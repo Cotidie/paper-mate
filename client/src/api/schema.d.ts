@@ -458,6 +458,8 @@ export interface components {
             doi?: string | null;
             /** Venue */
             venue?: string | null;
+            /** Venue Short */
+            venue_short?: string | null;
             /** Year */
             year?: number | null;
         };
@@ -499,6 +501,8 @@ export interface components {
             doi?: string | null;
             /** Venue */
             venue?: string | null;
+            /** Venue Short */
+            venue_short?: string | null;
             /** Year */
             year?: number | null;
             /**

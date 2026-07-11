@@ -12,6 +12,7 @@ const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
   added: 120,
   file_type: 96,
   location: 140,
+  venue_short: 120,
   venue: 200,
   year: 80,
   doi: 200,
@@ -71,6 +72,13 @@ export function useColumnWidths() {
     KEYBOARD_STEP,
     (v) => setWidth("location", v),
   );
+  const venueShort = useDragResize(
+    persisted.venue_short ?? DEFAULT_WIDTHS.venue_short,
+    MIN_COLUMN_WIDTH,
+    MAX_COLUMN_WIDTH,
+    KEYBOARD_STEP,
+    (v) => setWidth("venue_short", v),
+  );
   const venue = useDragResize(
     persisted.venue ?? DEFAULT_WIDTHS.venue,
     MIN_COLUMN_WIDTH,
@@ -99,6 +107,7 @@ export function useColumnWidths() {
     added,
     file_type: fileType,
     location,
+    venue_short: venueShort,
     venue,
     year,
     doi,
@@ -110,6 +119,7 @@ export function useColumnWidths() {
     added: added.value,
     file_type: fileType.value,
     location: location.value,
+    venue_short: venueShort.value,
     venue: venue.value,
     year: year.value,
     doi: doi.value,

@@ -33,6 +33,8 @@ export default function PendingRow({
         return <td key="authors" className="collection-table__authors" />;
       // A fresh upload has no Crossref-enriched metadata yet (it settles via
       // the background pipeline, Story 7.9) - empty cells, no lookup.
+      case "venue_short":
+        return <td key="venue_short" className="collection-table__venue-short" />;
       case "venue":
         return <td key="venue" className="collection-table__venue" />;
       case "year":

@@ -64,6 +64,7 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
     "status": "extracting",      // a new import; settles to ready | enrich-skipped | parse-failed
     "doi": null,                  // string | null; extraction-sourced, filled on settle
     "venue": null,                // string | null; Crossref-sourced, filled on settle
+    "venue_short": null,          // string | null; Crossref-sourced (short-container-title, year-stripped event.acronym, or a trailing "(ACRONYM)" on container-title), else Semantic Scholar's publicationVenue.alternate_names[0] by DOI, null when none apply; read-only
     "year": null,                 // int | null; Crossref-sourced, filled on settle
     "schema_version": 1
   }
@@ -71,7 +72,7 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
 - **400** → `{ "detail": "Could not read PDF file" }` — corrupt, empty, or non-PDF bytes. Nothing is written.
 
 > `Doc` = `doc_id` + the on-disk `meta.json` schema (`DocMeta`:
-> `filename, title, page_count, added, last_opened, authors, authors_list, file_type, status, doi, venue, year, schema_version`).
+> `filename, title, page_count, added, last_opened, authors, authors_list, file_type, status, doi, venue, venue_short, year, schema_version`).
 > `doc_id` is the library folder name and is **not** stored inside `meta.json`
 > (AD-8). `authors`/`file_type`/`status` are additive (Story 6.2); `doi`/`venue`/`year`
 > are additive (Story 7.9, Crossref new-imports-only). `authors_list` is additive
@@ -83,6 +84,14 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
 > import lands at `status: "extracting"`; the background pipeline (Story 6.5)
 > drives the `extracting -> ready | enrich-skipped | parse-failed` transitions
 > and fills `authors_list` and (when Crossref matches) `doi`/`venue`/`year`.
+> `venue_short` is additive (Story 8.5, no `schema_version` bump): a compact
+> venue form (e.g. `"CHI"`, `"ICCV"`) derived from Crossref's
+> `short-container-title`, else a year-stripped `event.acronym`, else a
+> trailing `"(ACRONYM)"` parenthetical on `container-title`, else (fix
+> request) Semantic Scholar's `publicationVenue.alternate_names[0]` looked up
+> by DOI when the paper resolved but still has no short form. Read-only (not
+> in `DocPatch`). The client renders the cell blank when it is `null` (user
+> decision 2026-07-12: no full-venue fallback).
 > This import also indexes the paper into `library.json` (see `GET
 > /api/library` below) as Uncategorized, untrashed, at the next order.
 
@@ -230,6 +239,7 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
         "filename": "a-paper.pdf",
         "doi": null,
         "venue": null,
+        "venue_short": null,
         "year": null
       }
     ],
@@ -242,7 +252,7 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 > `library.json` is the authoritative index for **cross-doc** state: the
 > folder tree, membership (paper → ≤1 folder), trash, star, and paper order. A
 > paper's **own** fields (title/authors/authors_list/added/last_opened/file_type/status/
-> filename/doi/venue/year) stay authoritative in its `meta.json`;
+> filename/doi/venue/venue_short/year) stay authoritative in its `meta.json`;
 > `CollectionRow`'s display fields are a non-authoritative cache of that
 > projection, refreshed from `meta.json` on every index write, so this
 > endpoint never opens N `meta.json` files (LNFR-4). At boot, storage
@@ -262,7 +272,18 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 > until it is re-imported; `doi` is sourced from the PDF extraction (not the
 > matched Crossref work), `venue`/`year` from Crossref's `container-title` /
 > `issued` date, falling back to arXiv's own record (fix request) when
-> Crossref has no venue and the PDF carries an arXiv id.
+> Crossref has no venue and the PDF carries an arXiv id. `venue_short`
+> (Story 8.5) is likewise new-imports-only, optional (`null` on a
+> pre-existing row) and backfills on the next reconcile; it is read-only
+> (not in `DocPatch`) and the client renders the cell blank when it is `null`
+> (no full-venue fallback). Its own source cascades Crossref's
+> `short-container-title` / `event.acronym` / `container-title` parenthetical,
+> then (fix request) a Semantic Scholar lookup by DOI when the paper resolved
+> but still has no short form. **Exception:** when a paper exists on arXiv
+> only (no `journal_ref` — the arXiv fallback's own venue is the literal
+> `"arXiv"`), `venue_short` is set to `"arXiv"` too, matching `venue`, rather
+> than staying blank or querying Semantic Scholar by arXiv's self-assigned
+> DOI (user fix request).
 
 ### `POST /api/library/folders` — create a folder
 
@@ -419,6 +440,10 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-12 (Story 8.5 fix request):** `enrich()`'s arXiv venue/year fallback (Story 7.9 fix request) gains a `venue_short` exception: when a paper exists on arXiv only (no `journal_ref` - the fallback's own `venue` is the literal `"arXiv"`), `venue_short` is set to `"arXiv"` too, matching `venue`, instead of staying blank or querying the Semantic Scholar fallback by arXiv's self-assigned DOI. A `journal_ref` (formally published elsewhere) is unaffected and still goes through the normal cascade. Verified live against a genuinely arXiv-only fixture (arXiv id `1907.10211`): `venue: "arXiv"`, `venue_short: "arXiv"`. No contract change, no new path.
+- **2026-07-12 (Story 8.5 fix request):** `enrich()` gains a third fallback layer: when Crossref (and the arXiv fallback) leave `venue_short` unset on an otherwise-resolved paper that DOES have a `doi`, a new `SemanticScholarEnricher` (`app/domain/semantic_scholar.py`) queries Semantic Scholar's public Graph API (`GET /graph/v1/paper/DOI:{doi}?fields=publicationVenue`) and takes the first `publicationVenue.alternate_names` entry (e.g. `"ICCV"`). Bounded (5s), never raises, never blocks, no API key required at this call volume. Only upgrades `venue_short`; never touches `venue`/`year`/`doi`/`authors`. No contract change (still the same `venue_short` field from Story 8.5), no new path.
+- **2026-07-12 (Story 8.5 fix request):** `_short_venue_from_work`'s cascade gains a third rung: a trailing `"(ACRONYM)"` parenthetical on `container-title[0]` (e.g. `"... Computer Vision (ICCV)"` -> `"ICCV"`), for the many IEEE proceedings works whose `event` carries no `acronym` key at all (verified: DOI 10.1109/iccv.2017.226). Also, the client's Venue (Short) cell no longer falls back to the full venue when `venue_short` is `null` - it renders blank (user decision 2026-07-12, supersedes the original fallback behavior below).
+- **2026-07-12 (Story 8.5):** `DocMeta`/`Doc`/`CollectionRow` gain `venue_short: str | null` (additive, default `null`, no `schema_version` bump) alongside `venue`; `ExtractedMeta` (internal, not in the OpenAPI schema) gains the same field. Captured during the existing Crossref enrichment: `short-container-title[0]` when present, else `event.acronym` with a trailing year token stripped (`"CHI '25"` -> `"CHI"`), else `null`. Meta-derived cache projected through `_cache_from_meta` (mirrors `venue`); Crossref new-imports-only, backfilled by `reconcile_library` for a pre-existing row. Read-only: `DocPatch` is unchanged, `venue_short` is not patchable. No new path.
 - **2026-07-10 (Story 7.11):** `authors` becomes a first-class list end-to-end. `DocMeta` and `CollectionRow` gain `authors_list: string[]` (additive, default `[]`, no `schema_version` bump); `authors` stays but is now always the derived join of `authors_list` (never independently authored). A pre-7.11 `meta.json`/`library.json` row (a joined `authors` string, no `authors_list` key) self-heals its list on read by splitting on `", "` (best-effort). `DocPatch.authors` is replaced by `DocPatch.authors_list: string[] | null` — a full-list replacement (the client sends the complete intended author list; an empty list is a legitimate clear, not a no-op). No new path; contract shape change on `Doc`/`CollectionRow`/`DocPatch`.
 - **2026-07-08 (Story 7.9 fix request):** venue/year/doi/authors gain an arXiv fallback during the existing background enrichment: when Crossref leaves `venue` unset AND the PDF carries an arXiv id (a stamp like `arXiv:2103.12345v2` found in the extracted text), arXiv's own record (via the `arxiv` client library) fills `venue` (its `journal_ref` if the preprint was later formally published, else the literal `"arXiv"`) and `year` (the submission year); when the PDF/Crossref left `doi`/`authors` empty too, arXiv's own self-assigned DOI (the deterministic `10.48550/arXiv.<id>` pattern) and its author list fill those in as well. Crossref, when it does have an answer, stays authoritative; the fallback only fires on a Crossref miss, and never overwrites a real extraction/Crossref-sourced value. No contract change (still the same `DocMeta`/`CollectionRow` fields from Story 7.9), no new path.
 - **2026-07-08 (Story 7.9 fix request):** `DocPatch` gains `venue: str | null`, `year: int | null` (additive; `PATCH /api/docs/{doc_id}` now edits Venue/Year inline alongside Title/Authors). `doi` stays NOT patchable (link-only cell). No new path, no `schema_version` bump.

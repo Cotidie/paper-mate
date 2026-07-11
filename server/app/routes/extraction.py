@@ -39,6 +39,7 @@ def run_extraction(doc_id: str, pdf_bytes: bytes) -> None:
                 status=status,
                 doi=final.doi,
                 venue=final.venue,
+                venue_short=final.venue_short,
                 year=final.year,
             )
         except storage.DocumentNotFoundError:
@@ -54,6 +55,7 @@ def run_extraction(doc_id: str, pdf_bytes: bytes) -> None:
                 status="parse-failed",
                 doi=None,
                 venue=None,
+                venue_short=None,
                 year=None,
             )
         except storage.StorageError:

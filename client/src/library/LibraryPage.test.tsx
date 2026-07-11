@@ -670,6 +670,7 @@ describe("Inline edit Venue/Year (Story 7.9 fix request)", () => {
   const metaRow: api.CollectionRow = {
     ...fakeRow,
     venue: "Journal of Foo",
+    venue_short: "JoF",
     year: 2017,
   };
 
@@ -1232,6 +1233,7 @@ describe("Display, Sort controls (Story 7.4)", () => {
       title: "Meta Paper",
       doi: "10.1234/abcd",
       venue: "Journal of Foo",
+      venue_short: "JoF",
       year: 2017,
     });
     vi.spyOn(api, "getLibrary").mockResolvedValue({ papers: [paper], folders: [] });
@@ -1239,10 +1241,11 @@ describe("Display, Sort controls (Story 7.4)", () => {
     await waitFor(() => expect(screen.getByText("Meta Paper")).toBeTruthy());
 
     expect(screen.queryByRole("columnheader", { name: /^File type/ })).toBeNull();
-    expect(screen.getByRole("columnheader", { name: /^Venue/ })).toBeTruthy();
+    expect(screen.getAllByRole("columnheader", { name: /^Venue/ })).toHaveLength(2); // Venue (Short) + Venue (Full)
     expect(screen.getByRole("columnheader", { name: /^Year/ })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /^DOI/ })).toBeTruthy();
     expect(screen.getByText("Journal of Foo")).toBeTruthy();
+    expect(screen.getByText("JoF")).toBeTruthy();
     expect(screen.getByText("2017")).toBeTruthy();
     expect(screen.getByRole("link", { name: "10.1234/abcd" })).toBeTruthy();
 

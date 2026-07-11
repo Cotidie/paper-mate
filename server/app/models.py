@@ -50,6 +50,9 @@ class ExtractedMeta(BaseModel):
     # fallback (fix request) when Crossref has no venue; the domain's honest
     # shape before storage projects them.
     venue: str | None = None
+    # Story 8.5: a compact venue form (e.g. "CHI") for the Venue (Short)
+    # column, Crossref-sourced (`short-container-title` or `event.acronym`).
+    venue_short: str | None = None
     year: int | None = None
     # A new-style arXiv id (e.g. "2103.12345") found in the PDF text (fix
     # request), NOT projected to DocMeta/CollectionRow: it's a transient
@@ -94,6 +97,10 @@ class DocMeta(BaseModel):
     # missing them still validates via defaults.
     doi: str | None = None
     venue: str | None = None
+    # Additive (Story 8.5, no schema_version bump): the derived Venue (Short)
+    # projection, read-only (not in DocPatch); an existing meta.json missing
+    # it still validates via the default.
+    venue_short: str | None = None
     year: int | None = None
     schema_version: int = 1
 
@@ -276,6 +283,11 @@ class CollectionRow(BaseModel):
     # still validates; reconcile_library backfills them.
     doi: str | None = None
     venue: str | None = None
+    # Additive (Story 8.5, no schema_version bump): the Venue (Short) display
+    # cache, meta-derived like `venue`. Optional so a pre-existing
+    # library.json entry cached before this field existed still validates;
+    # reconcile_library backfills it.
+    venue_short: str | None = None
     year: int | None = None
 
 

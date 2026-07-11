@@ -1027,7 +1027,7 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
         onResizeColumnKeyDown={noop}
       />,
     );
-    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(8);
+    expect(document.querySelectorAll(".collection-table__col-resize-handle").length).toBe(9);
   });
 
   it("pointerdown on a column's handle calls onResizeColumnStart with that column's key", () => {
@@ -1084,20 +1084,22 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
           added: 100,
           file_type: 80,
           location: 120,
+          venue_short: 90,
           venue: 60,
           year: 40,
           doi: 60,
         }}
       />,
     );
-    // Column order (Story 7.10 fix request): title, authors, venue, year, doi, location, added, file_type.
+    // Column order (Story 8.5): title, authors, venue_short, venue, year, doi, location, added, file_type.
     const cols = document.querySelectorAll("colgroup col");
     expect((cols[0] as HTMLElement).style.width).toBe("400px"); // title
     expect((cols[1] as HTMLElement).style.width).toBe("150px"); // authors
-    expect((cols[2] as HTMLElement).style.width).toBe("60px"); // venue
-    expect((cols[3] as HTMLElement).style.width).toBe("40px"); // year
-    expect((cols[4] as HTMLElement).style.width).toBe("60px"); // doi
-    expect((cols[5] as HTMLElement).style.width).toBe("120px"); // location
+    expect((cols[2] as HTMLElement).style.width).toBe("90px"); // venue_short
+    expect((cols[3] as HTMLElement).style.width).toBe("60px"); // venue
+    expect((cols[4] as HTMLElement).style.width).toBe("40px"); // year
+    expect((cols[5] as HTMLElement).style.width).toBe("60px"); // doi
+    expect((cols[6] as HTMLElement).style.width).toBe("120px"); // location
   });
 
   it("sizes the <table> itself to the exact sum of columnWidths (fix request: table-layout:fixed + width:100% rescaled every <col> proportionally when they didn't sum to 100%, so narrowing one column visibly widened another even though its own width state never changed)", () => {
@@ -1112,6 +1114,7 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
           added: 100,
           file_type: 80,
           location: 120,
+          venue_short: 90,
           venue: 60,
           year: 40,
           doi: 60,
@@ -1119,7 +1122,7 @@ describe("CollectionTable column resize (fix request: adjustable column widths)"
       />,
     );
     const table = container.querySelector("table.collection-table") as HTMLElement;
-    expect(table.style.width).toBe("1010px");
+    expect(table.style.width).toBe("1100px");
   });
 
   it("falls back to the CSS width:100% default when columnWidths is omitted", () => {
@@ -1184,6 +1187,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
   const COLUMN_ORDER_KEYS = [
     "title",
     "authors",
+    "venue_short",
     "venue",
     "year",
     "doi",
@@ -1242,7 +1246,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       <CollectionTable rows={[rows[0]]} onOpenRow={noop} onEditField={noop} visibleColumns={reordered} />,
     );
     const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
-    expect(headerTexts).toEqual(["Title", "Venue", "Authors", "Year"]);
+    expect(headerTexts).toEqual(["Title", "Venue (Full)", "Authors", "Year"]);
     const cellClasses = Array.from(document.querySelectorAll("tbody tr td")).map((td) => td.className);
     expect(cellClasses).toEqual([
       "collection-table__title",
@@ -1270,7 +1274,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
     const pendingRow = screen.getByText("brand-new").closest("tr")!;
     const cellClasses = Array.from(pendingRow.querySelectorAll("td")).map((td) => td.className);
-    expect(headerTexts).toEqual(["Title", "Venue", "Authors"]);
+    expect(headerTexts).toEqual(["Title", "Venue (Full)", "Authors"]);
     expect(cellClasses).toEqual([
       "collection-table__title",
       "collection-table__venue",
@@ -1330,7 +1334,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       />,
     );
     const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
-    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue (Full)" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
     fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
@@ -1371,7 +1375,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       />,
     );
     const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
-    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue (Full)" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     // Forward: Authors (idx1) dragged onto Venue (idx2) lands AFTER Venue.
     fireEvent.dragStart(authorsHeader, { dataTransfer });
@@ -1394,7 +1398,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       />,
     );
     const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
-    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue (Full)" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     // Backward: Venue (idx2) dragged onto Authors (idx1) lands BEFORE Authors.
     fireEvent.dragStart(venueHeader, { dataTransfer });
@@ -1415,7 +1419,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       />,
     );
     const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
-    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue (Full)" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
     fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
@@ -1423,7 +1427,8 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     const headerTexts = Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
     expect(headerTexts).toEqual([
       "Title",
-      "Venue",
+      "Venue (Short)",
+      "Venue (Full)",
       "Authors",
       "Year",
       "DOI",
@@ -1446,14 +1451,15 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       />,
     );
     const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
-    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue (Full)" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
     fireColumnDragOver(venueHeader, dataTransfer, clientXFor("venue"));
 
     const firstRowCells = document.querySelectorAll("tbody tr")[0].querySelectorAll("td");
-    expect(firstRowCells[1].className).toBe("collection-table__venue");
-    expect(firstRowCells[2].className).toBe("collection-table__authors");
+    expect(firstRowCells[1].className).toBe("collection-table__venue-short");
+    expect(firstRowCells[2].className).toBe("collection-table__venue");
+    expect(firstRowCells[3].className).toBe("collection-table__authors");
   });
 
   it("reverts the live preview to the committed order on dragend without a drop (drag cancelled, fix request)", () => {
@@ -1468,7 +1474,7 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       />,
     );
     const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
-    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue (Full)" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
     fireEvent.dragOver(venueHeader, { dataTransfer });
@@ -1478,7 +1484,8 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     expect(headerTexts).toEqual([
       "Title",
       "Authors",
-      "Venue",
+      "Venue (Short)",
+      "Venue (Full)",
       "Year",
       "DOI",
       "Location",
@@ -1521,14 +1528,24 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
       />,
     );
     const authorsHeader = screen.getByRole("button", { name: "Authors" }).closest("th")!;
-    const venueHeader = screen.getByRole("button", { name: "Venue" }).closest("th")!;
+    const venueHeader = screen.getByRole("button", { name: "Venue (Full)" }).closest("th")!;
     const dataTransfer = dataTransferStub();
     fireEvent.dragStart(authorsHeader, { dataTransfer });
 
     function headerOrder() {
       return Array.from(document.querySelectorAll("thead th")).map((th) => th.textContent);
     }
-    const swapped = ["Title", "Venue", "Authors", "Year", "DOI", "Location", "Added", "File type"];
+    const swapped = [
+      "Title",
+      "Venue (Short)",
+      "Venue (Full)",
+      "Authors",
+      "Year",
+      "DOI",
+      "Location",
+      "Added",
+      "File type",
+    ];
 
     // Fire the SAME clientX (Venue's slot) on ALTERNATING elements - in a
     // real browser, once a swap happens, native hit-testing routes the next
@@ -1547,7 +1564,8 @@ describe("CollectionTable column reorder (Story 7.10, AC-1/AC-2/AC-4/AC-6)", () 
     fireColumnDragOver(authorsHeader, dataTransfer, clientXFor("year"));
     expect(headerOrder()).toEqual([
       "Title",
-      "Venue",
+      "Venue (Short)",
+      "Venue (Full)",
       "Year",
       "Authors",
       "DOI",
@@ -1676,6 +1694,7 @@ describe("CollectionTable Venue/Year/DOI columns (Story 7.9)", () => {
     order: 0,
     doi: "10.1234/abcd",
     venue: "Journal of Foo",
+    venue_short: "JoF",
     year: 2017,
   };
   const withoutMeta: CollectionRow = {
@@ -1756,11 +1775,79 @@ describe("CollectionTable Venue/Year/DOI columns (Story 7.9)", () => {
     render(
       <CollectionTable rows={[withMeta]} onOpenRow={noop} onEditField={noop} visibleColumns={visibleColumns} />,
     );
-    expect(screen.queryByRole("columnheader", { name: "Venue" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Venue (Full)" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Year" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "DOI" })).toBeNull();
     expect(screen.queryByText("Journal of Foo")).toBeNull();
     expect(screen.queryByRole("link", { name: "10.1234/abcd" })).toBeNull();
+  });
+});
+
+describe("CollectionTable Venue (Short)/Venue (Full) columns (Story 8.5)", () => {
+  const withShortVenue: CollectionRow = {
+    doc_id: "s".repeat(64),
+    title: "Paper With Short Venue",
+    authors: null,
+    authors_list: [],
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    starred: false,
+    order: 0,
+    venue: "Proceedings of the 2025 CHI Conference",
+    venue_short: "CHI",
+  };
+  const withoutShortVenue: CollectionRow = {
+    doc_id: "t".repeat(64),
+    title: "Paper Without Short Venue",
+    authors: null,
+    authors_list: [],
+    added: "2026-07-05T12:00:00+00:00",
+    file_type: "pdf",
+    status: "ready",
+    folder_id: null,
+    trashed: false,
+    starred: false,
+    order: 1,
+    venue: "Journal of Bar",
+    venue_short: null,
+  };
+
+  it("renders the short venue and exposes the full venue via title on hover/focus", () => {
+    render(<CollectionTable rows={[withShortVenue]} onOpenRow={noop} onEditField={noop} />);
+    const shortCell = screen.getByText("CHI").closest("td")!;
+    expect(shortCell.className).toBe("collection-table__venue-short");
+    expect(shortCell.getAttribute("title")).toBe("Proceedings of the 2025 CHI Conference");
+  });
+
+  it("is keyboard-focusable when there is a full venue to reveal (code-review fix: a plain <td> is not in the tab order)", () => {
+    render(<CollectionTable rows={[withShortVenue]} onOpenRow={noop} onEditField={noop} />);
+    const shortCell = screen.getByText("CHI").closest("td")!;
+    expect(shortCell.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("renders blank (no fallback to the full venue) when venue_short is absent (user decision 2026-07-12)", () => {
+    render(<CollectionTable rows={[withoutShortVenue]} onOpenRow={noop} onEditField={noop} />);
+    const shortCell = document.querySelector(".collection-table__venue-short")!;
+    expect(shortCell.textContent).toBe("");
+    // The full venue still renders once, in the Full column only.
+    expect(screen.getAllByText("Journal of Bar")).toHaveLength(1);
+    expect(screen.getByText("Journal of Bar").closest("td")!.className).toBe("collection-table__venue");
+  });
+
+  it("is not focusable when the row has no venue at all (nothing to reveal)", () => {
+    const noVenueRow: CollectionRow = { ...withoutShortVenue, venue: null };
+    render(<CollectionTable rows={[noVenueRow]} onOpenRow={noop} onEditField={noop} />);
+    const shortCell = document.querySelector(".collection-table__venue-short")!;
+    expect(shortCell.hasAttribute("tabindex")).toBe(false);
+  });
+
+  it("the Full column still renders the full venue and stays inline-editable", () => {
+    render(<CollectionTable rows={[withShortVenue]} onOpenRow={noop} onEditField={noop} />);
+    const fullCell = screen.getByText("Proceedings of the 2025 CHI Conference").closest("td")!;
+    expect(fullCell.className).toBe("collection-table__venue");
   });
 });
 
@@ -1779,6 +1866,7 @@ describe("CollectionTable inline edit Venue/Year (Story 7.9 fix request)", () =>
     order: 0,
     doi: "10.1234/abcd",
     venue: "Journal of Foo",
+    venue_short: "JoF",
     year: 2017,
   };
 

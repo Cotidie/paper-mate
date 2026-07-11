@@ -120,6 +120,27 @@ function renderAuthorsCell({
   );
 }
 
+/** Read-only: a derived projection (Story 8.5), no `DocPatch` field. Blank
+ *  when Crossref has no derivable short form (user decision 2026-07-12,
+ *  supersedes the original full-venue-fallback AC), and exposes the full
+ *  venue on hover/focus via `title`. `tabIndex={0}` (code-review fix) makes
+ *  the cell keyboard-reachable so AC-6's "hover/focus" access to the full
+ *  venue holds for keyboard users too, not just a mouse hover - a plain
+ *  `<td>` is not in the tab order otherwise. Only set when there IS a full
+ *  venue to reveal; an empty cell has nothing to focus for. */
+function renderVenueShortCell({ row }: CellContext): ReactNode {
+  return (
+    <td
+      key="venue_short"
+      className="collection-table__venue-short"
+      title={row.venue ?? undefined}
+      tabIndex={row.venue ? 0 : undefined}
+    >
+      {row.venue_short ?? ""}
+    </td>
+  );
+}
+
 function renderVenueCell({
   row,
   editable,
@@ -244,6 +265,7 @@ function renderDoiCell({ row }: CellContext): ReactNode {
 export const CELL_RENDERERS: Record<ColumnKey, CellRenderer> = {
   title: renderTitleCell,
   authors: renderAuthorsCell,
+  venue_short: renderVenueShortCell,
   venue: renderVenueCell,
   year: renderYearCell,
   location: renderLocationCell,
