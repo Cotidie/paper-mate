@@ -4,7 +4,7 @@ baseline_commit: ecfacfc74f2567889bbf4470d0b45368a8e8021a
 
 # Story 8.2: Annotation Bank filter by type (default comments)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -184,3 +184,4 @@ Claude Sonnet 5 (xHigh)
 |------|--------|
 | 2026-07-11 | Implemented Story 8.2: widened `bankItems` to all five annotation types, added `filterBankItems` + `BankPanel` type-filter chip row (default comments only, resets on every reopen), adaptive empty-state copy. Fixed pre-existing `BankPanel.test.tsx`/`ReaderPage.test.tsx` fixtures broken by the new default. 1393/1393 client tests pass; typecheck clean; live-smoked on own dev servers (8010/5183) with one annotation of each type. Status → review. |
 | 2026-07-11 | Addressed Codex `bmad-code-review` findings (2 patch, both resolved): reset-filter effect switched `useEffect` → `useLayoutEffect` (prevented a stale-rows flash on Bank reopen); three test sites (`bank.test.ts`, `BankPanel.test.tsx`) switched from re-listing the five annotation types inline to importing `BANK_FILTER_TYPES`. 1393/1393 tests pass; typecheck clean. Status → review. |
+| 2026-07-11 | PR #64 merged to `main`. `server/pyproject.toml` version bumped 0.5.13 → 0.5.14 (PATCH +1 per completed story). Status → done. |
