@@ -138,6 +138,30 @@ describe("bankItems (Story 8.3, reading order)", () => {
     expect(rows.map((r) => r.id)).toEqual(["left", "right"]);
   });
 
+  it("AC-1: the epsilon band is transitive — a chain of near-equal-y marks sorts the same regardless of input order (Codex review finding)", () => {
+    // y0 = 0, 0.009, 0.018: each CONSECUTIVE pair is within the 0.01 epsilon,
+    // but the first/last pair (0.018 apart) is not — the classic case where a
+    // pairwise "within epsilon counts as equal" comparator is non-transitive
+    // (A ties B, B ties C, but A strictly precedes C), so `Array.sort` (which
+    // assumes a total order) can return a DIFFERENT result depending on the
+    // input's original order. Descending x0 makes the left-to-right tie-break
+    // disagree with the top-to-bottom order, so a non-transitive comparator
+    // would visibly disagree across permutations.
+    const a = textMark("a", {}, "x", [{ x0: 0.9, y0: 0, x1: 1.0, y1: 0.02 }]);
+    const b = textMark("b", {}, "x", [{ x0: 0.5, y0: 0.009, x1: 0.6, y1: 0.03 }]);
+    const c = textMark("c", {}, "x", [{ x0: 0.1, y0: 0.018, x1: 0.2, y1: 0.04 }]);
+    const permutations = [
+      [a, b, c],
+      [c, b, a],
+      [b, a, c],
+      [a, c, b],
+    ];
+    const results = permutations.map((marks) => bankItems(marks, "doc-1").map((r) => r.id));
+    for (const result of results) {
+      expect(result).toEqual(results[0]);
+    }
+  });
+
   it("AC-1: two marks with identical (page, y0, x0) fall back to created_at order", () => {
     const rows = bankItems(
       [
@@ -172,6 +196,28 @@ describe("bankItems (Story 8.3, reading order)", () => {
       "doc-1",
     );
     expect(rows.map((r) => r.id)).toEqual(["region", "text", "pen"]);
+  });
+
+  it("AC-3: a region and a pen on the SAME row sort by their bbox LEFT, not just Y (Codex review finding)", () => {
+    const rows = bankItems(
+      [
+        regionMark("region-right", {
+          anchor: { kind: "rect", page_index: 0, rect: { x0: 0.6, y0: 0.5, x1: 0.9, y1: 0.55 } },
+        }),
+        penMark("pen-left", {
+          anchor: {
+            kind: "path",
+            page_index: 0,
+            points: [
+              { x: 0.1, y: 0.5 },
+              { x: 0.2, y: 0.51 },
+            ],
+          },
+        }),
+      ],
+      "doc-1",
+    );
+    expect(rows.map((r) => r.id)).toEqual(["pen-left", "region-right"]);
   });
 
   it("dedups a group_id-shared pair into ONE row, keeping the earliest sibling", () => {

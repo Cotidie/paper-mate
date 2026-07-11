@@ -106,49 +106,80 @@ function toBankItem(a: Annotation): BankItem {
   };
 }
 
-/** Same-row tolerance for the reading-order Y comparison (D2): two rects
- *  whose `top` differ by less than this count as one "row" and order by
- *  `left` instead — a typical line-height is ~0.015 of the page box, so this
- *  catches same-line marks without merging adjacent lines. Validated against
- *  a real paper in Task 5 live smoke; tune here if it proves off. */
+/** Same-row tolerance for the reading-order Y comparison (D2): a mark chains
+ *  into the CURRENT row (see the clustering pass in `bankItems` below) when
+ *  its `top` is within this of the row's most recently added member — a
+ *  typical line-height is ~0.015 of the page box, so this catches same-line
+ *  marks without merging adjacent lines. Validated against a real paper in
+ *  Task 5 live smoke; tune here if it proves off. */
 const READING_ORDER_Y_EPSILON = 0.01;
 
-/** page ascending, then epsilon-banded top (same "row" ties go to `left`
- *  ascending), then `created_at` as the final deterministic tie-break. */
-function readingOrderCompare(
-  a: { pageIndex: number; top: number; left: number; createdAt: string },
-  b: { pageIndex: number; top: number; left: number; createdAt: string },
-): number {
+/** Strict, transitive pre-sort — page ascending, then `top` ascending — used
+ *  ONLY to put marks into a stable top-to-bottom order for the row-clustering
+ *  pass below. Deliberately does NOT apply the epsilon band here: a pairwise
+ *  "within ε counts as equal" comparator is not transitive (three marks with
+ *  consecutive gaps each ≤ ε but a first/last gap > ε form a genuine cycle —
+ *  A ties B, B ties C, but A strictly precedes C), so `Array.sort` (which
+ *  assumes a total order) returns a different, non-deterministic result
+ *  depending on input order — violating AC-1's determinism (Codex review
+ *  finding; reproduced: the same 3 marks sorted differently across 4 input
+ *  permutations). Row membership must come from a one-directional chaining
+ *  pass over an already-sorted sequence, never a runtime pairwise epsilon
+ *  comparison. */
+function byPageThenTop(a: { pageIndex: number; top: number }, b: { pageIndex: number; top: number }): number {
   if (a.pageIndex !== b.pageIndex) return a.pageIndex - b.pageIndex;
-  if (Math.abs(a.top - b.top) > READING_ORDER_Y_EPSILON) return a.top - b.top;
-  if (a.left !== b.left) return a.left - b.left;
-  return a.createdAt.localeCompare(b.createdAt);
+  return a.top - b.top;
 }
 
 /**
  * The Bank's row list (AC #1): every `docId` annotation of any of the five
  * types, ordered in reading order (FR-24, AR-12) — page ascending, then
- * top-to-bottom, then left-to-right for same-row ties, with `created_at` as
- * the final deterministic tie-break — with a two-page group (shared
- * non-null `group_id`) collapsed to ONE row, the first sibling encountered
- * after sorting (i.e. its earliest-page, top-most one, AC #2), so the jump
- * lands on its own page/anchor. Callers that want a subset (e.g.
- * `BankPanel`'s type filter) narrow the result with `filterBankItems`.
+ * top-to-bottom (epsilon-banded into "rows" by the clustering pass below),
+ * then left-to-right for same-row ties, with `created_at` as the final
+ * deterministic tie-break — with a two-page group (shared non-null
+ * `group_id`) collapsed to ONE row, the first sibling encountered after
+ * sorting (i.e. its earliest-page, top-most one, AC #2), so the jump lands
+ * on its own page/anchor. Callers that want a subset (e.g. `BankPanel`'s
+ * type filter) narrow the result with `filterBankItems`.
  */
 export function bankItems(annotations: Iterable<Annotation>, docId: string): BankItem[] {
-  const ordered = [...annotations]
+  const pairs = [...annotations]
     .filter((a) => a.doc_id === docId)
     .map((a) => ({ annotation: a, item: toBankItem(a) }))
     .sort((x, y) =>
-      readingOrderCompare(
-        { pageIndex: x.item.pageIndex, top: x.item.topFraction, left: x.item.leftFraction, createdAt: x.annotation.created_at },
-        { pageIndex: y.item.pageIndex, top: y.item.topFraction, left: y.item.leftFraction, createdAt: y.annotation.created_at },
-      ),
+      byPageThenTop({ pageIndex: x.item.pageIndex, top: x.item.topFraction }, { pageIndex: y.item.pageIndex, top: y.item.topFraction }),
     );
+
+  // Chain consecutive (now top-ordered) marks into "rows": a mark joins the
+  // current row when it is within ε of the PREVIOUS mark added to it, else
+  // starts a new row (and every page change always starts a new row). This
+  // one-directional pass can never contradict itself the way a pairwise
+  // epsilon comparator can (see `byPageThenTop` above).
+  let rowRank = -1;
+  let rowPage = -1;
+  let rowTop = -Infinity;
+  const withRow = pairs.map(({ annotation, item }) => {
+    if (item.pageIndex !== rowPage || item.topFraction - rowTop > READING_ORDER_Y_EPSILON) {
+      rowRank++;
+      rowPage = item.pageIndex;
+    }
+    rowTop = item.topFraction;
+    return { annotation, item, rowRank };
+  });
+
+  // Final order: page → row → left → `created_at` tie-break — every key here
+  // is a plain value comparison against a precomputed field, so (unlike the
+  // old pairwise-epsilon comparator) this is fully transitive.
+  withRow.sort((x, y) => {
+    if (x.item.pageIndex !== y.item.pageIndex) return x.item.pageIndex - y.item.pageIndex;
+    if (x.rowRank !== y.rowRank) return x.rowRank - y.rowRank;
+    if (x.item.leftFraction !== y.item.leftFraction) return x.item.leftFraction - y.item.leftFraction;
+    return x.annotation.created_at.localeCompare(y.annotation.created_at);
+  });
 
   const seenGroups = new Set<string>();
   const rows: BankItem[] = [];
-  for (const { annotation: a, item } of ordered) {
+  for (const { annotation: a, item } of withRow) {
     if (a.group_id != null) {
       if (seenGroups.has(a.group_id)) continue;
       seenGroups.add(a.group_id);

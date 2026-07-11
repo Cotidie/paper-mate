@@ -1045,13 +1045,58 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
   });
 
-  it("scroll (incl. zoom recenter) re-anchors the box instead of closing it (bug fix: closing on scroll self-closed a Bank-jump-opened box on its own smooth scroll)", async () => {
-    setup([textMark("m1")], "m1");
-    await screen.findByTestId("selection-quick-box");
+  it("scroll (incl. zoom recenter) re-anchors the box to the mark's LIVE screen point instead of closing it (bug fix: closing on scroll self-closed a Bank-jump-opened box on its own smooth scroll)", async () => {
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().addAnnotation(textMark("m1"));
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    const box = await screen.findByTestId("selection-quick-box");
+    const topBefore = box.style.top;
+
+    // Simulate the canvas having scrolled: the card's live screen position
+    // moves (mirrors what a real `getBoundingClientRect()` would report after
+    // a scroll), THEN fire the scroll event the component listens for.
+    pages[0].cardEl.getBoundingClientRect = () =>
+      ({ left: 0, top: -500, right: 600, bottom: 300, width: 600, height: 800, x: 0, y: -500 }) as DOMRect;
     fireEvent.scroll(document, {});
-    // The box stays open (repositioned, not dismissed) and the selection stays ringed.
+
+    // The box stays open (repositioned, not dismissed)...
     expect(screen.queryByTestId("selection-quick-box")).not.toBeNull();
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
+    // ...AND its position actually follows the card's new screen point (not
+    // frozen at the pre-scroll value) — this is what "re-anchors" means; a
+    // test that only checks the box is still mounted would pass even if the
+    // reposition math silently no-op'd.
+    expect(box.style.top).not.toBe(topBefore);
+  });
+
+  it("selecting a second non-memo mark on ANOTHER page (e.g. a Bank jump) re-anchors the box to the NEW mark, not a stale one (Codex review finding: a useCallback memoized only on isMemoSelected froze the box on whichever mark was selected when isMemoSelected last actually changed)", async () => {
+    const pageA = fakeCard(0, 0);
+    const pageB = fakeCard(1, 5000);
+    const m1 = textMark("m1"); // page_index 0 (fakeCard top=0)
+    const m2 = textMark("m2");
+    m2.anchor = { kind: "text", page_index: 1, rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }], text: "y" };
+    useAnnotationStore.getState().addAnnotation(m1);
+    useAnnotationStore.getState().addAnnotation(m2);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [pageA, pageB]} scale={1} enabled rectReader={reader} />);
+
+    act(() => useAnnotationStore.getState().select("m1"));
+    const box = await screen.findByTestId("selection-quick-box");
+    const topOnPageA = parseFloat(box.style.top);
+    expect(topOnPageA).toBeLessThan(500); // anchored near pageA's cardEl top (0)
+
+    // A second, DIFFERENT non-memo mark on another page — the exact sequence
+    // `handleBankJump` produces (`select(item.id)` twice in a row, never
+    // passing through a memo selection in between, so `isMemoSelected` never
+    // flips and a `useCallback` memoized only on it would stay frozen).
+    act(() => useAnnotationStore.getState().select("m2"));
+    await waitFor(() => expect(parseFloat(box.style.top)).not.toBe(topOnPageA));
+    const topOnPageB = parseFloat(box.style.top);
+    // pageB's cardEl top (5000) is far below the viewport, so `clampToViewport`
+    // pins the box near the viewport's bottom edge rather than the raw 5000 —
+    // the property that matters is that it moved WAY down from pageA's
+    // near-top position, not a specific pixel value.
+    expect(topOnPageB).toBeGreaterThan(topOnPageA + 300);
   });
 
   it("does not delete on Del while typing in an input (editable exempt)", () => {
