@@ -221,3 +221,9 @@ Added 5 new jsdom unit tests (`measureSelectedLines (text clipping)` describe bl
 - `client/src/render/paragraphCopy.test.ts` (new)
 - `client/src/render/textSelection.ts` (modified: added the `copy` listener + import)
 
+### Review Findings
+
+- [ ] [Review][Patch] Sparse selections normalize away the only large paragraph gap and real pdf.js font size is never measured [client/src/render/paragraphCopy.ts:72]
+- [ ] [Review][Patch] Mixed selections with text outside registered text layers pass the endpoint-only guard and lose native clipboard content [client/src/render/textSelection.ts:115]
+- [ ] [Review][Patch] Multi-range PDF selections are validated in full but only the first range is copied [client/src/render/paragraphCopy.ts:169]
+- [ ] [Review][Patch] Existing line-edge whitespace is not normalized, so a soft-wrap boundary can contain multiple spaces or defeat de-hyphenation [client/src/render/paragraphCopy.ts:117]
