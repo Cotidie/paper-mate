@@ -688,7 +688,7 @@ def test_enrich_arxiv_doi_fill_only_fires_alongside_a_successful_venue_fallback(
 # --- semantic_scholar (Story 8.5 fix request): venue-acronym fallback -------
 
 
-def test_semantic_scholar_enricher_returns_first_alternate_name(fake_semantic_scholar_httpx):
+def test_semantic_scholar_enricher_returns_acronym_shaped_alternate_name(fake_semantic_scholar_httpx):
     def handler(url, params):
         assert url == "https://api.semanticscholar.org/graph/v1/paper/DOI:10.1109/iccv.2017.226"
         assert params == {"fields": "publicationVenue"}
@@ -699,6 +699,40 @@ def test_semantic_scholar_enricher_returns_first_alternate_name(fake_semantic_sc
 
     fake_semantic_scholar_httpx(handler)
     assert SemanticScholarEnricher().fetch("10.1109/iccv.2017.226") == "ICCV"
+
+
+def test_semantic_scholar_enricher_scans_past_a_non_acronym_first_entry(fake_semantic_scholar_httpx):
+    """Code-review fix: `alternate_names` is NOT ordered acronym-first.
+    Verified live: DOI 10.18653/v1/2020.acl-main.1 returns the bare acronym
+    ("ACL") at index 2, behind two longer non-acronym-shaped variants."""
+
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {
+                "publicationVenue": {
+                    "name": "Annual Meeting of the Association for Computational Linguistics",
+                    "alternate_names": [
+                        "Annu Meet Assoc Comput Linguistics",
+                        "Meeting of the Association for Computational Linguistics",
+                        "ACL",
+                        "Meet Assoc Comput Linguistics",
+                    ],
+                }
+            },
+        )
+
+    fake_semantic_scholar_httpx(handler)
+    assert SemanticScholarEnricher().fetch("10.18653/v1/2020.acl-main.1") == "ACL"
+
+
+def test_semantic_scholar_enricher_none_when_no_alternate_name_is_acronym_shaped(fake_semantic_scholar_httpx):
+    fake_semantic_scholar_httpx(
+        lambda url, params: _FakeResponse(
+            200, {"publicationVenue": {"alternate_names": ["IEEE Int Conf Comput Vis", "ICCV Workshops"]}}
+        )
+    )
+    assert SemanticScholarEnricher().fetch("10.1/x") is None
 
 
 def test_semantic_scholar_enricher_none_on_empty_or_missing_alternate_names(fake_semantic_scholar_httpx):

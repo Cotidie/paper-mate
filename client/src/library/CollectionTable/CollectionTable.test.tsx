@@ -1822,6 +1822,12 @@ describe("CollectionTable Venue (Short)/Venue (Full) columns (Story 8.5)", () =>
     expect(shortCell.getAttribute("title")).toBe("Proceedings of the 2025 CHI Conference");
   });
 
+  it("is keyboard-focusable when there is a full venue to reveal (code-review fix: a plain <td> is not in the tab order)", () => {
+    render(<CollectionTable rows={[withShortVenue]} onOpenRow={noop} onEditField={noop} />);
+    const shortCell = screen.getByText("CHI").closest("td")!;
+    expect(shortCell.getAttribute("tabindex")).toBe("0");
+  });
+
   it("renders blank (no fallback to the full venue) when venue_short is absent (user decision 2026-07-12)", () => {
     render(<CollectionTable rows={[withoutShortVenue]} onOpenRow={noop} onEditField={noop} />);
     const shortCell = document.querySelector(".collection-table__venue-short")!;
@@ -1829,6 +1835,13 @@ describe("CollectionTable Venue (Short)/Venue (Full) columns (Story 8.5)", () =>
     // The full venue still renders once, in the Full column only.
     expect(screen.getAllByText("Journal of Bar")).toHaveLength(1);
     expect(screen.getByText("Journal of Bar").closest("td")!.className).toBe("collection-table__venue");
+  });
+
+  it("is not focusable when the row has no venue at all (nothing to reveal)", () => {
+    const noVenueRow: CollectionRow = { ...withoutShortVenue, venue: null };
+    render(<CollectionTable rows={[noVenueRow]} onOpenRow={noop} onEditField={noop} />);
+    const shortCell = document.querySelector(".collection-table__venue-short")!;
+    expect(shortCell.hasAttribute("tabindex")).toBe(false);
   });
 
   it("the Full column still renders the full venue and stays inline-editable", () => {
