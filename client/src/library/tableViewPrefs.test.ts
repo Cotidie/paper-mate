@@ -28,6 +28,7 @@ describe("useTableViewPrefs actions", () => {
       "title",
       "doi",
       "authors",
+      "venue_short",
       "venue",
       "year",
       "location",
@@ -85,7 +86,18 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
 
   it("drops an unknown/removed column key from a persisted order", async () => {
     await rehydrateWith({
-      order: ["title", "authors", "removed-column", "venue", "year", "doi", "location", "added", "file_type"],
+      order: [
+        "title",
+        "authors",
+        "venue_short",
+        "removed-column",
+        "venue",
+        "year",
+        "doi",
+        "location",
+        "added",
+        "file_type",
+      ],
       hidden: [],
       widths: {},
     });
@@ -94,12 +106,13 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
 
   it("appends a known column missing from a persisted order, at the end (not spliced into the middle)", async () => {
     await rehydrateWith({
-      order: ["title", "venue", "year", "doi", "location", "added", "file_type"], // authors missing
+      order: ["title", "venue_short", "venue", "year", "doi", "location", "added", "file_type"], // authors missing
       hidden: [],
       widths: {},
     });
     expect(useTableViewPrefs.getState().order).toEqual([
       "title",
+      "venue_short",
       "venue",
       "year",
       "doi",
@@ -112,7 +125,7 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
 
   it("appends MULTIPLE missing columns in DEFAULT_ORDER's own relative sequence", async () => {
     await rehydrateWith({
-      order: ["title", "location", "doi"], // authors, venue, year, added, file_type all missing
+      order: ["title", "location", "doi"], // authors, venue_short, venue, year, added, file_type all missing
       hidden: [],
       widths: {},
     });
@@ -121,6 +134,7 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
       "location",
       "doi",
       "authors",
+      "venue_short",
       "venue",
       "year",
       "added",
@@ -128,9 +142,28 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
     ]);
   });
 
+  it("appends venue_short (Story 8.5) at the end when absent from an otherwise-complete persisted order", async () => {
+    await rehydrateWith({
+      order: ["title", "authors", "venue", "year", "doi", "location", "added", "file_type"], // venue_short missing
+      hidden: [],
+      widths: {},
+    });
+    expect(useTableViewPrefs.getState().order).toEqual([
+      "title",
+      "authors",
+      "venue",
+      "year",
+      "doi",
+      "location",
+      "added",
+      "file_type",
+      "venue_short",
+    ]);
+  });
+
   it("force-pins Title to index 0 regardless of a stored order", async () => {
     await rehydrateWith({
-      order: ["authors", "title", "venue", "year", "doi", "location", "added", "file_type"],
+      order: ["authors", "title", "venue_short", "venue", "year", "doi", "location", "added", "file_type"],
       hidden: [],
       widths: {},
     });
@@ -139,7 +172,18 @@ describe("useTableViewPrefs reconcile-on-load (AC-5, forward-compat)", () => {
 
   it("collapses a duplicate column key to its first occurrence (corrupt order, code-review fix)", async () => {
     await rehydrateWith({
-      order: ["title", "authors", "authors", "venue", "year", "doi", "location", "added", "file_type"],
+      order: [
+        "title",
+        "authors",
+        "authors",
+        "venue_short",
+        "venue",
+        "year",
+        "doi",
+        "location",
+        "added",
+        "file_type",
+      ],
       hidden: [],
       widths: {},
     });

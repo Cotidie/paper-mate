@@ -96,6 +96,7 @@ export function docToRow(doc: Doc, papers: CollectionRow[]): CollectionRow {
     filename: doc.filename,
     doi: doc.doi ?? null,
     venue: doc.venue ?? null,
+    venue_short: doc.venue_short ?? null,
     year: doc.year ?? null,
   };
 }

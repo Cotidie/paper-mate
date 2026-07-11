@@ -6,10 +6,13 @@ import { COLUMN_DRAG_MIME, buildColumnDragPreview } from "./dragPreview";
 import "./CollectionTable.css";
 import "@/library/TableControls/TableControls.css";
 
-/** `file_type`'s CSS class suffix drops the underscore (`col-file-type`);
- *  every other key is already a valid class-name segment. */
+/** `file_type`/`venue_short`'s CSS class suffix drops the underscore
+ *  (`col-file-type`/`col-venue-short`); every other key is already a valid
+ *  class-name segment. */
 function columnClassSuffix(key: ColumnKey): string {
-  return key === "file_type" ? "file-type" : key;
+  if (key === "file_type") return "file-type";
+  if (key === "venue_short") return "venue-short";
+  return key;
 }
 
 /** `aria-sort` for a sortable column's `<th>` (fix request: the visual caret

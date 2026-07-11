@@ -33,6 +33,10 @@
   width: var(--collection-table-location-width);
 }
 
+.collection-table__col-venue-short {
+  width: var(--collection-table-venue-short-width);
+}
+
 .collection-table__col-venue {
   width: var(--collection-table-venue-width);
 }
@@ -454,6 +458,12 @@
 
 .collection-table__untitled {
   color: var(--color-muted);
+}
+
+.collection-table__venue-short {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .collection-table__venue {

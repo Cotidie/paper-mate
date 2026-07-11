@@ -412,6 +412,30 @@ def test_meta_from_work_no_container_title_yields_venue_none():
     assert meta.year is None
 
 
+# --- _short_venue_from_work (Story 8.5) --------------------------------------
+
+
+def test_short_venue_from_work_prefers_short_container_title():
+    work = {"short-container-title": ["CHI"], "event": {"acronym": "CHI '25"}}
+    assert crossref._short_venue_from_work(work) == "CHI"
+
+
+def test_short_venue_from_work_falls_back_to_year_stripped_acronym():
+    # Verified live: DOI 10.1145/3706598.3713941 returns an empty
+    # short-container-title but event.acronym == "CHI '25".
+    assert crossref._short_venue_from_work({"event": {"acronym": "CHI '25"}}) == "CHI"
+    assert crossref._short_venue_from_work({"event": {"acronym": "WWW 2024"}}) == "WWW"
+
+
+def test_short_venue_from_work_none_when_neither_exists():
+    assert crossref._short_venue_from_work({}) is None
+    assert crossref._short_venue_from_work({"short-container-title": [], "event": {}}) is None
+
+
+def test_short_venue_from_work_acronym_without_year_passes_through_unchanged():
+    assert crossref._short_venue_from_work({"event": {"acronym": "NeurIPS"}}) == "NeurIPS"
+
+
 # --- arxiv_enrich (fix request): venue/year fallback for a Crossref-less preprint --
 
 

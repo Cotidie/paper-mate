@@ -5,7 +5,16 @@
  * leaves: sort in `columnSort.ts`, reorder in `columnReorder.ts` (Story 7.12
  * AC-4: the column model reads as a coherent set of leaves, not one fused file).
  */
-export type ColumnKey = "title" | "authors" | "added" | "file_type" | "location" | "venue" | "year" | "doi";
+export type ColumnKey =
+  | "title"
+  | "authors"
+  | "added"
+  | "file_type"
+  | "location"
+  | "venue_short"
+  | "venue"
+  | "year"
+  | "doi";
 
 export interface ColumnDef {
   key: ColumnKey;
@@ -41,7 +50,8 @@ export const MAX_COLUMN_WIDTH = 640;
 export const COLUMNS: ColumnDef[] = [
   { key: "title", label: "Title", hideable: false, sortable: true, cellType: "text" },
   { key: "authors", label: "Authors", hideable: true, sortable: true, cellType: "tag" },
-  { key: "venue", label: "Venue", hideable: true, sortable: true, cellType: "text" },
+  { key: "venue_short", label: "Venue (Short)", hideable: true, sortable: true, cellType: "text" },
+  { key: "venue", label: "Venue (Full)", hideable: true, sortable: true, cellType: "text" },
   { key: "year", label: "Year", hideable: true, sortable: true, cellType: "number" },
   { key: "doi", label: "DOI", hideable: true, sortable: true, cellType: "text" },
   { key: "location", label: "Location", hideable: true, sortable: true, cellType: "text" },

@@ -13,6 +13,7 @@ from app.models import (
     DocIdSet,
     DocMeta,
     DocPatch,
+    ExtractedMeta,
     Folder,
     Library,
     MoveRequest,
@@ -212,6 +213,29 @@ def test_doc_meta_round_trips_doi_venue_year() -> None:
     assert meta.doi == "10.1234/abcd"
     assert meta.venue == "Journal of Foo"
     assert meta.year == 2017
+
+
+def test_extracted_meta_defaults_venue_short_to_none() -> None:
+    assert ExtractedMeta().venue_short is None
+
+
+def test_doc_meta_defaults_venue_short_when_missing() -> None:
+    """Story 8.5, AC-1: an existing meta.json missing venue_short still
+    validates via the default (additive, no schema_version bump)."""
+    meta = DocMeta(filename="f.pdf", page_count=1, added="t", last_opened="t")
+    assert meta.venue_short is None
+
+
+def test_doc_meta_round_trips_venue_short() -> None:
+    meta = DocMeta(
+        filename="f.pdf",
+        page_count=1,
+        added="t",
+        last_opened="t",
+        venue="Proceedings of the 2025 CHI Conference",
+        venue_short="CHI",
+    )
+    assert meta.venue_short == "CHI"
 
 
 def test_doc_meta_authors_list_is_authoritative_derives_join() -> None:
@@ -433,6 +457,40 @@ def test_collection_row_defaults_doi_venue_year_when_missing() -> None:
     assert row.doi is None
     assert row.venue is None
     assert row.year is None
+
+
+def test_collection_row_defaults_venue_short_when_missing() -> None:
+    """Story 8.5: a pre-existing library.json entry cached before venue_short
+    existed still validates; reconcile_library backfills it."""
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+    )
+    assert row.venue_short is None
+
+
+def test_collection_row_accepts_and_round_trips_venue_short() -> None:
+    row = CollectionRow(
+        doc_id="d1",
+        title="A Paper",
+        authors=None,
+        added="2026-07-05T00:00:00+00:00",
+        file_type="pdf",
+        status="ready",
+        folder_id=None,
+        trashed=False,
+        order=0,
+        venue="Proceedings of the 2025 CHI Conference",
+        venue_short="CHI",
+    )
+    assert row.venue_short == "CHI"
 
 
 def test_collection_row_accepts_and_round_trips_authors_list() -> None:

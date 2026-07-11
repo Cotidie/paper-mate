@@ -35,6 +35,8 @@ function sortKey(row: CollectionRow, column: ColumnKey, folderNameById: Map<stri
       return row.file_type;
     case "location":
       return row.folder_id ? (folderNameById.get(row.folder_id) ?? UNCATEGORIZED_LABEL) : UNCATEGORIZED_LABEL;
+    case "venue_short":
+      return row.venue_short || row.venue || "";
     case "venue":
       return row.venue ?? "";
     case "year":

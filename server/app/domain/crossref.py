@@ -72,6 +72,32 @@ def _venue_from_work(work: dict) -> str | None:
     return clean(containers[0]) if containers else None
 
 
+#: A trailing year token on a Crossref `event.acronym` (e.g. "CHI '25" ->
+#: "CHI"; the Year column already carries the year). Matches an optional
+#: leading straight/curly apostrophe/backtick then 2-4 trailing digits.
+_VENUE_YEAR_SUFFIX = re.compile(r"\s*['‘’`]?\d{2,4}\s*$")
+
+
+def _short_venue_from_work(work: dict) -> str | None:
+    """Short venue for the Venue (Short) column (Story 8.5). Crossref's own
+    ``short-container-title`` is the first choice, but it is empty for many
+    ACM/IEEE conference proceedings (verified: DOI 10.1145/3706598.3713941
+    returns an empty ``short-container-title`` but ``event.acronym`` == "CHI
+    '25"). Fall back to ``event.acronym`` with its trailing year token stripped
+    ("CHI '25" -> "CHI"; the Year column carries the year). ``None`` when
+    neither exists, and the client cell then falls back to the full venue."""
+    shorts = work.get("short-container-title") or []
+    short = clean(shorts[0]) if shorts else None
+    if short:
+        return short
+    event = work.get("event")
+    acronym = clean(event.get("acronym")) if isinstance(event, dict) else None
+    if acronym:
+        stripped = _VENUE_YEAR_SUFFIX.sub("", acronym).strip()
+        return stripped or acronym
+    return None
+
+
 def _year_from_work(work: dict) -> int | None:
     for key in _YEAR_KEYS:
         entry = work.get(key)
@@ -102,6 +128,7 @@ def _meta_from_work(work: dict, doi: str | None) -> ExtractedMeta | None:
         authors=_authors_from_crossref(work),
         doi=doi,
         venue=_venue_from_work(work),
+        venue_short=_short_venue_from_work(work),
         year=_year_from_work(work),
     )
 
