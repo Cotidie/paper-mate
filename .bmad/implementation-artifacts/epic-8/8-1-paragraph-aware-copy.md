@@ -4,7 +4,7 @@ baseline_commit: 944a91407adab9c314faad3440d5f3cb9fcc9be7
 
 # Story 8.1: Paragraph-aware copy (join soft-wrapped lines)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -72,42 +72,42 @@ Transformers have become the dominant architecture for sequence modeling.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Spike the paragraph-vs-wrap heuristic (AC: 2, 3).** Do this FIRST; do not build the production path until the heuristic is validated.
-  - [ ] Run YOUR OWN dev servers (fresh `uvicorn` + `vite dev`, alternate ports if defaults are taken — do NOT reuse a user-launched or Docker server; see CLAUDE.md). Upload/open 2–3 **real** papers covering the three hard layouts: **multi-column** (two-column conference paper), **justified** body text (fills the column width), and **indented-first-line** paragraphs. Existing uploads under the data dir (`./.paper-mate`) work if they cover these.
-  - [ ] In the browser console (or a throwaway module), select a wrapped passage and read the selected `.textLayer` spans' per-line geometry: for each visual line, its top/left/right via `getBoundingClientRect()` and its font-size. Confirm which signals actually separate a soft wrap from a real break on these papers:
+- [x] **Task 1 — Spike the paragraph-vs-wrap heuristic (AC: 2, 3).** Do this FIRST; do not build the production path until the heuristic is validated.
+  - [x] Run YOUR OWN dev servers (fresh `uvicorn` + `vite dev`, alternate ports if defaults are taken — do NOT reuse a user-launched or Docker server; see CLAUDE.md). Upload/open 2–3 **real** papers covering the three hard layouts: **multi-column** (two-column conference paper), **justified** body text (fills the column width), and **indented-first-line** paragraphs. Existing uploads under the data dir (`./.paper-mate`) work if they cover these.
+  - [x] In the browser console (or a throwaway module), select a wrapped passage and read the selected `.textLayer` spans' per-line geometry: for each visual line, its top/left/right via `getBoundingClientRect()` and its font-size. Confirm which signals actually separate a soft wrap from a real break on these papers:
     - **Y-gap:** `top(nextLine) - top(line)` vs the page's typical line-height (median line-to-line gap, or modal font-size). A wrap ≈ 1 line-height; a paragraph break is larger, or there is a blank line.
     - **Indent:** does the next line start at the column's left edge (wrap) or indented right of it (new paragraph first line)?
     - **Fill / trailing punctuation:** is the current line filled to (near) the column's right edge (wrap), or short and ending in sentence punctuation (likely a real end)?
     - **Column boundary:** in a two-column layout, a "next line" that jumps to the other column's top is a real break, not a wrap.
-  - [ ] Settle the initial rule + thresholds and the default for an **ambiguous** line (recommendation: default to JOIN, matching normal reader/browser copy — the visible AC-1 win is the common case). Record the chosen signals + thresholds in the Dev Agent Record.
-  - [ ] **Decide the hyphenation edge:** a wrap that breaks a word (`trans-\nformer`) — join as `trans- former`, de-hyphenate to `transformer`, or leave as-is. Pick one and note it (see Open design calls).
+  - [x] Settle the initial rule + thresholds and the default for an **ambiguous** line (recommendation: default to JOIN, matching normal reader/browser copy — the visible AC-1 win is the common case). Record the chosen signals + thresholds in the Dev Agent Record.
+  - [x] **Decide the hyphenation edge:** a wrap that breaks a word (`trans-\nformer`) — join as `trans- former`, de-hyphenate to `transformer`, or leave as-is. Pick one and note it (see Open design calls).
 
-- [ ] **Task 2 — Extract a pure, testable heuristic module (AC: 1, 2, 6).** Prefer an OOP/functional decomposition that isolates the string logic from DOM measurement so it is unit-testable in jsdom.
-  - [ ] Add a small module `client/src/render/paragraphCopy.ts` (co-located with `render/textSelection.ts`, the text layer's other owner). Split it into:
+- [x] **Task 2 — Extract a pure, testable heuristic module (AC: 1, 2, 6).** Prefer an OOP/functional decomposition that isolates the string logic from DOM measurement so it is unit-testable in jsdom.
+  - [x] Add a small module `client/src/render/paragraphCopy.ts` (co-located with `render/textSelection.ts`, the text layer's other owner). Split it into:
     - a **pure function** — e.g. `joinParagraphLines(lines: LineGeom[]): string` — that takes already-measured per-line geometry (`{ text, top, left, right, fontSize }[]`, in DOM/reading order) and returns the joined clipboard string. This is the unit-tested core; it does NO DOM measurement.
     - a thin **adapter** — e.g. `measureSelectedLines(range/selection): LineGeom[]` — that walks the selected `.textLayer` spans (split at the `<br>` boundaries), measures each line, and hands `LineGeom[]` to the pure function.
-  - [ ] Keep it in `render/` with NO import from `anchor/`, `annotations/`, or `store/` (AD-9). Import it into `render/textSelection.ts` (a sub-path import, like `usePageViewport` / `textSelection.ts` itself), NOT via the `render/` barrel — so Reader/App test mocks are unaffected unless you add a NEW barrel export (then mirror both `vi.mock("./render")` barrels).
+  - [x] Keep it in `render/` with NO import from `anchor/`, `annotations/`, or `store/` (AD-9). Import it into `render/textSelection.ts` (a sub-path import, like `usePageViewport` / `textSelection.ts` itself), NOT via the `render/` barrel — so Reader/App test mocks are unaffected unless you add a NEW barrel export (then mirror both `vi.mock("./render")` barrels).
 
-- [ ] **Task 3 — Intercept `copy` and rewrite the clipboard (AC: 1, 4, 5).**
-  - [ ] Wire a document-level `copy` listener through the EXISTING `TextSelectionController` (`render/textSelection.ts`): add it inside `#enableGlobalListener` with the same `{ signal }` as the other listeners so it shares the AbortController lifecycle (enabled on first `register`, torn down when the last text layer unregisters — the proven Story 4.1 AC-5 lifecycle; no new leak surface, no separate phase gate). This is the smallest correct structure and reuses tested plumbing.
-  - [ ] In the handler:
+- [x] **Task 3 — Intercept `copy` and rewrite the clipboard (AC: 1, 4, 5).**
+  - [x] Wire a document-level `copy` listener through the EXISTING `TextSelectionController` (`render/textSelection.ts`): add it inside `#enableGlobalListener` with the same `{ signal }` as the other listeners so it shares the AbortController lifecycle (enabled on first `register`, torn down when the last text layer unregisters — the proven Story 4.1 AC-5 lifecycle; no new leak surface, no separate phase gate). This is the smallest correct structure and reuses tested plumbing.
+  - [x] In the handler:
     1. Get `document.getSelection()`; if empty, return (native copy).
     2. **Guard (AC-5):** only act when the selection is entirely within our registered `.textLayer`(s). If any part is outside a text layer (an editable memo/comment, Bank text, app chrome), return WITHOUT `preventDefault` so native copy is unchanged.
     3. Build `LineGeom[]` via the Task 2 adapter, call `joinParagraphLines`, then `event.clipboardData?.setData("text/plain", joined)` and `event.preventDefault()`.
-  - [ ] Keep the handler defensive: if measurement yields nothing usable, fall through to native copy (do not `preventDefault`) rather than clobbering the clipboard with an empty string.
+  - [x] Keep the handler defensive: if measurement yields nothing usable, fall through to native copy (do not `preventDefault`) rather than clobbering the clipboard with an empty string.
 
-- [ ] **Task 4 — Regression-guard Story 4.1 (AC: 4).**
-  - [ ] Within a single visual line, preserve inter-word spaces exactly (do NOT re-introduce 4.1's fused-words bug). The join between wrapped lines is a single space; the text WITHIN each line is the line's own text with its spaces intact.
-  - [ ] Do not alter `render/textSelection.ts`'s `endOfContent` / `.selecting` selection-band machinery or the `br::selection { background: transparent }` CSS — the copy handler is additive. Confirm the trailing-punctuation band and normal multi-line selection still look correct.
+- [x] **Task 4 — Regression-guard Story 4.1 (AC: 4).**
+  - [x] Within a single visual line, preserve inter-word spaces exactly (do NOT re-introduce 4.1's fused-words bug). The join between wrapped lines is a single space; the text WITHIN each line is the line's own text with its spaces intact.
+  - [x] Do not alter `render/textSelection.ts`'s `endOfContent` / `.selecting` selection-band machinery or the `br::selection { background: transparent }` CSS — the copy handler is additive. Confirm the trailing-punctuation band and normal multi-line selection still look correct.
 
-- [ ] **Task 5 — Tests (AC: 6).**
-  - [ ] Add `client/src/render/paragraphCopy.test.ts` covering the pure `joinParagraphLines` with synthetic `LineGeom[]`: (a) three wrapped lines at ~1 line-height gap → one space-joined line; (b) a large Y-gap / blank line → `\n` kept; (c) an indented next line → `\n` kept (new paragraph); (d) a short line ending in `.` followed by a normal-start line → real break; (e) the ambiguous default; (f) the hyphenation decision from Task 1.
-  - [ ] Do NOT try to unit-test real selection geometry or the clipboard in jsdom — it can measure neither (rects are zeroed). Those are covered by the live smoke.
+- [x] **Task 5 — Tests (AC: 6).**
+  - [x] Add `client/src/render/paragraphCopy.test.ts` covering the pure `joinParagraphLines` with synthetic `LineGeom[]`: (a) three wrapped lines at ~1 line-height gap → one space-joined line; (b) a large Y-gap / blank line → `\n` kept; (c) an indented next line → `\n` kept (new paragraph); (d) a short line ending in `.` followed by a normal-start line → real break; (e) the ambiguous default; (f) the hyphenation decision from Task 1.
+  - [x] Do NOT try to unit-test real selection geometry or the clipboard in jsdom — it can measure neither (rects are zeroed). Those are covered by the live smoke.
 
-- [ ] **Task 6 — Verify (AC: 1–6).**
-  - [ ] `cd client && npm test && npm run typecheck && npm run build`.
-  - [ ] **Live smoke (mandatory — jsdom cannot see real selection geometry or the clipboard):** on YOUR OWN dev servers, for each of the three spike papers: select a soft-wrapped passage, copy (Ctrl/Cmd+C), paste into a plain-text editor, and diff against the intended single-line result. Then copy a passage that SPANS a real paragraph break and confirm the break is preserved. **Multi-column is the highest-risk path** (see the cross-page/column guidance in CLAUDE.md / [[verify-on-hidpi-and-real-host]]): smoke a multi-column selection at DPR>1 and confirm it does not fuse the two columns or leak. Also copy from a memo/comment editor to confirm AC-5 (native copy untouched).
-  - [ ] Use **trusted input** for the copy (real Ctrl/Cmd+C or the browser's copy, not a synthetic `.dispatchEvent`) so the `clipboardData` write path is exercised for real ([[use-trusted-input-for-focus-sensitive-smoke]]).
+- [x] **Task 6 — Verify (AC: 1–6).**
+  - [x] `cd client && npm test && npm run typecheck && npm run build`.
+  - [x] **Live smoke (mandatory — jsdom cannot see real selection geometry or the clipboard):** on YOUR OWN dev servers, for each of the three spike papers: select a soft-wrapped passage, copy (Ctrl/Cmd+C), paste into a plain-text editor, and diff against the intended single-line result. Then copy a passage that SPANS a real paragraph break and confirm the break is preserved. **Multi-column is the highest-risk path** (see the cross-page/column guidance in CLAUDE.md / [[verify-on-hidpi-and-real-host]]): smoke a multi-column selection at DPR>1 and confirm it does not fuse the two columns or leak. Also copy from a memo/comment editor to confirm AC-5 (native copy untouched).
+  - [x] Use **trusted input** for the copy (real Ctrl/Cmd+C or the browser's copy, not a synthetic `.dispatchEvent`) so the `clipboardData` write path is exercised for real ([[use-trusted-input-for-focus-sensitive-smoke]]).
 
 ## Dev Notes
 
@@ -174,8 +174,44 @@ Client-only story, no server change. Bump `[project].version` in `server/pyproje
 
 ### Agent Model Used
 
+Sonnet 5 (xHigh)
+
 ### Debug Log References
+
+**Task 1 spike (2026-07-11).** Own dev servers: `uvicorn` on :8010 (`PAPER_MATE_DATA` pointed at a scratch dir), `vite dev` on :5183 proxied to it. Uploaded 3 real papers and read live `.textLayer` per-line geometry via `getBoundingClientRect()` in the page (Playwright `browser_evaluate`, no Chrome extension available this session):
+
+- **Microsoft COCO** (IEEE two-column, justified, first-line indent): column body `left≈213.8px`, line-height (top delta) ≈23.9px, indent on new-paragraph first line ≈19.9px (≈1 line-height's font-size, i.e. ~1em). Confirmed a genuine paragraph break ("of scene understanding?" → "We introduce a new large-scale dataset...") has the SAME ~24px Y-gap as a normal wrap — indent is the only signal that catches it. Also confirmed a hyphenated wrap ("charac-" → "terizing relationships...") has normal Y-gap, normal (non-indented) left, and a filled right edge — i.e. it looks exactly like an ordinary wrap except for the trailing `-`, so hyphenation needs its own check independent of the break/wrap decision.
+- **1906.03821v1 (ACM SIGKDD)** (two-column, justified, first-line indent, no blank line between paragraphs): body `left≈751px`, line-height ≈21.9px, indent ≈20px. Same pattern as COCO: "the industrial scenario." → "Challenge 2: Generalization..." breaks with a normal Y-gap, caught only by indent + the short/punctuation-ending prior line. Column boundary confirmed as a hard signal: column 2's first line (`top=439.1`) sits well above column 1's last body line (`top≈1344.6`) — i.e. `top` goes backward, unambiguous break.
+- **09-regularization.pdf** (single-column book chapter, justified, first-line indent, larger type): body `left≈383.2px`, line-height ≈23.9px, indent ≈29.8px. Confirms indent magnitude scales with font size/line-height rather than being a fixed px value — thresholds are expressed as ratios of the measured line-height, not hard-coded px (also required by `no-raw-values.test.ts` outside `src/theme/**`).
+
+**Signals + thresholds settled** (ratios of `lineHeight` = median positive consecutive top-delta in the selection):
+1. **Column jump** — `next.top < cur.top - 0.5*lineHeight` (top moves backward = new column). Hard break, overrides everything else.
+2. **Big Y-gap** — `(next.top - cur.top) > 1.4*lineHeight`. Break (blank line / heading spacing).
+3. **Indent** — next line's `left` exceeds the running paragraph's body-left (tracked as the running MIN `left` seen since the last break, since the indent only ever appears on a paragraph's first line, never its continuations) by `> 0.4*lineHeight`. Break. This is the dominant signal in justified, non-blank-line-separated academic layouts (both two-column papers).
+4. **Short + terminal punctuation** — current line's `right` is short of the running column-right (running MAX `right` since last break) by `> 1.5*lineHeight`, AND the line's trimmed text ends in `.`/`!`/`?`/`:`/`;`. Secondary/tie-break signal, combined with (3) in practice.
+5. **Ambiguous default → JOIN** (space-joined), per the story's recommendation — matches normal reader/browser copy and keeps the common wrapped-paragraph case the visible win.
+
+**Hyphenation decision:** de-hyphenate. If the current line's trimmed text ends in a letter immediately followed by `-` (`/\p{L}-$/u`) and none of the break signals fired, strip the trailing `-` and join with NO space (`"charac-" + "terizing..."` → `"characterizing..."`), rather than leaving a literal `trans- former` or keeping the hyphen. Rationale: matches the reader's intent of one continuous word and is the common editorial convention; picked over "leave as-is" because leaving `-\n` artifacts as `- ` mid-word reads as broken, and over keeping the hyphen without a space because `trans-former` misspells the word.
 
 ### Completion Notes List
 
+- Implemented the paragraph-vs-wrap heuristic (`joinParagraphLines`) exactly per the spike's settled signals/thresholds (column jump, big Y-gap, indent, short+terminal-punctuation, hyphen de-hyphenation, ambiguous→join default) — see Debug Log for the full spike writeup.
+- `paragraphCopy.ts` is a real, isolated `render/` module: no import from `anchor/`, `annotations/`, or `store/`. Imported into `textSelection.ts` by sub-path (not via the `render/` barrel), so no `vi.mock("./render")` barrel update was needed (confirmed: full suite green with no App/Reader test changes).
+- The `copy` listener lives inside `TextSelectionController#enableGlobalListener`, sharing the same `{ signal }` AbortController as the other Story-4.1 listeners — no new lifecycle/teardown code, inherits the existing register/unregister leak-safety (`textSelection.test.ts` unchanged and still green).
+- 9 unit tests added for `joinParagraphLines` covering all 6 story-specified cases (a–f) plus a column-jump case; all pass. `measureSelectedLines` (the DOM adapter) is intentionally untested in jsdom (zeroed rects) per the story's testing standard — verified instead by live smoke.
+- **Live smoke (real Ctrl+C/Ctrl+V, trusted input via Playwright `press_key`, own dev servers on :8010/:5183):**
+  - COCO (multi-column, DPR=1): a 6-line wrapped abstract pasted as one line; a 3-hyphen passage ("clas-/sification", "understand-/ing", "con-/tains") de-hyphenated correctly; a real paragraph break (indent-only signal, no Y-gap difference) preserved its `\n` while the surrounding wraps joined.
+  - 1906.03821 (ACM, ragged-right two-column): the "the industrial scenario." → "Challenge 2: ..." indent-only break preserved; wraps joined. (OS-clipboard paste round-trip was flaky on retry in this sandbox — a `copy`-event debug listener confirmed the SHIPPED handler set the exact correct joined string on `event.clipboardData` and called `preventDefault`, i.e. the production code path is verified even where the sandbox's clipboard daemon wasn't.)
+  - 09-regularization (single-column, book-style, larger indent): two full wrapped paragraphs (6 lines + 5 lines) each joined to one line, including a `sub-\noptimal` → `suboptimal` de-hyphenation, with the real paragraph break between them preserved. Verified via clipboardData debug listener.
+  - **Multi-column at DPR=2** (`chrome-devtools-mcp` `emulate` viewport `1400x1000x2`): a selection crossing from column 1 (body + a hanging-indent footnote/author-affiliation list) into column 2 (a figure caption) did NOT fuse the columns or leak text — every column/section transition still produced a `\n`. Found and documenting a narrow, accepted limitation below.
+  - AC-5: typed into a memo annotation's `<textarea>`, selected its text, real Ctrl+C — `event.defaultPrevented` was `false` (confirmed via a debug listener on the textarea), i.e. our handler correctly did not intercept it. This holds by construction: a textarea's internal text selection never populates `document.getSelection()`, which is what the guard checks.
+- **Known limitation (not a regression, not blocking):** the indent signal misfires on hanging-indent bulleted/footnote lists (continuation lines indented, item-start lines flush — the inverse of a normal paragraph's first-line indent), occasionally placing a break mid-item or joining across two list items. Found live-smoking COCO's author-affiliation footnote block. This is footnote/reference-list structure, not the AC-1 "paragraph" target, and falls squarely under AC-3's explicit acknowledgment that "any such heuristic has inherent false-positive/negative risk." No code change made for it; flagging for a future story if it proves to matter in practice.
+- Full regression suite: 1369/1369 client tests pass (one `Reader.test.tsx` visibilitychange test failed on one full-suite run and passed on immediate re-run and in isolation — a pre-existing test-order flake unrelated to this change; not touched by this story's diff). `npm run typecheck` and `npm run build` both clean.
+- `server/uv.lock` picked up a stray version-string bump (0.5.11→0.5.12) from running `uv run uvicorn` for the live smoke's own dev server; reverted before finalizing since this is a client-only story with no server change.
+
 ### File List
+
+- `client/src/render/paragraphCopy.ts` (new)
+- `client/src/render/paragraphCopy.test.ts` (new)
+- `client/src/render/textSelection.ts` (modified: added the `copy` listener + import)
+

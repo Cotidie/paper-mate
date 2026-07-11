@@ -18,6 +18,13 @@
 // re-exported from the `render/` barrel — `renderPage` is what Reader/App
 // tests mock, so this stays a real, isolated, unit-testable module (AD-9: no
 // import from anchor/, annotations/, or store/).
+//
+// Story 8.1 adds one more `{ signal }`-scoped listener here: `copy`, which
+// rewrites the clipboard so a soft-wrapped paragraph pastes as one line (see
+// `paragraphCopy.ts`). It reuses this controller's registry/lifecycle rather
+// than standing up a second global listener manager.
+
+import { joinParagraphLines, measureSelectedLines } from "./paragraphCopy";
 
 /**
  * Shared across every live page card (mirrors `TextLayerBuilder`'s static
@@ -91,6 +98,36 @@ class TextSelectionController {
       "keyup",
       () => {
         if (!pointerDown) this.#textLayers.forEach(reset);
+      },
+      { signal },
+    );
+
+    document.addEventListener(
+      "copy",
+      (event: ClipboardEvent) => {
+        const selection = document.getSelection();
+        if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+
+        // AC-5: only act when every range is entirely within OUR registered
+        // text layers. Anything else (a memo/comment editor, Bank text, app
+        // chrome, or a mixed selection spanning one of those) falls through
+        // to native copy untouched — no preventDefault.
+        for (let i = 0; i < selection.rangeCount; i++) {
+          const range = selection.getRangeAt(i);
+          for (const container of [range.startContainer, range.endContainer]) {
+            const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : (container as Element);
+            const layer = element?.closest<HTMLElement>(".textLayer");
+            if (!layer || !this.#textLayers.has(layer)) return;
+          }
+        }
+
+        const lines = measureSelectedLines(selection);
+        if (lines.length === 0) return;
+        const joined = joinParagraphLines(lines);
+        if (!joined) return;
+
+        event.clipboardData?.setData("text/plain", joined);
+        event.preventDefault();
       },
       { signal },
     );
