@@ -6,11 +6,13 @@ port — the default ``CrossrefEnricher`` in production, an injected fake in a
 test — so enrichment is swappable and unit-testable without HTTP. It then
 layers two further conditional fallbacks: if Crossref left ``venue`` unset and
 the PDF carried an arXiv id, arXiv's own record fills venue/year (fix
-request); and if the paper resolved but still carries no ``venue_short``,
-Semantic Scholar's venue-acronym lookup fills that in (Story 8.5 fix request).
+request; when the paper is arXiv-only, ``venue_short`` is filled to match
+``"arXiv"`` too, per a Story 8.5 fix request); and if the paper resolved but
+still carries no ``venue_short``, Semantic Scholar's venue-acronym lookup
+fills that in (Story 8.5 fix request).
 """
 
-from app.domain.arxiv_enrich import ArxivEnricher, ArxivFetcher, arxiv_doi
+from app.domain.arxiv_enrich import ARXIV_VENUE, ArxivEnricher, ArxivFetcher, arxiv_doi
 from app.domain.crossref import CrossrefEnricher, EnrichResult, Enricher
 from app.domain.semantic_scholar import SemanticScholarEnricher, VenueShortFetcher
 from app.models import ExtractedMeta
@@ -47,6 +49,12 @@ def enrich(
     instead of Crossref). When the paper is arXiv-only this way, its own
     self-assigned DOI and author list ALSO fill in (fix request) wherever
     extraction/Crossref left them empty - never overwriting a real value.
+    When the fallback's venue is the literal ``ARXIV_VENUE`` ("arXiv", i.e.
+    no formal ``journal_ref`` exists), ``venue_short`` is filled to match it
+    too (user fix request) - an arXiv-only preprint has no real short-form
+    venue, and showing "arXiv" in both columns beats a blank Short cell or a
+    Semantic Scholar lookup against arXiv's own self-assigned DOI. A venue
+    that IS a real ``journal_ref`` still goes through the normal cascade.
 
     The Semantic Scholar fallback only fires on top of an already-resolved
     paper (a real ``ExtractedMeta``, from either Crossref or the arXiv
@@ -72,6 +80,16 @@ def enrich(
                 updates["doi"] = arxiv_doi(meta.arxiv_id)
             if not base.authors and authors:
                 updates["authors"] = authors
+            # User exception (Story 8.5 fix request): a paper that exists on
+            # arXiv only (no journal_ref, ArxivFetcher.fetch's own fallback to
+            # the literal ARXIV_VENUE) has no real short-form venue to derive
+            # - Venue (Short) should read "arXiv" too, matching Venue (Full),
+            # rather than staying blank or triggering a Semantic Scholar
+            # lookup keyed on arXiv's own self-assigned DOI. A venue that IS a
+            # real journal_ref (formally published elsewhere) still goes
+            # through the normal venue_short cascade below.
+            if venue == ARXIV_VENUE:
+                updates["venue_short"] = ARXIV_VENUE
             result = base.model_copy(update=updates)
 
     if isinstance(result, ExtractedMeta) and result.venue_short is None and result.doi:

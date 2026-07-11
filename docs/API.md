@@ -279,7 +279,11 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 > (no full-venue fallback). Its own source cascades Crossref's
 > `short-container-title` / `event.acronym` / `container-title` parenthetical,
 > then (fix request) a Semantic Scholar lookup by DOI when the paper resolved
-> but still has no short form.
+> but still has no short form. **Exception:** when a paper exists on arXiv
+> only (no `journal_ref` — the arXiv fallback's own venue is the literal
+> `"arXiv"`), `venue_short` is set to `"arXiv"` too, matching `venue`, rather
+> than staying blank or querying Semantic Scholar by arXiv's self-assigned
+> DOI (user fix request).
 
 ### `POST /api/library/folders` — create a folder
 
@@ -436,6 +440,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-12 (Story 8.5 fix request):** `enrich()`'s arXiv venue/year fallback (Story 7.9 fix request) gains a `venue_short` exception: when a paper exists on arXiv only (no `journal_ref` - the fallback's own `venue` is the literal `"arXiv"`), `venue_short` is set to `"arXiv"` too, matching `venue`, instead of staying blank or querying the Semantic Scholar fallback by arXiv's self-assigned DOI. A `journal_ref` (formally published elsewhere) is unaffected and still goes through the normal cascade. Verified live against a genuinely arXiv-only fixture (arXiv id `1907.10211`): `venue: "arXiv"`, `venue_short: "arXiv"`. No contract change, no new path.
 - **2026-07-12 (Story 8.5 fix request):** `enrich()` gains a third fallback layer: when Crossref (and the arXiv fallback) leave `venue_short` unset on an otherwise-resolved paper that DOES have a `doi`, a new `SemanticScholarEnricher` (`app/domain/semantic_scholar.py`) queries Semantic Scholar's public Graph API (`GET /graph/v1/paper/DOI:{doi}?fields=publicationVenue`) and takes the first `publicationVenue.alternate_names` entry (e.g. `"ICCV"`). Bounded (5s), never raises, never blocks, no API key required at this call volume. Only upgrades `venue_short`; never touches `venue`/`year`/`doi`/`authors`. No contract change (still the same `venue_short` field from Story 8.5), no new path.
 - **2026-07-12 (Story 8.5 fix request):** `_short_venue_from_work`'s cascade gains a third rung: a trailing `"(ACRONYM)"` parenthetical on `container-title[0]` (e.g. `"... Computer Vision (ICCV)"` -> `"ICCV"`), for the many IEEE proceedings works whose `event` carries no `acronym` key at all (verified: DOI 10.1109/iccv.2017.226). Also, the client's Venue (Short) cell no longer falls back to the full venue when `venue_short` is `null` - it renders blank (user decision 2026-07-12, supersedes the original fallback behavior below).
 - **2026-07-12 (Story 8.5):** `DocMeta`/`Doc`/`CollectionRow` gain `venue_short: str | null` (additive, default `null`, no `schema_version` bump) alongside `venue`; `ExtractedMeta` (internal, not in the OpenAPI schema) gains the same field. Captured during the existing Crossref enrichment: `short-container-title[0]` when present, else `event.acronym` with a trailing year token stripped (`"CHI '25"` -> `"CHI"`), else `null`. Meta-derived cache projected through `_cache_from_meta` (mirrors `venue`); Crossref new-imports-only, backfilled by `reconcile_library` for a pre-existing row. Read-only: `DocPatch` is unchanged, `venue_short` is not patchable. No new path.

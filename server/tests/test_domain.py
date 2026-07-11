@@ -573,6 +573,9 @@ def test_enrich_arxiv_fallback_fires_when_crossref_skips_entirely(fake_httpx):
     assert result != "skipped"
     assert result.title == "A Preprint"  # Crossref skipped: original title kept
     assert result.venue == "arXiv"
+    # User fix request: arXiv-only (no journal_ref) -> Venue (Short) matches
+    # Venue (Full), both "arXiv".
+    assert result.venue_short == "arXiv"
     assert result.year == 2021
     # PDF carried no DOI/authors either: arXiv-only, so its own record fills both in.
     assert result.doi == "10.48550/arXiv.2103.12345"
@@ -597,6 +600,7 @@ def test_enrich_arxiv_fallback_fires_when_crossref_has_no_venue(fake_httpx):
     assert result.title == "A Paper"
     assert result.doi == "10.1/x"  # untouched: DOI stays extraction-sourced
     assert result.venue == "arXiv"
+    assert result.venue_short == "arXiv"  # user fix request: matches Venue (Full)
     assert result.year == 2020
     # Crossref's own author list came back empty: arXiv's fills in.
     assert result.authors == ["Grace Hopper"]
@@ -630,6 +634,62 @@ def test_enrich_arxiv_fallback_never_fires_without_an_arxiv_id(fake_httpx):
     fake_httpx(lambda url, params: _FakeResponse(200, {"message": {"items": []}}))
     result = enrich(ExtractedMeta(title="No ArXiv Id"), arxiv_fetcher=_RaisingArxivFetcher())
     assert result == "skipped"  # no arxiv_id to route the fallback on
+
+
+def test_enrich_arxiv_only_paper_gets_venue_short_arxiv_without_a_semantic_scholar_lookup(fake_httpx):
+    """User fix request: a paper that exists on arXiv only (no journal_ref -
+    ArxivFetcher.fetch's own fallback to the literal ARXIV_VENUE) gets
+    venue_short filled to "arXiv" directly, matching venue, rather than
+    staying blank or triggering the Semantic Scholar fallback (which would
+    only look up arXiv's own self-assigned DOI anyway)."""
+
+    def handler(url, params):
+        raise crossref.httpx.ConnectError("offline")
+
+    fake_httpx(handler)
+
+    class FakeArxiv:
+        def fetch(self, arxiv_id: str) -> tuple[str | None, int | None, list[str]]:
+            return arxiv_enrich.ARXIV_VENUE, 2021, []
+
+    result = enrich(
+        ExtractedMeta(title="A Preprint", arxiv_id="2103.12345"),
+        arxiv_fetcher=FakeArxiv(),
+        venue_short_fetcher=_RaisingVenueShortFetcher(),
+    )
+    assert result != "skipped"
+    assert result.venue == "arXiv"
+    assert result.venue_short == "arXiv"
+
+
+def test_enrich_arxiv_fallback_with_a_journal_ref_does_not_force_venue_short_to_arxiv(fake_httpx):
+    """The venue_short == "arXiv" shortcut only applies when the arXiv
+    fallback's venue IS the literal ARXIV_VENUE (no journal_ref). A formally-
+    published journal_ref still goes through the normal Semantic-Scholar-by-
+    DOI cascade below - it is NOT forced to "arXiv"."""
+
+    def handler(url, params):
+        raise crossref.httpx.ConnectError("offline")
+
+    fake_httpx(handler)
+
+    class FakeArxiv:
+        def fetch(self, arxiv_id: str) -> tuple[str | None, int | None, list[str]]:
+            return "IEEE Access, vol. 7, 2019", 2019, []
+
+    class FakeVenueShort:
+        def fetch(self, doi: str) -> str | None:
+            assert doi == "10.48550/arXiv.2103.12345"
+            return "IEEE Access"
+
+    result = enrich(
+        ExtractedMeta(title="A Preprint", arxiv_id="2103.12345"),
+        arxiv_fetcher=FakeArxiv(),
+        venue_short_fetcher=FakeVenueShort(),
+    )
+    assert result != "skipped"
+    assert result.venue == "IEEE Access, vol. 7, 2019"
+    assert result.venue_short == "IEEE Access"
 
 
 def test_enrich_arxiv_fallback_failure_leaves_crossref_result_unchanged(fake_httpx):
