@@ -192,11 +192,17 @@ Story 2.9 (memo tool) is the FIRST `kind=rect` tool AND the first mark with a
   its place — the memo twin of Pen's opacity (Story 2.13). `activeAlpha` in the store
   is PER-TOOL (`Record<"pen"|"memo", number>`, mirrors `activeColors`'s per-tool
   split), so tuning one tool's default never touches the other's. `style.alpha`
-  (0..1) sets the strength of the `color-mix()` that blends `style.color` toward
-  `--color-surface-card` in `MemoBox.tsx` — 1 = fully saturated color, 0 = white; a
-  memo created before this feature (`alpha: null`) falls back to 35%, the old fixed
-  ratio. `realphaAnnotation`'s guard covers `kind=path` (pen) OR
-  `kind=rect && type=memo`.
+  (0..1) sets the strength of the `color-mix()` in `MemoBox.tsx` that blends
+  `style.color` toward **`transparent`** (a second fix request: an EARLIER version
+  of this feature mixed toward `--color-surface-card` white instead, which only
+  desaturated the box and never let the page content underneath actually show
+  through — `color-mix(in srgb, color A%, transparent)` is the alpha-channel
+  equivalent of `rgba(color, A)`) — 1 = fully saturated/opaque, 0 = fully
+  see-through. `.annotation-memo__body`'s own `background: transparent`
+  (Annotations.css) means the textarea zone shows through identically to the
+  padding/border zone. A memo created before this feature (`alpha: null`) falls
+  back to 35%, the old fixed ratio. `realphaAnnotation`'s guard covers `kind=path`
+  (pen) OR `kind=rect && type=memo`.
 
 ## Story 2.10 — comment (text+pin OR pin, + bubble)
 

@@ -288,13 +288,15 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(body.value).toBe("a note");
     expect(screen.getByTestId("memo-collapse-toggle-m1")).toBeTruthy();
     // Accent (border AND background, user request) is on the OUTER wrapper. The
-    // border is full-strength; the background is SOFTENED via color-mix (a later
-    // user fix request: full-strength read "thick"). The mix strength is now
-    // style.alpha (fix request, user-adjustable) — null (no alpha set) falls back
-    // to 35%, the mark's old fixed ratio.
+    // border is full-strength; the background mixes toward TRANSPARENT (fix
+    // request: true see-through alpha, not a lighten-toward-white tint — an
+    // earlier version mixed toward --color-surface-card, which only desaturated
+    // the box and never let the page content underneath show). The mix strength
+    // is style.alpha (fix request, user-adjustable) — null (no alpha set) falls
+    // back to 35%, the mark's old fixed ratio.
     expect(mark.style.borderColor).toBe("var(--color-annotation-pink)");
     expect(mark.style.backgroundColor).toBe(
-      "color-mix(in srgb, var(--color-annotation-pink) 35%, var(--color-surface-card))",
+      "color-mix(in srgb, var(--color-annotation-pink) 35%, transparent)",
     );
     // denormalize at scale 1: left=0.1*600=60, top=0.2*800=160, w=0.4*600=240, minHeight=0.2*800=160.
     expect(mark.style.left).toBe("60px");
@@ -306,13 +308,13 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(container.querySelector(".annotation-highlights")!.contains(mark)).toBe(false);
   });
 
-  it("a memo's background mix strength tracks its OWN style.alpha (fix request: user-adjustable opacity)", () => {
+  it("a memo's background mix strength tracks its OWN style.alpha (fix request: TRUE transparency, page content shows through at low alpha)", () => {
     const m = { ...memoMark("m2", 0), style: { color: "annotation-blue", stroke_width: null, alpha: 0.6 } };
     useAnnotationStore.getState().addAnnotation(m);
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     const mark = screen.getByTestId("annotation-mark-m2");
     expect(mark.style.backgroundColor).toBe(
-      "color-mix(in srgb, var(--color-annotation-blue) 60%, var(--color-surface-card))",
+      "color-mix(in srgb, var(--color-annotation-blue) 60%, transparent)",
     );
   });
 

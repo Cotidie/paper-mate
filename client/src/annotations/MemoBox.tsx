@@ -92,16 +92,18 @@ export default function MemoBox({
         ...(collapsed ? {} : { minHeight: pos.height }),
         borderColor: `var(--color-${anno.style.color})`,
         // Background also carries the mark's accent (user request: border-only
-        // made too little difference), but SOFTENED (a later user fix request:
-        // full-strength read "thick") by blending toward the surface-card white
-        // via color-mix — the border stays full-strength for contrast/legibility,
-        // only the fill lightens. Ink-black body text stays legible either way.
-        // The blend strength is now a user-adjustable opacity (fix request, the
-        // memo twin of pen's alpha, AlphaRow in the rail flyout + selection
-        // quick-box): style.alpha 0..1 becomes the color-mix percentage directly
-        // (1 = fully saturated color, no white blend). `?? 0.35` is the fallback
-        // for a memo created before this feature (the old fixed mix ratio).
-        backgroundColor: `color-mix(in srgb, var(--color-${anno.style.color}) ${(anno.style.alpha ?? 0.35) * 100}%, var(--color-surface-card))`,
+        // made too little difference). style.alpha (fix request, the memo twin
+        // of pen's alpha) is TRUE transparency, not a lighten-toward-white tint:
+        // color-mix toward `transparent` (not `--color-surface-card`) yields the
+        // alpha-channel equivalent of `rgba(color, alpha)`, so the page content
+        // underneath actually shows through at low alpha (a fix request itself —
+        // an earlier version mixed toward white, which only desaturated the box,
+        // never let anything behind it show). The border stays full-strength
+        // (unaffected) for contrast/legibility; `.annotation-memo__body`'s own
+        // `background: transparent` (Annotations.css) means the textarea zone
+        // shows through identically to the padding/border zone. `?? 0.35` is the
+        // fallback for a memo created before this feature existed.
+        backgroundColor: `color-mix(in srgb, var(--color-${anno.style.color}) ${(anno.style.alpha ?? 0.35) * 100}%, transparent)`,
       }}
     >
       <button
