@@ -131,6 +131,35 @@ describe("joinParagraphLines", () => {
     ];
     expect(joinParagraphLines(lines)).toBe("Last line of column one\nFirst line of column two");
   });
+
+  it("(g) a 2-line selection with a genuine large gap still breaks (code-review fix)", () => {
+    // With only ONE gap in the whole selection, a naive `median(gaps)` line-
+    // height is self-referential: the lone gap always equals its own
+    // "median", so `gap > BIG_GAP_RATIO * lineHeight` can never be true no
+    // matter how large the real gap is. Same left/right (no indent or
+    // short-line signal either, since there's no earlier line to establish
+    // a baseline column width from) isolates the Y-gap signal specifically.
+    const lines = [line("End of one paragraph", 700, 214, 700, 20), line("Start of the next", 900, 214, 700, 20)];
+    expect(joinParagraphLines(lines)).toBe("End of one paragraph\nStart of the next");
+  });
+
+  it("(g cont.) a 2-line selection with a normal single-line gap still joins", () => {
+    // Same 2-line shape, but the gap is an ordinary single-spacing advance
+    // (~1.2x font-size) — must NOT be misread as a break now that the
+    // font-size fallback is used instead of the self-referential gap.
+    const lines = [line("Transformers have become the", 700, 214, 710, 20), line("dominant architecture", 724, 214, 705, 20)];
+    expect(joinParagraphLines(lines)).toBe("Transformers have become the dominant architecture");
+  });
+
+  it("(h) de-hyphenates even when the line's raw text has a trailing space after the hyphen (code-review fix)", () => {
+    const lines = [line("charac- ", 700, 214, 712), line("terizing relationships", 724, 214, 710)];
+    expect(joinParagraphLines(lines)).toBe("characterizing relationships");
+  });
+
+  it("(i) never produces a double space when the source line already ends or starts with whitespace (code-review fix)", () => {
+    const lines = [line("wrapped line with trailing space ", 700, 214, 710), line(" leading space too", 724, 214, 705)];
+    expect(joinParagraphLines(lines)).toBe("wrapped line with trailing space leading space too");
+  });
 });
 
 describe("measureSelectedLines (text clipping)", () => {

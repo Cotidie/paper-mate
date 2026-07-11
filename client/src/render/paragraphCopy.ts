@@ -63,18 +63,22 @@ function mode(values: number[]): number {
 
 /**
  * The selection's typical single-line-to-next-line Y advance: the median of
- * consecutive positive top-deltas. Falls back to the modal font-size (× a
- * standard ~1.2 single-spacing ratio) when there aren't enough gaps to take a
- * median from (a two-line selection has only one gap, which IS the
- * line-height whether it's a wrap or a break — the font-size fallback only
- * matters for a one-line selection, where there's no gap at all).
+ * consecutive positive top-deltas, trusted only once there are at least 2
+ * gaps (3+ lines) to take a median FROM. With exactly 1 gap (a 2-line
+ * selection), that lone gap has no independent data to be judged against —
+ * it always equals its own "median", so `gap > BIG_GAP_RATIO * lineHeight`
+ * collapses to `gap > BIG_GAP_RATIO * gap`, which can never be true. A real
+ * paragraph-gap between exactly 2 selected lines would silently be treated
+ * as a normal wrap. Below that threshold (0 or 1 gaps), fall back to the
+ * modal font-size (× a ~1.2 single-spacing ratio) as an INDEPENDENT
+ * estimate that doesn't reference the gap it's meant to judge.
  */
 function lineHeightOf(lines: LineGeom[]): number {
   const gaps = lines
     .slice(1)
     .map((line, i) => line.top - lines[i].top)
     .filter((gap) => gap > 0);
-  if (gaps.length > 0) return median(gaps);
+  if (gaps.length > 1) return median(gaps);
   const fontSize = mode(lines.map((line) => line.fontSize).filter((size) => size > 0));
   return fontSize > 0 ? fontSize * 1.2 : 1;
 }
@@ -114,11 +118,23 @@ export function joinParagraphLines(lines: LineGeom[]): string {
       continue;
     }
 
-    if (HYPHEN_WRAP.test(prev.text.trimEnd())) {
-      parts[parts.length - 1] = parts[parts.length - 1].replace(/-$/, "");
-      parts.push(cur.text);
+    // Normalize the join boundary itself: strip any incidental trailing
+    // whitespace pdf.js left on the accumulated text and any leading
+    // whitespace on the incoming line, so the join is exactly one space (or
+    // a clean de-hyphenation) regardless of edge whitespace in the source
+    // spans. Without this, testing HYPHEN_WRAP against a trimmed copy while
+    // mutating the untrimmed original let a trailing space survive the
+    // hyphen strip (`"charac- "` stayed `"charac- "` instead of joining to
+    // `"characterizing"`), and a plain `" " + cur.text` join on a
+    // pre-existing trailing/leading space produced a double space.
+    const accumulated = parts[parts.length - 1].replace(/\s+$/, "");
+    const incoming = cur.text.replace(/^\s+/, "");
+    if (HYPHEN_WRAP.test(accumulated)) {
+      parts[parts.length - 1] = accumulated.slice(0, -1);
+      parts.push(incoming);
     } else {
-      parts.push(" " + cur.text);
+      parts[parts.length - 1] = accumulated;
+      parts.push(" " + incoming);
     }
     bodyLeft = Math.min(bodyLeft, cur.left);
     columnRight = Math.max(columnRight, cur.right);
@@ -193,7 +209,12 @@ export function measureSelectedLines(selection: Selection): LineGeom[] {
           top: Math.min(...rects.map((rect) => rect.top)),
           left: Math.min(...rects.map((rect) => rect.left)),
           right: Math.max(...rects.map((rect) => rect.right)),
-          fontSize: parseFloat(selected[0].span.style.fontSize) || 0,
+          // pdf.js's TextLayer sets a `--font-height` CSS custom property on
+          // each span, never an inline `font-size` — reading `span.style
+          // .fontSize` here always silently returned "" (parsed to 0). The
+          // computed style is where the layout-rendered value actually
+          // lives, so read it there instead.
+          fontSize: parseFloat(getComputedStyle(selected[0].span).fontSize) || 0,
         });
       }
       current = [];

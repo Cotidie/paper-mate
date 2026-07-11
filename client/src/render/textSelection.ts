@@ -52,6 +52,26 @@ class TextSelectionController {
     return () => this.#unregister(div);
   }
 
+  /**
+   * True only if EVERY text node `range` touches sits inside one of our
+   * registered text layers. Checking just the range's start/end containers
+   * (as an earlier version did) misses content interposed between them in
+   * document order — a range can start and end inside registered layers
+   * while still covering non-layer content along the way. Bounding the walk
+   * to `range.commonAncestorContainer` keeps this cheap (proportional to the
+   * selection, not the document).
+   */
+  #rangeStaysWithinTextLayers(range: Range): boolean {
+    const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => (range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+    });
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const layer = node.parentElement?.closest<HTMLElement>(".textLayer");
+      if (!layer || !this.#textLayers.has(layer)) return false;
+    }
+    return true;
+  }
+
   #unregister(div: Element): void {
     this.#textLayers.delete(div);
     if (this.#textLayers.size === 0) {
@@ -107,19 +127,18 @@ class TextSelectionController {
       (event: ClipboardEvent) => {
         const selection = document.getSelection();
         if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+        // A discontiguous multi-range selection (e.g. Firefox ctrl+drag) is
+        // rare, and the join heuristic operates over a single contiguous
+        // range's lines. Rather than silently keep only the first range,
+        // fall through to native copy so nothing is dropped.
+        if (selection.rangeCount !== 1) return;
+        const range = selection.getRangeAt(0);
 
-        // AC-5: only act when every range is entirely within OUR registered
+        // AC-5: only act when the range is entirely within OUR registered
         // text layers. Anything else (a memo/comment editor, Bank text, app
         // chrome, or a mixed selection spanning one of those) falls through
         // to native copy untouched — no preventDefault.
-        for (let i = 0; i < selection.rangeCount; i++) {
-          const range = selection.getRangeAt(i);
-          for (const container of [range.startContainer, range.endContainer]) {
-            const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : (container as Element);
-            const layer = element?.closest<HTMLElement>(".textLayer");
-            if (!layer || !this.#textLayers.has(layer)) return;
-          }
-        }
+        if (!this.#rangeStaysWithinTextLayers(range)) return;
 
         const lines = measureSelectedLines(selection);
         if (lines.length === 0) return;
