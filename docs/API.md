@@ -64,7 +64,7 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
     "status": "extracting",      // a new import; settles to ready | enrich-skipped | parse-failed
     "doi": null,                  // string | null; extraction-sourced, filled on settle
     "venue": null,                // string | null; Crossref-sourced, filled on settle
-    "venue_short": null,          // string | null; Crossref-sourced (short-container-title or year-stripped event.acronym), filled on settle; read-only
+    "venue_short": null,          // string | null; Crossref-sourced (short-container-title, year-stripped event.acronym, or a trailing "(ACRONYM)" on container-title), null when none apply; read-only
     "year": null,                 // int | null; Crossref-sourced, filled on settle
     "schema_version": 1
   }
@@ -85,9 +85,11 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
 > drives the `extracting -> ready | enrich-skipped | parse-failed` transitions
 > and fills `authors_list` and (when Crossref matches) `doi`/`venue`/`year`.
 > `venue_short` is additive (Story 8.5, no `schema_version` bump): a compact
-> venue form (e.g. `"CHI"`) derived from Crossref's `short-container-title` or
-> a year-stripped `event.acronym`, read-only (not in `DocPatch`) — the client
-> falls back to `venue` when it is `null`.
+> venue form (e.g. `"CHI"`, `"ICCV"`) derived from Crossref's
+> `short-container-title`, else a year-stripped `event.acronym`, else a
+> trailing `"(ACRONYM)"` parenthetical on `container-title`, read-only (not
+> in `DocPatch`). The client renders the cell blank when it is `null` (user
+> decision 2026-07-12: no full-venue fallback).
 > This import also indexes the paper into `library.json` (see `GET
 > /api/library` below) as Uncategorized, untrashed, at the next order.
 
@@ -271,7 +273,8 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 > Crossref has no venue and the PDF carries an arXiv id. `venue_short`
 > (Story 8.5) is likewise Crossref new-imports-only, optional (`null` on a
 > pre-existing row) and backfills on the next reconcile; it is read-only
-> (not in `DocPatch`) and the client falls back to `venue` when it is `null`.
+> (not in `DocPatch`) and the client renders the cell blank when it is `null`
+> (no full-venue fallback).
 
 ### `POST /api/library/folders` — create a folder
 
@@ -428,6 +431,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-12 (Story 8.5 fix request):** `_short_venue_from_work`'s cascade gains a third rung: a trailing `"(ACRONYM)"` parenthetical on `container-title[0]` (e.g. `"... Computer Vision (ICCV)"` -> `"ICCV"`), for the many IEEE proceedings works whose `event` carries no `acronym` key at all (verified: DOI 10.1109/iccv.2017.226). Also, the client's Venue (Short) cell no longer falls back to the full venue when `venue_short` is `null` - it renders blank (user decision 2026-07-12, supersedes the original fallback behavior below).
 - **2026-07-12 (Story 8.5):** `DocMeta`/`Doc`/`CollectionRow` gain `venue_short: str | null` (additive, default `null`, no `schema_version` bump) alongside `venue`; `ExtractedMeta` (internal, not in the OpenAPI schema) gains the same field. Captured during the existing Crossref enrichment: `short-container-title[0]` when present, else `event.acronym` with a trailing year token stripped (`"CHI '25"` -> `"CHI"`), else `null`. Meta-derived cache projected through `_cache_from_meta` (mirrors `venue`); Crossref new-imports-only, backfilled by `reconcile_library` for a pre-existing row. Read-only: `DocPatch` is unchanged, `venue_short` is not patchable. No new path.
 - **2026-07-10 (Story 7.11):** `authors` becomes a first-class list end-to-end. `DocMeta` and `CollectionRow` gain `authors_list: string[]` (additive, default `[]`, no `schema_version` bump); `authors` stays but is now always the derived join of `authors_list` (never independently authored). A pre-7.11 `meta.json`/`library.json` row (a joined `authors` string, no `authors_list` key) self-heals its list on read by splitting on `", "` (best-effort). `DocPatch.authors` is replaced by `DocPatch.authors_list: string[] | null` — a full-list replacement (the client sends the complete intended author list; an empty list is a legitimate clear, not a no-op). No new path; contract shape change on `Doc`/`CollectionRow`/`DocPatch`.
 - **2026-07-08 (Story 7.9 fix request):** venue/year/doi/authors gain an arXiv fallback during the existing background enrichment: when Crossref leaves `venue` unset AND the PDF carries an arXiv id (a stamp like `arXiv:2103.12345v2` found in the extracted text), arXiv's own record (via the `arxiv` client library) fills `venue` (its `journal_ref` if the preprint was later formally published, else the literal `"arXiv"`) and `year` (the submission year); when the PDF/Crossref left `doi`/`authors` empty too, arXiv's own self-assigned DOI (the deterministic `10.48550/arXiv.<id>` pattern) and its author list fill those in as well. Crossref, when it does have an answer, stays authoritative; the fallback only fires on a Crossref miss, and never overwrites a real extraction/Crossref-sourced value. No contract change (still the same `DocMeta`/`CollectionRow` fields from Story 7.9), no new path.

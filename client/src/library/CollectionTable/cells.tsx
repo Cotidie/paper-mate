@@ -120,13 +120,14 @@ function renderAuthorsCell({
   );
 }
 
-/** Read-only: a derived projection (Story 8.5), no `DocPatch` field. Falls
- *  back to the full venue when `venue_short` is absent (never blank when a
- *  full venue exists) and exposes the full venue on hover/focus via `title`. */
+/** Read-only: a derived projection (Story 8.5), no `DocPatch` field. Blank
+ *  when Crossref has no derivable short form (user decision 2026-07-12,
+ *  supersedes the original full-venue-fallback AC), and exposes the full
+ *  venue on hover/focus via `title`. */
 function renderVenueShortCell({ row }: CellContext): ReactNode {
   return (
     <td key="venue_short" className="collection-table__venue-short" title={row.venue ?? undefined}>
-      {row.venue_short ?? row.venue ?? ""}
+      {row.venue_short ?? ""}
     </td>
   );
 }

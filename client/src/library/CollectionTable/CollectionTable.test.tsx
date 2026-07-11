@@ -1822,12 +1822,13 @@ describe("CollectionTable Venue (Short)/Venue (Full) columns (Story 8.5)", () =>
     expect(shortCell.getAttribute("title")).toBe("Proceedings of the 2025 CHI Conference");
   });
 
-  it("falls back to the full venue when venue_short is absent (never blank when a full venue exists)", () => {
+  it("renders blank (no fallback to the full venue) when venue_short is absent (user decision 2026-07-12)", () => {
     render(<CollectionTable rows={[withoutShortVenue]} onOpenRow={noop} onEditField={noop} />);
-    const matches = screen.getAllByText("Journal of Bar");
-    expect(matches).toHaveLength(2); // Venue (Short) fallback cell + Venue (Full) cell
-    const classNames = matches.map((el) => el.closest("td")!.className).sort();
-    expect(classNames).toEqual(["collection-table__venue", "collection-table__venue-short"]);
+    const shortCell = document.querySelector(".collection-table__venue-short")!;
+    expect(shortCell.textContent).toBe("");
+    // The full venue still renders once, in the Full column only.
+    expect(screen.getAllByText("Journal of Bar")).toHaveLength(1);
+    expect(screen.getByText("Journal of Bar").closest("td")!.className).toBe("collection-table__venue");
   });
 
   it("the Full column still renders the full venue and stays inline-editable", () => {

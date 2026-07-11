@@ -77,15 +77,28 @@ def _venue_from_work(work: dict) -> str | None:
 #: leading straight/curly apostrophe/backtick then 2-4 trailing digits.
 _VENUE_YEAR_SUFFIX = re.compile(r"\s*['‘’`]?\d{2,4}\s*$")
 
+#: A trailing all-caps acronym in parens at the end of `container-title`
+#: (e.g. "... Computer Vision (ICCV)" -> "ICCV"). Verified: many IEEE
+#: proceedings works (e.g. DOI 10.1109/iccv.2017.226) carry an `event` with
+#: no `acronym` key at all, so the only Crossref-supplied short form is this
+#: parenthetical in the title itself. Must start with a letter (rejects a
+#: bare "(2020)") and contain only uppercase letters/digits (rejects
+#: "(Volume 1)", "(SAC '19)") - a tight match so a false positive degrades to
+#: `None`, not a wrong guess.
+_CONTAINER_TITLE_ACRONYM = re.compile(r"\(([A-Z][A-Z0-9]{1,11})\)\s*$")
+
 
 def _short_venue_from_work(work: dict) -> str | None:
-    """Short venue for the Venue (Short) column (Story 8.5). Crossref's own
-    ``short-container-title`` is the first choice, but it is empty for many
-    ACM/IEEE conference proceedings (verified: DOI 10.1145/3706598.3713941
-    returns an empty ``short-container-title`` but ``event.acronym`` == "CHI
-    '25"). Fall back to ``event.acronym`` with its trailing year token stripped
-    ("CHI '25" -> "CHI"; the Year column carries the year). ``None`` when
-    neither exists, and the client cell then falls back to the full venue."""
+    """Short venue for the Venue (Short) column (Story 8.5). Cascade over
+    Crossref-supplied fields only (never a curated abbreviation dictionary):
+    1. ``short-container-title[0]``, when present.
+    2. ``event.acronym``, year-stripped (e.g. "CHI '25" -> "CHI"; verified:
+       DOI 10.1145/3706598.3713941 has an empty ``short-container-title``
+       but ``event.acronym`` == "CHI '25").
+    3. A trailing "(ACRONYM)" parenthetical on ``container-title[0]``
+       (verified: DOI 10.1109/iccv.2017.226's ``event`` has no ``acronym``
+       key at all, but its ``container-title`` ends in "(ICCV)").
+    ``None`` when none apply, and the client cell then renders blank."""
     shorts = work.get("short-container-title") or []
     short = clean(shorts[0]) if shorts else None
     if short:
@@ -95,6 +108,11 @@ def _short_venue_from_work(work: dict) -> str | None:
     if acronym:
         stripped = _VENUE_YEAR_SUFFIX.sub("", acronym).strip()
         return stripped or acronym
+    venue = _venue_from_work(work)
+    if venue:
+        match = _CONTAINER_TITLE_ACRONYM.search(venue)
+        if match:
+            return match.group(1)
     return None
 
 

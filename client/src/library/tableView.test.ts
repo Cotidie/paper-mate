@@ -134,12 +134,13 @@ describe("sortRows", () => {
     ]);
   });
 
-  it("sorts Venue (Short) falling back to the full venue when the short value is empty", () => {
+  it("sorts Venue (Short) with no fallback to the full venue (user decision 2026-07-12): a row with only a full venue sorts as empty", () => {
     const rows = [
       row({ doc_id: "1", venue_short: null, venue: "Zeta Journal" }),
       row({ doc_id: "2", venue_short: "alpha" }),
     ];
     expect(sortRows(rows, { column: "venue_short", direction: "asc" }).map((r) => r.doc_id)).toEqual(["2", "1"]);
+    expect(sortRows(rows, { column: "venue_short", direction: "desc" }).map((r) => r.doc_id)).toEqual(["2", "1"]);
   });
 
   it("sorts Year numerically, not lexically, empty last in either direction", () => {

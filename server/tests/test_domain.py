@@ -436,6 +436,25 @@ def test_short_venue_from_work_acronym_without_year_passes_through_unchanged():
     assert crossref._short_venue_from_work({"event": {"acronym": "NeurIPS"}}) == "NeurIPS"
 
 
+def test_short_venue_from_work_falls_back_to_container_title_parenthetical_acronym():
+    # Verified live: DOI 10.1109/iccv.2017.226's `event` has no `acronym`
+    # key at all (only name/location/start/end), but `container-title` ends
+    # in "(ICCV)".
+    work = {
+        "container-title": ["2017 IEEE International Conference on Computer Vision (ICCV)"],
+        "event": {"name": "2017 IEEE International Conference on Computer Vision (ICCV)"},
+    }
+    assert crossref._short_venue_from_work(work) == "ICCV"
+
+
+def test_short_venue_from_work_container_title_acronym_rejects_non_acronym_parentheticals():
+    # A bare year, or a mixed-case/spaced parenthetical, is not a clean
+    # acronym - degrades to None rather than a wrong guess.
+    assert crossref._short_venue_from_work({"container-title": ["Some Proceedings (2020)"]}) is None
+    assert crossref._short_venue_from_work({"container-title": ["Some Proceedings (Volume 1)"]}) is None
+    assert crossref._short_venue_from_work({"container-title": ["Some Proceedings (SAC '19)"]}) is None
+
+
 # --- arxiv_enrich (fix request): venue/year fallback for a Crossref-less preprint --
 
 
