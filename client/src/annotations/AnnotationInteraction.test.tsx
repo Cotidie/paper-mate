@@ -1045,12 +1045,12 @@ describe("AnnotationInteraction selection quick-box (Story 2.5 — AC2,3,4)", ()
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
   });
 
-  it("scroll (incl. zoom recenter) CLOSES the box but keeps the selection ringed", async () => {
+  it("scroll (incl. zoom recenter) re-anchors the box instead of closing it (bug fix: closing on scroll self-closed a Bank-jump-opened box on its own smooth scroll)", async () => {
     setup([textMark("m1")], "m1");
     await screen.findByTestId("selection-quick-box");
     fireEvent.scroll(document, {});
-    await waitFor(() => expect(screen.queryByTestId("selection-quick-box")).toBeNull());
-    // The selection (ring) stays — it rides the denormalized rect (NFR-3).
+    // The box stays open (repositioned, not dismissed) and the selection stays ringed.
+    expect(screen.queryByTestId("selection-quick-box")).not.toBeNull();
     expect(useAnnotationStore.getState().selectedId).toBe("m1");
   });
 
