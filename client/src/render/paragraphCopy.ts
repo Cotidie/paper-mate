@@ -128,35 +128,72 @@ export function joinParagraphLines(lines: LineGeom[]): string {
 }
 
 /**
+ * The portion of `node`'s text that actually falls inside `range`, using
+ * native Range boundary comparison rather than `Selection.containsNode`.
+ * `containsNode(node, true)` ("allow partial containment") answers a yes/no
+ * question — "does the selection touch this node at all" — so a span at the
+ * drag's start/end edge that's only HALF selected still counts as "in", and
+ * the caller that grabs `span.textContent` gets the span's FULL text, not
+ * the dragged portion. That is what let a single-line, mid-word drag copy
+ * as three whole visual lines: every span at the selection's edges
+ * contributed its entire text instead of just the highlighted characters.
+ *
+ * `setStart`/`setEnd` collapse the range instead of throwing when the new
+ * boundary would put start after end (DOM Range spec), so a node with NO
+ * overlap naturally reduces to `.collapsed === true` here — no separate
+ * containment check needed first.
+ */
+function clippedText(range: Range, node: Node): string {
+  const nodeRange = document.createRange();
+  nodeRange.selectNodeContents(node);
+  if (nodeRange.compareBoundaryPoints(Range.START_TO_START, range) < 0) {
+    nodeRange.setStart(range.startContainer, range.startOffset);
+  }
+  if (nodeRange.compareBoundaryPoints(Range.END_TO_END, range) > 0) {
+    nodeRange.setEnd(range.endContainer, range.endOffset);
+  }
+  return nodeRange.collapsed ? "" : nodeRange.toString();
+}
+
+/**
  * Reads the live per-line geometry of the SELECTED spans within `selection`,
  * grouped by their text layer's `<br role="presentation">` boundaries — the
- * adapter `joinParagraphLines` needs. DOM-measurement only; not
- * unit-testable (jsdom returns zeroed rects), covered by live smoke.
+ * adapter `joinParagraphLines` needs. Each line's text is clipped to the
+ * selection's actual boundaries (`clippedText`), not a whole-span
+ * inclusion test, so a drag starting/ending mid-span contributes only the
+ * highlighted characters. Geometry (rects) is DOM-measurement only; not
+ * unit-testable (jsdom returns zeroed rects) — but the text-clipping logic
+ * IS jsdom-testable (pure Range/text operations) and is covered by unit
+ * tests, with real-selection live smoke as the geometry backstop.
  */
 export function measureSelectedLines(selection: Selection): LineGeom[] {
-  const layers = new Set<HTMLElement>();
-  for (let i = 0; i < selection.rangeCount; i++) {
-    const range = selection.getRangeAt(i);
-    for (const container of [range.startContainer, range.endContainer]) {
-      const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : (container as Element);
-      const layer = element?.closest<HTMLElement>(".textLayer");
-      if (layer) layers.add(layer);
-    }
-  }
+  if (selection.rangeCount === 0) return [];
+  const range = selection.getRangeAt(0);
+
+  // Mirrors the controller's own `range.intersectsNode(div)` test (used for
+  // the `.selecting` class in `#enableGlobalListener`) rather than inferring
+  // touched layers from just the range's two endpoints — a selection can
+  // cover an entire middle page's text layer without either endpoint
+  // sitting inside it (e.g. a 3-page drag).
+  const layers = [...document.querySelectorAll<HTMLElement>(".textLayer")].filter((layer) =>
+    range.intersectsNode(layer),
+  );
 
   const lines: LineGeom[] = [];
   for (const layer of layers) {
     let current: HTMLElement[] = [];
     const flush = (): void => {
-      const selected = current.filter((span) => selection.containsNode(span, true));
+      const selected = current
+        .map((span) => ({ span, text: clippedText(range, span) }))
+        .filter(({ text }) => text.length > 0);
       if (selected.length > 0) {
-        const rects = selected.map((span) => span.getBoundingClientRect());
+        const rects = selected.map(({ span }) => span.getBoundingClientRect());
         lines.push({
-          text: selected.map((span) => span.textContent ?? "").join(""),
+          text: selected.map(({ text }) => text).join(""),
           top: Math.min(...rects.map((rect) => rect.top)),
           left: Math.min(...rects.map((rect) => rect.left)),
           right: Math.max(...rects.map((rect) => rect.right)),
-          fontSize: parseFloat(selected[0].style.fontSize) || 0,
+          fontSize: parseFloat(selected[0].span.style.fontSize) || 0,
         });
       }
       current = [];

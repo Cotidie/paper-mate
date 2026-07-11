@@ -1,15 +1,46 @@
-// jsdom returns zeroed rects and has no real clipboard, so this only covers
-// the pure `joinParagraphLines` over synthetic `LineGeom[]` (the DOM adapter,
-// `measureSelectedLines`, is live-smoke only — see CLAUDE.md / the story's
-// Dev Notes). Geometry below mirrors the Task 1 spike's real measurements
-// (COCO/ACM SIGKDD/09-regularization): line-height ~24px, first-line indent
-// ~20px (~0.4+ line-heights), column width ~500px.
+// jsdom returns zeroed rects and has no real clipboard, so the GEOMETRY half
+// of `measureSelectedLines` (top/left/right, and therefore the paragraph-vs-
+// wrap decision itself) is live-smoke only — see CLAUDE.md / the story's Dev
+// Notes. But `measureSelectedLines`'s TEXT extraction is pure Range/DOM-text
+// work with no layout dependency, so it IS jsdom-testable, and is covered
+// below (a regression test for a real bug: a drag that starts or ends
+// mid-span was copying each boundary span's FULL text instead of just the
+// highlighted portion). `joinParagraphLines` geometry below mirrors the
+// Task 1 spike's real measurements (COCO/ACM SIGKDD/09-regularization):
+// line-height ~24px, first-line indent ~20px (~0.4+ line-heights), column
+// width ~500px.
 
-import { describe, it, expect } from "vitest";
-import { joinParagraphLines, type LineGeom } from "./paragraphCopy";
+import { describe, it, expect, afterEach } from "vitest";
+import { joinParagraphLines, measureSelectedLines, type LineGeom } from "./paragraphCopy";
 
 function line(text: string, top: number, left: number, right: number, fontSize = 20): LineGeom {
   return { text, top, left, right, fontSize };
+}
+
+/** Builds a `.textLayer` div from `lines` (arrays of span texts), appending a `<br role="presentation">` after each. */
+function buildTextLayer(lines: string[][]): HTMLElement {
+  const layer = document.createElement("div");
+  layer.className = "textLayer";
+  for (const spans of lines) {
+    for (const text of spans) {
+      const span = document.createElement("span");
+      span.textContent = text;
+      span.style.fontSize = "20px";
+      layer.appendChild(span);
+    }
+    const br = document.createElement("br");
+    br.setAttribute("role", "presentation");
+    layer.appendChild(br);
+  }
+  document.body.appendChild(layer);
+  return layer;
+}
+
+function selectRange(range: Range): Selection {
+  const selection = window.getSelection()!;
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return selection;
 }
 
 describe("joinParagraphLines", () => {
@@ -99,5 +130,96 @@ describe("joinParagraphLines", () => {
       line("First line of column two", 460, 750, 1230),
     ];
     expect(joinParagraphLines(lines)).toBe("Last line of column one\nFirst line of column two");
+  });
+});
+
+describe("measureSelectedLines (text clipping)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    window.getSelection()?.removeAllRanges();
+  });
+
+  it("clips a span the drag STARTS inside to only the selected tail, dropping earlier spans on the line", () => {
+    const layer = buildTextLayer([["and ", "3D scene information"]]);
+    const spans = layer.querySelectorAll("span");
+    const range = document.createRange();
+    // Start 4 chars into "3D scene information" ("3D s|cene information").
+    range.setStart(spans[1].firstChild!, 4);
+    range.setEnd(spans[1].firstChild!, spans[1].textContent!.length);
+    const selection = selectRange(range);
+
+    const lines = measureSelectedLines(selection);
+    expect(lines).toHaveLength(1);
+    // Must NOT include "and " (before the drag start) or the full "3D scene
+    // information" (only "cene information" was actually dragged).
+    expect(lines[0].text).toBe("cene information");
+  });
+
+  it("clips a span the drag ENDS inside to only the selected head, dropping later spans on the line", () => {
+    const layer = buildTextLayer([["three core research problems ", "in scene understanding: de-"]]);
+    const spans = layer.querySelectorAll("span");
+    const range = document.createRange();
+    range.setStart(spans[0].firstChild!, 0);
+    // End 5 chars into "in scene understanding: de-" ("in sc|ene...").
+    range.setEnd(spans[1].firstChild!, 5);
+    const selection = selectRange(range);
+
+    const lines = measureSelectedLines(selection);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].text).toBe("three core research problems in sc");
+  });
+
+  it("reproduces the reported bug: a drag from mid-span to mid-span across multiple lines copies only the highlighted characters at each edge, not whole lines", () => {
+    const layer = buildTextLayer([
+      ["attributes [9], keypoints [10], ", "and 3D scene information"],
+      ["[11]. This leads us to the obvious question: what datasets"],
+      ["will best continue our advance towards our ultimate goal"],
+      ["of scene understanding?"],
+      ["We introduce a new large-scale dataset that addresses"],
+      ["three core research problems ", "in scene understanding: de-"],
+    ]);
+    const lines_ = layer.querySelectorAll("span");
+    // Drag starts at "and " (4 chars into the second span of line 1: "and
+    // 3D scene information" -> select from "3D scene information" on).
+    const startSpan = lines_[1]; // "and 3D scene information"
+    // Drag ends 5 chars into "in scene understanding: de-" on the last line.
+    const endSpan = lines_[lines_.length - 1];
+    const range = document.createRange();
+    range.setStart(startSpan.firstChild!, 4);
+    range.setEnd(endSpan.firstChild!, 5);
+    const selection = selectRange(range);
+
+    const lines = measureSelectedLines(selection);
+    expect(lines).toHaveLength(6);
+    expect(lines[0].text).toBe("3D scene information");
+    expect(lines[1].text).toBe("[11]. This leads us to the obvious question: what datasets");
+    expect(lines[2].text).toBe("will best continue our advance towards our ultimate goal");
+    expect(lines[3].text).toBe("of scene understanding?");
+    expect(lines[4].text).toBe("We introduce a new large-scale dataset that addresses");
+    expect(lines[5].text).toBe("three core research problems in sc");
+  });
+
+  it("includes a fully-covered middle span untouched between two partially-clipped edge spans", () => {
+    const layer = buildTextLayer([["AAAA", "BBBB", "CCCC"]]);
+    const spans = layer.querySelectorAll("span");
+    const range = document.createRange();
+    range.setStart(spans[0].firstChild!, 2); // "AA|AA"
+    range.setEnd(spans[2].firstChild!, 2); // "CC|CC"
+    const selection = selectRange(range);
+
+    const lines = measureSelectedLines(selection);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].text).toBe("AABBBBCC");
+  });
+
+  it("returns an empty array for a collapsed (empty) selection", () => {
+    const layer = buildTextLayer([["some text"]]);
+    const span = layer.querySelector("span")!;
+    const range = document.createRange();
+    range.setStart(span.firstChild!, 0);
+    range.setEnd(span.firstChild!, 0);
+    const selection = selectRange(range);
+
+    expect(measureSelectedLines(selection)).toEqual([]);
   });
 });
