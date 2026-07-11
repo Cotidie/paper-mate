@@ -231,40 +231,63 @@ genuinely new pieces are a `body` param, a pin button, and a `CommentBubble`.
   contract already carries `type:"comment"`/`kind=text`/`kind=rect`/`body`, so the
   tracked OpenAPI + generated TS types stay byte-identical.
 
-## Story 2.11 -- box-highlight a region
+## Story 2.11 -- box-highlight a region (generalized in Story 8.4 to box-comment)
 
 Box-highlight is a MODE of the Highlight tool, not its own tool: a `boxHighlight`
 flag App threads down. While Highlight is active AND box mode is on, a pointer DRAG
 over a page creates a `type=highlight` / `kind=rect` region annotation with a fill
 (not text-based). The region lands as a highlight and the 2.5 selection quick-box
-(recolor + delete) takes over. There is no region tool-type picker and no
-box-comment (removed): a box drag always makes a highlight.
+(recolor + delete) takes over. There is no region tool-type picker (removed): a box
+drag under Highlight always makes a highlight. **Story 8.4 adds a second box mode,
+`boxComment`, as the twin under the Comment tool** — see that section below for the
+generalization; this section describes the shared mechanics both modes ride.
 
-- Box mode lives UNDER the Highlight tool's flyout (a `highlight-box-toggle` button
-  beside the color row), keyed `M`. It is NOT a pointer sub-mode and NOT a top-level
-  rail tool. App resets `boxHighlight` to false whenever the active tool leaves
-  Highlight, so re-arming Highlight always starts in plain text mode.
-- The overlay's box-drag gesture gates on an explicit `boxActive?: boolean` prop
-  (`activeTool === "highlight" && boxHighlight`), threaded App → Reader →
-  AnnotationInteraction. The armed tool is `highlight`, but a box drag is a rectangle,
-  not a text selection, so it needs this separate signal.
-- `buildRegionAnnotation` in `create.ts` is the factory (parallel to `buildPenAnnotation`,
-  `buildMemoAnnotation`, `buildCommentPin`): `type=highlight`, `kind=rect`, `body=null`,
-  `stroke_width=null`.
-- The box drag gesture is document-level (AP-1), gated on `boxActiveRef.current`,
+- Box mode lives UNDER its tool's own flyout (a Text/Box `menuitemradio` pair beside
+  the color row): `highlight-box-toggle` for Highlight (keyed `M`), `comment-box-toggle`
+  for Comment (no hotkey, Story 8.4). Box is NOT a pointer sub-mode and NOT a
+  top-level rail tool. App resets each tool's box flag to false whenever the active
+  tool leaves it, so re-arming a tool always starts in plain text mode.
+- The overlay's box-drag gesture (`useBoxGesture`) gates on a single `boxMode:
+  "highlight" | "comment" | null` prop (`BoxMode`, exported from `gestures/useBoxGesture.ts`
+  and re-exported by `annotations/index.ts`), derived in ReaderPage as
+  `activeTool === "highlight" && boxHighlight ? "highlight" : activeTool === "comment"
+  && boxComment ? "comment" : null` and threaded ReaderPage → Reader → AnnotationInteraction.
+  The armed tool is `highlight`/`comment`, but a box drag is a rectangle, not a text
+  selection or a click, so it needs this separate signal. Box-highlight and
+  box-comment are mutually exclusive for free: they are modes of two DIFFERENT tools,
+  and only one `activeTool` is ever active (AD-11).
+- On commit, `useBoxGesture` branches the builder + color on `boxMode`:
+  `"highlight"` → `buildRegionAnnotation` (`type=highlight`, `body=null`, the
+  Highlight tool's remembered color); `"comment"` → `buildCommentPin` (`type=comment`,
+  `body=""`, the Comment tool's remembered color). Both build the SAME `RectPlacement`
+  (the drawn, canonicalized, normalized drag rect) — one parametrized gesture, not a
+  forked one (`create.ts`'s existing factories, parallel to `buildPenAnnotation` /
+  `buildMemoAnnotation`).
+- The box drag gesture is document-level (AP-1), gated on `boxModeRef.current !== null`,
   with an 8px commit threshold (`BOX_DRAG_THRESHOLD`). It builds a canonicalized
   normalized rect via `normalizeRect` (handles up-left drags and off-card overshoot),
-  then calls `buildRegionAnnotation`, `addAnnotation`, and `select`.
+  then calls the mode's builder, `addAnnotation`, and `select`.
+- **Box mode must own creation while active (Story 8.4, Design D3):** `useCreateQuickBox`
+  takes a `boxActive: boolean` opt (`boxMode !== null`); its `onPointerUp` and
+  `onPointerDownCandidate` both early-return while box mode is active, so a box drag
+  never ALSO falls through to the text-comment create or the click-pin path. This was
+  a non-issue for box-highlight (Highlight's empty-selection pointerup branch is
+  already a no-op) but required for Comment (its empty-selection branch drops a
+  click pin).
 - The `kind=rect` FILL BRANCH in `AnnotationLayer` renders `kind=rect` marks as fill
   divs in a `.annotation-regions` group (sibling of `.annotation-highlights`). It also
-  still covers `type=comment` `kind=rect` (the Story 2.10 comment pins). The
-  `.annotation-highlight` base class keeps the 2.5 selection seam (hover/selected
+  still covers `type=comment` `kind=rect` (the Story 2.10 comment pins, now ALSO
+  reachable via a direct box-comment drag, not just a click or a Story 3.7 convert).
+  The `.annotation-highlight` base class keeps the 2.5 selection seam (hover/selected
   classes, hit-tests) working.
 - Rubber-band preview: `boxPreview` state in client coordinates renders as a
-  `.box-preview` fixed div (dashed border, `pointer-events:none`, `z-index:40`).
+  `.box-preview` fixed div (dashed border, `pointer-events:none`, `z-index:40`),
+  tinted to the active mode's own color (Highlight's or Comment's).
 - `M` / `m` arms Highlight with box mode on (UX-DR15); `V`/`Esc` return to cursor (AD-11).
-- No API/contract change: `RectAnchor`, `type:"highlight"`, `body` already exist
-  (AR-5); the tracked OpenAPI + generated TS types stay byte-identical.
+  Box-comment has no hotkey (Story 8.4 Decision D4) — the flyout's Box option is the
+  only affordance.
+- No API/contract change: `RectAnchor`, `type:"highlight"`, `type:"comment"`, `body`
+  already exist (AR-5); the tracked OpenAPI + generated TS types stay byte-identical.
 
 ## Story 2.12 -- cursor-mode drag-to-change-tool picker
 
@@ -382,7 +405,8 @@ encapsulation preserves behavior exactly:
 - `gestures/shared.ts` — `GestureContext` (the ref-backed live context every
   gesture reads) + `isExempt` (shared editable/button skip).
 - `gestures/usePenGesture.ts` — pen freehand draft → preview → commit (Story 2.8).
-- `gestures/useBoxGesture.ts` — box-highlight rubber-band region (Story 2.11).
+- `gestures/useBoxGesture.ts` — box-drag rubber-band region: highlight (Story 2.11)
+  or comment (Story 8.4), per `boxMode`.
 - `gestures/useMemoPlacement.ts` — click-to-place memo (Story 2.9).
 - `gestures/useSelection.ts` — the whole selected-mark quick-box concern (Story
   2.5/AD-12): selection state + open/close/key/dismiss/focus effects + the

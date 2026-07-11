@@ -59,6 +59,8 @@ export default function ToolRail({
   onPickColor,
   boxHighlight,
   onSetBoxHighlight,
+  boxComment,
+  onSetBoxComment,
   activeStrokeWidth,
   onPickStrokeWidth,
   activeAlpha,
@@ -85,6 +87,14 @@ export default function ToolRail({
   boxHighlight: boolean;
   /** Set box-highlight mode explicitly (the Highlight flyout's text/box pair). */
   onSetBoxHighlight: (value: boolean) => void;
+  /** Whether box-comment mode is on (a mode of the Comment tool, Story 8.4):
+   *  false = a drag highlights a text run + pin / a click drops a point pin
+   *  (the default), true = a drag makes a rectangular region comment instead.
+   *  The Comment flyout shows both as an explicit two-option picker, the twin
+   *  of the Highlight flyout's text/box picker. */
+  boxComment: boolean;
+  /** Set box-comment mode explicitly (the Comment flyout's text/box pair). */
+  onSetBoxComment: (value: boolean) => void;
   /** The active pen stroke width (store-backed; Story 2.8). The Pen tool's
    *  sub-toolbox shows this armed and sets it via `onPickStrokeWidth`. */
   activeStrokeWidth: number;
@@ -445,6 +455,36 @@ export default function ToolRail({
 
         {commentActive && flyoutOpen && (
           <ToolFlyout testId="comment-flyout">
+            {/* Comment mode (Story 8.4): the twin of the Highlight flyout's
+                Text/Box picker (mirroring lines above). Text (default) vs Box are
+                mutually exclusive (`menuitemradio`), sit FIRST above the colors,
+                with a divider between. A mode PICK does NOT close the flyout (the
+                user may still pick a color). */}
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={!boxComment}
+              className={!boxComment ? "tool-button tool-button--armed" : "tool-button"}
+              aria-label="Text comment"
+              title="Text comment: drag over text or click a spot"
+              data-testid="comment-text-toggle"
+              onClick={() => onSetBoxComment(false)}
+            >
+              <ChatCircle aria-hidden />
+            </button>
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={boxComment}
+              className={boxComment ? "tool-button tool-button--armed" : "tool-button"}
+              aria-label="Box comment"
+              title="Box comment: drag a region"
+              data-testid="comment-box-toggle"
+              onClick={() => onSetBoxComment(true)}
+            >
+              <BoundingBox aria-hidden />
+            </button>
+            <div className="tool-flyout__divider" data-testid="comment-box-divider" />
             <ColorSwatchRow
               value={activeColors.comment}
               onPick={(token) => {

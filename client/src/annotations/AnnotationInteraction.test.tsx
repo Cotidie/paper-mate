@@ -1873,12 +1873,12 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     return surf;
   }
 
-  it("a box drag with boxActive=true creates a region highlight with kind=rect, canonical rect, selected, opens the selection quick-box", async () => {
+  it('a box drag with boxMode="highlight" creates a region highlight with kind=rect, canonical rect, selected, opens the selection quick-box', async () => {
     const surf = pageSurface();
     const pages = [fakeCard(0, 0)];
     useAnnotationStore.getState().setActiveColor("highlight", "annotation-green");
     render(
-      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />,
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="highlight" rectReader={reader} />,
     );
 
     // Drag 60px down-right (above threshold).
@@ -1913,7 +1913,7 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
   it("a box drag canonicalizes the rect when dragged up-left (x0>x1, y0>y1)", () => {
     const surf = pageSurface();
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="highlight" rectReader={reader} />);
 
     // Down at bottom-right, up at top-left.
     fireEvent.pointerDown(surf, { button: 0, clientX: 300, clientY: 400 });
@@ -1932,7 +1932,7 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
   it("a below-threshold drag creates no mark (stray click guard)", () => {
     const surf = pageSurface();
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="highlight" rectReader={reader} />);
 
     fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
     // Travel only 4px — below BOX_DRAG_THRESHOLD (8px).
@@ -1949,7 +1949,7 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     existingMark.className = "annotation-highlight";
     surf.appendChild(existingMark);
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="highlight" rectReader={reader} />);
 
     fireEvent.pointerDown(existingMark, { button: 0, clientX: 60, clientY: 80 });
     fireEvent.pointerMove(document, { clientX: 200, clientY: 200 });
@@ -1965,7 +1965,7 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     qb.className = "quick-box";
     surf.appendChild(qb);
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="highlight" rectReader={reader} />);
 
     fireEvent.pointerDown(qb, { button: 0, clientX: 60, clientY: 80 });
     fireEvent.pointerMove(document, { clientX: 200, clientY: 200 });
@@ -1974,10 +1974,10 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     expect(useAnnotationStore.getState().all()).toHaveLength(0);
   });
 
-  it("box drag does NOT create a region when boxActive=false", () => {
+  it("box drag does NOT create a region when boxMode is null", () => {
     const surf = pageSurface();
     const pages = [fakeCard(0, 0)];
-    // boxActive not set (defaults false)
+    // boxMode not set (defaults null)
     render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
 
     fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
@@ -2001,7 +2001,7 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     };
     useAnnotationStore.getState().addAnnotation(region);
     const pages = [fakeCard(0, 0)];
-    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxActive rectReader={reader} />);
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="highlight" rectReader={reader} />);
 
     // Select AFTER mount so the docId-clearSelection effect on mount doesn't clear it.
     act(() => useAnnotationStore.getState().select("rg1"));
@@ -2016,6 +2016,149 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     // The selection quick-box must open (no region picker for pre-existing mark).
     await screen.findByTestId("selection-quick-box");
     expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
+  });
+});
+
+describe("AnnotationInteraction box-comment gesture (Story 8.4 — AC1,5, Design D2/D3)", () => {
+  function pageSurface(): HTMLElement {
+    const canvas = document.createElement("div");
+    canvas.className = "pdf-canvas";
+    const surf = document.createElement("div");
+    surf.className = "page-surface";
+    canvas.appendChild(surf);
+    document.body.appendChild(canvas);
+    stubNodes.push(canvas);
+    return surf;
+  }
+
+  it('a box drag with boxMode="comment" creates ONE region comment (kind=rect, body="", defaults.colors.comment), selected, opens the bubble not the selection quick-box', async () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    useAnnotationStore.getState().setActiveColor("comment", "annotation-purple");
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="comment" rectReader={reader} />,
+    );
+
+    // Drag 60px down-right (above threshold).
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].type).toBe("comment");
+    expect(all[0].anchor.kind).toBe("rect");
+    expect(all[0].group_id).toBeNull();
+    expect(all[0].style.color).toBe("annotation-purple");
+    expect(all[0].body).toBe("");
+    if (all[0].anchor.kind === "rect") {
+      expect(all[0].anchor.rect.x0).toBeCloseTo(0.1, 5);
+      expect(all[0].anchor.rect.y0).toBeCloseTo(0.1, 5);
+      expect(all[0].anchor.rect.x1).toBeCloseTo(0.2, 5);
+      expect(all[0].anchor.rect.y1).toBeCloseTo(0.2, 5);
+    }
+    expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
+    // A comment shows the bubble, NOT the generic selection quick-box (Decision 4).
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+  });
+
+  it('a below-threshold box-comment drag creates no mark (stray click guard)', () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="comment" rectReader={reader} />,
+    );
+
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    // Travel only 4px — below BOX_DRAG_THRESHOLD (8px).
+    fireEvent.pointerMove(document, { clientX: 64, clientY: 80 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 64, clientY: 80 });
+
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+
+  it("mid-drag boxMode going to null aborts the box-comment draft (no mark, no preview)", () => {
+    const surf = pageSurface();
+    const pages = [fakeCard(0, 0)];
+    const { rerender } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="comment" rectReader={reader} />,
+    );
+
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    expect(screen.getByTestId("box-preview")).toBeTruthy();
+
+    // The mode switches off mid-drag (e.g. the flyout picks Text, or the tool
+    // is disarmed) — the draft must abort, not commit on the eventual release.
+    rerender(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode={null} rectReader={reader} />);
+    expect(screen.queryByTestId("box-preview")).toBeNull();
+
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
+  });
+});
+
+describe("AnnotationInteraction box mode suppresses useCreateQuickBox's comment create (Story 8.4, Design D3)", () => {
+  /** A .page-surface element so the comment CLICK pointerup's closest checks pass. */
+  function canvasTarget(): HTMLElement {
+    const canvas = document.createElement("div");
+    canvas.className = "pdf-canvas";
+    const surf = document.createElement("div");
+    surf.className = "page-surface";
+    canvas.appendChild(surf);
+    document.body.appendChild(canvas);
+    stubNodes.push(canvas);
+    return surf;
+  }
+
+  it("with boxMode=\"comment\" active, a text-drag selection does NOT ALSO create a text comment (exactly one mark, from the box gesture)", async () => {
+    const surf = canvasTarget();
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction
+        docId="doc-1"
+        getPages={() => pages}
+        scale={1}
+        enabled
+        armedTool="comment"
+        boxMode="comment"
+        rectReader={reader}
+      />,
+    );
+
+    // A box drag over the page (useCreateQuickBox's onPointerUp also fires on
+    // this same document pointerup — it must see boxMode active and bail).
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 80 });
+    fireEvent.pointerMove(document, { clientX: 120, clientY: 160 });
+    fireEvent.pointerUp(document, { button: 0, clientX: 120, clientY: 160 });
+
+    const all = useAnnotationStore.getState().all();
+    expect(all).toHaveLength(1);
+    expect(all[0].anchor.kind).toBe("rect");
+  });
+
+  it('with boxMode="comment" active, an empty-selection click does NOT drop a click pin (box gesture owns the gesture, not the click-pin path)', () => {
+    const surf = canvasTarget();
+    const pages = [fakeCard(0, 0)];
+    render(
+      <AnnotationInteraction
+        docId="doc-1"
+        getPages={() => pages}
+        scale={1}
+        enabled
+        armedTool="comment"
+        boxMode="comment"
+        rectReader={reader}
+      />,
+    );
+
+    // A real click (pointerdown then pointerup at the same point, below the box
+    // drag threshold): neither the box gesture nor the click-pin path creates.
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 160 });
+    fireEvent.pointerUp(surf, { button: 0, clientX: 60, clientY: 160 });
+
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
   });
 });
 

@@ -68,6 +68,16 @@ export default function ReaderPage() {
   useEffect(() => {
     if (activeTool !== "highlight") setBoxHighlight(false);
   }, [activeTool]);
+  // Box-comment (Story 8.4) is the Comment tool's twin of box-highlight: a MODE,
+  // not its own tool. When true AND Comment is active, a rectangle drag makes a
+  // region comment instead of a text-run comment / click pin. Reset whenever the
+  // active tool leaves Comment (below) so re-arming Comment always starts in
+  // plain text mode; the Comment flyout's Text/Box picker turns it back on (no
+  // hotkey, D4).
+  const [boxComment, setBoxComment] = useState(false);
+  useEffect(() => {
+    if (activeTool !== "comment") setBoxComment(false);
+  }, [activeTool]);
   // The active/default annotation color, PER TOOL (Story 2.6, split per-tool by
   // user request), lives in the annotation store, not ReaderPage state: it is
   // written from two unrelated subtrees (the rail's color sub-toolbox AND the
@@ -404,9 +414,17 @@ export default function ReaderPage() {
           // `activeTool` (AD-11) — no stored siblings to keep in sync.
           panArmed={activeTool === "hand"}
           armedTool={isAnnotationTool(activeTool) ? activeTool : null}
-          // Box-highlight is a mode of Highlight; the overlay's box-drag gesture
-          // gates on this signal (true only while Highlight is active + box mode on).
-          boxActive={activeTool === "highlight" && boxHighlight}
+          // Box mode is a mode of its tool (Highlight's box-highlight or Comment's
+          // box-comment, Story 8.4); the overlay's box-drag gesture gates on this
+          // single derived signal. Both are modes of DIFFERENT tools, so they are
+          // mutually exclusive for free (only one `activeTool` is ever active).
+          boxMode={
+            activeTool === "highlight" && boxHighlight
+              ? "highlight"
+              : activeTool === "comment" && boxComment
+                ? "comment"
+                : null
+          }
           // Box-select (user feature request) is its own POINTER tool (Cursor's
           // flyout, not a mode of another tool); the overlay's marquee gesture
           // gates on this signal.
@@ -428,6 +446,10 @@ export default function ReaderPage() {
           // Box-highlight mode lives under the Highlight tool's flyout (a toggle).
           boxHighlight={boxHighlight}
           onSetBoxHighlight={setBoxHighlight}
+          // Box-comment mode (Story 8.4) lives under the Comment tool's flyout,
+          // the same toggle pattern as box-highlight.
+          boxComment={boxComment}
+          onSetBoxComment={setBoxComment}
           // Story 2.8: the Pen tool's sub-toolbox reads activeStrokeWidth and
           // sets it via onPickStrokeWidth (the default new strokes land in).
           activeStrokeWidth={activeStrokeWidth}

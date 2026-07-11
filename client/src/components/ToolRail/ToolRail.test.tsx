@@ -9,6 +9,7 @@ type RailProps = {
   activeTool: ActiveTool;
   activeColors: Record<AnnotationTool, string>;
   boxHighlight: boolean;
+  boxComment: boolean;
   activeStrokeWidth: number;
   activeAlpha: number;
   collapsed: boolean;
@@ -35,6 +36,7 @@ function renderRail(over: Partial<RailProps> = {}) {
   const onSelectTool = vi.fn();
   const onPickColor = vi.fn();
   const onSetBoxHighlight = vi.fn();
+  const onSetBoxComment = vi.fn();
   const onPickStrokeWidth = vi.fn();
   const onPickAlpha = vi.fn();
   const onToggleCollapse = vi.fn();
@@ -43,6 +45,7 @@ function renderRail(over: Partial<RailProps> = {}) {
     activeTool: "cursor",
     activeColors: DEFAULT_COLORS,
     boxHighlight: false,
+    boxComment: false,
     activeStrokeWidth: 4,
     activeAlpha: 0.4,
     collapsed: false,
@@ -56,6 +59,8 @@ function renderRail(over: Partial<RailProps> = {}) {
       onPickColor={onPickColor}
       boxHighlight={p.boxHighlight}
       onSetBoxHighlight={onSetBoxHighlight}
+      boxComment={p.boxComment}
+      onSetBoxComment={onSetBoxComment}
       activeStrokeWidth={p.activeStrokeWidth}
       onPickStrokeWidth={onPickStrokeWidth}
       activeAlpha={p.activeAlpha}
@@ -75,6 +80,7 @@ function renderRail(over: Partial<RailProps> = {}) {
     onSelectTool,
     onPickColor,
     onSetBoxHighlight,
+    onSetBoxComment,
     onPickStrokeWidth,
     onPickAlpha,
     onToggleCollapse,
@@ -256,6 +262,8 @@ describe("ToolRail", () => {
         onPickColor={vi.fn()}
         boxHighlight={false}
         onSetBoxHighlight={vi.fn()}
+        boxComment={false}
+        onSetBoxComment={vi.fn()}
         activeStrokeWidth={4}
         onPickStrokeWidth={vi.fn()}
         activeAlpha={0.4}
@@ -607,6 +615,46 @@ describe("ToolRail", () => {
     fireEvent.click(screen.getByTestId("color-swatch-annotation-pink"));
     expect(onPickColor).toHaveBeenCalledWith("comment", "annotation-pink");
     expect(screen.queryByTestId("comment-flyout")).toBeNull();
+  });
+
+  // ── Comment mode (Story 8.4): TEXT (default) vs BOX — the twin of the
+  // Highlight flyout's text/box picker, tested above ──
+  it("the comment flyout shows a text- and a box-comment option, text armed by default", () => {
+    armComment({ boxComment: false });
+    const text = screen.getByTestId("comment-text-toggle");
+    const box = screen.getByTestId("comment-box-toggle");
+    expect(text.getAttribute("aria-checked")).toBe("true");
+    expect(text.className).toContain("tool-button--armed");
+    expect(box.getAttribute("aria-checked")).toBe("false");
+    expect(box.className).not.toContain("tool-button--armed");
+    const flyout = screen.getByTestId("comment-flyout");
+    expect(flyout.contains(text)).toBe(true);
+    expect(flyout.contains(box)).toBe(true);
+  });
+
+  it("shows the box option armed (and text disarmed) when boxComment is on", () => {
+    armComment({ boxComment: true });
+    const text = screen.getByTestId("comment-text-toggle");
+    const box = screen.getByTestId("comment-box-toggle");
+    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(box.className).toContain("tool-button--armed");
+    expect(text.getAttribute("aria-checked")).toBe("false");
+    expect(text.className).not.toContain("tool-button--armed");
+  });
+
+  it("clicking the box option calls onSetBoxComment(true) and keeps the flyout open", () => {
+    const { onSetBoxComment } = armComment({ boxComment: false });
+    fireEvent.click(screen.getByTestId("comment-box-toggle"));
+    expect(onSetBoxComment).toHaveBeenCalledWith(true);
+    // A mode pick, NOT a color pick — the flyout stays open (unlike a swatch).
+    expect(screen.getByTestId("comment-flyout")).toBeTruthy();
+  });
+
+  it("clicking the text option calls onSetBoxComment(false) and keeps the flyout open", () => {
+    const { onSetBoxComment } = armComment({ boxComment: true });
+    fireEvent.click(screen.getByTestId("comment-text-toggle"));
+    expect(onSetBoxComment).toHaveBeenCalledWith(false);
+    expect(screen.getByTestId("comment-flyout")).toBeTruthy();
   });
 
   it("changing one tool's color does NOT change another tool's armed swatch (user fix: colors were global)", () => {

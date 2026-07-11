@@ -76,8 +76,18 @@ export function useCreateQuickBox(opts: {
    *  read live) so switching tools never re-binds them. */
   armedToolRef: RefObject<AnnotationTool | null>;
   rectReaderRef: RefObject<((r: Range) => ArrayLike<DOMRect>) | undefined>;
+  /** True while ANY box mode (box-highlight or box-comment, Story 8.4) is
+   *  active: `useBoxGesture` owns mark creation for the drag/click while this
+   *  is true, so this hook must NOT also create (Design D3). */
+  boxActive: boolean;
 }): CreateQuickBoxApi {
-  const { enabled, docId, scale, getPagesRef, scaleRef, defaultsRef, armedTool, armedToolRef, rectReaderRef } = opts;
+  const { enabled, docId, scale, getPagesRef, scaleRef, defaultsRef, armedTool, armedToolRef, rectReaderRef, boxActive } =
+    opts;
+  // Stable mirror of `boxActive` for the document-level listeners (bound once,
+  // read live), same pattern as `armedToolRef` — a box-mode toggle never
+  // re-binds the listeners below.
+  const boxActiveRef = useRef(boxActive);
+  boxActiveRef.current = boxActive;
 
   const [state, dispatch] = useReducer(overlayReducer, initialOverlayState);
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation);
@@ -225,7 +235,12 @@ export function useCreateQuickBox(opts: {
     // Record the comment-click candidate at pointerdown over a valid page spot, so
     // the pointerup click path can reject a release that wandered (a failed drag).
     const onPointerDownCandidate = (e: PointerEvent) => {
-      if (armedToolRef.current !== "comment" || e.button !== 0 || isExempt(e.target)) {
+      if (
+        armedToolRef.current !== "comment" ||
+        boxActiveRef.current ||
+        e.button !== 0 ||
+        isExempt(e.target)
+      ) {
         commentDownRef.current = null;
         return;
       }
@@ -260,6 +275,11 @@ export function useCreateQuickBox(opts: {
       // Pen and memo have their OWN gesture paths (below); neither reads the text
       // selection (pen = a drag, memo = a click-to-place).
       if (armedToolRef.current === "pen" || armedToolRef.current === "memo") return;
+      // A box mode (box-highlight or box-comment, Story 8.4) is active:
+      // `useBoxGesture` owns this drag/click's create, so this path must not
+      // ALSO fall through to the text-comment create or the click-pin below
+      // (Design D3 — the single most likely double-create seam).
+      if (boxActiveRef.current) return;
       const selection = window.getSelection();
       const pages = rectsFromSelection(selection, getPagesRef.current(), scaleRef.current, rectReaderRef.current);
       const tool = armedToolRef.current;
