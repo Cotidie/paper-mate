@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-11 (correct-course: broadened Epic 8 + added 8-2..8-8; new Epic 9 (9-1..9-3) for the three Phase-2 features; sprint-change-proposal-2026-07-11-epic-8-9-stories.md)"
+last_updated: "2026-07-11 (merge: correct-course broadened Epic 8 + added 8-2..8-8, new Epic 9 (9-1..9-3); PR #63 merged, 8-1-paragraph-aware-copy -> done)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -264,8 +264,8 @@ development_status:
   # Bank capability (8-2 filter, 8-3 sort), comment-on-region (8-4), a venue-display refinement
   # (8-5), and three reader defects (8-6/8-7/8-8). New reader FRs: FR-23/24/25. No story files
   # yet -> backlog.
-  epic-8: backlog
-  8-1-paragraph-aware-copy: backlog
+  epic-8: in-progress
+  8-1-paragraph-aware-copy: done
   8-2-annotation-bank-filter-by-type: backlog
   8-3-sort-annotations-reading-order: backlog
   8-4-comment-on-region: backlog
