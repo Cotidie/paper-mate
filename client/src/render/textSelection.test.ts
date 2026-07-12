@@ -4,16 +4,39 @@
 // being enabled once and torn down only once the last div unregisters
 // (Story 4.1 AC-5, "no leak / lifecycle-safe").
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { isEmptyLayerSpace, textSelectionController } from "./textSelection";
 import * as nearest from "./nearestTextAnchor";
 
-// Story 8.11: the controller resolves the nearest glyph through this module.
-// jsdom has no real layout, so mock it and assert the CONTROLLER's gate logic
-// (snap vs the Story 8.8 no-op fallback). The resolver's own geometry is
-// covered in nearestTextAnchor.test.ts.
-vi.mock("./nearestTextAnchor", () => ({ resolveNearestTextPoint: vi.fn() }));
-const mockResolve = vi.mocked(nearest.resolveNearestTextPoint);
+// Story 8.11: the controller resolves the snap anchor + focus (nearest text)
+// through this module. jsdom has no real layout, so mock it and assert the
+// CONTROLLER's gate logic (snap vs the Story 8.8 no-op fallback). The resolver's
+// own geometry is covered in nearestTextAnchor.test.ts.
+vi.mock("./nearestTextAnchor", () => ({ resolveNearestText: vi.fn() }));
+const mockResolve = vi.mocked(nearest.resolveNearestText);
+// A drag drives the selection through requestAnimationFrame. Queue frames and
+// flush them explicitly (via `flushRaf`) rather than running the callback
+// inline — running inline would reset the controller's `snapRaf` guard BEFORE
+// the `snapRaf = requestAnimationFrame(...)` assignment, corrupting the
+// coalescing guard the way real (async) rAF never does.
+let rafQueue: FrameRequestCallback[] = [];
+let rafId = 0;
+function flushRaf() {
+  const q = rafQueue;
+  rafQueue = [];
+  for (const cb of q) cb(0);
+}
+beforeEach(() => {
+  rafQueue = [];
+  rafId = 0;
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+    rafQueue.push(cb);
+    return ++rafId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {
+    rafQueue = [];
+  });
+});
 
 describe("isEmptyLayerSpace", () => {
   it("is true for the registered .textLayer container element itself", () => {
@@ -111,7 +134,7 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     return { div, glyph, unregister };
   }
 
-  it("does NOT suppress selectstart when a nearest line resolves (snap active)", () => {
+  it("does NOT suppress selectstart when an anchor resolves (snap active)", () => {
     const { div, glyph, unregister } = setupLayer();
     mockResolve.mockReturnValue({ node: glyph.firstChild as Text, offset: 0 });
 
@@ -123,7 +146,7 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     unregister();
   });
 
-  it("keeps the Story 8.8 selectstart suppression when NO nearest line resolves", () => {
+  it("keeps the Story 8.8 selectstart suppression when NO anchor resolves", () => {
     const { div, unregister } = setupLayer();
     mockResolve.mockReturnValue(null);
 
@@ -135,22 +158,39 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     unregister();
   });
 
-  it("drives setBaseAndExtent from the resolved anchor on pointermove while snapping", () => {
+  it("drives setBaseAndExtent from the resolved anchor to the live focus on pointermove", () => {
     const { div, glyph, unregister } = setupLayer();
     const node = glyph.firstChild as Text;
-    mockResolve.mockReturnValue({ node, offset: 2 });
+    // First call (anchor at pointerdown) offset 2; second call (focus) offset 7.
+    mockResolve.mockReturnValueOnce({ node, offset: 2 }).mockReturnValueOnce({ node, offset: 7 });
     const setBaseAndExtent = vi.fn();
     vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
-    // jsdom lacks document.elementFromPoint; the pointermove handler calls it to
-    // find the layer under the current drag point. Stub it to the origin layer.
-    const origElementFromPoint = document.elementFromPoint;
-    document.elementFromPoint = (() => div) as typeof document.elementFromPoint;
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    // pointermove schedules a rAF frame; flush it to apply.
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 100 }));
+    flushRaf();
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 2, node, 7);
+
+    unregister();
+  });
+
+  it("re-resolves the focus on scroll mid-drag (tracks the pointer under scroll)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockResolve.mockReturnValue({ node, offset: 5 });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 100 }));
-    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 2, node, 2);
+    flushRaf();
+    setBaseAndExtent.mockClear();
+    // A scroll with no pointer motion must still re-apply the snap frame.
+    document.dispatchEvent(new Event("scroll"));
+    flushRaf();
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 5, node, 5);
 
-    document.elementFromPoint = origElementFromPoint;
     unregister();
   });
 

@@ -34,7 +34,7 @@
 // fallback when no line is near (a far, truly-empty margin).
 
 import { joinParagraphLines, measureSelectedLines } from "./paragraphCopy";
-import { resolveNearestTextPoint } from "./nearestTextAnchor";
+import { resolveNearestText } from "./nearestTextAnchor";
 
 /**
  * True when `target` is empty page space in a registered text layer: the
@@ -122,12 +122,22 @@ class TextSelectionController {
 
     let pointerDown = false;
     let emptyOrigin = false;
-    // Story 8.11 snap state: when an empty-origin pointerdown resolves a nearest
-    // glyph, `snapAnchor` holds it and `snapFocus` the last resolved drag point;
-    // `snapping` gates the pointermove that drives the native selection.
+    // Story 8.11 snap state: on an empty-origin pointerdown that resolves a
+    // nearest glyph, `snapLayer` is the origin page's text layer, `snapAnchor`
+    // holds the seed point, and `snapFocus` the last resolved drag point.
+    // `snapping` gates the drag that drives the native selection.
     let snapping = false;
+    let snapLayer: Element | null = null;
     let snapAnchor: { node: Node; offset: number } | null = null;
     let snapFocus: { node: Node; offset: number } | null = null;
+    // rAF throttle: an empty-origin snap drives the selection ITSELF (unlike an
+    // on-text drag the browser drives natively). Calling setBaseAndExtent on
+    // every pointermove fires the selectionchange handler + forces layout
+    // synchronously many times per frame, thrashing and starving event delivery
+    // (the "laggy from empty space, fast from text" report). Coalesce to one
+    // update per animation frame, matching the browser's own native cadence.
+    let snapPoint: { x: number; y: number } | null = null;
+    let snapRaf = 0;
     let isFirefox: boolean | undefined;
     let prevRange: Range | null = null;
 
@@ -140,33 +150,55 @@ class TextSelectionController {
       return null;
     };
 
+    // Apply one snap frame: re-resolve the focus LIVE (nearest text to the
+    // current pointer; re-measuring keeps it correct as the page scrolls under
+    // the drag) and extend the native selection from the anchor to it.
+    const applySnapFrame = (): void => {
+      snapRaf = 0;
+      if (!snapping || !snapAnchor || !snapLayer || !snapPoint) return;
+      const focus = resolveNearestText(snapLayer, snapPoint.x, snapPoint.y);
+      // Keep the last good focus when the pointer is momentarily off any text;
+      // falling back to the anchor would COLLAPSE the selection mid-drag.
+      if (focus) snapFocus = { node: focus.node, offset: focus.offset };
+      const f = snapFocus ?? snapAnchor;
+      document.getSelection()?.setBaseAndExtent(snapAnchor.node, snapAnchor.offset, f.node, f.offset);
+    };
+    const scheduleSnapFrame = (): void => {
+      if (snapping && snapRaf === 0) snapRaf = requestAnimationFrame(applySnapFrame);
+    };
+
     document.addEventListener(
       "pointerdown",
       (event) => {
         pointerDown = true;
         emptyOrigin = isEmptyLayerSpace(event.target, this.#textLayers);
         snapping = false;
+        snapLayer = null;
         snapAnchor = null;
         snapFocus = null;
+        snapPoint = null;
         if (!emptyOrigin) return;
-        // Story 8.11: resolve the nearest glyph ONCE at the origin. If found,
-        // seed the native selection there and let pointermove extend it (the
-        // snap); if not (a far, truly-empty margin), fall through to Story 8.8's
-        // selectstart-suppress no-op below.
+        // Story 8.11: resolve the nearest text ONCE at the origin (nearest glyph
+        // by 2D distance -> nearest char). If found, seed the native selection
+        // there and let the drag extend it (the snap); if not (a far, truly-empty
+        // margin), fall through to Story 8.8's selectstart-suppress no-op below.
         const layer = originLayerOf(event.target);
-        const point = layer ? resolveNearestTextPoint(layer, event.clientX, event.clientY) : null;
-        if (point) {
-          // We DRIVE the native selection per-move here — a deliberate crossing
-          // of Story 8.9's spike-budget "no per-move selection driving" guard.
-          // That guard's rationale was the reverted attempts' column-band
-          // CLIPPING; `setBaseAndExtent` never clips (it yields the plain native
-          // contiguous range, identical to an on-text drag between the same two
-          // points), so the rationale still holds and this is not that class.
-          // preventDefault stops the browser's click-to-collapse on release,
-          // which would otherwise wipe the built selection before pointerup
-          // reads it (deferred-work.md#Discarded: Story 4.2 Part B).
+        const point = layer ? resolveNearestText(layer, event.clientX, event.clientY) : null;
+        if (layer && point) {
+          // We DRIVE the native selection per-frame (rAF-throttled) here — a
+          // deliberate crossing of Story 8.9's spike-budget "no per-move
+          // selection driving" guard. That guard's rationale was the reverted
+          // attempts' column-band CLIPPING; we never clip. `setBaseAndExtent`
+          // yields the plain native contiguous range, identical to an on-text
+          // drag between the same two points — so a snap drag behaves exactly
+          // like a text drag (it can extend across columns as the pointer moves),
+          // only with its START snapped to the nearest text. preventDefault stops
+          // the browser's click-to-collapse on release, which would otherwise
+          // wipe the built selection before pointerup reads it
+          // (deferred-work.md#Discarded: Story 4.2 Part B).
           event.preventDefault();
           snapping = true;
+          snapLayer = layer;
           snapAnchor = { node: point.node, offset: point.offset };
           snapFocus = { node: point.node, offset: point.offset };
         }
@@ -176,24 +208,30 @@ class TextSelectionController {
     document.addEventListener(
       "pointermove",
       (event) => {
-        if (!snapping || !snapAnchor) return;
-        const layer = originLayerOf(document.elementFromPoint(event.clientX, event.clientY));
-        const focus = layer ? resolveNearestTextPoint(layer, event.clientX, event.clientY) : null;
-        // Keep the last good focus when the pointer is momentarily over a
-        // non-resolvable spot; falling back to the anchor would COLLAPSE the
-        // selection mid-drag.
-        if (focus) snapFocus = { node: focus.node, offset: focus.offset };
-        const f = snapFocus ?? snapAnchor;
-        document.getSelection()?.setBaseAndExtent(snapAnchor.node, snapAnchor.offset, f.node, f.offset);
+        if (!snapping) return;
+        snapPoint = { x: event.clientX, y: event.clientY };
+        scheduleSnapFrame();
       },
       { signal },
     );
+    // Scrolling mid-drag (the user wheel-scrolls while holding the button) fires
+    // no pointermove, but the content under the cursor changes — re-resolve from
+    // the last pointer position against the new (scrolled) geometry so the
+    // selection tracks. Capture phase: the pdf-canvas scrolls, and `scroll` does
+    // not bubble.
+    document.addEventListener("scroll", scheduleSnapFrame, { signal, capture: true });
     const releasePointer = (): void => {
       pointerDown = false;
       emptyOrigin = false;
       snapping = false;
+      snapLayer = null;
       snapAnchor = null;
       snapFocus = null;
+      snapPoint = null;
+      if (snapRaf !== 0) {
+        cancelAnimationFrame(snapRaf);
+        snapRaf = 0;
+      }
       this.#textLayers.forEach(reset);
     };
     document.addEventListener("pointerup", releasePointer, { signal });
