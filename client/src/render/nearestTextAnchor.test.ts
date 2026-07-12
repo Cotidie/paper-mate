@@ -96,6 +96,7 @@ describe("resolveNearestText", () => {
     ]);
     const p = resolveNearestText(layer, 130, 108, rectReader(map), rangeReader(map))!;
     expect(p.node.textContent).toBe("leftrow"); // nearest = left, not the far right
+    expect(p.inBand).toBe(true); // y=108 is within the row band (100..116)
   });
 
   it("resolves to the RIGHT column for a right-side point (cross-column drag can extend here)", () => {
@@ -107,10 +108,20 @@ describe("resolveNearestText", () => {
     expect(p.node.textContent).toBe("rightrow");
   });
 
-  it("returns null past the proximity threshold (far-empty margin)", () => {
+  it("reports inBand=false when the pointer Y is in a vertical gap (still returns the nearest point)", () => {
     const { layer, map } = layerWith([{ text: "body", left: 50, right: 90, top: 100 }]);
-    // > 3 line-heights (48px) below the glyph bottom (116) is a truly-empty margin.
-    expect(resolveNearestText(layer, 70, 116 + 60, rectReader(map), rangeReader(map))).toBeNull();
+    // y=200 is well below the row band (100..116): not touching a row.
+    const p = resolveNearestText(layer, 70, 200, rectReader(map), rangeReader(map))!;
+    expect(p.node.textContent).toBe("body");
+    expect(p.inBand).toBe(false);
+  });
+
+  it("has NO horizontal proximity gate: a deep-margin pointer still resolves (Issue #2)", () => {
+    const { layer, map } = layerWith([{ text: "body", left: 50, right: 90, top: 100 }]);
+    // x=900 is far right of the glyph, but y is in its band: inBand stays true.
+    const p = resolveNearestText(layer, 900, 108, rectReader(map), rangeReader(map))!;
+    expect(p.node.textContent).toBe("body");
+    expect(p.inBand).toBe(true);
   });
 
   it("skips a rotated (--rotate) margin span", () => {

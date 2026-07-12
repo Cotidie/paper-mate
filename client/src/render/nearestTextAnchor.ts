@@ -45,6 +45,17 @@ export interface NearestTextPoint {
 }
 
 /**
+ * The moving-focus result: a nearest text point plus whether the pointer's Y
+ * is inside that glyph's vertical band. `inBand` is the "touching a row" signal
+ * the caller uses to decide when to START painting the snap selection (Issue #1:
+ * a drag must not paint while the cursor is still in a vertical gap / blank
+ * space, only once it reaches a text row).
+ */
+export interface FocusPoint extends NearestTextPoint {
+  inBand: boolean;
+}
+
+/**
  * The snap origin's anchor candidates: `inBand` when the pointer is beside text
  * (inside a line's vertical band); otherwise the pointer is in a vertical gap
  * and `aboveEnd` / `belowStart` are the paragraph-boundary anchors chosen by
@@ -260,11 +271,14 @@ function lineStart(line: Line): NearestTextPoint | null {
 }
 
 /**
- * Resolve the nearest text position to `(x, y)` within `layer` from live
- * geometry: the glyph nearest by 2D distance, then the nearest character within
- * it. Null when the nearest glyph is too far (a far-empty margin) or the layer
- * has no glyphs. Used for the moving FOCUS each drag frame — no column locking,
- * so a drag extends across columns exactly like a native text drag.
+ * Resolve the moving FOCUS each drag frame: the nearest text position to
+ * `(x, y)` from live geometry — the glyph nearest by 2D distance, then the
+ * nearest character in it — plus whether `y` is inside that glyph's vertical
+ * band (`inBand`). No column locking, so a drag extends across columns exactly
+ * like a native text drag. NO horizontal proximity gate: once a drag is active
+ * the pointer may wander deep into the margin and the selection must keep
+ * tracking (Issue #2 — the proximity gate belongs only at the START, in
+ * `resolveOrigin`). Null only when the layer has no usable glyphs.
  */
 export function resolveNearestText(
   layer: Element,
@@ -272,15 +286,14 @@ export function resolveNearestText(
   y: number,
   elRectsOf: (el: Element) => DOMRect = defaultElRectsOf,
   rangeRectsOf: (r: Range) => ArrayLike<DOMRect> = defaultRangeRectsOf,
-): NearestTextPoint | null {
+): FocusPoint | null {
   const glyphs = gatherGlyphs(layer, elRectsOf);
   const glyph = nearestGlyph(glyphs, x, y);
   if (!glyph) return null;
-  const height = glyph.bottom - glyph.top || 16;
-  if (distSqToGlyph(glyph, x, y) > (MAX_DISTANCE_IN_LINE_HEIGHTS * height) ** 2) return null;
   const node = glyph.el.firstChild;
   if (!node || node.nodeType !== Node.TEXT_NODE) return null;
-  return { node: node as Text, offset: nearestOffsetInTextNode(node as Text, x, rangeRectsOf) };
+  const inBand = y >= glyph.top && y <= glyph.bottom;
+  return { node: node as Text, offset: nearestOffsetInTextNode(node as Text, x, rangeRectsOf), inBand };
 }
 
 /**

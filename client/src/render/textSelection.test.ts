@@ -169,16 +169,33 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     unregister();
   });
 
-  it("dragging DOWN from a gap anchors at the line-below START, extending to the live focus", () => {
+  it("does NOT paint until the cursor touches a text row (Issue #1: engage on inBand)", () => {
     const { div, glyph, unregister } = setupLayer();
     const node = glyph.firstChild as Text;
-    mockOrigin.mockReturnValue(gapOrigin(node)); // originY 100, belowStart offset 0
-    mockFocus.mockReturnValue({ node, offset: 8 });
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    // Focus resolves a nearest point but the cursor is NOT in its band yet.
+    mockFocus.mockReturnValue({ node, offset: 8, inBand: false });
     const setBaseAndExtent = vi.fn();
     vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
-    // Move DOWN (clientY 140 > originY 100): anchor = belowStart (offset 0).
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 130 }));
+    flushRaf();
+    expect(setBaseAndExtent).not.toHaveBeenCalled(); // still in blank space -> no paint
+
+    unregister();
+  });
+
+  it("dragging DOWN from a gap anchors at the line-below START once a row is touched", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node)); // originY 100, belowStart offset 0
+    mockFocus.mockReturnValue({ node, offset: 8, inBand: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    // Move DOWN (clientY 140 > originY 100) onto a row: anchor = belowStart (offset 0).
     document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
     flushRaf();
     expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 8);
@@ -186,19 +203,40 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     unregister();
   });
 
-  it("dragging UP from a gap anchors at the line-above END", () => {
+  it("dragging UP from a gap anchors at the line-above END once a row is touched", () => {
     const { div, glyph, unregister } = setupLayer();
     const node = glyph.firstChild as Text;
     mockOrigin.mockReturnValue(gapOrigin(node)); // aboveEnd offset 11
-    mockFocus.mockReturnValue({ node, offset: 3 });
+    mockFocus.mockReturnValue({ node, offset: 3, inBand: true });
     const setBaseAndExtent = vi.fn();
     vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
-    // Move UP (clientY 60 < originY 100): anchor = aboveEnd (offset 11).
+    // Move UP (clientY 60 < originY 100) onto a row: anchor = aboveEnd (offset 11).
     document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 60 }));
     flushRaf();
     expect(setBaseAndExtent).toHaveBeenCalledWith(node, 11, node, 3);
+
+    unregister();
+  });
+
+  it("keeps tracking after engage even when the focus stays at the same row (Issue #2: no proximity gate)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    // Engage on a row, then a later frame whose focus is deep in the margin
+    // (the resolver has no horizontal gate, so it still returns inBand at that Y).
+    mockFocus.mockReturnValueOnce({ node, offset: 4, inBand: true }).mockReturnValue({ node, offset: 9, inBand: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
+    flushRaf();
+    setBaseAndExtent.mockClear();
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 900, clientY: 140 }));
+    flushRaf();
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 9); // still tracking in the margin
 
     unregister();
   });
@@ -207,7 +245,7 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     const { div, glyph, unregister } = setupLayer();
     const node = glyph.firstChild as Text;
     mockOrigin.mockReturnValue(gapOrigin(node));
-    mockFocus.mockReturnValue({ node, offset: 5 });
+    mockFocus.mockReturnValue({ node, offset: 5, inBand: true });
     const setBaseAndExtent = vi.fn();
     vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
 

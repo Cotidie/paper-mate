@@ -130,6 +130,13 @@ class TextSelectionController {
     let snapping = false;
     let snapLayer: Element | null = null;
     let snapOrigin: OriginContext | null = null;
+    // The snap does not paint until the cursor first TOUCHES a text row (Issue
+    // #1): `snapEngaged` flips true on the first frame the focus is in a line's
+    // vertical band, and only then is `snapAnchor` fixed (by drag direction for
+    // a gap origin, or the in-band char for a side origin) and the selection
+    // extended. Before engaging, nothing is painted.
+    let snapEngaged = false;
+    let snapAnchor: NearestTextPoint | null = null;
     let snapFocus: NearestTextPoint | null = null;
     // rAF throttle: an empty-origin snap drives the selection ITSELF (unlike an
     // on-text drag the browser drives natively). Calling setBaseAndExtent on
@@ -151,30 +158,38 @@ class TextSelectionController {
       return null;
     };
 
-    // The anchor for the CURRENT drag direction: inside a line band it is the
-    // fixed nearest character; in a vertical gap it is the end of the line above
-    // (dragging up) or the start of the line below (dragging down), so a gap
-    // origin anchors on a paragraph boundary.
-    const anchorForDirection = (ctx: OriginContext, pointerY: number): NearestTextPoint | null => {
+    // The anchor fixed at ENGAGE (first row-touch): a side origin (pointer beside
+    // a line) uses that line's in-band char; a gap origin uses the paragraph
+    // boundary in the drag's direction — dragging up anchors at the end of the
+    // line above the gap, dragging down at the start of the line below.
+    const anchorAtEngage = (ctx: OriginContext, pointerY: number): NearestTextPoint | null => {
       if (ctx.inBand) return ctx.inBand;
       if (pointerY < ctx.originY) return ctx.aboveEnd ?? ctx.belowStart;
       return ctx.belowStart ?? ctx.aboveEnd;
     };
 
-    // Apply one snap frame: re-resolve the focus LIVE (nearest text to the
+    // Apply one snap frame. Re-resolve the focus LIVE (nearest text to the
     // current pointer; re-measuring keeps it correct as the page scrolls under
-    // the drag), pick the direction-aware anchor, and extend the native
-    // selection from the anchor to the focus.
+    // the drag). Until the cursor first TOUCHES a text row (focus.inBand), paint
+    // nothing (Issue #1). On that first touch, ENGAGE: fix the anchor once (so
+    // it can't flip mid-drag) and start extending. Once engaged, always track
+    // the focus with no proximity gate, so a cursor that wanders into the deep
+    // margin keeps the selection alive (Issue #2).
     const applySnapFrame = (): void => {
       snapRaf = 0;
       if (!snapping || !snapOrigin || !snapLayer || !snapPoint) return;
       const focus = resolveNearestText(snapLayer, snapPoint.x, snapPoint.y);
-      // Keep the last good focus when the pointer is momentarily off any text;
-      // falling back to the anchor would COLLAPSE the selection mid-drag.
-      if (focus) snapFocus = focus;
-      const anchor = anchorForDirection(snapOrigin, snapPoint.y);
-      const f = snapFocus ?? anchor;
-      if (anchor && f) document.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, f.node, f.offset);
+      if (!snapEngaged) {
+        if (!focus || !focus.inBand) return; // still in blank space — paint nothing
+        snapEngaged = true;
+        snapAnchor = anchorAtEngage(snapOrigin, snapPoint.y);
+        snapFocus = { node: focus.node, offset: focus.offset };
+      } else if (focus) {
+        snapFocus = { node: focus.node, offset: focus.offset };
+      }
+      const a = snapAnchor;
+      const f = snapFocus ?? snapAnchor;
+      if (a && f) document.getSelection()?.setBaseAndExtent(a.node, a.offset, f.node, f.offset);
     };
     const scheduleSnapFrame = (): void => {
       if (snapping && snapRaf === 0) snapRaf = requestAnimationFrame(applySnapFrame);
@@ -188,13 +203,16 @@ class TextSelectionController {
         snapping = false;
         snapLayer = null;
         snapOrigin = null;
+        snapEngaged = false;
+        snapAnchor = null;
         snapFocus = null;
         snapPoint = null;
         if (!emptyOrigin) return;
         // Story 8.11: resolve the origin's direction-aware anchor context ONCE.
-        // If a nearest line is found, seed the native selection at gesture start
-        // and let the drag extend it (the snap); if not (a far, truly-empty
-        // margin), fall through to Story 8.8's selectstart-suppress no-op below.
+        // If the pointer is near enough to text (the proximity gate = the accepted
+        // "start border"; a far, truly-empty margin does NOT snap), arm the snap;
+        // the drag paints only once the cursor touches a row (see applySnapFrame).
+        // Otherwise fall through to Story 8.8's selectstart-suppress no-op below.
         const layer = originLayerOf(event.target);
         const origin = layer ? resolveOrigin(layer, event.clientX, event.clientY) : null;
         const seed = origin && (origin.inBand ?? origin.belowStart ?? origin.aboveEnd);
@@ -214,7 +232,6 @@ class TextSelectionController {
           snapping = true;
           snapLayer = layer;
           snapOrigin = origin;
-          snapFocus = seed;
         }
       },
       { signal },
@@ -240,6 +257,8 @@ class TextSelectionController {
       snapping = false;
       snapLayer = null;
       snapOrigin = null;
+      snapEngaged = false;
+      snapAnchor = null;
       snapFocus = null;
       snapPoint = null;
       if (snapRaf !== 0) {
