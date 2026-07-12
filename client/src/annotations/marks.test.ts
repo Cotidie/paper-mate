@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Annotation } from "@/api/client";
 import { ANNOTATION_TOOLS } from "@/lib/tools";
-import { MARK_DESCRIPTORS, quickBoxSpec } from "./marks";
+import { MARK_DESCRIPTORS, quickBoxSpec, isBoxComment, usesLeftVerticalQuickBox } from "./marks";
 
 function anno(type: Annotation["type"], kind: Annotation["anchor"]["kind"]): Annotation {
   const base = { id: "a", doc_id: "d", type, group_id: null, style: { color: "annotation-default", stroke_width: null, alpha: null }, body: null, created_at: "t", updated_at: "t" };
@@ -36,9 +36,37 @@ describe("quickBoxSpec (selection quick-box capability)", () => {
     expect(s).toMatchObject({ strokeWidth: false, alpha: true, size: false, usesBubble: false, ariaLabel: "Memo actions" });
   });
 
-  it("comment → routed to the bubble (generic box gated off), either kind", () => {
+  it("comment (text-kind, or a degenerate click-placed pin) → routed to the bubble", () => {
     expect(quickBoxSpec(anno("comment", "text")).usesBubble).toBe(true);
-    expect(quickBoxSpec(anno("comment", "rect")).usesBubble).toBe(true);
+    const pin: Annotation = {
+      ...anno("comment", "rect"),
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.1, y1: 0.2 } },
+    };
+    expect(quickBoxSpec(pin).usesBubble).toBe(true);
+  });
+
+  it("comment (box/region — real-area rect, fix request) → routed to the shared quick-box instead", () => {
+    // anno("comment", "rect") builds rect {x0:0,y0:0,x1:1,y1:1} — real area.
+    expect(quickBoxSpec(anno("comment", "rect")).usesBubble).toBe(false);
+  });
+
+  it("isBoxComment: true only for a comment with a real-area rect anchor", () => {
+    expect(isBoxComment(anno("comment", "rect"))).toBe(true);
+    expect(isBoxComment(anno("comment", "text"))).toBe(false);
+    expect(isBoxComment(anno("memo", "rect"))).toBe(false);
+    const pin: Annotation = {
+      ...anno("comment", "rect"),
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.1, y1: 0.2 } },
+    };
+    expect(isBoxComment(pin)).toBe(false);
+  });
+
+  it("usesLeftVerticalQuickBox: true for a memo or a box comment, false otherwise (or null)", () => {
+    expect(usesLeftVerticalQuickBox(anno("memo", "rect"))).toBe(true);
+    expect(usesLeftVerticalQuickBox(anno("comment", "rect"))).toBe(true);
+    expect(usesLeftVerticalQuickBox(anno("comment", "text"))).toBe(false);
+    expect(usesLeftVerticalQuickBox(anno("highlight", "rect"))).toBe(false);
+    expect(usesLeftVerticalQuickBox(null)).toBe(false);
   });
 
   it("highlight + underline → no extra rows, Highlight actions label (text or region)", () => {
