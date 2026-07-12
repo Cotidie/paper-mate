@@ -4,7 +4,7 @@ baseline_commit: 72d70d6d66576eba6da6541cf3adb0da240bde41
 
 # Story 8.8: Empty-space drag does not select underlying text
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
