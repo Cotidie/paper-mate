@@ -6,6 +6,14 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { isEmptyLayerSpace, textSelectionController } from "./textSelection";
+import * as nearest from "./nearestTextAnchor";
+
+// Story 8.11: the controller resolves the nearest glyph through this module.
+// jsdom has no real layout, so mock it and assert the CONTROLLER's gate logic
+// (snap vs the Story 8.8 no-op fallback). The resolver's own geometry is
+// covered in nearestTextAnchor.test.ts.
+vi.mock("./nearestTextAnchor", () => ({ resolveNearestTextPoint: vi.fn() }));
+const mockResolve = vi.mocked(nearest.resolveNearestTextPoint);
 
 describe("isEmptyLayerSpace", () => {
   it("is true for the registered .textLayer container element itself", () => {
@@ -80,6 +88,85 @@ describe("TextSelectionController — empty-origin selectstart suppression", () 
     const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
     document.dispatchEvent(selectstart);
     expect(selectstart.defaultPrevented).toBe(false);
+
+    unregister();
+  });
+});
+
+describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    mockResolve.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  function setupLayer() {
+    const div = document.createElement("div");
+    div.className = "textLayer";
+    const glyph = document.createElement("span");
+    glyph.append(document.createTextNode("nearest text"));
+    div.append(glyph);
+    document.body.append(div);
+    const unregister = textSelectionController.register(div);
+    return { div, glyph, unregister };
+  }
+
+  it("does NOT suppress selectstart when a nearest line resolves (snap active)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    mockResolve.mockReturnValue({ node: glyph.firstChild as Text, offset: 0 });
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(false);
+
+    unregister();
+  });
+
+  it("keeps the Story 8.8 selectstart suppression when NO nearest line resolves", () => {
+    const { div, unregister } = setupLayer();
+    mockResolve.mockReturnValue(null);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(true);
+
+    unregister();
+  });
+
+  it("drives setBaseAndExtent from the resolved anchor on pointermove while snapping", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockResolve.mockReturnValue({ node, offset: 2 });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+    // jsdom lacks document.elementFromPoint; the pointermove handler calls it to
+    // find the layer under the current drag point. Stub it to the origin layer.
+    const origElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = (() => div) as typeof document.elementFromPoint;
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 100 }));
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 2, node, 2);
+
+    document.elementFromPoint = origElementFromPoint;
+    unregister();
+  });
+
+  it("clears the snap latch on pointerup, so a later empty-origin drag re-evaluates", () => {
+    const { div, glyph, unregister } = setupLayer();
+    mockResolve.mockReturnValue({ node: glyph.firstChild as Text, offset: 0 });
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new Event("pointerup"));
+
+    // After release, resolve nothing: the next empty-origin drag must fall back
+    // to the Story 8.8 suppression (snap latch cleared, not stuck on).
+    mockResolve.mockReturnValue(null);
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(true);
 
     unregister();
   });

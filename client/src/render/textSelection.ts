@@ -23,8 +23,18 @@
 // rewrites the clipboard so a soft-wrapped paragraph pastes as one line (see
 // `paragraphCopy.ts`). It reuses this controller's registry/lifecycle rather
 // than standing up a second global listener manager.
+//
+// Story 8.11 adds the empty-origin SNAP: instead of Story 8.8's flat no-op, a
+// drag starting in blank space next to text resolves the nearest glyph once
+// (via `nearestTextAnchor`, caret-API-free — the caret family is poisoned
+// mid-session, see deferred-work.md#Discarded: Story 8.9) and seeds a real
+// native selection with `setBaseAndExtent` each `pointermove`. Everything
+// downstream (create-on-release, copy, quick-box) already reads
+// `window.getSelection()`, so it works unchanged. The no-op stays as the
+// fallback when no line is near (a far, truly-empty margin).
 
 import { joinParagraphLines, measureSelectedLines } from "./paragraphCopy";
+import { resolveNearestTextPoint } from "./nearestTextAnchor";
 
 /**
  * True when `target` is empty page space in a registered text layer: the
@@ -112,20 +122,78 @@ class TextSelectionController {
 
     let pointerDown = false;
     let emptyOrigin = false;
+    // Story 8.11 snap state: when an empty-origin pointerdown resolves a nearest
+    // glyph, `snapAnchor` holds it and `snapFocus` the last resolved drag point;
+    // `snapping` gates the pointermove that drives the native selection.
+    let snapping = false;
+    let snapAnchor: { node: Node; offset: number } | null = null;
+    let snapFocus: { node: Node; offset: number } | null = null;
     let isFirefox: boolean | undefined;
     let prevRange: Range | null = null;
+
+    // The registered `.textLayer` the pointer target is (or is inside): the
+    // target IS a layer, or is a layer's `endOfContent` bound child.
+    const originLayerOf = (target: EventTarget | null): Element | null => {
+      if (!(target instanceof Element)) return null;
+      if (this.#textLayers.has(target)) return target;
+      for (const [div, endOfContent] of this.#textLayers) if (target === endOfContent) return div;
+      return null;
+    };
 
     document.addEventListener(
       "pointerdown",
       (event) => {
         pointerDown = true;
         emptyOrigin = isEmptyLayerSpace(event.target, this.#textLayers);
+        snapping = false;
+        snapAnchor = null;
+        snapFocus = null;
+        if (!emptyOrigin) return;
+        // Story 8.11: resolve the nearest glyph ONCE at the origin. If found,
+        // seed the native selection there and let pointermove extend it (the
+        // snap); if not (a far, truly-empty margin), fall through to Story 8.8's
+        // selectstart-suppress no-op below.
+        const layer = originLayerOf(event.target);
+        const point = layer ? resolveNearestTextPoint(layer, event.clientX, event.clientY) : null;
+        if (point) {
+          // We DRIVE the native selection per-move here — a deliberate crossing
+          // of Story 8.9's spike-budget "no per-move selection driving" guard.
+          // That guard's rationale was the reverted attempts' column-band
+          // CLIPPING; `setBaseAndExtent` never clips (it yields the plain native
+          // contiguous range, identical to an on-text drag between the same two
+          // points), so the rationale still holds and this is not that class.
+          // preventDefault stops the browser's click-to-collapse on release,
+          // which would otherwise wipe the built selection before pointerup
+          // reads it (deferred-work.md#Discarded: Story 4.2 Part B).
+          event.preventDefault();
+          snapping = true;
+          snapAnchor = { node: point.node, offset: point.offset };
+          snapFocus = { node: point.node, offset: point.offset };
+        }
+      },
+      { signal },
+    );
+    document.addEventListener(
+      "pointermove",
+      (event) => {
+        if (!snapping || !snapAnchor) return;
+        const layer = originLayerOf(document.elementFromPoint(event.clientX, event.clientY));
+        const focus = layer ? resolveNearestTextPoint(layer, event.clientX, event.clientY) : null;
+        // Keep the last good focus when the pointer is momentarily over a
+        // non-resolvable spot; falling back to the anchor would COLLAPSE the
+        // selection mid-drag.
+        if (focus) snapFocus = { node: focus.node, offset: focus.offset };
+        const f = snapFocus ?? snapAnchor;
+        document.getSelection()?.setBaseAndExtent(snapAnchor.node, snapAnchor.offset, f.node, f.offset);
       },
       { signal },
     );
     const releasePointer = (): void => {
       pointerDown = false;
       emptyOrigin = false;
+      snapping = false;
+      snapAnchor = null;
+      snapFocus = null;
       this.#textLayers.forEach(reset);
     };
     document.addEventListener("pointerup", releasePointer, { signal });
@@ -134,15 +202,16 @@ class TextSelectionController {
     // an unrelated later selectstart until the next pointerdown/blur.
     document.addEventListener("pointercancel", releasePointer, { signal });
     window.addEventListener("blur", releasePointer, { signal });
-    // A drag whose origin is empty page space must not start a native
-    // selection at all (Story 8.8 AC-1): it would anchor at the nearest
-    // glyph and drag through every span in between. `emptyOrigin` is latched
-    // at pointerdown so this also covers a drag that starts blank and
-    // wanders onto text. On-text origins are untouched (AC-2).
+    // A drag whose origin is empty page space with NO nearby line must not
+    // start a native selection at all (Story 8.8 AC-1): it would anchor at the
+    // nearest glyph and drag through every span in between. `emptyOrigin` is
+    // latched at pointerdown so this also covers a drag that starts blank and
+    // wanders onto text. On-text origins are untouched (AC-2). When the snap is
+    // active (`snapping`), the selection is intentional, so do NOT suppress it.
     document.addEventListener(
       "selectstart",
       (event) => {
-        if (emptyOrigin) event.preventDefault();
+        if (emptyOrigin && !snapping) event.preventDefault();
       },
       { signal },
     );
