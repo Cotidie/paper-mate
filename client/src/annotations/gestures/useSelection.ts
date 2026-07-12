@@ -377,11 +377,18 @@ export function useSelection(opts: {
     el.style.top = `${c.y}px`;
   }, [isVerticalQuickBox, selectionPoint]);
 
+  // Tracks the scale this effect last ran at, so it can tell "the scale just
+  // changed" apart from "opened/selection changed at the same scale" (fix
+  // request, below).
+  const prevRepositionScaleRef = useRef(scale);
+
   // Focus moves INTO the selection box on open and RETURNS to the prior element on
   // close (same accessibility floor as the create box). Also nudges the box on-screen
   // once measured. Focus only on the OPEN transition (guarded by
   // `restoreSelectionFocusRef`), so a re-run (zoom) re-clamps without stealing focus.
   useLayoutEffect(() => {
+    const scaleJustChanged = prevRepositionScaleRef.current !== scale;
+    prevRepositionScaleRef.current = scale;
     if (showSelectionBox) {
       const el = selectionBoxRef.current;
       if (!el) return;
@@ -393,6 +400,23 @@ export function useSelection(opts: {
         // point; the swatches stay reachable by Tab.
         restoreSelectionFocusRef.current = (document.activeElement as HTMLElement | null) ?? document.body;
         el.querySelector<HTMLElement>("button")?.focus();
+      }
+      if (scaleJustChanged) {
+        // Fix request (oscillating quick-box on zoom): zooming also changes
+        // `scale`, which `useZoomControl` (a PARENT hook, so ITS layout effect
+        // runs AFTER this one — React fires child effects before parent ones)
+        // reacts to by re-centering the scroll container on the same focal
+        // point. Repositioning synchronously here reads the PRE-recenter
+        // scroll position — a transitional spot that paints, gets corrected
+        // a frame later when that recentering's native `scroll` event reaches
+        // the listener below, and reads as the box jumping/oscillating.
+        // Deferring this one call to the next animation frame lets the
+        // recentering (and browser layout) settle first, so it reads the
+        // FINAL position and paints once. Any resulting `scroll` event still
+        // fires the listener below too — redundant (same settled value) but
+        // harmless.
+        const raf = requestAnimationFrame(repositionBox);
+        return () => cancelAnimationFrame(raf);
       }
       repositionBox();
     } else if (restoreSelectionFocusRef.current) {

@@ -274,8 +274,6 @@ export default function AnnotationInteraction({
     return null;
   }
 
-  const selInit = showSelectionBox ? selection.selectionPoint() : { x: 0, y: 0 };
-
   // The live pen preview, drawn in fixed/client space (the same engine the mark
   // uses, so what-you-draw-is-what-you-get). Width = activeStrokeWidth * scale so
   // it matches the stored mark, which denormalizes at the current scale.
@@ -431,6 +429,14 @@ export default function AnnotationInteraction({
         </div>
       )}
 
+      {/* No left/top style here (fix request, oscillating quick-box on zoom): the
+          imperative `repositionBox` effect in useSelection.ts is the SOLE writer
+          of this element's position (shift + viewport clamp, glued on scroll/
+          resize/zoom via a ref, bypassing React reconciliation). If this JSX
+          ALSO set left/top from the raw, un-shifted/un-clamped `selectionPoint()`,
+          every re-render (a scale change causes one) would reset the DOM back to
+          that raw value, fighting the imperative fix and reading as the box
+          jumping between two different positions. */}
       {showSelectionBox && selectedAnno && selectedSpec && (
         <div
           ref={selectionBoxRef}
@@ -438,7 +444,6 @@ export default function AnnotationInteraction({
           role="menu"
           aria-label={selectedSpec.ariaLabel}
           data-testid="selection-quick-box"
-          style={{ left: selInit.x, top: selInit.y }}
         >
           {/* Recolor the selected mark (reuses 2.3's row + store.recolorAnnotation);
               the row shows the mark's CURRENT color armed. For a memo it tints the

@@ -1433,6 +1433,32 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     expect(box2.className).not.toContain("quick-box--vertical");
   });
 
+  it("selection quick-box position on zoom: the scale-triggered reposition is deferred a frame, not synchronous, then settles once (fix request: oscillating quick-box)", async () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m2", "n"));
+    const pages = [fakeCard(0, 0)];
+    const { rerender } = render(
+      <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />,
+    );
+    act(() => useAnnotationStore.getState().select("m2"));
+    const box = await screen.findByTestId("selection-quick-box");
+    const initialLeft = box.style.left;
+
+    // Zoom: scale changes. useZoomControl (a separate, PARENT hook in the real
+    // tree) recenters scroll in its OWN layout effect, which fires AFTER this
+    // one (React runs child effects before parent effects) — repositioning
+    // synchronously here would race that and read a transitional scroll
+    // position, painting a wrong spot before a later scroll event corrects it
+    // (the reported "oscillating" box). Deferring this one reposition to the
+    // next animation frame lets that settle first, so it moves ONCE. Right
+    // after the re-render (before that frame fires), the box must therefore
+    // NOT have already jumped.
+    rerender(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={2} enabled rectReader={reader} />);
+    expect(box.style.left).toBe(initialLeft);
+
+    // Once the deferred frame fires, it settles to the new scale's position.
+    await waitFor(() => expect(box.style.left).not.toBe(initialLeft));
+  });
+
   it("Del deletes the selected memo", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", "n"));
     const pages = [fakeCard(0, 0)];
