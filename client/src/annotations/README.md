@@ -253,6 +253,17 @@ genuinely new pieces are a `body` param, a pin button, and a `CommentBubble`.
   the SAME adjusted size as the full bubble instead of snapping back to the
   220px default. A comment that was never resized (both fields null) still shows
   the compact default preview, unchanged.
+- **Box comment popup layout (fix request):** a BOX comment (`isBoxComment` in
+  `marks.ts` — a `type=comment` mark whose live anchor is `kind=rect` with REAL
+  area, i.e. drawn via the Comment tool's Box mode, Story 8.4) no longer
+  overlaps its own highlighted region. Its color-swatch + delete chrome moves
+  into the shared selection quick-box's LEFT-side vertical strip (the same
+  layout `MemoBox`'s own quick-box already uses, `usesLeftVerticalQuickBox` in
+  `marks.ts`), and `CommentBubble`/`CommentPreview` render in `compact` mode:
+  just a textarea (+ resize handle for the full bubble), positioned to the
+  RIGHT of the highlight (`position.ts`'s `rightOf`) instead of below the pin.
+  A click-placed pin comment or a text-drag comment is unaffected — both keep
+  today's self-contained bubble below the pin.
 
 ## Story 2.11 -- box-highlight a region (generalized in Story 8.4 to box-comment)
 
