@@ -39,6 +39,8 @@ import { useCreateQuickBox } from "./gestures/useCreateQuickBox";
 import { useLiveRef } from "@/hooks/useLiveRef";
 import { useTextEditSession } from "./useTextEditSession";
 import { inActiveGroup, commentGroupIds } from "./markGeometry";
+import { isBoxComment, usesLeftVerticalQuickBox } from "./marks";
+import { rightOf } from "./position";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";
@@ -255,7 +257,10 @@ export default function AnnotationInteraction({
       height: local.height,
     };
   };
-  const selectedCommentPoint = selectedComment ? commentScreenPoint(selectedComment) : null;
+  const selectedCommentCompact = selectedComment ? isBoxComment(selectedComment) : false;
+  const selectedCommentRawPoint = selectedComment ? commentScreenPoint(selectedComment) : null;
+  const selectedCommentPoint =
+    selectedCommentRawPoint && selectedCommentCompact ? rightOf(selectedCommentRawPoint) : selectedCommentRawPoint;
 
   if (
     !pending &&
@@ -429,7 +434,7 @@ export default function AnnotationInteraction({
       {showSelectionBox && selectedAnno && selectedSpec && (
         <div
           ref={selectionBoxRef}
-          className={selectedAnno.type === "memo" ? "quick-box quick-box--vertical" : "quick-box"}
+          className={usesLeftVerticalQuickBox(selectedAnno) ? "quick-box quick-box--vertical" : "quick-box"}
           role="menu"
           aria-label={selectedSpec.ariaLabel}
           data-testid="selection-quick-box"
@@ -491,6 +496,7 @@ export default function AnnotationInteraction({
           key={selectedComment.id}
           anno={selectedComment}
           pos={selectedCommentPoint}
+          compact={selectedCommentCompact}
           onRetext={(_id, body) =>
             // Group-aware (Codex HIGH): a two-page comment is grouped siblings;
             // write the same body to ALL of them so reopening the other page's
@@ -522,13 +528,16 @@ export default function AnnotationInteraction({
           only currently-hovered marks would unmount it the instant hover ends,
           before that timer could run. */}
       {commentPreviewMarks.map((a) => {
-        const pos = commentScreenPoint(a);
-        if (!pos) return null;
+        const raw = commentScreenPoint(a);
+        if (!raw) return null;
+        const compact = isBoxComment(a);
+        const pos = compact ? rightOf(raw) : raw;
         return (
           <CommentPreview
             key={a.id}
             anno={a}
             pos={pos}
+            compact={compact}
             hovered={inActiveGroup(a, hoveredId, annotations)}
             onRetext={(_id, body) =>
               // Group-aware, same as the full bubble's retext (see above).

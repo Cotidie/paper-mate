@@ -10,14 +10,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import { denormalizeRect, denormalizePoint, type PageCardRef } from "@/anchor";
 import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "@/store";
 import type { Annotation } from "@/api/client";
-import { clampToViewport } from "@/annotations/position";
-import { quickBoxSpec, type QuickBoxSpec } from "@/annotations/marks";
+import { clampToViewport, QUICK_BOX_GAP } from "@/annotations/position";
+import { quickBoxSpec, usesLeftVerticalQuickBox, type QuickBoxSpec } from "@/annotations/marks";
 import { isExempt } from "./shared";
 import { isEditableTarget } from "@/lib/domFocus";
-
-/** Vertical gap (viewport px) between the marked text and the floating quick-box
- *  anchored below it, so the box clears the run instead of covering it. */
-const QUICK_BOX_GAP = 6;
 
 export interface SelectionApi {
   /** The selected mark, scoped to THIS doc (null if nothing/other-doc selected). */
@@ -273,9 +269,10 @@ export function useSelection(opts: {
     };
   }, [enabled, selectedAnno, clearSelection, deleteAnnotation]);
 
-  // A memo owns its own focus (its textarea autofocuses for typing), so the box must
-  // not steal focus to the first swatch on open — the focus effect checks this.
-  const isMemoSelected = selectedAnno?.anchor.kind === "rect" && selectedAnno.type === "memo";
+  // A memo or a box comment (fix request) owns its OWN focus (its textarea/compact
+  // bubble autofocuses for typing), so the box must not steal focus to the first
+  // swatch on open — the focus effect checks this.
+  const isVerticalQuickBox = usesLeftVerticalQuickBox(selectedAnno);
   // Story 5.0: the selected mark's quick-box capability comes from the descriptor
   // registry (one source per tool).
   const selectedSpec = selectedAnno ? quickBoxSpec(selectedAnno) : null;
@@ -297,10 +294,10 @@ export function useSelection(opts: {
   // `effectiveAnchor` (not `selectedAnno.anchor` directly) so a move/resize drag
   // — live preview OR just-committed — is reflected immediately (bug fix above).
   // `useCallback` (not a plain function): `repositionBox` below is ALSO a
-  // `useCallback` that calls this one, memoized separately on `isMemoSelected`
+  // `useCallback` that calls this one, memoized separately on `isVerticalQuickBox`
   // — if this were a plain function (redefined fresh every render, the old
   // shape), `repositionBox` would close over whichever `selectionPoint` existed
-  // the last time `isMemoSelected` actually changed, not the latest one, since
+  // the last time `isVerticalQuickBox` actually changed, not the latest one, since
   // `useCallback` discards a new closure whenever its deps compare equal. That
   // stale closure kept its `effectiveAnchor` frozen from an EARLIER selection
   // (or from mount, `null`), so re-anchoring on scroll (or even the plain
@@ -371,13 +368,14 @@ export function useSelection(opts: {
     if (!el) return;
     const { x, y } = selectionPoint();
     const rect = el.getBoundingClientRect();
-    // A memo's box sits to the LEFT of the mark, so shift by the box's own
-    // (measured) width + gap; every other kind anchors below and needs no shift.
-    const shiftedX = isMemoSelected ? x - rect.width - QUICK_BOX_GAP : x;
+    // A memo or a box comment's quick-box sits to the LEFT of the mark, so shift
+    // by the box's own (measured) width + gap; every other kind anchors below and
+    // needs no shift.
+    const shiftedX = isVerticalQuickBox ? x - rect.width - QUICK_BOX_GAP : x;
     const c = clampToViewport(shiftedX, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
     el.style.left = `${c.x}px`;
     el.style.top = `${c.y}px`;
-  }, [isMemoSelected, selectionPoint]);
+  }, [isVerticalQuickBox, selectionPoint]);
 
   // Focus moves INTO the selection box on open and RETURNS to the prior element on
   // close (same accessibility floor as the create box). Also nudges the box on-screen
@@ -387,12 +385,12 @@ export function useSelection(opts: {
     if (showSelectionBox) {
       const el = selectionBoxRef.current;
       if (!el) return;
-      if (!restoreSelectionFocusRef.current && !isMemoSelected) {
+      if (!restoreSelectionFocusRef.current && !isVerticalQuickBox) {
         // First open: remember where focus was, move it into the box. EXCEPTION: a
-        // memo owns its focus (its textarea is autofocused for typing) — pulling
-        // focus to the first swatch would fight that, so the memo box never grabs
-        // focus on open. The textarea is the keyboard entry point; the swatches stay
-        // reachable by Tab.
+        // memo or a box comment owns its own focus (its textarea is autofocused for
+        // typing) — pulling focus to the first swatch would fight that, so their
+        // quick-box never grabs focus on open. The textarea is the keyboard entry
+        // point; the swatches stay reachable by Tab.
         restoreSelectionFocusRef.current = (document.activeElement as HTMLElement | null) ?? document.body;
         el.querySelector<HTMLElement>("button")?.focus();
       }

@@ -1632,6 +1632,123 @@ describe("AnnotationInteraction comment gestures (Story 2.10 — AC1,3,6)", () =
   });
 });
 
+describe("AnnotationInteraction box comment popup layout (fix request)", () => {
+  /** A stored box comment: type=comment, kind=rect with REAL area (a drawn
+   *  box, Story 8.4) — as opposed to a degenerate point-rect pin. Same rect as
+   *  the memo gesture block's `memoMark` fixture above, for predictable pixel
+   *  math: denormalized against `fakeCard`'s 600x800 page box at scale=1,
+   *  {x0:0.1,y0:0.2,x1:0.5,y1:0.4} -> {left:60, top:160, width:240, height:160}.
+   */
+  function boxCommentMark(id: string, body = ""): Annotation {
+    return {
+      id,
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.4 } },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+  }
+
+  it("a selected box comment shows the shared quick-box (vertical) with working recolor/delete, plus a compact bubble beside it", async () => {
+    useAnnotationStore.getState().addAnnotation(boxCommentMark("c20", "note"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("c20"));
+
+    const box = await screen.findByTestId("selection-quick-box");
+    expect(box.className).toContain("quick-box--vertical");
+
+    // Compact bubble: textarea + resize handle, positioned beside the box
+    // (rightOf: left 60+240+6=306, top 160, no pin-offset shift).
+    const bubble = screen.getByTestId("comment-bubble-c20");
+    expect(bubble.style.left).toBe("306px");
+    expect(bubble.style.top).toBe("160px");
+    expect(screen.queryByTestId("comment-delete-c20")).toBeNull();
+    expect(screen.getByTestId("comment-body-c20")).toBeTruthy();
+    expect(screen.getByTestId("comment-bubble-resize-c20")).toBeTruthy();
+
+    // Recolor from the SHARED quick-box works.
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-blue"));
+    expect(useAnnotationStore.getState().annotations.get("c20")!.style.color).toBe("annotation-blue");
+
+    // Delete from the SHARED quick-box works.
+    fireEvent.click(screen.getByTestId("quick-box-delete"));
+    expect(useAnnotationStore.getState().annotations.has("c20")).toBe(false);
+  });
+
+  it("a click-placed pin comment (degenerate point rect) is UNCHANGED: self-contained bubble, no shared quick-box", async () => {
+    const pin: Annotation = {
+      id: "c21",
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.1, y1: 0.2 } },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: "",
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+    useAnnotationStore.getState().addAnnotation(pin);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("c21"));
+
+    await screen.findByTestId("comment-bubble-c21");
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+    expect(screen.getByTestId("comment-delete-c21")).toBeTruthy();
+  });
+
+  it("a text-drag comment is UNCHANGED: self-contained bubble, no shared quick-box", async () => {
+    const textComment: Annotation = { ...textMark("c22"), type: "comment", body: "" };
+    useAnnotationStore.getState().addAnnotation(textComment);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("c22"));
+
+    await screen.findByTestId("comment-bubble-c22");
+    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+    expect(screen.getByTestId("comment-delete-c22")).toBeTruthy();
+  });
+
+  it("hovering a NON-selected box comment shows the preview positioned beside it", async () => {
+    useAnnotationStore.getState().addAnnotation(boxCommentMark("c23", "note"));
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().setHovered("c23"));
+
+    const preview = await screen.findByTestId("comment-preview-c23");
+    expect(preview.style.left).toBe("306px");
+    expect(preview.style.top).toBe("160px");
+  });
+
+  it("hovering a NON-selected pin comment is UNCHANGED: preview positioned below the pin", async () => {
+    const pin: Annotation = {
+      id: "c24",
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.2, x1: 0.1, y1: 0.2 } },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: "",
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+    useAnnotationStore.getState().addAnnotation(pin);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().setHovered("c24"));
+
+    const preview = await screen.findByTestId("comment-preview-c24");
+    // Unshifted: left/top at the pin's own point (60, 160), pin-offset transform applied.
+    expect(preview.style.left).toBe("60px");
+    expect(preview.style.top).toBe("160px");
+  });
+});
+
 describe("AnnotationInteraction comment overlay — bubble + hover preview (Story 2.10, relocated from AnnotationLayer as a page-edge-clipping bug fix, 2026-07-03)", () => {
   /** A kind=text comment (drag) on page 0. */
   function textComment(id: string, body = "", color = "annotation-default", groupId: string | null = null): Annotation {
@@ -2065,7 +2182,7 @@ describe("AnnotationInteraction box-comment gesture (Story 8.4 — AC1,5, Design
     return surf;
   }
 
-  it('a box drag with boxMode="comment" creates ONE region comment (kind=rect, body="", defaults.colors.comment), selected, opens the bubble not the selection quick-box', async () => {
+  it('a box drag with boxMode="comment" creates ONE region comment (kind=rect, body="", defaults.colors.comment), selected, opens the shared quick-box (vertical) + a compact bubble beside it (fix request supersedes Decision 4 for a REAL-area box comment)', async () => {
     const surf = pageSurface();
     const pages = [fakeCard(0, 0)];
     useAnnotationStore.getState().setActiveColor("comment", "annotation-purple");
@@ -2092,8 +2209,12 @@ describe("AnnotationInteraction box-comment gesture (Story 8.4 — AC1,5, Design
       expect(all[0].anchor.rect.y1).toBeCloseTo(0.2, 5);
     }
     expect(useAnnotationStore.getState().selectedId).toBe(all[0].id);
-    // A comment shows the bubble, NOT the generic selection quick-box (Decision 4).
-    expect(screen.queryByTestId("selection-quick-box")).toBeNull();
+    // A REAL-area box comment now shows the shared quick-box (vertical, fix
+    // request), plus its compact bubble beside it — superseding the old
+    // blanket Decision 4 exclusion, which still applies to a pin/text comment.
+    await screen.findByTestId("selection-quick-box");
+    expect(screen.getByTestId("selection-quick-box").className).toContain("quick-box--vertical");
+    expect(screen.getByTestId(`comment-bubble-${all[0].id}`)).toBeTruthy();
   });
 
   it('a below-threshold box-comment drag creates no mark (stray click guard)', () => {
