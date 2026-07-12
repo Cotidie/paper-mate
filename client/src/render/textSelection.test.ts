@@ -8,12 +8,13 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { isEmptyLayerSpace, textSelectionController } from "./textSelection";
 import * as nearest from "./nearestTextAnchor";
 
-// Story 8.11: the controller resolves the snap anchor + focus (nearest text)
-// through this module. jsdom has no real layout, so mock it and assert the
-// CONTROLLER's gate logic (snap vs the Story 8.8 no-op fallback). The resolver's
-// own geometry is covered in nearestTextAnchor.test.ts.
-vi.mock("./nearestTextAnchor", () => ({ resolveNearestText: vi.fn() }));
-const mockResolve = vi.mocked(nearest.resolveNearestText);
+// Story 8.11: the controller resolves the origin anchor context + the live
+// focus through this module. jsdom has no real layout, so mock it and assert
+// the CONTROLLER's gate + direction logic. The resolver's own geometry is
+// covered in nearestTextAnchor.test.ts.
+vi.mock("./nearestTextAnchor", () => ({ resolveOrigin: vi.fn(), resolveNearestText: vi.fn() }));
+const mockOrigin = vi.mocked(nearest.resolveOrigin);
+const mockFocus = vi.mocked(nearest.resolveNearestText);
 // A drag drives the selection through requestAnimationFrame. Queue frames and
 // flush them explicitly (via `flushRaf`) rather than running the callback
 // inline — running inline would reset the controller's `snapRaf` guard BEFORE
@@ -119,7 +120,8 @@ describe("TextSelectionController — empty-origin selectstart suppression", () 
 describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", () => {
   afterEach(() => {
     document.body.innerHTML = "";
-    mockResolve.mockReset();
+    mockOrigin.mockReset();
+    mockFocus.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -133,10 +135,19 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     const unregister = textSelectionController.register(div);
     return { div, glyph, unregister };
   }
+  // A gap origin: no inBand, distinct above/below anchors so direction is visible.
+  function gapOrigin(node: Text) {
+    return {
+      originY: 100,
+      inBand: null,
+      aboveEnd: { node, offset: 11 },
+      belowStart: { node, offset: 0 },
+    };
+  }
 
-  it("does NOT suppress selectstart when an anchor resolves (snap active)", () => {
+  it("does NOT suppress selectstart when an origin resolves (snap active)", () => {
     const { div, glyph, unregister } = setupLayer();
-    mockResolve.mockReturnValue({ node: glyph.firstChild as Text, offset: 0 });
+    mockOrigin.mockReturnValue(gapOrigin(glyph.firstChild as Text));
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
@@ -146,9 +157,9 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     unregister();
   });
 
-  it("keeps the Story 8.8 selectstart suppression when NO anchor resolves", () => {
+  it("keeps the Story 8.8 selectstart suppression when NO origin resolves", () => {
     const { div, unregister } = setupLayer();
-    mockResolve.mockReturnValue(null);
+    mockOrigin.mockReturnValue(null);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
@@ -158,19 +169,36 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     unregister();
   });
 
-  it("drives setBaseAndExtent from the resolved anchor to the live focus on pointermove", () => {
+  it("dragging DOWN from a gap anchors at the line-below START, extending to the live focus", () => {
     const { div, glyph, unregister } = setupLayer();
     const node = glyph.firstChild as Text;
-    // First call (anchor at pointerdown) offset 2; second call (focus) offset 7.
-    mockResolve.mockReturnValueOnce({ node, offset: 2 }).mockReturnValueOnce({ node, offset: 7 });
+    mockOrigin.mockReturnValue(gapOrigin(node)); // originY 100, belowStart offset 0
+    mockFocus.mockReturnValue({ node, offset: 8 });
     const setBaseAndExtent = vi.fn();
     vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
-    // pointermove schedules a rAF frame; flush it to apply.
-    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 100 }));
+    // Move DOWN (clientY 140 > originY 100): anchor = belowStart (offset 0).
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
     flushRaf();
-    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 2, node, 7);
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 8);
+
+    unregister();
+  });
+
+  it("dragging UP from a gap anchors at the line-above END", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node)); // aboveEnd offset 11
+    mockFocus.mockReturnValue({ node, offset: 3 });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    // Move UP (clientY 60 < originY 100): anchor = aboveEnd (offset 11).
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 60 }));
+    flushRaf();
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 11, node, 3);
 
     unregister();
   });
@@ -178,31 +206,32 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
   it("re-resolves the focus on scroll mid-drag (tracks the pointer under scroll)", () => {
     const { div, glyph, unregister } = setupLayer();
     const node = glyph.firstChild as Text;
-    mockResolve.mockReturnValue({ node, offset: 5 });
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    mockFocus.mockReturnValue({ node, offset: 5 });
     const setBaseAndExtent = vi.fn();
     vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
 
-    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
-    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 100 }));
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 140 }));
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
     flushRaf();
     setBaseAndExtent.mockClear();
     // A scroll with no pointer motion must still re-apply the snap frame.
     document.dispatchEvent(new Event("scroll"));
     flushRaf();
-    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 5, node, 5);
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 5); // down-drag anchor
 
     unregister();
   });
 
   it("clears the snap latch on pointerup, so a later empty-origin drag re-evaluates", () => {
     const { div, glyph, unregister } = setupLayer();
-    mockResolve.mockReturnValue({ node: glyph.firstChild as Text, offset: 0 });
+    mockOrigin.mockReturnValue(gapOrigin(glyph.firstChild as Text));
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     document.dispatchEvent(new Event("pointerup"));
 
     // After release, resolve nothing: the next empty-origin drag must fall back
     // to the Story 8.8 suppression (snap latch cleared, not stuck on).
-    mockResolve.mockReturnValue(null);
+    mockOrigin.mockReturnValue(null);
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
     document.dispatchEvent(selectstart);

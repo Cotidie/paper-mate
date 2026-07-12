@@ -3,7 +3,7 @@
 // to place spans/characters in space and exercise the pure resolver logic.
 
 import { describe, it, expect } from "vitest";
-import { nearestGlyph, nearestOffsetInTextNode, resolveNearestText } from "./nearestTextAnchor";
+import { nearestGlyph, nearestOffsetInTextNode, resolveNearestText, resolveOrigin } from "./nearestTextAnchor";
 
 function rectReader(map: WeakMap<Element, DOMRect>) {
   return (el: Element): DOMRect => map.get(el) ?? new DOMRect(0, 0, 0, 0);
@@ -134,5 +134,72 @@ describe("resolveNearestText", () => {
     const layer = document.createElement("div");
     const map = new WeakMap<Element, DOMRect>([[layer, new DOMRect(0, 0, 1200, 800)]]);
     expect(resolveNearestText(layer, 100, 8, rectReader(map))).toBeNull();
+  });
+});
+
+describe("resolveOrigin (direction-aware anchoring)", () => {
+  // A left column with two paragraphs separated by a blank gap, plus a right
+  // column. Left para A: two lines at y 0-16 and 20-36 ("aEndword" is the last
+  // glyph of line 2). Blank gap 36-100. Left para B: "bStart" at y 100-116.
+  function gappedLayer() {
+    const layer = document.createElement("div");
+    const map = new WeakMap<Element, DOMRect>();
+    map.set(layer, new DOMRect(0, 0, 1200, 800));
+    const mk = (text: string, x: number, w: number, top: number) => {
+      const s = document.createElement("span");
+      s.append(document.createTextNode(text));
+      layer.append(s);
+      map.set(s, new DOMRect(x, top, w, 16));
+      return s;
+    };
+    const a1 = mk("aone", 50, 120, 0); // para A line 1 [50,170]
+    const aEnd = mk("prediction.", 50, 150, 20); // para A line 2 (its end) [50,200]
+    const bStart = mk("Introduction", 50, 140, 100); // para B first line [50,190]
+    const right = mk("rightcol", 900, 90, 20); // right column, same band as aEnd
+    return { layer, map, a1, aEnd, bStart, right };
+  }
+  function rangeReader(map: WeakMap<Element, DOMRect>) {
+    return (r: Range) => {
+      const span = (r.startContainer.parentElement ?? r.startContainer) as Element;
+      const base = map.get(span)?.left ?? 0;
+      return [new DOMRect(base + 10 * r.startOffset, 0, 10 * (r.endOffset - r.startOffset), 16)];
+    };
+  }
+
+  it("in a vertical gap: aboveEnd = END of the line above, belowStart = START of the line below (same column)", () => {
+    const { layer, map, aEnd, bStart } = gappedLayer();
+    // Pointer at x=120 (left column), y=60 (in the gap between aEnd and bStart).
+    const ctx = resolveOrigin(layer, 120, 60, rectReader(map), rangeReader(map))!;
+    expect(ctx.inBand).toBeNull();
+    expect(ctx.aboveEnd).toEqual({ node: aEnd.firstChild, offset: (aEnd.firstChild as Text).length });
+    expect(ctx.belowStart).toEqual({ node: bStart.firstChild, offset: 0 });
+  });
+
+  it("ignores the OTHER column when finding the gap's line boundaries", () => {
+    const { layer, map, aEnd, bStart } = gappedLayer();
+    const ctx = resolveOrigin(layer, 120, 60, rectReader(map), rangeReader(map))!;
+    // aboveEnd/belowStart come from the LEFT column, never the right-column glyph.
+    expect(ctx.aboveEnd!.node).toBe(aEnd.firstChild);
+    expect(ctx.belowStart!.node).toBe(bStart.firstChild);
+  });
+
+  it("beside text (inside a line band): inBand is the nearest character, no gap anchors used", () => {
+    const { layer, map, aEnd } = gappedLayer();
+    // Pointer just past aEnd's right edge (within the proximity threshold), y in band.
+    const ctx = resolveOrigin(layer, 220, 28, rectReader(map), rangeReader(map))!;
+    expect(ctx.inBand).not.toBeNull();
+    expect(ctx.inBand!.node).toBe(aEnd.firstChild);
+    expect(ctx.inBand!.offset).toBe((aEnd.firstChild as Text).length); // clamped to line end
+  });
+
+  it("returns null past the proximity threshold (far-empty margin)", () => {
+    const { layer, map } = gappedLayer();
+    expect(resolveOrigin(layer, 120, 100 + 200, rectReader(map), rangeReader(map))).toBeNull();
+  });
+
+  it("returns null for a layer with no usable glyphs", () => {
+    const layer = document.createElement("div");
+    const map = new WeakMap<Element, DOMRect>([[layer, new DOMRect(0, 0, 1200, 800)]]);
+    expect(resolveOrigin(layer, 100, 8, rectReader(map))).toBeNull();
   });
 });

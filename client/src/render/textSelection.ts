@@ -34,7 +34,7 @@
 // fallback when no line is near (a far, truly-empty margin).
 
 import { joinParagraphLines, measureSelectedLines } from "./paragraphCopy";
-import { resolveNearestText } from "./nearestTextAnchor";
+import { resolveNearestText, resolveOrigin, type OriginContext, type NearestTextPoint } from "./nearestTextAnchor";
 
 /**
  * True when `target` is empty page space in a registered text layer: the
@@ -123,13 +123,14 @@ class TextSelectionController {
     let pointerDown = false;
     let emptyOrigin = false;
     // Story 8.11 snap state: on an empty-origin pointerdown that resolves a
-    // nearest glyph, `snapLayer` is the origin page's text layer, `snapAnchor`
-    // holds the seed point, and `snapFocus` the last resolved drag point.
-    // `snapping` gates the drag that drives the native selection.
+    // nearest glyph, `snapLayer` is the origin page's text layer, `snapOrigin`
+    // the direction-aware anchor context (paragraph-boundary anchoring in a
+    // gap), and `snapFocus` the last resolved drag point. `snapping` gates the
+    // drag that drives the native selection.
     let snapping = false;
     let snapLayer: Element | null = null;
-    let snapAnchor: { node: Node; offset: number } | null = null;
-    let snapFocus: { node: Node; offset: number } | null = null;
+    let snapOrigin: OriginContext | null = null;
+    let snapFocus: NearestTextPoint | null = null;
     // rAF throttle: an empty-origin snap drives the selection ITSELF (unlike an
     // on-text drag the browser drives natively). Calling setBaseAndExtent on
     // every pointermove fires the selectionchange handler + forces layout
@@ -150,18 +151,30 @@ class TextSelectionController {
       return null;
     };
 
+    // The anchor for the CURRENT drag direction: inside a line band it is the
+    // fixed nearest character; in a vertical gap it is the end of the line above
+    // (dragging up) or the start of the line below (dragging down), so a gap
+    // origin anchors on a paragraph boundary.
+    const anchorForDirection = (ctx: OriginContext, pointerY: number): NearestTextPoint | null => {
+      if (ctx.inBand) return ctx.inBand;
+      if (pointerY < ctx.originY) return ctx.aboveEnd ?? ctx.belowStart;
+      return ctx.belowStart ?? ctx.aboveEnd;
+    };
+
     // Apply one snap frame: re-resolve the focus LIVE (nearest text to the
     // current pointer; re-measuring keeps it correct as the page scrolls under
-    // the drag) and extend the native selection from the anchor to it.
+    // the drag), pick the direction-aware anchor, and extend the native
+    // selection from the anchor to the focus.
     const applySnapFrame = (): void => {
       snapRaf = 0;
-      if (!snapping || !snapAnchor || !snapLayer || !snapPoint) return;
+      if (!snapping || !snapOrigin || !snapLayer || !snapPoint) return;
       const focus = resolveNearestText(snapLayer, snapPoint.x, snapPoint.y);
       // Keep the last good focus when the pointer is momentarily off any text;
       // falling back to the anchor would COLLAPSE the selection mid-drag.
-      if (focus) snapFocus = { node: focus.node, offset: focus.offset };
-      const f = snapFocus ?? snapAnchor;
-      document.getSelection()?.setBaseAndExtent(snapAnchor.node, snapAnchor.offset, f.node, f.offset);
+      if (focus) snapFocus = focus;
+      const anchor = anchorForDirection(snapOrigin, snapPoint.y);
+      const f = snapFocus ?? anchor;
+      if (anchor && f) document.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, f.node, f.offset);
     };
     const scheduleSnapFrame = (): void => {
       if (snapping && snapRaf === 0) snapRaf = requestAnimationFrame(applySnapFrame);
@@ -174,17 +187,18 @@ class TextSelectionController {
         emptyOrigin = isEmptyLayerSpace(event.target, this.#textLayers);
         snapping = false;
         snapLayer = null;
-        snapAnchor = null;
+        snapOrigin = null;
         snapFocus = null;
         snapPoint = null;
         if (!emptyOrigin) return;
-        // Story 8.11: resolve the nearest text ONCE at the origin (nearest glyph
-        // by 2D distance -> nearest char). If found, seed the native selection
-        // there and let the drag extend it (the snap); if not (a far, truly-empty
+        // Story 8.11: resolve the origin's direction-aware anchor context ONCE.
+        // If a nearest line is found, seed the native selection at gesture start
+        // and let the drag extend it (the snap); if not (a far, truly-empty
         // margin), fall through to Story 8.8's selectstart-suppress no-op below.
         const layer = originLayerOf(event.target);
-        const point = layer ? resolveNearestText(layer, event.clientX, event.clientY) : null;
-        if (layer && point) {
+        const origin = layer ? resolveOrigin(layer, event.clientX, event.clientY) : null;
+        const seed = origin && (origin.inBand ?? origin.belowStart ?? origin.aboveEnd);
+        if (layer && origin && seed) {
           // We DRIVE the native selection per-frame (rAF-throttled) here — a
           // deliberate crossing of Story 8.9's spike-budget "no per-move
           // selection driving" guard. That guard's rationale was the reverted
@@ -199,8 +213,8 @@ class TextSelectionController {
           event.preventDefault();
           snapping = true;
           snapLayer = layer;
-          snapAnchor = { node: point.node, offset: point.offset };
-          snapFocus = { node: point.node, offset: point.offset };
+          snapOrigin = origin;
+          snapFocus = seed;
         }
       },
       { signal },
@@ -225,7 +239,7 @@ class TextSelectionController {
       emptyOrigin = false;
       snapping = false;
       snapLayer = null;
-      snapAnchor = null;
+      snapOrigin = null;
       snapFocus = null;
       snapPoint = null;
       if (snapRaf !== 0) {
