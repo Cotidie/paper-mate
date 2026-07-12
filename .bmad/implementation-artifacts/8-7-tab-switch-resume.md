@@ -4,7 +4,7 @@ baseline_commit: 437537454cdd4b565766639acd6e7e222d634dbe
 
 # Story 8.7: Immediate viewer resume on tab return
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
