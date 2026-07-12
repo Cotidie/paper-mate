@@ -167,18 +167,42 @@ Claude Opus 4.8
 - **Not the reverted class:** `setBaseAndExtent` yields the plain native contiguous range (no column-band clipping, no per-move rect filtering, no caret API). The per-move driving deliberately crosses 8.9's spike-budget guard, but that guard's rationale (clipping regressions) is preserved. Documented in-code.
 - **No-leak holds** (8.8 AC-5): the `anchor/collectTextRects` per-text-node guard is downstream and unchanged, so even a large snap selection never paints a cross-column/full-page rect (verified: 0 rects > 0.5 normalized width).
 - **On-text paths untouched by construction:** the whole snap lives inside `if (emptyOrigin)`; on-text-origin drags return early, so single/multi/cross-page on-text behavior is byte-identical to Story 8.8.
-- Method B (deterministic own-overlay fallback) was not needed. FR: a new FR may be assigned at epic close now that the spike validated (mirrors 8.2-8.4). Story 8.10's `textSelection.ts` refactor should absorb `nearestTextAnchor.ts` + the `snapping` gate.
+- Method B (deterministic own-overlay fallback) was not needed. FR: a new FR may be assigned at epic close now that the spike validated (mirrors 8.2-8.4). Story 8.10's `textSelection.ts` refactor should absorb `nearestTextAnchor.ts` + the `snapping`/`snapEngaged` gate.
+
+### Post-implementation UX refinements (from live user testing)
+
+Five rounds of live feedback drove the resolver from a single nearest-glyph point to a small state machine (all live-verified at DPR=1.25, trusted pointer input):
+- **rAF throttle + live re-resolve + scroll listener:** `setBaseAndExtent` on every pointermove thrashed layout (empty-space felt ~1fps while on-text felt instant); coalesce to one frame; re-resolve focus live each frame so mid-drag scroll tracks.
+- **Nearest glyph by 2D distance (no column lock):** anchor stays in the correct column automatically (gutter X-gap is large) AND a drag extends across columns like a native text drag.
+- **Coverage-based column detection** for the gap's paragraph-boundary anchoring (robust to short headings/last lines).
+- **Direction-aware gap anchor:** drag up from a gap anchors at the end of the line above ("...prediction."), drag down at the start of the line below ("1. Introduction").
+- **Engage-on-row-touch (`snapEngaged` + `onRow`):** paints nothing until the cursor reaches a text row; off-row (blank paragraph gap) collapses to the anchor so no stale selection lingers; the `onRow` half-line-height tolerance bridges inter-line leading without flicker.
+
+### Senior Developer Review (AI) — Codex, 2026-07-13
+
+Ran `bmad-code-review` through **Codex** (`codex exec`, GPT model — different from the Sonnet/Opus implementer, per CLAUDE.md). Verdict: **Changes Requested — High 0 / Med 5 / Low 3.** Clean on every hard guard: no caret-API family, no AD-9 upward import, no column-band selection clipping, no new user-facing em-dash. All 5 Medium + 2 Low (L1/L2) resolved with targeted tests; L3 is a coverage note (below).
+
+- **[Med, fixed] M1** — the moving focus could pick a horizontally-closer glyph on a *different* line, judging `onRow` against the wrong band → collapse even when the cursor Y was in a real row. Fixed: prefer a glyph whose band contains Y before 2D fallback.
+- **[Med, fixed] M2** — the rAF throttle could drop the last pointermove (or a whole single-frame drag) before `pointerup`, so create-on-release read a stale/empty range. Fixed: capture-phase pointerup flushes the pending frame synchronously before the bubble-phase consumer.
+- **[Med, fixed] M3** — a mid-drag layer unregister left a queued rAF + stale `snapLayer` → `setBaseAndExtent` on detached nodes. Fixed: `applySnapFrame` bails on `!snapLayer.isConnected`; an abort handler cancels the queued frame on teardown.
+- **[Med, fixed] M4** — a lone-line sparse region wasn't a detected column, so the anchor could resolve into the other column. Fixed: column keyed off the origin glyph's centre with a local-band fallback.
+- **[Med, fixed] M5** — a pre-existing Selection wasn't cleared on arm, so a stale range could linger/be consumed if the drag never engaged. Fixed: `removeAllRanges()` on arm.
+- **[Low, fixed] L1** — `groupLines` was input-order-dependent for a bridging glyph. Fixed: sort by top.
+- **[Low, fixed] L2** — the snap armed on middle/right button too. Fixed: primary button only.
+- **[Low, accepted coverage note] L3** — on-text CROSS-PAGE selection and paragraph-copy clipboard readback are not automated (jsdom can't see real Selection geometry; clipboard readback is blocked by a permission dialog in the smoke harness). Mitigation: the entire snap path is gated behind `if (emptyOrigin)`, so on-text-origin drags (including cross-page) return early and run byte-identical Story-8.8-verified code; on-text single/multi-line and far-margin no-op were live-verified. A dedicated cross-page trusted-input smoke + paragraph-copy check remains a follow-up for the next epic touching cross-page selection (carries AE7-4).
 
 ### File List
 
-- `client/src/render/nearestTextAnchor.ts` (new — the caret-API-free resolver)
-- `client/src/render/nearestTextAnchor.test.ts` (new — 12 resolver unit tests)
-- `client/src/render/textSelection.ts` (modified — empty-origin snap: `snapping` latch, scoped `pointermove` + `setBaseAndExtent`, narrowed `selectstart` suppress, shared `releasePointer` teardown)
-- `client/src/render/textSelection.test.ts` (modified — 4 Method A gate tests)
+- `client/src/render/nearestTextAnchor.ts` (new — the caret-API-free resolver: `nearestGlyph`/`nearestGlyphByX`/`nearestOffsetInTextNode`, `groupLines`/`detectColumns`/`localColumnBand`, `resolveNearestText` → `{node, offset, onRow}`, `resolveOrigin` → direction-aware `OriginContext`)
+- `client/src/render/nearestTextAnchor.test.ts` (new — resolver unit tests incl. M1/M4 regression cases)
+- `client/src/render/textSelection.ts` (modified — empty-origin snap state machine: `snapEngaged`/`snapAnchor`/`snapFocus`/`snapPoint`, rAF-throttled `pointermove` + capture-phase `scroll` + `pointerup` flush, `setBaseAndExtent`, narrowed `selectstart` suppress, shared `releasePointer` teardown + abort-cancel)
+- `client/src/render/textSelection.test.ts` (modified — snap gate/direction/engage/collapse + M2/M3/M5/L2 tests)
 - `.bmad/implementation-artifacts/8-11-snap-empty-space-drag-to-text-attempt-2.md` (this story)
 - `.bmad/implementation-artifacts/sprint-status.yaml` (status transitions)
 
 ## Change Log
 
 - 2026-07-12: Story created from the approved design spike-with-fallback design (attempt 2 after the 8.9 negative spike).
-- 2026-07-12: Probe P passed live smoke (native selection seeded by `setBaseAndExtent` survives release) → Method A implemented: empty-space drag snaps to the nearest glyph and drives a real native selection, everything downstream unchanged. Resolver + gate tests added (1493 suite green). Full 8.8 regression matrix live-verified at DPR>1 (no leak, on-text intact, far-margin no-op). Method B not needed.
+- 2026-07-12: Probe P passed live smoke (native selection seeded by `setBaseAndExtent` survives release) → Method A implemented: empty-space drag snaps to the nearest glyph and drives a real native selection, everything downstream unchanged. Full 8.8 regression matrix live-verified at DPR>1. Method B not needed.
+- 2026-07-12/13: Five rounds of live UX refinement (rAF throttle, live/scroll re-resolve, nearest-2D no-column-lock, coverage-based columns, direction-aware gap anchor, engage-on-row-touch + off-row collapse).
+- 2026-07-13: Codex `bmad-code-review` — Changes Requested (0 High / 5 Med / 3 Low). All 5 Med + L1/L2 fixed with tests; L3 documented as a cross-page smoke follow-up. 1512 suite green, typecheck clean.
