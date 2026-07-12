@@ -4,8 +4,40 @@
 // being enabled once and torn down only once the last div unregisters
 // (Story 4.1 AC-5, "no leak / lifecycle-safe").
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { isEmptyLayerSpace, textSelectionController } from "./textSelection";
+import * as nearest from "./nearestTextAnchor";
+
+// Story 8.11: the controller resolves the origin anchor context + the live
+// focus through this module. jsdom has no real layout, so mock it and assert
+// the CONTROLLER's gate + direction logic. The resolver's own geometry is
+// covered in nearestTextAnchor.test.ts.
+vi.mock("./nearestTextAnchor", () => ({ resolveOrigin: vi.fn(), resolveNearestText: vi.fn() }));
+const mockOrigin = vi.mocked(nearest.resolveOrigin);
+const mockFocus = vi.mocked(nearest.resolveNearestText);
+// A drag drives the selection through requestAnimationFrame. Queue frames and
+// flush them explicitly (via `flushRaf`) rather than running the callback
+// inline — running inline would reset the controller's `snapRaf` guard BEFORE
+// the `snapRaf = requestAnimationFrame(...)` assignment, corrupting the
+// coalescing guard the way real (async) rAF never does.
+let rafQueue: FrameRequestCallback[] = [];
+let rafId = 0;
+function flushRaf() {
+  const q = rafQueue;
+  rafQueue = [];
+  for (const cb of q) cb(0);
+}
+beforeEach(() => {
+  rafQueue = [];
+  rafId = 0;
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+    rafQueue.push(cb);
+    return ++rafId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {
+    rafQueue = [];
+  });
+});
 
 describe("isEmptyLayerSpace", () => {
   it("is true for the registered .textLayer container element itself", () => {
@@ -82,6 +114,256 @@ describe("TextSelectionController — empty-origin selectstart suppression", () 
     expect(selectstart.defaultPrevented).toBe(false);
 
     unregister();
+  });
+});
+
+describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    mockOrigin.mockReset();
+    mockFocus.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  function setupLayer() {
+    const div = document.createElement("div");
+    div.className = "textLayer";
+    const glyph = document.createElement("span");
+    glyph.append(document.createTextNode("nearest text"));
+    div.append(glyph);
+    document.body.append(div);
+    const unregister = textSelectionController.register(div);
+    return { div, glyph, unregister };
+  }
+  // A gap origin: no inBand, distinct above/below anchors so direction is visible.
+  function gapOrigin(node: Text) {
+    return {
+      originY: 100,
+      inBand: null,
+      aboveEnd: { node, offset: 11 },
+      belowStart: { node, offset: 0 },
+    };
+  }
+
+  it("does NOT suppress selectstart when an origin resolves (snap active)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    mockOrigin.mockReturnValue(gapOrigin(glyph.firstChild as Text));
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(false);
+
+    unregister();
+  });
+
+  it("keeps the Story 8.8 selectstart suppression when NO origin resolves", () => {
+    const { div, unregister } = setupLayer();
+    mockOrigin.mockReturnValue(null);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(true);
+
+    unregister();
+  });
+
+  it("does NOT paint until the cursor reaches a text row (Issue #1: engage on onRow)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    // Focus resolves a nearest point but the cursor is NOT on its row yet.
+    mockFocus.mockReturnValue({ node, offset: 8, onRow: false });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 130 }));
+    flushRaf();
+    expect(setBaseAndExtent).not.toHaveBeenCalled(); // still in blank space -> no paint
+
+    unregister();
+  });
+
+  it("dragging DOWN from a gap anchors at the line-below START once a row is touched", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node)); // originY 100, belowStart offset 0
+    mockFocus.mockReturnValue({ node, offset: 8, onRow: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    // Move DOWN (clientY 140 > originY 100) onto a row: anchor = belowStart (offset 0).
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
+    flushRaf();
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 8);
+
+    unregister();
+  });
+
+  it("dragging UP from a gap anchors at the line-above END once a row is touched", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node)); // aboveEnd offset 11
+    mockFocus.mockReturnValue({ node, offset: 3, onRow: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    // Move UP (clientY 60 < originY 100) onto a row: anchor = aboveEnd (offset 11).
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 60 }));
+    flushRaf();
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 11, node, 3);
+
+    unregister();
+  });
+
+  it("keeps tracking after engage even when the focus stays at the same row (Issue #2: no proximity gate)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    // Engage on a row, then a later frame whose focus is deep in the margin
+    // (the resolver has no horizontal gate, so it still returns onRow at that Y).
+    mockFocus.mockReturnValueOnce({ node, offset: 4, onRow: true }).mockReturnValue({ node, offset: 9, onRow: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
+    flushRaf();
+    setBaseAndExtent.mockClear();
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 900, clientY: 140 }));
+    flushRaf();
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 9); // still tracking in the margin
+
+    unregister();
+  });
+
+  it("collapses to the anchor when the cursor sits in a blank gap after engaging (no lingering selection)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    // Engage on a row (offset 8), then the cursor moves into a blank gap (offRow).
+    mockFocus.mockReturnValueOnce({ node, offset: 8, onRow: true }).mockReturnValue({ node, offset: 8, onRow: false });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
+    flushRaf();
+    setBaseAndExtent.mockClear();
+    // Cursor now in a blank gap: collapse to the anchor (belowStart offset 0).
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 200 }));
+    flushRaf();
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 0); // collapsed at anchor
+
+    unregister();
+  });
+
+  it("re-resolves the focus on scroll mid-drag (tracks the pointer under scroll)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    mockFocus.mockReturnValue({ node, offset: 5, onRow: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 140 }));
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
+    flushRaf();
+    setBaseAndExtent.mockClear();
+    // A scroll with no pointer motion must still re-apply the snap frame.
+    document.dispatchEvent(new Event("scroll"));
+    flushRaf();
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 5); // down-drag anchor
+
+    unregister();
+  });
+
+  it("clears the snap latch on pointerup, so a later empty-origin drag re-evaluates", () => {
+    const { div, glyph, unregister } = setupLayer();
+    mockOrigin.mockReturnValue(gapOrigin(glyph.firstChild as Text));
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new Event("pointerup"));
+
+    // After release, resolve nothing: the next empty-origin drag must fall back
+    // to the Story 8.8 suppression (snap latch cleared, not stuck on).
+    mockOrigin.mockReturnValue(null);
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(true);
+
+    unregister();
+  });
+
+  it("flushes the last pointer position on pointerup before consumers read the selection (M2)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    mockFocus.mockReturnValue({ node, offset: 9, onRow: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    // A move records the point but the rAF has NOT fired yet (not flushed).
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
+    expect(setBaseAndExtent).not.toHaveBeenCalled();
+    // pointerup must flush the pending frame synchronously (capture phase).
+    document.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 9);
+
+    unregister();
+  });
+
+  it("clears any pre-existing selection when arming the snap (M5)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    mockOrigin.mockReturnValue(gapOrigin(glyph.firstChild as Text));
+    const removeAllRanges = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({
+      setBaseAndExtent: vi.fn(),
+      removeAllRanges,
+    } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    expect(removeAllRanges).toHaveBeenCalled();
+
+    unregister();
+  });
+
+  it("does NOT arm the snap on a non-primary (middle/right) button (L2)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    mockOrigin.mockReturnValue(gapOrigin(glyph.firstChild as Text));
+
+    // Right button (button=2): must not preventDefault nor arm; a later
+    // selectstart is NOT suppressed by the snap path.
+    const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 2 });
+    div.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(false);
+    // resolveOrigin must not even be consulted for a non-primary button.
+    expect(mockOrigin).not.toHaveBeenCalled();
+
+    unregister();
+  });
+
+  it("cancels a pending snap frame when the controller tears down (M3)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    mockFocus.mockReturnValue({ node, offset: 5, onRow: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
+    // A frame is queued (not yet flushed). Unregister the last layer -> abort.
+    unregister();
+    // The queued frame, if it still fired, would call setBaseAndExtent; the abort
+    // handler cancels it, so flushing the (now empty) queue does nothing.
+    flushRaf();
+    expect(setBaseAndExtent).not.toHaveBeenCalled();
   });
 });
 

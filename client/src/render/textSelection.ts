@@ -23,8 +23,18 @@
 // rewrites the clipboard so a soft-wrapped paragraph pastes as one line (see
 // `paragraphCopy.ts`). It reuses this controller's registry/lifecycle rather
 // than standing up a second global listener manager.
+//
+// Story 8.11 adds the empty-origin SNAP: instead of Story 8.8's flat no-op, a
+// drag starting in blank space next to text resolves the nearest glyph once
+// (via `nearestTextAnchor`, caret-API-free — the caret family is poisoned
+// mid-session, see deferred-work.md#Discarded: Story 8.9) and seeds a real
+// native selection with `setBaseAndExtent` each `pointermove`. Everything
+// downstream (create-on-release, copy, quick-box) already reads
+// `window.getSelection()`, so it works unchanged. The no-op stays as the
+// fallback when no line is near (a far, truly-empty margin).
 
 import { joinParagraphLines, measureSelectedLines } from "./paragraphCopy";
+import { resolveNearestText, resolveOrigin, type OriginContext, type NearestTextPoint } from "./nearestTextAnchor";
 
 /**
  * True when `target` is empty page space in a registered text layer: the
@@ -112,37 +122,211 @@ class TextSelectionController {
 
     let pointerDown = false;
     let emptyOrigin = false;
+    // Story 8.11 snap state: on an empty-origin pointerdown that resolves a
+    // nearest glyph, `snapLayer` is the origin page's text layer, `snapOrigin`
+    // the direction-aware anchor context (paragraph-boundary anchoring in a
+    // gap), and `snapFocus` the last resolved drag point. `snapping` gates the
+    // drag that drives the native selection.
+    let snapping = false;
+    let snapLayer: Element | null = null;
+    let snapOrigin: OriginContext | null = null;
+    // The snap does not paint until the cursor first TOUCHES a text row (Issue
+    // #1): `snapEngaged` flips true on the first frame the focus is in a line's
+    // vertical band, and only then is `snapAnchor` fixed (by drag direction for
+    // a gap origin, or the in-band char for a side origin) and the selection
+    // extended. Before engaging, nothing is painted.
+    let snapEngaged = false;
+    let snapAnchor: NearestTextPoint | null = null;
+    let snapFocus: NearestTextPoint | null = null;
+    // rAF throttle: an empty-origin snap drives the selection ITSELF (unlike an
+    // on-text drag the browser drives natively). Calling setBaseAndExtent on
+    // every pointermove fires the selectionchange handler + forces layout
+    // synchronously many times per frame, thrashing and starving event delivery
+    // (the "laggy from empty space, fast from text" report). Coalesce to one
+    // update per animation frame, matching the browser's own native cadence.
+    let snapPoint: { x: number; y: number } | null = null;
+    let snapRaf = 0;
     let isFirefox: boolean | undefined;
     let prevRange: Range | null = null;
+
+    // The registered `.textLayer` the pointer target is (or is inside): the
+    // target IS a layer, or is a layer's `endOfContent` bound child.
+    const originLayerOf = (target: EventTarget | null): Element | null => {
+      if (!(target instanceof Element)) return null;
+      if (this.#textLayers.has(target)) return target;
+      for (const [div, endOfContent] of this.#textLayers) if (target === endOfContent) return div;
+      return null;
+    };
+
+    // The anchor fixed at ENGAGE (first row-touch): a side origin (pointer beside
+    // a line) uses that line's in-band char; a gap origin uses the paragraph
+    // boundary in the drag's direction — dragging up anchors at the end of the
+    // line above the gap, dragging down at the start of the line below.
+    const anchorAtEngage = (ctx: OriginContext, pointerY: number): NearestTextPoint | null => {
+      if (ctx.inBand) return ctx.inBand;
+      if (pointerY < ctx.originY) return ctx.aboveEnd ?? ctx.belowStart;
+      return ctx.belowStart ?? ctx.aboveEnd;
+    };
+
+    // Apply one snap frame. Re-resolve the focus LIVE (nearest text to the
+    // current pointer; re-measuring keeps it correct as the page scrolls under
+    // the drag). Until the cursor first reaches a text row (focus.onRow), paint
+    // nothing (Issue #1). On that first touch, ENGAGE: fix the anchor once (so
+    // it can't flip mid-drag) and start extending. Once engaged: while the
+    // cursor is on a row, extend the selection to it — no horizontal gate, so a
+    // cursor deep in the side margin (same row) keeps tracking (Issue #2); while
+    // the cursor sits in a blank vertical gap between paragraphs (off-row),
+    // COLLAPSE to the anchor so no stale selection lingers at a point with no
+    // text.
+    const applySnapFrame = (): void => {
+      snapRaf = 0;
+      if (!snapping || !snapOrigin || !snapLayer || !snapPoint) return;
+      // The origin layer can be unregistered mid-drag (a scroll/zoom re-render
+      // detaches it) while other pages stay registered. Its glyph rects then read
+      // as zero and its anchor nodes are detached, so bail rather than call
+      // setBaseAndExtent with detached nodes.
+      if (!snapLayer.isConnected) return;
+      const focus = resolveNearestText(snapLayer, snapPoint.x, snapPoint.y);
+      const onRow = !!focus && focus.onRow;
+      if (!snapEngaged) {
+        if (!onRow) return; // still in blank space — paint nothing
+        snapEngaged = true;
+        snapAnchor = anchorAtEngage(snapOrigin, snapPoint.y);
+      }
+      // On a row → extend to it; off a row (blank gap) → collapse to the anchor.
+      snapFocus = onRow ? { node: focus!.node, offset: focus!.offset } : snapAnchor;
+      const a = snapAnchor;
+      const f = snapFocus ?? snapAnchor;
+      if (a && f) document.getSelection()?.setBaseAndExtent(a.node, a.offset, f.node, f.offset);
+    };
+    const scheduleSnapFrame = (): void => {
+      if (snapping && snapRaf === 0) snapRaf = requestAnimationFrame(applySnapFrame);
+    };
+    // Teardown of the whole controller (last text layer unregisters) removes
+    // these listeners but cannot clear a rAF already queued for a snap frame —
+    // cancel it so no orphaned frame fires against detached geometry.
+    signal.addEventListener("abort", () => {
+      if (snapRaf !== 0) {
+        cancelAnimationFrame(snapRaf);
+        snapRaf = 0;
+      }
+      snapping = false;
+    });
 
     document.addEventListener(
       "pointerdown",
       (event) => {
         pointerDown = true;
         emptyOrigin = isEmptyLayerSpace(event.target, this.#textLayers);
+        snapping = false;
+        snapLayer = null;
+        snapOrigin = null;
+        snapEngaged = false;
+        snapAnchor = null;
+        snapFocus = null;
+        snapPoint = null;
+        if (!emptyOrigin) return;
+        // Story 8.11: resolve the origin's direction-aware anchor context ONCE.
+        // If the pointer is near enough to text (the proximity gate = the accepted
+        // "start border"; a far, truly-empty margin does NOT snap), arm the snap;
+        // the drag paints only once the cursor touches a row (see applySnapFrame).
+        // Otherwise fall through to Story 8.8's selectstart-suppress no-op below.
+        // Only the PRIMARY button drives a text selection; a middle/right-button
+        // empty-space press must not arm the snap or preventDefault (that would
+        // interfere with middle-button autoscroll and the right-click place-a-
+        // comment/memo picker).
+        if (event.button !== 0) return;
+        const layer = originLayerOf(event.target);
+        const origin = layer ? resolveOrigin(layer, event.clientX, event.clientY) : null;
+        const seed = origin && (origin.inBand ?? origin.belowStart ?? origin.aboveEnd);
+        if (layer && origin && seed) {
+          // We DRIVE the native selection per-frame (rAF-throttled) here — a
+          // deliberate crossing of Story 8.9's spike-budget "no per-move
+          // selection driving" guard. That guard's rationale was the reverted
+          // attempts' column-band CLIPPING; we never clip. `setBaseAndExtent`
+          // yields the plain native contiguous range, identical to an on-text
+          // drag between the same two points — so a snap drag behaves exactly
+          // like a text drag (it can extend across columns as the pointer moves),
+          // only with its START snapped to the nearest text. preventDefault stops
+          // the browser's click-to-collapse on release, which would otherwise
+          // wipe the built selection before pointerup reads it
+          // (deferred-work.md#Discarded: Story 4.2 Part B).
+          event.preventDefault();
+          // Clear any pre-existing selection when arming: the snap paints nothing
+          // until the cursor first touches a row, so a stale range left over from
+          // an earlier gesture must not linger on screen or be consumed on release
+          // if this drag never engages.
+          document.getSelection()?.removeAllRanges();
+          snapping = true;
+          snapLayer = layer;
+          snapOrigin = origin;
+        }
       },
       { signal },
     );
+    document.addEventListener(
+      "pointermove",
+      (event) => {
+        if (!snapping) return;
+        snapPoint = { x: event.clientX, y: event.clientY };
+        scheduleSnapFrame();
+      },
+      { signal },
+    );
+    // Scrolling mid-drag (the user wheel-scrolls while holding the button) fires
+    // no pointermove, but the content under the cursor changes — re-resolve from
+    // the last pointer position against the new (scrolled) geometry so the
+    // selection tracks. Capture phase: the pdf-canvas scrolls, and `scroll` does
+    // not bubble.
+    document.addEventListener("scroll", scheduleSnapFrame, { signal, capture: true });
     const releasePointer = (): void => {
       pointerDown = false;
       emptyOrigin = false;
+      snapping = false;
+      snapLayer = null;
+      snapOrigin = null;
+      snapEngaged = false;
+      snapAnchor = null;
+      snapFocus = null;
+      snapPoint = null;
+      if (snapRaf !== 0) {
+        cancelAnimationFrame(snapRaf);
+        snapRaf = 0;
+      }
       this.#textLayers.forEach(reset);
     };
+    // The rAF throttle means the LAST pointermove of a drag may still be queued
+    // (or a whole quick drag may fit within one frame) when the button releases.
+    // Flush it synchronously in the CAPTURE phase — before the bubble-phase
+    // create-on-release consumer (`useCreateQuickBox`) reads `window.getSelection()`
+    // — so the mark is built from the final range, not a stale one (and a
+    // single-frame drag still forms its selection). Runs before `releasePointer`
+    // clears the state.
+    const flushSnap = (): void => {
+      if (!snapping || !snapPoint) return;
+      if (snapRaf !== 0) {
+        cancelAnimationFrame(snapRaf);
+        snapRaf = 0;
+      }
+      applySnapFrame();
+    };
+    document.addEventListener("pointerup", flushSnap, { signal, capture: true });
     document.addEventListener("pointerup", releasePointer, { signal });
     // A cancelled gesture (e.g. the browser revoking pointer capture) skips
     // pointerup entirely; without this, emptyOrigin stays latched and blocks
     // an unrelated later selectstart until the next pointerdown/blur.
     document.addEventListener("pointercancel", releasePointer, { signal });
     window.addEventListener("blur", releasePointer, { signal });
-    // A drag whose origin is empty page space must not start a native
-    // selection at all (Story 8.8 AC-1): it would anchor at the nearest
-    // glyph and drag through every span in between. `emptyOrigin` is latched
-    // at pointerdown so this also covers a drag that starts blank and
-    // wanders onto text. On-text origins are untouched (AC-2).
+    // A drag whose origin is empty page space with NO nearby line must not
+    // start a native selection at all (Story 8.8 AC-1): it would anchor at the
+    // nearest glyph and drag through every span in between. `emptyOrigin` is
+    // latched at pointerdown so this also covers a drag that starts blank and
+    // wanders onto text. On-text origins are untouched (AC-2). When the snap is
+    // active (`snapping`), the selection is intentional, so do NOT suppress it.
     document.addEventListener(
       "selectstart",
       (event) => {
-        if (emptyOrigin) event.preventDefault();
+        if (emptyOrigin && !snapping) event.preventDefault();
       },
       { signal },
     );

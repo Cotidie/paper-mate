@@ -2179,7 +2179,17 @@ So that the next reader-polish epic builds on cohesive modules instead of accret
 **Given** the refactor
 **Then** it lands in its own PR(s), separate from any feature story, per the established Story 5.0/5.3/5.4/6.8 precedent — never folded into a feature story
 
-> **Out of scope:** any new capability; touching client/server modules Epic 8 did not touch; the still-deferred multi-column selection controller and cross-type unified hit-layer (those stay in `deferred-work.md`, tracked separately, not incidentally swept up here). **Open design calls for create-story:** the exact module boundaries for the `textSelection.ts` split; final scope depends on Story 8.9's outcome (sequenced after it for exactly this reason).
+> **Out of scope:** any new capability; touching client/server modules Epic 8 did not touch; the still-deferred multi-column selection controller and cross-type unified hit-layer (those stay in `deferred-work.md`, tracked separately, not incidentally swept up here). **Open design calls for create-story:** the exact module boundaries for the `textSelection.ts` split; final scope depends on Story 8.9's/8.11's outcome (sequenced after them for exactly this reason).
+
+### Story 8.11: Snap empty-space drag to nearest text — attempt 2 (added 2026-07-12)
+
+> Follow-up to Story 8.9, which closed NEGATIVE (both named techniques failed: `caretRangeFromPoint` poisons mid-session; the manual-Range resolver is correct but native drag-select won't ARM from an off-glyph mousedown). 8.9 is NOT reopened — this is a fresh attempt on an approved design (`docs/superpowers/specs/2026-07-12-snap-empty-space-drag-to-text-design.md`). The reframe: the create/preview/copy pipeline already runs off native `window.getSelection()`, so the drag doesn't need native to ARM a selection — it needs one to EXIST. Approach is a spike-with-fallback (sequence A → B): a decision-gate probe seeds a native selection during the drag via the working 8.9 resolver + `setBaseAndExtent` (Method A, tiny — everything downstream free), gated on whether the selection survives the browser's collapse-on-release; a deterministic own-overlay + build-from-endpoints path is the fallback (Method B) if it doesn't. Sequenced BEFORE Story 8.10 so 8.10's `textSelection.ts` refactor absorbs the snap. A negative outcome remains complete/acceptable (write up, keep 8.8's no-op). No new FR unless it validates in live smoke. Full ACs + Dev Notes in the story file (`.bmad/implementation-artifacts/8-11-snap-empty-space-drag-to-text-attempt-2.md`).
+
+As a reader,
+I want a drag that starts in empty page space to snap its selection to the nearest text and behave like a normal on-text drag,
+So that the gesture works the way I'd expect on a page with visible text nearby.
+
+> **Out of scope:** the continuous column-aware drag-select controller / column-band rect clipping (the reverted-attempts class, stays deferred); the caret-API family (dead per 8.9). **Depends on:** Story 8.9's findings (resolver + native-arm blocker). **Blocks:** Story 8.10 (refactor absorbs this story's additions).
 
 ## Epic 9: Phase 2 kickoff, reading helper & paper portability (post-v1, Phase-2)
 
