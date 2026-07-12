@@ -78,6 +78,12 @@ export default function CommentPreview({
   // pointerenter that already keeps `hoveredId` alive below).
   const [pointerOverBox, setPointerOverBox] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Fix request: the grace window exists ONLY to bridge the pin→box gap on
+  // the way IN — once the pointer has actually reached the box at least once
+  // this open cycle, there is nothing left to bridge, so leaving (to neither
+  // pin nor box) closes immediately instead of lingering (visibly, now that
+  // the opacity fade above makes the wait visible) for the same window.
+  const enteredBoxRef = useRef(false);
   useEffect(() => {
     if (hovered) {
       if (closeTimer.current) {
@@ -85,6 +91,11 @@ export default function CommentPreview({
         closeTimer.current = null;
       }
       setVisible(true);
+      return;
+    }
+    if (enteredBoxRef.current) {
+      enteredBoxRef.current = false;
+      setVisible(false);
       return;
     }
     closeTimer.current = setTimeout(() => setVisible(false), HOVER_CLOSE_DELAY_MS);
@@ -132,6 +143,7 @@ export default function CommentPreview({
       }}
       onPointerEnter={() => {
         setPointerOverBox(true);
+        enteredBoxRef.current = true;
         onHoverEnter();
       }}
       onPointerLeave={() => {

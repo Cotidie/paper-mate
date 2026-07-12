@@ -182,3 +182,32 @@ describe("CommentPreview click-to-select (fix request: resize handle needs the c
     expect(() => fireEvent.click(screen.getByTestId("comment-preview-p32"))).not.toThrow();
   });
 });
+
+describe("CommentPreview close timing (fix request: instant close once the box itself was reached)", () => {
+  it("closes IMMEDIATELY (no grace window) once the pointer has directly entered the box and then leaves everything", () => {
+    const anno = comment("p40");
+    const { rerender } = render(
+      <CommentPreview anno={anno} pos={pos} hovered={true} onRetext={noop} onHoverEnter={noop} onHoverLeave={noop} />,
+    );
+    const box = screen.getByTestId("comment-preview-p40");
+    fireEvent.pointerEnter(box);
+    fireEvent.pointerLeave(box);
+    // External hover state clears (pointer left both pin and box) — no timer needed.
+    rerender(
+      <CommentPreview anno={anno} pos={pos} hovered={false} onRetext={noop} onHoverEnter={noop} onHoverLeave={noop} />,
+    );
+    expect(screen.queryByTestId("comment-preview-p40")).toBeNull();
+  });
+
+  it("still waits the grace window if the pointer never directly entered the box (pin-to-box gap crossing, unaffected)", () => {
+    const anno = comment("p41");
+    const { rerender } = render(
+      <CommentPreview anno={anno} pos={pos} hovered={true} onRetext={noop} onHoverEnter={noop} onHoverLeave={noop} />,
+    );
+    // hovered flips false (pin left) WITHOUT ever having entered the box.
+    rerender(
+      <CommentPreview anno={anno} pos={pos} hovered={false} onRetext={noop} onHoverEnter={noop} onHoverLeave={noop} />,
+    );
+    expect(screen.getByTestId("comment-preview-p41")).toBeTruthy();
+  });
+});
