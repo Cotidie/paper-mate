@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import CommentBubble from "./CommentBubble";
 import type { Annotation } from "@/api/client";
 import type { ScreenRect } from "@/anchor";
@@ -170,5 +170,60 @@ describe("CommentBubble keyboard (Esc/Delete, bug fix)", () => {
     const textarea = screen.getByTestId("comment-body-c9");
     fireEvent.keyDown(textarea, { key: "a" });
     expect(onDelete).not.toHaveBeenCalled();
+  });
+});
+
+describe("CommentBubble compact mode (box comment popup layout, fix request)", () => {
+  it("renders no color row, convert button, or delete button when compact", () => {
+    render(
+      <CommentBubble
+        anno={comment("c10")}
+        pos={pos}
+        onRetext={noop}
+        onRecolor={noop}
+        onConvertToHighlight={noop}
+        onDelete={noop}
+        onClearSelection={noop}
+        onResize={noop}
+        compact
+      />,
+    );
+    expect(screen.queryByTestId("comment-delete-c10")).toBeNull();
+    expect(screen.queryByTestId("color-swatch-annotation-blue")).toBeNull();
+    expect(screen.queryByTestId("comment-convert-highlight-c10")).toBeNull();
+    // The textarea and the resize handle are still there.
+    expect(screen.getByTestId("comment-body-c10")).toBeTruthy();
+    expect(screen.getByTestId("comment-bubble-resize-c10")).toBeTruthy();
+  });
+
+  it("renders at pos.left/pos.top with NO pin-offset transform when compact", () => {
+    renderBubble("c11");
+    const nonCompact = screen.getByTestId("comment-bubble-c11");
+    expect(nonCompact.style.transform).toContain("translateY(calc(var(--comment-pin-size)");
+    cleanup();
+
+    render(
+      <CommentBubble
+        anno={comment("c12")}
+        pos={pos}
+        onRetext={noop}
+        onRecolor={noop}
+        onConvertToHighlight={noop}
+        onDelete={noop}
+        onClearSelection={noop}
+        onResize={noop}
+        compact
+      />,
+    );
+    const bubble = screen.getByTestId("comment-bubble-c12");
+    expect(bubble.style.left).toBe("100px");
+    expect(bubble.style.top).toBe("100px");
+    expect(bubble.style.transform).toBe("translate(0px, 0px)");
+  });
+
+  it("a non-compact (or omitted) bubble is unchanged: color row and delete are present", () => {
+    renderBubble("c13");
+    expect(screen.getByTestId("comment-delete-c13")).toBeTruthy();
+    expect(screen.getByTestId("color-swatch-annotation-blue")).toBeTruthy();
   });
 });
