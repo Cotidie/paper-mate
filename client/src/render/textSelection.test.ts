@@ -5,7 +5,47 @@
 // (Story 4.1 AC-5, "no leak / lifecycle-safe").
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { textSelectionController } from "./textSelection";
+import { isEmptyLayerSpace, textSelectionController } from "./textSelection";
+
+describe("isEmptyLayerSpace", () => {
+  it("is true for the registered .textLayer container element itself", () => {
+    const div = document.createElement("div");
+    const endOfContent = document.createElement("div");
+    const textLayers = new Map([[div, endOfContent]]);
+    expect(isEmptyLayerSpace(div, textLayers)).toBe(true);
+  });
+
+  it("is true for the layer's endOfContent child", () => {
+    const div = document.createElement("div");
+    const endOfContent = document.createElement("div");
+    endOfContent.className = "endOfContent";
+    div.append(endOfContent);
+    const textLayers = new Map([[div, endOfContent]]);
+    expect(isEmptyLayerSpace(endOfContent, textLayers)).toBe(true);
+  });
+
+  it("is false for a glyph span descendant of the layer", () => {
+    const div = document.createElement("div");
+    const endOfContent = document.createElement("div");
+    const span = document.createElement("span");
+    span.textContent = "NYU v2.";
+    div.append(span, endOfContent);
+    const textLayers = new Map([[div, endOfContent]]);
+    expect(isEmptyLayerSpace(span, textLayers)).toBe(false);
+  });
+
+  it("is false for an unrelated/unregistered element", () => {
+    const div = document.createElement("div");
+    const endOfContent = document.createElement("div");
+    const textLayers = new Map([[div, endOfContent]]);
+    const other = document.createElement("div");
+    expect(isEmptyLayerSpace(other, textLayers)).toBe(false);
+  });
+
+  it("is false for a null target", () => {
+    expect(isEmptyLayerSpace(null, new Map())).toBe(false);
+  });
+});
 
 describe("TextSelectionController", () => {
   it("appends an endOfContent div to the registered text layer", () => {

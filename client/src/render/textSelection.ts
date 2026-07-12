@@ -27,6 +27,23 @@
 import { joinParagraphLines, measureSelectedLines } from "./paragraphCopy";
 
 /**
+ * True when `target` is empty page space in a registered text layer: the
+ * `.textLayer` container element itself, or its `endOfContent` bound child.
+ * False for a glyph `<span>` (or any other descendant) and for anything
+ * outside a registered layer. Target classification only, no layout reads
+ * (Story 8.8 AC-4) — pointerdown over empty space must not start a native
+ * selection that then grabs whatever text the drag wanders across.
+ */
+export function isEmptyLayerSpace(target: EventTarget | null, textLayers: ReadonlyMap<Element, HTMLElement>): boolean {
+  if (!(target instanceof Element)) return false;
+  if (textLayers.has(target)) return true;
+  for (const endOfContent of textLayers.values()) {
+    if (target === endOfContent) return true;
+  }
+  return false;
+}
+
+/**
  * Shared across every live page card (mirrors `TextLayerBuilder`'s static
  * registry): one `document`-level `selectionchange`/pointer listener set,
  * enabled on the first `register` and torn down when the last card
@@ -94,14 +111,23 @@ class TextSelectionController {
     };
 
     let pointerDown = false;
+    let emptyOrigin = false;
     let isFirefox: boolean | undefined;
     let prevRange: Range | null = null;
 
-    document.addEventListener("pointerdown", () => { pointerDown = true; }, { signal });
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        pointerDown = true;
+        emptyOrigin = isEmptyLayerSpace(event.target, this.#textLayers);
+      },
+      { signal },
+    );
     document.addEventListener(
       "pointerup",
       () => {
         pointerDown = false;
+        emptyOrigin = false;
         this.#textLayers.forEach(reset);
       },
       { signal },
@@ -110,7 +136,20 @@ class TextSelectionController {
       "blur",
       () => {
         pointerDown = false;
+        emptyOrigin = false;
         this.#textLayers.forEach(reset);
+      },
+      { signal },
+    );
+    // A drag whose origin is empty page space must not start a native
+    // selection at all (Story 8.8 AC-1): it would anchor at the nearest
+    // glyph and drag through every span in between. `emptyOrigin` is latched
+    // at pointerdown so this also covers a drag that starts blank and
+    // wanders onto text. On-text origins are untouched (AC-2).
+    document.addEventListener(
+      "selectstart",
+      (event) => {
+        if (emptyOrigin) event.preventDefault();
       },
       { signal },
     );

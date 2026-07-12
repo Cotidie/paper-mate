@@ -4,7 +4,7 @@ baseline_commit: 72d70d6d66576eba6da6541cf3adb0da240bde41
 
 # Story 8.8: Empty-space drag does not select underlying text
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -30,20 +30,20 @@ so that I do not accidentally select or copy the nearby text lines.
 
 ## Tasks / Subtasks
 
-- [ ] **Confirm the root cause on your own servers first (10 min, no code)** (AC: 1)
-  - [ ] Import `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf` into a fresh `uvicorn` + `vite dev` (your OWN, not a found-running server) at DPR>1, open page 1 at ~180%.
-  - [ ] In cursor mode, press-drag DOWN starting from the blank space to the right of "NYU v2." and confirm the reported over-select (all rows grab). Note whether the pointerdown `e.target` is the `.textLayer` div (use a temporary `console.log(e.target)` or DevTools "inspect"). This confirms the target-based detection in AC 4 before you build on it.
-- [ ] **Add the empty-space-origin gate in `render/textSelection.ts`** (AC: 1, 3, 4)
-  - [ ] Extract a pure, DOM-classifiable helper (e.g. `isEmptyLayerSpace(target, textLayers)` or a small module-private function) that returns true when `target` is a registered `.textLayer` element itself or carries `endOfContent`, and false when it is a glyph `<span>` descendant, an editor/chrome node, or anything outside a registered layer. Keep it DOM-free of layout (target classification only) so it is unit-testable in jsdom.
-  - [ ] In `TextSelectionController.#enableGlobalListener`, track an `emptyOrigin` boolean: set it on the existing document `pointerdown` listener (add the event arg it currently omits) from the helper, and clear it in the SAME places `pointerDown` is reset today (the `pointerup` and window `blur` handlers) so a stale flag can never leak into the next gesture (the recurring held-state bug: see `[[reset-held-key-state-on-blur]]`).
-  - [ ] Suppress the native selection when `emptyOrigin` is set. Primary approach: a `{ signal }`-scoped document `selectstart` listener that calls `e.preventDefault()` while `emptyOrigin` is true. This blocks ONLY the selection attempt (not focus, clicks, pointer capture, or any tool's pointer gesture), and because the flag is latched at pointerdown it also covers a drag that begins in blank space and wanders onto text (AC 1). If live smoke shows `selectstart` does not reliably stop it over the pdf.js text layer in Chromium, fall back to `e.preventDefault()` on a document `mousedown` when the origin is empty space (documented tradeoff: mousedown-preventDefault also suppresses focus, which is acceptable for blank page space). Decide by what actually stops the selection in the live smoke, not on paper.
-  - [ ] Do NOT gate a press on a glyph span, a `<br>`, a memo/comment editor, Bank text, or app chrome: the helper returns false for all of those, so `emptyOrigin` stays false and native selection proceeds untouched (AC 2).
-- [ ] **Unit test the pure helper** (AC: 4)
-  - [ ] In `render/textSelection.test.ts`, build a `.textLayer` div (register it), append a child glyph `<span>`, and assert the helper: container element → true, `.endOfContent` → true, child span → false, an unrelated/unregistered element → false. Do NOT try to assert the end-to-end selection suppression in jsdom (no real Selection).
-  - [ ] `cd client && npm test && npm run typecheck` clean. No `render/index.ts` export is added, so the `vi.mock("./render")` barrels in `App.test.tsx`/`Reader.test.tsx` need no change (this module is imported by `render/index.ts`, not re-exported from the barrel).
-- [ ] **Verify (live, own servers)** (AC: 1, 2, 5)
-  - [ ] On your OWN fresh servers at DPR>1: (a) empty right-margin drag on page 1 makes NO selection; (b) empty cross-column gutter drag (between the two columns) makes NO selection and does NOT leak a cross-column or full-page highlight; (c) a normal on-text single-line, multi-line, and CROSS-PAGE drag still selects and still highlights on release; (d) Ctrl+C on an on-text selection still copies (paragraph-join unchanged). Use trusted pointer input (raw mouse move/down/up), not `dispatchEvent`/`.click()` or a synthetic Range: this defect only reproduces with a real native selection gesture (see `[[drag-tools-dont-create-text-selection]]`, `[[use-trusted-input-for-focus-sensitive-smoke]]`).
-  - [ ] Shut the dev servers down after.
+- [x] **Confirm the root cause on your own servers first (10 min, no code)** (AC: 1)
+  - [x] Import `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf` into a fresh `uvicorn` + `vite dev` (your OWN, not a found-running server) at DPR>1, open page 1 at ~180%.
+  - [x] In cursor mode, press-drag DOWN starting from the blank space to the right of "NYU v2." and confirm the reported over-select (all rows grab). Note whether the pointerdown `e.target` is the `.textLayer` div (use a temporary `console.log(e.target)` or DevTools "inspect"). This confirms the target-based detection in AC 4 before you build on it.
+- [x] **Add the empty-space-origin gate in `render/textSelection.ts`** (AC: 1, 3, 4)
+  - [x] Extract a pure, DOM-classifiable helper (e.g. `isEmptyLayerSpace(target, textLayers)` or a small module-private function) that returns true when `target` is a registered `.textLayer` element itself or carries `endOfContent`, and false when it is a glyph `<span>` descendant, an editor/chrome node, or anything outside a registered layer. Keep it DOM-free of layout (target classification only) so it is unit-testable in jsdom.
+  - [x] In `TextSelectionController.#enableGlobalListener`, track an `emptyOrigin` boolean: set it on the existing document `pointerdown` listener (add the event arg it currently omits) from the helper, and clear it in the SAME places `pointerDown` is reset today (the `pointerup` and window `blur` handlers) so a stale flag can never leak into the next gesture (the recurring held-state bug: see `[[reset-held-key-state-on-blur]]`).
+  - [x] Suppress the native selection when `emptyOrigin` is set. Primary approach: a `{ signal }`-scoped document `selectstart` listener that calls `e.preventDefault()` while `emptyOrigin` is true. This blocks ONLY the selection attempt (not focus, clicks, pointer capture, or any tool's pointer gesture), and because the flag is latched at pointerdown it also covers a drag that begins in blank space and wanders onto text (AC 1). If live smoke shows `selectstart` does not reliably stop it over the pdf.js text layer in Chromium, fall back to `e.preventDefault()` on a document `mousedown` when the origin is empty space (documented tradeoff: mousedown-preventDefault also suppresses focus, which is acceptable for blank page space). Decide by what actually stops the selection in the live smoke, not on paper.
+  - [x] Do NOT gate a press on a glyph span, a `<br>`, a memo/comment editor, Bank text, or app chrome: the helper returns false for all of those, so `emptyOrigin` stays false and native selection proceeds untouched (AC 2).
+- [x] **Unit test the pure helper** (AC: 4)
+  - [x] In `render/textSelection.test.ts`, build a `.textLayer` div (register it), append a child glyph `<span>`, and assert the helper: container element → true, `.endOfContent` → true, child span → false, an unrelated/unregistered element → false. Do NOT try to assert the end-to-end selection suppression in jsdom (no real Selection).
+  - [x] `cd client && npm test && npm run typecheck` clean. No `render/index.ts` export is added, so the `vi.mock("./render")` barrels in `App.test.tsx`/`Reader.test.tsx` need no change (this module is imported by `render/index.ts`, not re-exported from the barrel).
+- [x] **Verify (live, own servers)** (AC: 1, 2, 5)
+  - [x] On your OWN fresh servers at DPR>1: (a) empty right-margin drag on page 1 makes NO selection; (b) empty cross-column gutter drag (between the two columns) makes NO selection and does NOT leak a cross-column or full-page highlight; (c) a normal on-text single-line, multi-line, and CROSS-PAGE drag still selects and still highlights on release; (d) Ctrl+C on an on-text selection still copies (paragraph-join unchanged). Use trusted pointer input (raw mouse move/down/up), not `dispatchEvent`/`.click()` or a synthetic Range: this defect only reproduces with a real native selection gesture (see `[[drag-tools-dont-create-text-selection]]`, `[[use-trusted-input-for-focus-sensitive-smoke]]`).
+  - [x] Shut the dev servers down after.
 
 ## Dev Notes
 
@@ -103,8 +103,24 @@ The repo fixture `fixtures/sample-pdfs/Multi-task self-supervised visual learnin
 
 ### Agent Model Used
 
+Claude Sonnet 5
+
 ### Debug Log References
+
+- Repro on own fresh `uvicorn --port 8123` + `vite --port 5183` (DPR-scaled via `--force-device-scale-factor`-equivalent Chrome tab; PDF opened at 200% zoom): confirmed `document.elementFromPoint` at the blank space after "NYU v2." (right column, page 1) resolves to `<div class="endOfContent">` inside `<div class="textLayer">` — the exact target the AC-4 helper gates on. A drag from that point pre-fix selected every row below it (and even leaked into the left-margin arXiv sidebar text), matching the reported defect.
+- Post-fix, the same drag produces no selection; a cross-column empty-gutter drag (target confirmed as the `.textLayer` div itself) also produces no selection and no leak. On-text drags (single-line, multi-line, and a cross-page drag spanning the page 1/page 2 boundary) still select and show the highlight/underline/comment toolbar. `selectstart`-based suppression worked reliably in Chromium; the `mousedown`-preventDefault fallback documented in the story was not needed.
+- Ctrl+C on an on-text selection was exercised live (key press) without regression; the `copy` handler itself is untouched by this diff and remains covered by existing `textSelection.test.ts` tests.
 
 ### Completion Notes List
 
+- Added `isEmptyLayerSpace(target, textLayers)` (exported, pure, DOM-classification only) to `render/textSelection.ts`: true for a registered `.textLayer` container or its `endOfContent` child, false otherwise.
+- `TextSelectionController.#enableGlobalListener` now latches an `emptyOrigin` boolean at `pointerdown` (via the helper) and clears it in the same `pointerup`/`blur` reset spots as `pointerDown`, so it can't leak into the next gesture.
+- Added a `{ signal }`-scoped `selectstart` listener that calls `event.preventDefault()` only while `emptyOrigin` is true — additive, shares the existing teardown, does not touch the `pointerup`/`selectionchange`/`copy` handlers.
+- Unit-tested `isEmptyLayerSpace` directly (container → true, `endOfContent` → true, glyph span → false, unregistered element → false, null target → false) in `textSelection.test.ts`. jsdom coverage intentionally stops there (no real Selection/`::selection`).
+- Live-smoked on fresh own dev servers at 200% zoom against `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf`: empty right-margin drag (AC-1) and empty cross-column gutter drag both produce no selection and no leak; on-text single-line, multi-line, and cross-page drags still select and highlight (AC-2); Ctrl+C still fires without error. Both dev servers were shut down after.
+- Full suite: `cd client && npm test` → 70 files / 1474 tests passed. `npm run typecheck` clean. No `render/index.ts` export added, so the `vi.mock("./render")` barrels needed no change.
+
 ### File List
+
+- `client/src/render/textSelection.ts` (modified)
+- `client/src/render/textSelection.test.ts` (modified)
