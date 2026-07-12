@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import CommentPreview from "./CommentPreview";
 import type { Annotation } from "@/api/client";
 import type { ScreenRect } from "@/anchor";
@@ -102,5 +102,42 @@ describe("CommentPreview compact mode (box comment popup layout, fix request)", 
     renderPreview(comment("p11"));
     const box = screen.getByTestId("comment-preview-p11");
     expect(box.style.transform).toContain("translateY(calc(var(--comment-pin-size)");
+  });
+});
+
+describe("CommentPreview fade-in on direct hover (fix request)", () => {
+  it("renders at reduced opacity (the pin's own idle token) until the pointer actually enters the box", () => {
+    renderPreview(comment("p20"));
+    const box = screen.getByTestId("comment-preview-p20");
+    expect(box.style.opacity).toBe("var(--comment-pin-opacity)");
+  });
+
+  it("snaps to full opacity once the pointer enters the box, back to reduced on leave", () => {
+    renderPreview(comment("p21"));
+    const box = screen.getByTestId("comment-preview-p21");
+    fireEvent.pointerEnter(box);
+    expect(box.style.opacity).toBe("1");
+    fireEvent.pointerLeave(box);
+    expect(box.style.opacity).toBe("var(--comment-pin-opacity)");
+  });
+
+  it("still calls onHoverEnter/onHoverLeave (the existing hover-keepalive contract) alongside the opacity toggle", () => {
+    const onHoverEnter = vi.fn();
+    const onHoverLeave = vi.fn();
+    render(
+      <CommentPreview
+        anno={comment("p22")}
+        pos={pos}
+        hovered={true}
+        onRetext={noop}
+        onHoverEnter={onHoverEnter}
+        onHoverLeave={onHoverLeave}
+      />,
+    );
+    const box = screen.getByTestId("comment-preview-p22");
+    fireEvent.pointerEnter(box);
+    expect(onHoverEnter).toHaveBeenCalledTimes(1);
+    fireEvent.pointerLeave(box);
+    expect(onHoverLeave).toHaveBeenCalledTimes(1);
   });
 });

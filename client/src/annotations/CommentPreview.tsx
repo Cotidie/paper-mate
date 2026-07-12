@@ -64,6 +64,13 @@ export default function CommentPreview({
   compact?: boolean;
 }) {
   const [visible, setVisible] = useState(hovered);
+  // Fade-in on direct hover (fix request): the box opens at the pin's own idle
+  // opacity (the SAME token .annotation-comment-pin uses when not hovered/
+  // selected) while the pointer is still just crossing from the pin, so it
+  // reads as a light preview rather than a fully-present box — then snaps to
+  // full opacity the moment the pointer actually enters it (the same
+  // pointerenter that already keeps `hoveredId` alive below).
+  const [pointerOverBox, setPointerOverBox] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (hovered) {
@@ -112,12 +119,19 @@ export default function CommentPreview({
       style={{
         left: pos.left,
         top: pos.top,
+        opacity: pointerOverBox ? 1 : "var(--comment-pin-opacity)",
         ...(compact ? {} : { transform: PIN_OFFSET_TRANSFORM }),
         ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),
         ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
       }}
-      onPointerEnter={onHoverEnter}
-      onPointerLeave={onHoverLeave}
+      onPointerEnter={() => {
+        setPointerOverBox(true);
+        onHoverEnter();
+      }}
+      onPointerLeave={() => {
+        setPointerOverBox(false);
+        onHoverLeave();
+      }}
     >
       <textarea
         className={
