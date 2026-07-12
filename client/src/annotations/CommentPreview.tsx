@@ -41,6 +41,7 @@ export default function CommentPreview({
   onHoverLeave,
   onTextFocus,
   onTextBlur,
+  compact = false,
 }: {
   anno: Annotation;
   pos: ScreenRect;
@@ -56,6 +57,11 @@ export default function CommentPreview({
   onTextFocus?: () => void;
   /** Called when the textarea loses focus (end of a text-edit session). */
   onTextBlur?: () => void;
+  /** True for a BOX comment (fix request): the caller has already positioned
+   *  `pos` beside the highlight, so no pin-offset shift is applied here. This
+   *  component never had color/delete chrome, so `compact` only affects
+   *  positioning (unlike `CommentBubble`'s `compact`). */
+  compact?: boolean;
 }) {
   const [visible, setVisible] = useState(hovered);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,7 +112,7 @@ export default function CommentPreview({
       style={{
         left: pos.left,
         top: pos.top,
-        transform: PIN_OFFSET_TRANSFORM,
+        ...(compact ? {} : { transform: PIN_OFFSET_TRANSFORM }),
         ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),
         ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
       }}

@@ -78,3 +78,29 @@ describe("CommentPreview size (Story 8.6: matches the bubble's adjusted full siz
     expect(box.style.height).toBe("150px");
   });
 });
+
+describe("CommentPreview compact mode (box comment popup layout, fix request)", () => {
+  it("renders at pos.left/pos.top with NO pin-offset transform when compact", () => {
+    render(
+      <CommentPreview
+        anno={comment("p10")}
+        pos={pos}
+        hovered={true}
+        onRetext={noop}
+        onHoverEnter={noop}
+        onHoverLeave={noop}
+        compact
+      />,
+    );
+    const box = screen.getByTestId("comment-preview-p10");
+    expect(box.style.left).toBe("100px");
+    expect(box.style.top).toBe("100px");
+    expect(box.style.transform).toBe("");
+  });
+
+  it("a non-compact (or omitted) preview keeps the pin-offset transform", () => {
+    renderPreview(comment("p11"));
+    const box = screen.getByTestId("comment-preview-p11");
+    expect(box.style.transform).toContain("translateY(calc(var(--comment-pin-size)");
+  });
+});
