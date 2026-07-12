@@ -1993,6 +1993,21 @@ describe("AnnotationInteraction comment overlay — bubble + hover preview (Stor
       act(() => useAnnotationStore.getState().setHovered("h1"));
       expect(screen.queryByTestId("comment-preview-h1")).toBeNull();
     });
+
+    it("clicking the hovered preview selects the comment, swapping in the full bubble with its resize handle (fix request)", () => {
+      useAnnotationStore.getState().addAnnotation(rectComment("p7", "note"));
+      setup();
+      act(() => useAnnotationStore.getState().setHovered("p7"));
+      expect(screen.getByTestId("comment-preview-p7")).toBeTruthy();
+      expect(screen.queryByTestId("comment-bubble-resize-p7")).toBeNull();
+
+      fireEvent.click(screen.getByTestId("comment-preview-p7"));
+
+      expect(useAnnotationStore.getState().selectedId).toBe("p7");
+      expect(screen.queryByTestId("comment-preview-p7")).toBeNull();
+      expect(screen.getByTestId("comment-body-p7")).toBeTruthy();
+      expect(screen.getByTestId("comment-bubble-resize-p7")).toBeTruthy();
+    });
   });
 });
 

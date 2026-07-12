@@ -141,3 +141,44 @@ describe("CommentPreview fade-in on direct hover (fix request)", () => {
     expect(onHoverLeave).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("CommentPreview click-to-select (fix request: resize handle needs the comment selected)", () => {
+  it("clicking the box calls onSelect with the comment's id", () => {
+    const onSelect = vi.fn();
+    render(
+      <CommentPreview
+        anno={comment("p30")}
+        pos={pos}
+        hovered={true}
+        onRetext={noop}
+        onHoverEnter={noop}
+        onHoverLeave={noop}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("comment-preview-p30"));
+    expect(onSelect).toHaveBeenCalledWith("p30");
+  });
+
+  it("clicking into the textarea itself also calls onSelect (any click promotes to the full editor)", () => {
+    const onSelect = vi.fn();
+    render(
+      <CommentPreview
+        anno={comment("p31")}
+        pos={pos}
+        hovered={true}
+        onRetext={noop}
+        onHoverEnter={noop}
+        onHoverLeave={noop}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("comment-preview-body-p31"));
+    expect(onSelect).toHaveBeenCalledWith("p31");
+  });
+
+  it("omitting onSelect does not throw on click (optional prop, no-op)", () => {
+    renderPreview(comment("p32"));
+    expect(() => fireEvent.click(screen.getByTestId("comment-preview-p32"))).not.toThrow();
+  });
+});

@@ -545,6 +545,7 @@ export default function AnnotationInteraction({
             }
             onHoverEnter={() => setHovered(a.id)}
             onHoverLeave={() => setHovered(null)}
+            onSelect={select}
             onTextFocus={startCommentTextEditSession}
             onTextBlur={commitCommentTextEditSession}
           />

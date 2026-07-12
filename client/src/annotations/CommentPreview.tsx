@@ -41,6 +41,7 @@ export default function CommentPreview({
   onHoverLeave,
   onTextFocus,
   onTextBlur,
+  onSelect,
   compact = false,
 }: {
   anno: Annotation;
@@ -57,6 +58,11 @@ export default function CommentPreview({
   onTextFocus?: () => void;
   /** Called when the textarea loses focus (end of a text-edit session). */
   onTextBlur?: () => void;
+  /** Click-to-select (fix request): any click on the preview — padding or the
+   *  textarea itself — promotes it to the full `CommentBubble` (recolor/
+   *  delete/resize), matching this component's own doc comment: hover is for
+   *  reading + quick edits, click-to-select is for restyling. */
+  onSelect?: (id: string) => void;
   /** True for a BOX comment (fix request): the caller has already positioned
    *  `pos` beside the highlight, so no pin-offset shift is applied here. This
    *  component never had color/delete chrome, so `compact` only affects
@@ -132,6 +138,7 @@ export default function CommentPreview({
         setPointerOverBox(false);
         onHoverLeave();
       }}
+      onClick={() => onSelect?.(anno.id)}
     >
       <textarea
         className={
