@@ -246,6 +246,24 @@ genuinely new pieces are a `body` param, a pin button, and a `CommentBubble`.
   `ColorSwatchRow` only (color, no width/size); `C` arms it. Client-only — the
   contract already carries `type:"comment"`/`kind=text`/`kind=rect`/`body`, so the
   tracked OpenAPI + generated TS types stay byte-identical.
+- **Story 8.6 (preview size fix):** `CommentPreview` (the HOVER-triggered compact
+  twin of `CommentBubble`, shown while a comment is not selected) reads the same
+  persisted `style.bubble_width`/`bubble_height` the full bubble already
+  reads+writes via its corner-handle resize, so the collapsed preview renders at
+  the SAME adjusted size as the full bubble instead of snapping back to the
+  220px default. A comment that was never resized (both fields null) still shows
+  the compact default preview, unchanged.
+- **Box comment popup layout (fix request):** a BOX comment (`isBoxComment` in
+  `marks.ts` — a `type=comment` mark whose live anchor is `kind=rect` with REAL
+  area, i.e. drawn via the Comment tool's Box mode, Story 8.4) no longer
+  overlaps its own highlighted region. Its color-swatch + delete chrome moves
+  into the shared selection quick-box's LEFT-side vertical strip (the same
+  layout `MemoBox`'s own quick-box already uses, `usesLeftVerticalQuickBox` in
+  `marks.ts`), and `CommentBubble`/`CommentPreview` render in `compact` mode:
+  just a textarea (+ resize handle for the full bubble), positioned to the
+  RIGHT of the highlight (`position.ts`'s `rightOf`) instead of below the pin.
+  A click-placed pin comment or a text-drag comment is unaffected — both keep
+  today's self-contained bubble below the pin.
 
 ## Story 2.11 -- box-highlight a region (generalized in Story 8.4 to box-comment)
 

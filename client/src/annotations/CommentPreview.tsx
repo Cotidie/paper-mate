@@ -41,6 +41,8 @@ export default function CommentPreview({
   onHoverLeave,
   onTextFocus,
   onTextBlur,
+  onSelect,
+  compact = false,
 }: {
   anno: Annotation;
   pos: ScreenRect;
@@ -56,9 +58,32 @@ export default function CommentPreview({
   onTextFocus?: () => void;
   /** Called when the textarea loses focus (end of a text-edit session). */
   onTextBlur?: () => void;
+  /** Click-to-select (fix request): any click on the preview — padding or the
+   *  textarea itself — promotes it to the full `CommentBubble` (recolor/
+   *  delete/resize), matching this component's own doc comment: hover is for
+   *  reading + quick edits, click-to-select is for restyling. */
+  onSelect?: (id: string) => void;
+  /** True for a BOX comment (fix request): the caller has already positioned
+   *  `pos` beside the highlight, so no pin-offset shift is applied here. This
+   *  component never had color/delete chrome, so `compact` only affects
+   *  positioning (unlike `CommentBubble`'s `compact`). */
+  compact?: boolean;
 }) {
   const [visible, setVisible] = useState(hovered);
+  // Fade-in on direct hover (fix request): the box opens at the pin's own idle
+  // opacity (the SAME token .annotation-comment-pin uses when not hovered/
+  // selected) while the pointer is still just crossing from the pin, so it
+  // reads as a light preview rather than a fully-present box — then snaps to
+  // full opacity the moment the pointer actually enters it (the same
+  // pointerenter that already keeps `hoveredId` alive below).
+  const [pointerOverBox, setPointerOverBox] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Fix request: the grace window exists ONLY to bridge the pin→box gap on
+  // the way IN — once the pointer has actually reached the box at least once
+  // this open cycle, there is nothing left to bridge, so leaving (to neither
+  // pin nor box) closes immediately instead of lingering (visibly, now that
+  // the opacity fade above makes the wait visible) for the same window.
+  const enteredBoxRef = useRef(false);
   useEffect(() => {
     if (hovered) {
       if (closeTimer.current) {
@@ -66,6 +91,11 @@ export default function CommentPreview({
         closeTimer.current = null;
       }
       setVisible(true);
+      return;
+    }
+    if (enteredBoxRef.current) {
+      enteredBoxRef.current = false;
+      setVisible(false);
       return;
     }
     closeTimer.current = setTimeout(() => setVisible(false), HOVER_CLOSE_DELAY_MS);
@@ -76,6 +106,10 @@ export default function CommentPreview({
 
   const boxRef = useRef<HTMLDivElement | null>(null);
   const body = anno.body ?? "";
+  // Mirrors CommentBubble's own manualWidth/manualHeight read (CommentBubble.tsx:73-74),
+  // minus the live resizeDraft — the preview has no resize handle of its own.
+  const manualWidth = anno.style.bubble_width ?? null;
+  const manualHeight = anno.style.bubble_height ?? null;
   // Auto-position clamp: the same treatment as CommentBubble (nudged back
   // on-screen near a viewport edge). jsdom has no layout (rect all-zero) → a
   // no-op there, matching CommentBubble's own guard.
@@ -91,7 +125,7 @@ export default function CommentPreview({
     const dy = c.y - r.top;
     if (dx !== 0) el.style.left = `${pos.left + dx}px`;
     if (dy !== 0) el.style.top = `${pos.top + dy}px`;
-  }, [visible, body, pos.left, pos.top]);
+  }, [visible, body, pos.left, pos.top, manualWidth, manualHeight]);
 
   if (!visible) return null;
   return (
@@ -99,12 +133,29 @@ export default function CommentPreview({
       ref={boxRef}
       className="comment-preview"
       data-testid={`comment-preview-${anno.id}`}
-      style={{ left: pos.left, top: pos.top, transform: PIN_OFFSET_TRANSFORM }}
-      onPointerEnter={onHoverEnter}
-      onPointerLeave={onHoverLeave}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        opacity: pointerOverBox ? 1 : "var(--comment-pin-opacity)",
+        ...(compact ? {} : { transform: PIN_OFFSET_TRANSFORM }),
+        ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),
+        ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
+      }}
+      onPointerEnter={() => {
+        setPointerOverBox(true);
+        enteredBoxRef.current = true;
+        onHoverEnter();
+      }}
+      onPointerLeave={() => {
+        setPointerOverBox(false);
+        onHoverLeave();
+      }}
+      onClick={() => onSelect?.(anno.id)}
     >
       <textarea
-        className="comment-preview__text"
+        className={
+          manualHeight !== null ? "comment-preview__text comment-preview__text--manual-size" : "comment-preview__text"
+        }
         data-testid={`comment-preview-body-${anno.id}`}
         aria-label="Comment"
         value={body}

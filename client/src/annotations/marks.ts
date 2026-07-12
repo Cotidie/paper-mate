@@ -21,9 +21,13 @@ export interface QuickBoxSpec {
   alpha: boolean;
   /** Memo: the size row (resize). */
   size: boolean;
-  /** Comment: a selected comment shows the floating bubble in `AnnotationLayer`
-   *  (recolor + delete there), NOT the generic selection quick-box — so the shared
-   *  box is gated off (UX-DR5, Story 2.10 Decision 4). */
+  /** Comment: a selected TEXT-kind or degenerate-point-pin comment shows the
+   *  floating bubble in `AnnotationLayer` (recolor + delete there), NOT the
+   *  generic selection quick-box — so the shared box is gated off (UX-DR5,
+   *  Story 2.10 Decision 4). EXCEPTION (fix request): a BOX comment (real-area
+   *  `kind=rect`, `isBoxComment` below) routes through the shared quick-box
+   *  instead, rendered as a left-vertical strip beside the highlight — see
+   *  `quickBoxSpec`, which resolves this live-kind exception. */
   usesBubble: boolean;
   /** The selection quick-box's aria-label for a mark of this tool. */
   ariaLabel: string;
@@ -34,8 +38,9 @@ export interface QuickBoxSpec {
  *  affordance. (Note: a `highlight`/`comment` can ALSO be `kind=rect` when made by
  *  a region/click gesture — `kind` here is the default-create geometry, while the
  *  render/store layers branch on the LIVE `anchor.kind`. The quick-box spec keys on
- *  `type` only, which is sufficient: pen⟺path, memo⟺rect-memo, so no live-kind
- *  read is needed to pick the rows.) */
+ *  `type` only for every tool EXCEPT comment (fix request): `quickBoxSpec` below
+ *  additionally reads the live anchor for a comment, since a box comment and a
+ *  pin/text comment need different `usesBubble` values despite sharing one type.) */
 export interface MarkDescriptor {
   type: AnnotationTool;
   kind: "text" | "path" | "rect";
@@ -65,13 +70,70 @@ export const MARK_DESCRIPTORS: Record<AnnotationTool, MarkDescriptor> = {
   comment: {
     type: "comment",
     kind: "rect",
+    // usesBubble:true here is the DEFAULT (text-kind / degenerate-pin comment);
+    // quickBoxSpec below overrides it to false for a box comment (fix request).
     quickBox: { ...NO_ROWS, usesBubble: true, ariaLabel: "Highlight actions" },
   },
 };
 
-/** The quick-box spec for a mark (by its `type`). The single source the selection
- *  quick-box reads to decide its rows + label, instead of re-deriving them from
- *  `anchor.kind`/`type` booleans at the call site. */
+/** A box comment (Story 8.4 box-comment mode, fix request): a `type=comment`
+ *  mark whose LIVE anchor is `kind=rect` with REAL area — as opposed to a
+ *  click-placed pin (`buildCommentPin`'s degenerate point rect, `x0===x1 &&
+ *  y0===y1` exactly, `COMMENT_CLICK_SLOP`-gated in `useCreateQuickBox.ts`) or a
+ *  text-drag comment (`kind=text`). Only a box comment routes its selection
+ *  actions through the shared quick-box (left-vertical strip) instead of
+ *  `CommentBubble`'s own internal chrome. */
+export function isBoxComment(anno: Annotation): boolean {
+  return (
+    anno.type === "comment" &&
+    anno.anchor.kind === "rect" &&
+    anno.anchor.rect.x1 > anno.anchor.rect.x0 &&
+    anno.anchor.rect.y1 > anno.anchor.rect.y0
+  );
+}
+
+/** A box highlight (Story 2.11/8.4 box-highlight mode, fix request): a
+ *  `type=highlight` mark drawn as a region (`kind=rect`) rather than over
+ *  selected text (`kind=text`). Always real-area — the box-drag gesture
+ *  enforces a minimum drag distance (`BOX_DRAG_THRESHOLD`) before it commits —
+ *  unlike a box comment's degenerate click-placed pin, so no extra area check
+ *  is needed here. */
+export function isBoxHighlight(anno: Annotation): boolean {
+  return anno.type === "highlight" && anno.anchor.kind === "rect";
+}
+
+/** Whether a selected mark's quick-box renders as a LEFT-side vertical strip
+ *  (mirrors `MemoBox`'s own left-side action strip) instead of the default
+ *  horizontal row below the mark. True for a memo, a box comment, or a box
+ *  highlight (fix request: previously only memo/box-comment, which left a box
+ *  highlight's quick-box rendering horizontally INSIDE the top of its own
+ *  region instead of beside it). NOT the same set as `hasOwnTextEntry` below —
+ *  a box highlight has no textarea of its own, just a different geometry. */
+export function usesLeftVerticalQuickBox(anno: Annotation | null): boolean {
+  if (!anno || anno.anchor.kind !== "rect") return false;
+  return anno.type === "memo" || isBoxHighlight(anno) || isBoxComment(anno);
+}
+
+/** Whether a selected mark owns its OWN focus — an autofocusing textarea
+ *  (memo) or compact bubble (box comment) of its own — so its quick-box must
+ *  never steal focus to the first swatch on open (`useSelection.ts` reads
+ *  this for that focus-guard). Deliberately NARROWER than
+ *  `usesLeftVerticalQuickBox`: a box highlight is ALSO left-vertical (above)
+ *  but has no text entry of its own, so it keeps the default first-swatch
+ *  autofocus — same as any other highlight (fix request: conflating the two
+ *  would have silently regressed that keyboard behavior for a box highlight). */
+export function hasOwnTextEntry(anno: Annotation | null): boolean {
+  if (!anno) return false;
+  return anno.type === "memo" || isBoxComment(anno);
+}
+
+/** The quick-box spec for a mark (by its `type`, EXCEPT comment which also
+ *  reads the live anchor — see `MarkDescriptor`'s doc comment above). The
+ *  single source the selection quick-box reads to decide its rows + label,
+ *  instead of re-deriving them from `anchor.kind`/`type` booleans at the call
+ *  site. */
 export function quickBoxSpec(anno: Annotation): QuickBoxSpec {
-  return MARK_DESCRIPTORS[anno.type as AnnotationTool].quickBox;
+  const base = MARK_DESCRIPTORS[anno.type as AnnotationTool].quickBox;
+  if (anno.type === "comment") return { ...base, usesBubble: !isBoxComment(anno) };
+  return base;
 }

@@ -36,6 +36,7 @@ export default function CommentBubble({
   onTextFocus,
   onTextBlur,
   onResize,
+  compact = false,
 }: {
   anno: Annotation;
   pos: ScreenRect;
@@ -53,6 +54,11 @@ export default function CommentBubble({
   /** Commits a corner-handle resize (user feature request): persisted on
    *  `anno.style.bubble_width`/`bubble_height` so it survives reselect/reload. */
   onResize: (size: { width: number; height: number }) => void;
+  /** True for a BOX comment (fix request, `isBoxComment` in `marks.ts`): the
+   *  caller has already positioned `pos` beside the highlight (no pin-offset
+   *  shift needed here) and owns recolor/delete via the shared quick-box, so
+   *  this renders only the textarea + resize handle, no internal chrome. */
+  compact?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -119,7 +125,9 @@ export default function CommentBubble({
       style={{
         left: pos.left,
         top: pos.top,
-        transform: `${PIN_OFFSET_TRANSFORM} translate(${dragOffset.x}px, ${dragOffset.y}px)`,
+        transform: compact
+          ? `translate(${dragOffset.x}px, ${dragOffset.y}px)`
+          : `${PIN_OFFSET_TRANSFORM} translate(${dragOffset.x}px, ${dragOffset.y}px)`,
         ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),
         ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
       }}
@@ -188,32 +196,34 @@ export default function CommentBubble({
         onFocus={onTextFocus}
         onBlur={onTextBlur}
       />
-      <div className="comment-bubble__actions">
-        <ColorSwatchRow value={anno.style.color} onPick={onRecolor} ariaLabel="Comment color" />
-        {anno.anchor.kind === "text" && (
+      {!compact && (
+        <div className="comment-bubble__actions">
+          <ColorSwatchRow value={anno.style.color} onPick={onRecolor} ariaLabel="Comment color" />
+          {anno.anchor.kind === "text" && (
+            <button
+              type="button"
+              role="menuitem"
+              className="comment-bubble__action"
+              data-testid={`comment-convert-highlight-${anno.id}`}
+              aria-label="Turn into highlight"
+              title="Turn into highlight"
+              onClick={onConvertToHighlight}
+            >
+              <Highlighter aria-hidden />
+            </button>
+          )}
           <button
             type="button"
-            role="menuitem"
             className="comment-bubble__action"
-            data-testid={`comment-convert-highlight-${anno.id}`}
-            aria-label="Turn into highlight"
-            title="Turn into highlight"
-            onClick={onConvertToHighlight}
+            data-testid={`comment-delete-${anno.id}`}
+            aria-label="Delete"
+            title="Delete (Del)"
+            onClick={onDelete}
           >
-            <Highlighter aria-hidden />
+            <Trash aria-hidden />
           </button>
-        )}
-        <button
-          type="button"
-          className="comment-bubble__action"
-          data-testid={`comment-delete-${anno.id}`}
-          aria-label="Delete"
-          title="Delete (Del)"
-          onClick={onDelete}
-        >
-          <Trash aria-hidden />
-        </button>
-      </div>
+        </div>
+      )}
       {/* Corner-handle resize (user feature request): reuses the on-page edit
           frame's `.edit-handle`/`.edit-handle--se` visual (ink-bordered nub,
           half outside the corner) for the SAME affordance language, but drives

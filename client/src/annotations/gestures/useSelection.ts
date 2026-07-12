@@ -10,14 +10,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import { denormalizeRect, denormalizePoint, type PageCardRef } from "@/anchor";
 import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "@/store";
 import type { Annotation } from "@/api/client";
-import { clampToViewport } from "@/annotations/position";
-import { quickBoxSpec, type QuickBoxSpec } from "@/annotations/marks";
+import { clampToViewport, QUICK_BOX_GAP } from "@/annotations/position";
+import { quickBoxSpec, usesLeftVerticalQuickBox, hasOwnTextEntry, type QuickBoxSpec } from "@/annotations/marks";
 import { isExempt } from "./shared";
 import { isEditableTarget } from "@/lib/domFocus";
-
-/** Vertical gap (viewport px) between the marked text and the floating quick-box
- *  anchored below it, so the box clears the run instead of covering it. */
-const QUICK_BOX_GAP = 6;
 
 export interface SelectionApi {
   /** The selected mark, scoped to THIS doc (null if nothing/other-doc selected). */
@@ -273,9 +269,12 @@ export function useSelection(opts: {
     };
   }, [enabled, selectedAnno, clearSelection, deleteAnnotation]);
 
-  // A memo owns its own focus (its textarea autofocuses for typing), so the box must
-  // not steal focus to the first swatch on open — the focus effect checks this.
-  const isMemoSelected = selectedAnno?.anchor.kind === "rect" && selectedAnno.type === "memo";
+  // Left-vertical layout (memo, box comment, or box highlight — fix request)
+  // vs. the "owns its own focus" subset (memo or box comment only — a box
+  // highlight has no textarea, so it keeps the default first-swatch autofocus
+  // the effect below applies). Two DIFFERENT sets — see marks.ts.
+  const isVerticalQuickBox = usesLeftVerticalQuickBox(selectedAnno);
+  const ownsOwnFocus = hasOwnTextEntry(selectedAnno);
   // Story 5.0: the selected mark's quick-box capability comes from the descriptor
   // registry (one source per tool).
   const selectedSpec = selectedAnno ? quickBoxSpec(selectedAnno) : null;
@@ -297,10 +296,10 @@ export function useSelection(opts: {
   // `effectiveAnchor` (not `selectedAnno.anchor` directly) so a move/resize drag
   // — live preview OR just-committed — is reflected immediately (bug fix above).
   // `useCallback` (not a plain function): `repositionBox` below is ALSO a
-  // `useCallback` that calls this one, memoized separately on `isMemoSelected`
+  // `useCallback` that calls this one, memoized separately on `isVerticalQuickBox`
   // — if this were a plain function (redefined fresh every render, the old
   // shape), `repositionBox` would close over whichever `selectionPoint` existed
-  // the last time `isMemoSelected` actually changed, not the latest one, since
+  // the last time `isVerticalQuickBox` actually changed, not the latest one, since
   // `useCallback` discards a new closure whenever its deps compare equal. That
   // stale closure kept its `effectiveAnchor` frozen from an EARLIER selection
   // (or from mount, `null`), so re-anchoring on scroll (or even the plain
@@ -371,30 +370,57 @@ export function useSelection(opts: {
     if (!el) return;
     const { x, y } = selectionPoint();
     const rect = el.getBoundingClientRect();
-    // A memo's box sits to the LEFT of the mark, so shift by the box's own
-    // (measured) width + gap; every other kind anchors below and needs no shift.
-    const shiftedX = isMemoSelected ? x - rect.width - QUICK_BOX_GAP : x;
+    // A memo or a box comment's quick-box sits to the LEFT of the mark, so shift
+    // by the box's own (measured) width + gap; every other kind anchors below and
+    // needs no shift.
+    const shiftedX = isVerticalQuickBox ? x - rect.width - QUICK_BOX_GAP : x;
     const c = clampToViewport(shiftedX, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
     el.style.left = `${c.x}px`;
     el.style.top = `${c.y}px`;
-  }, [isMemoSelected, selectionPoint]);
+  }, [isVerticalQuickBox, selectionPoint]);
+
+  // Tracks the scale this effect last ran at, so it can tell "the scale just
+  // changed" apart from "opened/selection changed at the same scale" (fix
+  // request, below).
+  const prevRepositionScaleRef = useRef(scale);
 
   // Focus moves INTO the selection box on open and RETURNS to the prior element on
   // close (same accessibility floor as the create box). Also nudges the box on-screen
   // once measured. Focus only on the OPEN transition (guarded by
   // `restoreSelectionFocusRef`), so a re-run (zoom) re-clamps without stealing focus.
   useLayoutEffect(() => {
+    const scaleJustChanged = prevRepositionScaleRef.current !== scale;
+    prevRepositionScaleRef.current = scale;
     if (showSelectionBox) {
       const el = selectionBoxRef.current;
       if (!el) return;
-      if (!restoreSelectionFocusRef.current && !isMemoSelected) {
+      if (!restoreSelectionFocusRef.current && !ownsOwnFocus) {
         // First open: remember where focus was, move it into the box. EXCEPTION: a
-        // memo owns its focus (its textarea is autofocused for typing) — pulling
-        // focus to the first swatch would fight that, so the memo box never grabs
-        // focus on open. The textarea is the keyboard entry point; the swatches stay
-        // reachable by Tab.
+        // memo or a box comment owns its own focus (its textarea is autofocused for
+        // typing) — pulling focus to the first swatch would fight that, so their
+        // quick-box never grabs focus on open. The textarea is the keyboard entry
+        // point; the swatches stay reachable by Tab. A box highlight has no
+        // textarea of its own (fix request), so it's NOT in this set — it still
+        // gets the default first-swatch autofocus, same as any other highlight.
         restoreSelectionFocusRef.current = (document.activeElement as HTMLElement | null) ?? document.body;
         el.querySelector<HTMLElement>("button")?.focus();
+      }
+      if (scaleJustChanged) {
+        // Fix request (oscillating quick-box on zoom): zooming also changes
+        // `scale`, which `useZoomControl` (a PARENT hook, so ITS layout effect
+        // runs AFTER this one — React fires child effects before parent ones)
+        // reacts to by re-centering the scroll container on the same focal
+        // point. Repositioning synchronously here reads the PRE-recenter
+        // scroll position — a transitional spot that paints, gets corrected
+        // a frame later when that recentering's native `scroll` event reaches
+        // the listener below, and reads as the box jumping/oscillating.
+        // Deferring this one call to the next animation frame lets the
+        // recentering (and browser layout) settle first, so it reads the
+        // FINAL position and paints once. Any resulting `scroll` event still
+        // fires the listener below too — redundant (same settled value) but
+        // harmless.
+        const raf = requestAnimationFrame(repositionBox);
+        return () => cancelAnimationFrame(raf);
       }
       repositionBox();
     } else if (restoreSelectionFocusRef.current) {

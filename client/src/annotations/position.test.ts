@@ -1,5 +1,34 @@
 import { describe, it, expect } from "vitest";
-import { clampToViewport } from "./position";
+import { clampToViewport, rightOf, QUICK_BOX_GAP } from "./position";
+
+describe("rightOf (box comment popup: beside the highlight, fix request)", () => {
+  it("shifts left to the rect's right edge using the default gap; top/width/height carry over", () => {
+    expect(rightOf({ left: 60, top: 160, width: 240, height: 160 })).toEqual({
+      left: 60 + 240 + QUICK_BOX_GAP,
+      top: 160,
+      width: 240,
+      height: 160,
+    });
+  });
+
+  it("accepts a custom gap", () => {
+    expect(rightOf({ left: 0, top: 0, width: 100, height: 50 }, 20)).toEqual({
+      left: 120,
+      top: 0,
+      width: 100,
+      height: 50,
+    });
+  });
+
+  it("a zero-width rect (degenerate) shifts by only the gap", () => {
+    expect(rightOf({ left: 10, top: 10, width: 0, height: 0 })).toEqual({
+      left: 10 + QUICK_BOX_GAP,
+      top: 10,
+      width: 0,
+      height: 0,
+    });
+  });
+});
 
 describe("clampToViewport (AC-4 nudge on-screen)", () => {
   it("leaves a box that already fits where it is", () => {

@@ -39,6 +39,8 @@ import { useCreateQuickBox } from "./gestures/useCreateQuickBox";
 import { useLiveRef } from "@/hooks/useLiveRef";
 import { useTextEditSession } from "./useTextEditSession";
 import { inActiveGroup, commentGroupIds } from "./markGeometry";
+import { isBoxComment, usesLeftVerticalQuickBox } from "./marks";
+import { rightOf } from "./position";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";
@@ -255,7 +257,10 @@ export default function AnnotationInteraction({
       height: local.height,
     };
   };
-  const selectedCommentPoint = selectedComment ? commentScreenPoint(selectedComment) : null;
+  const selectedCommentCompact = selectedComment ? isBoxComment(selectedComment) : false;
+  const selectedCommentRawPoint = selectedComment ? commentScreenPoint(selectedComment) : null;
+  const selectedCommentPoint =
+    selectedCommentRawPoint && selectedCommentCompact ? rightOf(selectedCommentRawPoint) : selectedCommentRawPoint;
 
   if (
     !pending &&
@@ -268,8 +273,6 @@ export default function AnnotationInteraction({
   ) {
     return null;
   }
-
-  const selInit = showSelectionBox ? selection.selectionPoint() : { x: 0, y: 0 };
 
   // The live pen preview, drawn in fixed/client space (the same engine the mark
   // uses, so what-you-draw-is-what-you-get). Width = activeStrokeWidth * scale so
@@ -426,14 +429,21 @@ export default function AnnotationInteraction({
         </div>
       )}
 
+      {/* No left/top style here (fix request, oscillating quick-box on zoom): the
+          imperative `repositionBox` effect in useSelection.ts is the SOLE writer
+          of this element's position (shift + viewport clamp, glued on scroll/
+          resize/zoom via a ref, bypassing React reconciliation). If this JSX
+          ALSO set left/top from the raw, un-shifted/un-clamped `selectionPoint()`,
+          every re-render (a scale change causes one) would reset the DOM back to
+          that raw value, fighting the imperative fix and reading as the box
+          jumping between two different positions. */}
       {showSelectionBox && selectedAnno && selectedSpec && (
         <div
           ref={selectionBoxRef}
-          className={selectedAnno.type === "memo" ? "quick-box quick-box--vertical" : "quick-box"}
+          className={usesLeftVerticalQuickBox(selectedAnno) ? "quick-box quick-box--vertical" : "quick-box"}
           role="menu"
           aria-label={selectedSpec.ariaLabel}
           data-testid="selection-quick-box"
-          style={{ left: selInit.x, top: selInit.y }}
         >
           {/* Recolor the selected mark (reuses 2.3's row + store.recolorAnnotation);
               the row shows the mark's CURRENT color armed. For a memo it tints the
@@ -491,6 +501,7 @@ export default function AnnotationInteraction({
           key={selectedComment.id}
           anno={selectedComment}
           pos={selectedCommentPoint}
+          compact={selectedCommentCompact}
           onRetext={(_id, body) =>
             // Group-aware (Codex HIGH): a two-page comment is grouped siblings;
             // write the same body to ALL of them so reopening the other page's
@@ -522,13 +533,16 @@ export default function AnnotationInteraction({
           only currently-hovered marks would unmount it the instant hover ends,
           before that timer could run. */}
       {commentPreviewMarks.map((a) => {
-        const pos = commentScreenPoint(a);
-        if (!pos) return null;
+        const raw = commentScreenPoint(a);
+        if (!raw) return null;
+        const compact = isBoxComment(a);
+        const pos = compact ? rightOf(raw) : raw;
         return (
           <CommentPreview
             key={a.id}
             anno={a}
             pos={pos}
+            compact={compact}
             hovered={inActiveGroup(a, hoveredId, annotations)}
             onRetext={(_id, body) =>
               // Group-aware, same as the full bubble's retext (see above).
@@ -536,6 +550,7 @@ export default function AnnotationInteraction({
             }
             onHoverEnter={() => setHovered(a.id)}
             onHoverLeave={() => setHovered(null)}
+            onSelect={select}
             onTextFocus={startCommentTextEditSession}
             onTextBlur={commitCommentTextEditSession}
           />
