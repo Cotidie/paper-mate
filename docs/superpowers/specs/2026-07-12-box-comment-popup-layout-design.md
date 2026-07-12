@@ -53,7 +53,7 @@ export function quickBoxSpec(anno: Annotation): QuickBoxSpec {
 ### `position.ts`
 
 - `QUICK_BOX_GAP` moves here from its current private `const` in `useSelection.ts` (same value, 6), exported so both the left-shift (quick-box) and right-shift (compact comment) computations import one definition instead of duplicating the number.
-- New pure, exported helper alongside `clampToViewport` (same "DOM-free, unit-testable" module convention): `rightOf(rect: ScreenRect, gap = QUICK_BOX_GAP): Point` returning `{ x: rect.left + rect.width + gap, y: rect.top }`. `AnnotationInteraction.tsx` calls this once for a compact comment's `pos`; the shift itself is unit-tested here, not re-derived at each call site.
+- New pure, exported helper alongside `clampToViewport` (same "DOM-free, unit-testable" module convention): `rightOf(rect: ScreenRect, gap = QUICK_BOX_GAP): ScreenRect` returning `{ left: rect.left + rect.width + gap, top: rect.top, width: rect.width, height: rect.height }` — a full `ScreenRect`, not a bare `{x, y}` `Point`, since `CommentBubble`/`CommentPreview`'s `pos` prop requires that exact shape (`left`/`top`, not `x`/`y`). `AnnotationInteraction.tsx` calls this once for a compact comment's `pos`; the shift itself is unit-tested here, not re-derived at each call site.
 
 ### `useSelection.ts`
 
@@ -92,7 +92,7 @@ No new data flow — `pos` (a `ScreenRect` with `width`/`height`) is already com
 ## Testing
 
 - `marks.test.ts`: `quickBoxSpec` returns `usesBubble: false` for a real-area rect comment, `true` for a degenerate-point or text-kind comment.
-- `position.test.ts`: new `rightOf` cases (offsets by width + gap, `y` unchanged, default gap value).
+- `position.test.ts`: new `rightOf` cases (offsets `left` by width + gap, `top`/`width`/`height` unchanged, default gap value).
 - `CommentBubble.test.tsx` / `CommentPreview.test.tsx`: a `compact` box comment renders no color row / convert / delete, renders at exactly the given `pos.left`/`pos.top` with no transform; a non-compact comment (pin or text) is unchanged from today's assertions.
 - `AnnotationInteraction.test.tsx`: selecting a box comment shows the shared quick-box (vertical, left of the anchor) with working recolor/delete, and passes the compact comment its `rightOf`-shifted `pos`; a pin/text comment selection still shows the self-contained bubble at its unshifted `pos`, as today.
 - Live smoke at DPR>1 (this repo's standing convention for any selection/positioning feature): draw a box comment near page center — left strip and right textarea both clear of the highlight, resize + recolor + delete all work from their new locations; draw one near a viewport edge — clamp keeps both pieces on-screen; hover (not select) the same box comment — preview also sits beside it; verify an ordinary click-pin comment and a text-drag comment are pixel-for-pixel unchanged.
