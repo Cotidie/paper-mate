@@ -209,6 +209,21 @@ function detectColumns(lines: Line[], layerLeft: number, layerWidth: number): [n
   return ranges;
 }
 
+/** The column range containing `x`, else the nearest; null if no columns. */
+function columnFor(ranges: [number, number][], x: number): [number, number] | null {
+  let best: [number, number] | null = null;
+  let bestDist = Infinity;
+  for (const r of ranges) {
+    if (x >= r[0] && x <= r[1]) return r;
+    const dist = x < r[0] ? r[0] - x : x - r[1];
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = r;
+    }
+  }
+  return best;
+}
+
 /**
  * Binary-search the nearest character boundary within `textNode` to `x`. Every
  * probed boundary is measured with a NON-collapsed single-character sub-range
@@ -306,15 +321,24 @@ function lineStart(line: Line): NearestTextPoint | null {
 }
 
 /**
- * Resolve the moving FOCUS each drag frame from live geometry. If the pointer's
- * `y` is inside some glyph's vertical band, the cursor is ON that row: pick the
- * horizontally nearest glyph AMONG the in-band glyphs (so a horizontally closer
- * glyph on a DIFFERENT line never wins, and a cursor deep in the side margin at
- * a row's Y keeps tracking that row — Issue #2, no horizontal gate). Only when
- * `y` sits in a vertical gap does it fall back to the nearest glyph by 2D
- * distance, with `onRow` decided by the line-touch tolerance. No column locking,
- * so a drag extends across columns like a native text drag. Null only when the
- * layer has no usable glyphs.
+ * Resolve the moving FOCUS each drag frame from live geometry.
+ *
+ * First narrow to the column the pointer's X is CURRENTLY over (by the page's
+ * detected column ranges): this follows the cursor across the gutter so a drag
+ * still extends into the other column like a native text drag, yet a cursor
+ * within one column never resolves to a glyph in the OTHER column — even when it
+ * is past a short line's text end or drifting near the gutter (that cross-column
+ * flip caused a flickering right-column leak while dragging inside a paragraph).
+ * The column X-range comes from ALL of the column's lines, so it is robust to
+ * short/last lines, unlike a single line's own extent.
+ *
+ * Then within that column: if the pointer's `y` is inside some glyph's vertical
+ * band, the cursor is ON that row — pick the horizontally nearest in-band glyph
+ * (a closer glyph on a DIFFERENT line never wins, and a cursor deep in the side
+ * margin at a row's Y keeps tracking that row — Issue #2, no horizontal gate).
+ * Only when `y` sits in a vertical gap does it fall back to the nearest glyph by
+ * 2D distance, with `onRow` decided by the line-touch tolerance. Null only when
+ * the layer has no usable glyphs.
  */
 export function resolveNearestText(
   layer: Element,
@@ -325,14 +349,23 @@ export function resolveNearestText(
 ): FocusPoint | null {
   const glyphs = gatherGlyphs(layer, elRectsOf);
   if (glyphs.length === 0) return null;
-  const inBand = glyphs.filter((g) => y >= g.top && y <= g.bottom);
+  const layerRect = elRectsOf(layer);
+  const column = columnFor(detectColumns(groupLines(glyphs), layerRect.left, layerRect.width || 1), x);
+  const columnGlyphs = column
+    ? glyphs.filter((g) => {
+        const c = (g.left + g.right) / 2;
+        return c >= column[0] && c <= column[1];
+      })
+    : glyphs;
+
+  const inBand = columnGlyphs.filter((g) => y >= g.top && y <= g.bottom);
   let glyph: Glyph | null;
   let onRow: boolean;
   if (inBand.length > 0) {
     glyph = nearestGlyphByX(inBand, x);
     onRow = true;
   } else {
-    glyph = nearestGlyph(glyphs, x, y);
+    glyph = nearestGlyph(columnGlyphs, x, y);
     if (!glyph) return null;
     const height = glyph.bottom - glyph.top || 16;
     const dy = y < glyph.top ? glyph.top - y : y - glyph.bottom;

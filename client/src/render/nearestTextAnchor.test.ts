@@ -131,6 +131,25 @@ describe("resolveNearestText", () => {
     expect(p.onRow).toBe(true);
   });
 
+  it("stays in the pointer's column past a short line's end (no cross-column flicker/leak)", () => {
+    // A two-column body: the left column has several justified full-width lines
+    // plus a SHORT last line; the right column has lines at the same Y bands.
+    // A cursor in the left column, past the short line's text end, must resolve
+    // to the left column, never flip to the horizontally-closer right column.
+    const { layer, map } = layerWith([
+      { text: "leftfulllineone", left: 150, right: 650, top: 0 },
+      { text: "leftfulllinetwo", left: 150, right: 650, top: 20 },
+      { text: "shorttail", left: 150, right: 300, top: 40 }, // short last line
+      { text: "rightlineone", left: 730, right: 1180, top: 0 },
+      { text: "rightlinetwo", left: 730, right: 1180, top: 20 },
+      { text: "rightlinethree", left: 730, right: 1180, top: 40 },
+    ]);
+    // Cursor at x=550 (inside the LEFT column's range, but 250px past the short
+    // line's end at 300; the right column starts at 730, dx=180 < 250).
+    const p = resolveNearestText(layer, 550, 48, rectReader(map), rangeReader(map))!;
+    expect(p.node.textContent).toBe("shorttail"); // left column, not "rightlinethree"
+  });
+
   it("Y-in-band wins over a horizontally-closer glyph on a DIFFERENT line (M1)", () => {
     // Short row A at y 100..116; a much longer row B one line below at y 120..136.
     // Cursor (1000,108): Y is inside A's band, but B is horizontally far closer.
