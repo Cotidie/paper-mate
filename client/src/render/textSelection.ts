@@ -181,6 +181,11 @@ class TextSelectionController {
     const applySnapFrame = (): void => {
       snapRaf = 0;
       if (!snapping || !snapOrigin || !snapLayer || !snapPoint) return;
+      // The origin layer can be unregistered mid-drag (a scroll/zoom re-render
+      // detaches it) while other pages stay registered. Its glyph rects then read
+      // as zero and its anchor nodes are detached, so bail rather than call
+      // setBaseAndExtent with detached nodes.
+      if (!snapLayer.isConnected) return;
       const focus = resolveNearestText(snapLayer, snapPoint.x, snapPoint.y);
       const onRow = !!focus && focus.onRow;
       if (!snapEngaged) {
@@ -197,6 +202,16 @@ class TextSelectionController {
     const scheduleSnapFrame = (): void => {
       if (snapping && snapRaf === 0) snapRaf = requestAnimationFrame(applySnapFrame);
     };
+    // Teardown of the whole controller (last text layer unregisters) removes
+    // these listeners but cannot clear a rAF already queued for a snap frame —
+    // cancel it so no orphaned frame fires against detached geometry.
+    signal.addEventListener("abort", () => {
+      if (snapRaf !== 0) {
+        cancelAnimationFrame(snapRaf);
+        snapRaf = 0;
+      }
+      snapping = false;
+    });
 
     document.addEventListener(
       "pointerdown",
@@ -216,6 +231,11 @@ class TextSelectionController {
         // "start border"; a far, truly-empty margin does NOT snap), arm the snap;
         // the drag paints only once the cursor touches a row (see applySnapFrame).
         // Otherwise fall through to Story 8.8's selectstart-suppress no-op below.
+        // Only the PRIMARY button drives a text selection; a middle/right-button
+        // empty-space press must not arm the snap or preventDefault (that would
+        // interfere with middle-button autoscroll and the right-click place-a-
+        // comment/memo picker).
+        if (event.button !== 0) return;
         const layer = originLayerOf(event.target);
         const origin = layer ? resolveOrigin(layer, event.clientX, event.clientY) : null;
         const seed = origin && (origin.inBand ?? origin.belowStart ?? origin.aboveEnd);
@@ -232,6 +252,11 @@ class TextSelectionController {
           // wipe the built selection before pointerup reads it
           // (deferred-work.md#Discarded: Story 4.2 Part B).
           event.preventDefault();
+          // Clear any pre-existing selection when arming: the snap paints nothing
+          // until the cursor first touches a row, so a stale range left over from
+          // an earlier gesture must not linger on screen or be consumed on release
+          // if this drag never engages.
+          document.getSelection()?.removeAllRanges();
           snapping = true;
           snapLayer = layer;
           snapOrigin = origin;
@@ -270,6 +295,22 @@ class TextSelectionController {
       }
       this.#textLayers.forEach(reset);
     };
+    // The rAF throttle means the LAST pointermove of a drag may still be queued
+    // (or a whole quick drag may fit within one frame) when the button releases.
+    // Flush it synchronously in the CAPTURE phase — before the bubble-phase
+    // create-on-release consumer (`useCreateQuickBox`) reads `window.getSelection()`
+    // — so the mark is built from the final range, not a stale one (and a
+    // single-frame drag still forms its selection). Runs before `releasePointer`
+    // clears the state.
+    const flushSnap = (): void => {
+      if (!snapping || !snapPoint) return;
+      if (snapRaf !== 0) {
+        cancelAnimationFrame(snapRaf);
+        snapRaf = 0;
+      }
+      applySnapFrame();
+    };
+    document.addEventListener("pointerup", flushSnap, { signal, capture: true });
     document.addEventListener("pointerup", releasePointer, { signal });
     // A cancelled gesture (e.g. the browser revoking pointer capture) skips
     // pointerup entirely; without this, emptyOrigin stays latched and blocks

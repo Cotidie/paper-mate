@@ -131,6 +131,19 @@ describe("resolveNearestText", () => {
     expect(p.onRow).toBe(true);
   });
 
+  it("Y-in-band wins over a horizontally-closer glyph on a DIFFERENT line (M1)", () => {
+    // Short row A at y 100..116; a much longer row B one line below at y 120..136.
+    // Cursor (1000,108): Y is inside A's band, but B is horizontally far closer.
+    // The band-containing row A must win, and onRow stays true (deep side margin).
+    const { layer, map } = layerWith([
+      { text: "shortA", left: 50, right: 100, top: 100 },
+      { text: "longrowB", left: 50, right: 900, top: 120 },
+    ]);
+    const p = resolveNearestText(layer, 1000, 108, rectReader(map), rangeReader(map))!;
+    expect(p.node.textContent).toBe("shortA");
+    expect(p.onRow).toBe(true);
+  });
+
   it("skips a rotated (--rotate) margin span", () => {
     const layer = document.createElement("div");
     const map = new WeakMap<Element, DOMRect>();
@@ -219,5 +232,34 @@ describe("resolveOrigin (direction-aware anchoring)", () => {
     const layer = document.createElement("div");
     const map = new WeakMap<Element, DOMRect>([[layer, new DOMRect(0, 0, 1200, 800)]]);
     expect(resolveOrigin(layer, 100, 8, rectReader(map))).toBeNull();
+  });
+
+  it("anchors in the origin glyph's own column when that region is a single sparse line (M4)", () => {
+    // Left column: three body lines. Right side: ONE isolated line (a caption)
+    // — too sparse to form a coverage column. A pointer beside that lone right
+    // line must anchor on it, not jump into the left column.
+    const layer = document.createElement("div");
+    const map = new WeakMap<Element, DOMRect>();
+    map.set(layer, new DOMRect(0, 0, 1200, 800));
+    const mk = (text: string, x: number, w: number, top: number) => {
+      const s = document.createElement("span");
+      s.append(document.createTextNode(text));
+      layer.append(s);
+      map.set(s, new DOMRect(x, top, w, 16));
+      return s;
+    };
+    mk("leftone", 50, 200, 0);
+    mk("lefttwo", 50, 200, 20);
+    mk("leftthree", 50, 200, 40);
+    const caption = mk("caption", 900, 120, 40); // lone right-side line
+    const rr = (r: Range) => {
+      const span = (r.startContainer.parentElement ?? r.startContainer) as Element;
+      const base = map.get(span)?.left ?? 0;
+      return [new DOMRect(base + 10 * r.startOffset, 0, 10 * (r.endOffset - r.startOffset), 16)];
+    };
+    // Pointer just right of the caption, y in its band: inBand must be the caption.
+    const ctx = resolveOrigin(layer, 1030, 48, rectReader(map), rr)!;
+    expect(ctx.inBand).not.toBeNull();
+    expect(ctx.inBand!.node).toBe(caption.firstChild);
   });
 });

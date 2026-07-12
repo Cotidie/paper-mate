@@ -176,7 +176,7 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     // Focus resolves a nearest point but the cursor is NOT on its row yet.
     mockFocus.mockReturnValue({ node, offset: 8, onRow: false });
     const setBaseAndExtent = vi.fn();
-    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 130 }));
@@ -192,7 +192,7 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     mockOrigin.mockReturnValue(gapOrigin(node)); // originY 100, belowStart offset 0
     mockFocus.mockReturnValue({ node, offset: 8, onRow: true });
     const setBaseAndExtent = vi.fn();
-    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     // Move DOWN (clientY 140 > originY 100) onto a row: anchor = belowStart (offset 0).
@@ -209,7 +209,7 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     mockOrigin.mockReturnValue(gapOrigin(node)); // aboveEnd offset 11
     mockFocus.mockReturnValue({ node, offset: 3, onRow: true });
     const setBaseAndExtent = vi.fn();
-    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     // Move UP (clientY 60 < originY 100) onto a row: anchor = aboveEnd (offset 11).
@@ -228,7 +228,7 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     // (the resolver has no horizontal gate, so it still returns onRow at that Y).
     mockFocus.mockReturnValueOnce({ node, offset: 4, onRow: true }).mockReturnValue({ node, offset: 9, onRow: true });
     const setBaseAndExtent = vi.fn();
-    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
@@ -248,7 +248,7 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     // Engage on a row (offset 8), then the cursor moves into a blank gap (offRow).
     mockFocus.mockReturnValueOnce({ node, offset: 8, onRow: true }).mockReturnValue({ node, offset: 8, onRow: false });
     const setBaseAndExtent = vi.fn();
-    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
     document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
@@ -268,7 +268,7 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     mockOrigin.mockReturnValue(gapOrigin(node));
     mockFocus.mockReturnValue({ node, offset: 5, onRow: true });
     const setBaseAndExtent = vi.fn();
-    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent } as unknown as Selection);
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
 
     div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 140 }));
     document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
@@ -297,6 +297,73 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     expect(selectstart.defaultPrevented).toBe(true);
 
     unregister();
+  });
+
+  it("flushes the last pointer position on pointerup before consumers read the selection (M2)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    mockFocus.mockReturnValue({ node, offset: 9, onRow: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    // A move records the point but the rAF has NOT fired yet (not flushed).
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
+    expect(setBaseAndExtent).not.toHaveBeenCalled();
+    // pointerup must flush the pending frame synchronously (capture phase).
+    document.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+    expect(setBaseAndExtent).toHaveBeenCalledWith(node, 0, node, 9);
+
+    unregister();
+  });
+
+  it("clears any pre-existing selection when arming the snap (M5)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    mockOrigin.mockReturnValue(gapOrigin(glyph.firstChild as Text));
+    const removeAllRanges = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({
+      setBaseAndExtent: vi.fn(),
+      removeAllRanges,
+    } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    expect(removeAllRanges).toHaveBeenCalled();
+
+    unregister();
+  });
+
+  it("does NOT arm the snap on a non-primary (middle/right) button (L2)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    mockOrigin.mockReturnValue(gapOrigin(glyph.firstChild as Text));
+
+    // Right button (button=2): must not preventDefault nor arm; a later
+    // selectstart is NOT suppressed by the snap path.
+    const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true, clientX: 100, clientY: 100, button: 2 });
+    div.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(false);
+    // resolveOrigin must not even be consulted for a non-primary button.
+    expect(mockOrigin).not.toHaveBeenCalled();
+
+    unregister();
+  });
+
+  it("cancels a pending snap frame when the controller tears down (M3)", () => {
+    const { div, glyph, unregister } = setupLayer();
+    const node = glyph.firstChild as Text;
+    mockOrigin.mockReturnValue(gapOrigin(node));
+    mockFocus.mockReturnValue({ node, offset: 5, onRow: true });
+    const setBaseAndExtent = vi.fn();
+    vi.spyOn(document, "getSelection").mockReturnValue({ setBaseAndExtent, removeAllRanges: vi.fn() } as unknown as Selection);
+
+    div.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    document.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 140 }));
+    // A frame is queued (not yet flushed). Unregister the last layer -> abort.
+    unregister();
+    // The queued frame, if it still fired, would call setBaseAndExtent; the abort
+    // handler cancels it, so flushing the (now empty) queue does nothing.
+    flushRaf();
+    expect(setBaseAndExtent).not.toHaveBeenCalled();
   });
 });
 

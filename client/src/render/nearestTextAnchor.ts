@@ -119,10 +119,29 @@ export function nearestGlyph(glyphs: Glyph[], x: number, y: number): Glyph | nul
   return best;
 }
 
-/** Group glyphs into line bands by vertical overlap (pure). */
+/** The glyph whose horizontal extent is nearest `x` (0 distance if x is inside). */
+function nearestGlyphByX(glyphs: Glyph[], x: number): Glyph | null {
+  let best: Glyph | null = null;
+  let bestDist = Infinity;
+  for (const g of glyphs) {
+    const d = x >= g.left && x <= g.right ? 0 : x < g.left ? g.left - x : x - g.right;
+    if (d < bestDist) {
+      bestDist = d;
+      best = g;
+    }
+  }
+  return best;
+}
+
+/**
+ * Group glyphs into line bands by vertical overlap (pure). Glyphs are sorted by
+ * top first so a band that bridges two earlier bands still merges them into one
+ * line regardless of input order (a bridging glyph always arrives adjacent to
+ * the bands it joins).
+ */
 function groupLines(glyphs: Glyph[]): Line[] {
   const lines: Line[] = [];
-  for (const glyph of glyphs) {
+  for (const glyph of [...glyphs].sort((a, b) => a.top - b.top)) {
     const line = lines.find((l) => glyph.top < l.bottom && glyph.bottom > l.top);
     if (line) {
       line.glyphs.push(glyph);
@@ -133,6 +152,25 @@ function groupLines(glyphs: Glyph[]): Line[] {
     }
   }
   return lines;
+}
+
+/**
+ * The horizontal extent of the run of glyphs on `g`'s own row that is
+ * contiguous with `g` (breaking at any gap wider than a column gutter,
+ * approximated as one line-height). Used as a local fallback column when the
+ * page's coverage histogram does not carve out a range for a sparse region
+ * (e.g. a lone caption or heading on one side).
+ */
+function localColumnBand(glyphs: Glyph[], g: Glyph): [number, number] {
+  const height = g.bottom - g.top || 16;
+  const gutter = height; // a real inter-column gutter exceeds ~1 line-height
+  const row = glyphs.filter((q) => q.top < g.bottom && q.bottom > g.top).sort((a, b) => a.left - b.left);
+  let lo = row.indexOf(g);
+  let hi = lo;
+  while (lo > 0 && row[lo].left - row[lo - 1].right < gutter) lo--;
+  while (hi < row.length - 1 && row[hi + 1].left - row[hi].right < gutter) hi++;
+  const run = row.slice(lo, hi + 1);
+  return [Math.min(...run.map((q) => q.left)), Math.max(...run.map((q) => q.right))];
 }
 
 const COLUMN_BINS = 120;
@@ -169,21 +207,6 @@ function detectColumns(lines: Line[], layerLeft: number, layerWidth: number): [n
     }
   }
   return ranges;
-}
-
-/** The column range containing `x`, else the nearest; null if no columns. */
-function columnFor(ranges: [number, number][], x: number): [number, number] | null {
-  let best: [number, number] | null = null;
-  let bestDist = Infinity;
-  for (const r of ranges) {
-    if (x >= r[0] && x <= r[1]) return r;
-    const dist = x < r[0] ? r[0] - x : x - r[1];
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = r;
-    }
-  }
-  return best;
 }
 
 /**
@@ -283,14 +306,15 @@ function lineStart(line: Line): NearestTextPoint | null {
 }
 
 /**
- * Resolve the moving FOCUS each drag frame: the nearest text position to
- * `(x, y)` from live geometry — the glyph nearest by 2D distance, then the
- * nearest character in it — plus whether `y` is inside that glyph's vertical
- * band (`inBand`). No column locking, so a drag extends across columns exactly
- * like a native text drag. NO horizontal proximity gate: once a drag is active
- * the pointer may wander deep into the margin and the selection must keep
- * tracking (Issue #2 — the proximity gate belongs only at the START, in
- * `resolveOrigin`). Null only when the layer has no usable glyphs.
+ * Resolve the moving FOCUS each drag frame from live geometry. If the pointer's
+ * `y` is inside some glyph's vertical band, the cursor is ON that row: pick the
+ * horizontally nearest glyph AMONG the in-band glyphs (so a horizontally closer
+ * glyph on a DIFFERENT line never wins, and a cursor deep in the side margin at
+ * a row's Y keeps tracking that row — Issue #2, no horizontal gate). Only when
+ * `y` sits in a vertical gap does it fall back to the nearest glyph by 2D
+ * distance, with `onRow` decided by the line-touch tolerance. No column locking,
+ * so a drag extends across columns like a native text drag. Null only when the
+ * layer has no usable glyphs.
  */
 export function resolveNearestText(
   layer: Element,
@@ -300,13 +324,22 @@ export function resolveNearestText(
   rangeRectsOf: (r: Range) => ArrayLike<DOMRect> = defaultRangeRectsOf,
 ): FocusPoint | null {
   const glyphs = gatherGlyphs(layer, elRectsOf);
-  const glyph = nearestGlyph(glyphs, x, y);
-  if (!glyph) return null;
-  const node = glyph.el.firstChild;
+  if (glyphs.length === 0) return null;
+  const inBand = glyphs.filter((g) => y >= g.top && y <= g.bottom);
+  let glyph: Glyph | null;
+  let onRow: boolean;
+  if (inBand.length > 0) {
+    glyph = nearestGlyphByX(inBand, x);
+    onRow = true;
+  } else {
+    glyph = nearestGlyph(glyphs, x, y);
+    if (!glyph) return null;
+    const height = glyph.bottom - glyph.top || 16;
+    const dy = y < glyph.top ? glyph.top - y : y - glyph.bottom;
+    onRow = dy <= LINE_TOUCH_TOLERANCE * height;
+  }
+  const node = glyph?.el.firstChild;
   if (!node || node.nodeType !== Node.TEXT_NODE) return null;
-  const height = glyph.bottom - glyph.top || 16;
-  const dy = y < glyph.top ? glyph.top - y : y > glyph.bottom ? y - glyph.bottom : 0;
-  const onRow = dy <= LINE_TOUCH_TOLERANCE * height;
   return { node: node as Text, offset: nearestOffsetInTextNode(node as Text, x, rangeRectsOf), onRow };
 }
 
@@ -334,18 +367,22 @@ export function resolveOrigin(
   const height = g.bottom - g.top || 16;
   if (distSqToGlyph(g, x, y) > (MAX_DISTANCE_IN_LINE_HEIGHTS * height) ** 2) return null;
 
-  // The pointer's column = the coverage-detected column X-range containing x
-  // (robust to short headings/last lines, unlike one glyph's own width). Group
-  // just that column's glyphs into lines so line boundaries stay in-column.
+  // The origin's column = the coverage-detected column X-range that contains the
+  // ORIGIN GLYPH's centre (robust to short headings/last lines, unlike one
+  // glyph's own width). Keyed off the glyph's centre, not the raw pointer x, so
+  // the column that actually won `nearestGlyph` stays eligible. If no detected
+  // body column contains it (a sparse region — a lone caption/heading on one
+  // side), fall back to a local band from the glyph's own row so the anchor
+  // never jumps into the other column. Group just that column's glyphs into
+  // lines so the gap's above/below boundaries stay in-column.
   const layerRect = elRectsOf(layer);
   const columns = detectColumns(groupLines(glyphs), layerRect.left, layerRect.width || 1);
-  const column = columnFor(columns, x);
-  const columnGlyphs = column
-    ? glyphs.filter((q) => {
-        const c = (q.left + q.right) / 2;
-        return c >= column[0] && c <= column[1];
-      })
-    : glyphs;
+  const gCenter = (g.left + g.right) / 2;
+  const column = columns.find((c) => gCenter >= c[0] && gCenter <= c[1]) ?? localColumnBand(glyphs, g);
+  const columnGlyphs = glyphs.filter((q) => {
+    const c = (q.left + q.right) / 2;
+    return c >= column[0] && c <= column[1];
+  });
   const lines = groupLines(columnGlyphs).sort((a, b) => a.top - b.top);
 
   let inBandLine: Line | null = null;
