@@ -1,6 +1,10 @@
+---
+baseline_commit: f8f7e540f057ac68e5c049c37ee84f46d636e08f
+---
+
 # Story 8.11: Snap empty-space drag to nearest text (attempt 2)
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
