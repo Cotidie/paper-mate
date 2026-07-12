@@ -47,6 +47,44 @@ describe("isEmptyLayerSpace", () => {
   });
 });
 
+describe("TextSelectionController — empty-origin selectstart suppression", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("suppresses selectstart after a pointerdown on empty layer space", () => {
+    const div = document.createElement("div");
+    div.className = "textLayer";
+    document.body.append(div);
+    const unregister = textSelectionController.register(div);
+    const endOfContent = div.querySelector(".endOfContent")!;
+
+    endOfContent.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(true);
+
+    unregister();
+  });
+
+  it("clears the empty-origin latch on pointercancel, so a later selectstart is not suppressed", () => {
+    const div = document.createElement("div");
+    div.className = "textLayer";
+    document.body.append(div);
+    const unregister = textSelectionController.register(div);
+    const endOfContent = div.querySelector(".endOfContent")!;
+
+    endOfContent.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    document.dispatchEvent(new Event("pointercancel"));
+
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(false);
+
+    unregister();
+  });
+});
+
 describe("TextSelectionController", () => {
   it("appends an endOfContent div to the registered text layer", () => {
     const div = document.createElement("div");

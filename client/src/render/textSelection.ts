@@ -123,24 +123,17 @@ class TextSelectionController {
       },
       { signal },
     );
-    document.addEventListener(
-      "pointerup",
-      () => {
-        pointerDown = false;
-        emptyOrigin = false;
-        this.#textLayers.forEach(reset);
-      },
-      { signal },
-    );
-    window.addEventListener(
-      "blur",
-      () => {
-        pointerDown = false;
-        emptyOrigin = false;
-        this.#textLayers.forEach(reset);
-      },
-      { signal },
-    );
+    const releasePointer = (): void => {
+      pointerDown = false;
+      emptyOrigin = false;
+      this.#textLayers.forEach(reset);
+    };
+    document.addEventListener("pointerup", releasePointer, { signal });
+    // A cancelled gesture (e.g. the browser revoking pointer capture) skips
+    // pointerup entirely; without this, emptyOrigin stays latched and blocks
+    // an unrelated later selectstart until the next pointerdown/blur.
+    document.addEventListener("pointercancel", releasePointer, { signal });
+    window.addEventListener("blur", releasePointer, { signal });
     // A drag whose origin is empty page space must not start a native
     // selection at all (Story 8.8 AC-1): it would anchor at the nearest
     // glyph and drag through every span in between. `emptyOrigin` is latched

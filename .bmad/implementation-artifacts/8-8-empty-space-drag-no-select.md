@@ -45,6 +45,10 @@ so that I do not accidentally select or copy the nearby text lines.
   - [x] On your OWN fresh servers at DPR>1: (a) empty right-margin drag on page 1 makes NO selection; (b) empty cross-column gutter drag (between the two columns) makes NO selection and does NOT leak a cross-column or full-page highlight; (c) a normal on-text single-line, multi-line, and CROSS-PAGE drag still selects and still highlights on release; (d) Ctrl+C on an on-text selection still copies (paragraph-join unchanged). Use trusted pointer input (raw mouse move/down/up), not `dispatchEvent`/`.click()` or a synthetic Range: this defect only reproduces with a real native selection gesture (see `[[drag-tools-dont-create-text-selection]]`, `[[use-trusted-input-for-focus-sensitive-smoke]]`).
   - [x] Shut the dev servers down after.
 
+### Review Findings
+
+- [x] [Review][Patch] Clear the empty-origin selection guard on `pointercancel` so a canceled gesture cannot leave document-wide selection suppression latched [client/src/render/textSelection.ts:126]
+
 ## Dev Notes
 
 ### Root cause (confirmed by reading the code)
@@ -119,6 +123,7 @@ Claude Sonnet 5
 - Unit-tested `isEmptyLayerSpace` directly (container → true, `endOfContent` → true, glyph span → false, unregistered element → false, null target → false) in `textSelection.test.ts`. jsdom coverage intentionally stops there (no real Selection/`::selection`).
 - Live-smoked on fresh own dev servers at 200% zoom against `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf`: empty right-margin drag (AC-1) and empty cross-column gutter drag both produce no selection and no leak; on-text single-line, multi-line, and cross-page drags still select and highlight (AC-2); Ctrl+C still fires without error. Both dev servers were shut down after.
 - Full suite: `cd client && npm test` → 70 files / 1474 tests passed. `npm run typecheck` clean. No `render/index.ts` export added, so the `vi.mock("./render")` barrels needed no change.
+- ✅ Resolved review finding [Medium]: `pointercancel` did not clear the `emptyOrigin` latch (only `pointerup`/`blur` did), so a canceled gesture (e.g. the browser revoking pointer capture) could leave document-wide `selectstart` suppression stuck until the next pointerdown/blur. Fixed by extracting the reset logic into one `releasePointer` closure shared by `pointerup`, `pointercancel`, and window `blur` (previously `blur` duplicated the same three lines inline). Added a regression test (`textSelection.test.ts`) asserting a `selectstart` fired after `pointercancel` is NOT suppressed. Full suite re-run: 70 files / 1476 tests passed, typecheck clean.
 
 ### File List
 
