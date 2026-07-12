@@ -45,14 +45,18 @@ export interface NearestTextPoint {
 }
 
 /**
- * The moving-focus result: a nearest text point plus whether the pointer's Y
- * is inside that glyph's vertical band. `inBand` is the "touching a row" signal
- * the caller uses to decide when to START painting the snap selection (Issue #1:
- * a drag must not paint while the cursor is still in a vertical gap / blank
- * space, only once it reaches a text row).
+ * The moving-focus result: a nearest text point plus whether the pointer's Y is
+ * ON that glyph's text row — inside its vertical band OR within a small
+ * tolerance of it. `onRow` is the "touching a row" signal the caller uses to
+ * decide when the snap selection is live: it starts painting on the first
+ * on-row frame (Issue #1: no paint while the cursor is still in blank space),
+ * and collapses again whenever the cursor sits in a blank vertical gap between
+ * paragraphs (no lingering selection at a point with no text). The tolerance is
+ * wide enough to bridge inter-line leading within a paragraph (so a normal
+ * down-drag does not flicker) but narrower than a paragraph gap.
  */
 export interface FocusPoint extends NearestTextPoint {
-  inBand: boolean;
+  onRow: boolean;
 }
 
 /**
@@ -233,6 +237,14 @@ export function nearestOffsetInTextNode(
  */
 const MAX_DISTANCE_IN_LINE_HEIGHTS = 3;
 
+/**
+ * A pointer within this fraction of a line-height above/below a row's band
+ * counts as "on the row". Wide enough to bridge inter-line leading inside a
+ * paragraph (a normal down-drag never flickers), narrower than a paragraph gap
+ * (so the cursor sitting in a blank gap reads as off-row → no selection).
+ */
+const LINE_TOUCH_TOLERANCE = 0.5;
+
 function pointOfNode(node: ChildNode | null, offset: number): NearestTextPoint | null {
   return node && node.nodeType === Node.TEXT_NODE ? { node: node as Text, offset } : null;
 }
@@ -292,8 +304,10 @@ export function resolveNearestText(
   if (!glyph) return null;
   const node = glyph.el.firstChild;
   if (!node || node.nodeType !== Node.TEXT_NODE) return null;
-  const inBand = y >= glyph.top && y <= glyph.bottom;
-  return { node: node as Text, offset: nearestOffsetInTextNode(node as Text, x, rangeRectsOf), inBand };
+  const height = glyph.bottom - glyph.top || 16;
+  const dy = y < glyph.top ? glyph.top - y : y > glyph.bottom ? y - glyph.bottom : 0;
+  const onRow = dy <= LINE_TOUCH_TOLERANCE * height;
+  return { node: node as Text, offset: nearestOffsetInTextNode(node as Text, x, rangeRectsOf), onRow };
 }
 
 /**

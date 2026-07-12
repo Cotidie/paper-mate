@@ -170,23 +170,26 @@ class TextSelectionController {
 
     // Apply one snap frame. Re-resolve the focus LIVE (nearest text to the
     // current pointer; re-measuring keeps it correct as the page scrolls under
-    // the drag). Until the cursor first TOUCHES a text row (focus.inBand), paint
+    // the drag). Until the cursor first reaches a text row (focus.onRow), paint
     // nothing (Issue #1). On that first touch, ENGAGE: fix the anchor once (so
-    // it can't flip mid-drag) and start extending. Once engaged, always track
-    // the focus with no proximity gate, so a cursor that wanders into the deep
-    // margin keeps the selection alive (Issue #2).
+    // it can't flip mid-drag) and start extending. Once engaged: while the
+    // cursor is on a row, extend the selection to it — no horizontal gate, so a
+    // cursor deep in the side margin (same row) keeps tracking (Issue #2); while
+    // the cursor sits in a blank vertical gap between paragraphs (off-row),
+    // COLLAPSE to the anchor so no stale selection lingers at a point with no
+    // text.
     const applySnapFrame = (): void => {
       snapRaf = 0;
       if (!snapping || !snapOrigin || !snapLayer || !snapPoint) return;
       const focus = resolveNearestText(snapLayer, snapPoint.x, snapPoint.y);
+      const onRow = !!focus && focus.onRow;
       if (!snapEngaged) {
-        if (!focus || !focus.inBand) return; // still in blank space — paint nothing
+        if (!onRow) return; // still in blank space — paint nothing
         snapEngaged = true;
         snapAnchor = anchorAtEngage(snapOrigin, snapPoint.y);
-        snapFocus = { node: focus.node, offset: focus.offset };
-      } else if (focus) {
-        snapFocus = { node: focus.node, offset: focus.offset };
       }
+      // On a row → extend to it; off a row (blank gap) → collapse to the anchor.
+      snapFocus = onRow ? { node: focus!.node, offset: focus!.offset } : snapAnchor;
       const a = snapAnchor;
       const f = snapFocus ?? snapAnchor;
       if (a && f) document.getSelection()?.setBaseAndExtent(a.node, a.offset, f.node, f.offset);

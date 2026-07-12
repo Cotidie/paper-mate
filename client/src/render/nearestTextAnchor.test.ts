@@ -96,7 +96,7 @@ describe("resolveNearestText", () => {
     ]);
     const p = resolveNearestText(layer, 130, 108, rectReader(map), rangeReader(map))!;
     expect(p.node.textContent).toBe("leftrow"); // nearest = left, not the far right
-    expect(p.inBand).toBe(true); // y=108 is within the row band (100..116)
+    expect(p.onRow).toBe(true); // y=108 is within the row band (100..116)
   });
 
   it("resolves to the RIGHT column for a right-side point (cross-column drag can extend here)", () => {
@@ -108,20 +108,27 @@ describe("resolveNearestText", () => {
     expect(p.node.textContent).toBe("rightrow");
   });
 
-  it("reports inBand=false when the pointer Y is in a vertical gap (still returns the nearest point)", () => {
+  it("reports onRow=false when the pointer Y is in a blank vertical gap (still returns the nearest point)", () => {
     const { layer, map } = layerWith([{ text: "body", left: 50, right: 90, top: 100 }]);
-    // y=200 is well below the row band (100..116): not touching a row.
+    // y=200 is well below the row band (100..116, height 16): off-row.
     const p = resolveNearestText(layer, 70, 200, rectReader(map), rangeReader(map))!;
     expect(p.node.textContent).toBe("body");
-    expect(p.inBand).toBe(false);
+    expect(p.onRow).toBe(false);
   });
 
-  it("has NO horizontal proximity gate: a deep-margin pointer still resolves (Issue #2)", () => {
+  it("reports onRow=true within the inter-line leading tolerance (no flicker on a normal drag)", () => {
     const { layer, map } = layerWith([{ text: "body", left: 50, right: 90, top: 100 }]);
-    // x=900 is far right of the glyph, but y is in its band: inBand stays true.
+    // y=122 is 6px below the band bottom (116), within 0.5*16 = 8px tolerance.
+    const p = resolveNearestText(layer, 70, 122, rectReader(map), rangeReader(map))!;
+    expect(p.onRow).toBe(true);
+  });
+
+  it("has NO horizontal proximity gate: a deep-margin pointer still resolves on-row (Issue #2)", () => {
+    const { layer, map } = layerWith([{ text: "body", left: 50, right: 90, top: 100 }]);
+    // x=900 is far right of the glyph, but y is in its band: onRow stays true.
     const p = resolveNearestText(layer, 900, 108, rectReader(map), rangeReader(map))!;
     expect(p.node.textContent).toBe("body");
-    expect(p.inBand).toBe(true);
+    expect(p.onRow).toBe(true);
   });
 
   it("skips a rotated (--rotate) margin span", () => {
