@@ -4,7 +4,7 @@ baseline_commit: 93379807e1f3a260a15b9dc3a74f3ac907f12b15
 
 # Story 8.9: Snap empty-space drag to nearest text (spike)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -32,37 +32,29 @@ so that the gesture works the way I'd expect on a page with visible text nearby.
 
 ## Tasks / Subtasks
 
-- [ ] **Reproduce the baseline and confirm the target surface first (no code)** (AC: 1, 6)
-  - [ ] Launch your OWN fresh `uvicorn` + `vite dev` (never a found-running server), import `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf`, open page 1 at ~180-200% zoom, DPR>1 (`--force-device-scale-factor` or a HiDPI display).
-  - [ ] Confirm the current shipped behavior: a press-drag DOWN starting in the blank space to the right of "NYU v2." (right column, page 1) does NOTHING (Story 8.8's no-op). This is the behavior 8.9 tries to replace with a snap.
-  - [ ] Log `event.target` at that empty-space pointerdown and confirm it is the `.textLayer` div or its `.endOfContent` child (`isEmptyLayerSpace` returns true there). This is the exact origin the snap must resolve from.
+- [x] **Reproduce the baseline and confirm the target surface first (no code)** (AC: 1, 6)
+  - [x] Launched own `uvicorn` (port 8000) + `vite dev` (port 5173), opened `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf` in the `claude-in-chrome` extension (real host, DPR=1.25) at 200% zoom, page 1.
+  - [x] Confirmed the shipped no-op: a trusted press-drag DOWN from the blank space right of "...NYU depth prediction." (left column, page 1) produced `getSelection()` = `{rangeCount:1, isCollapsed:true, text:""}` — no visible/programmatic selection. Sanity-checked the drag tool itself against an on-text drag first (`he ImageNet network on NY` selected), confirming the tool can form real selections and the empty-space result is the app's behavior, not a tooling artifact.
+  - [x] Confirmed via `document.elementFromPoint` at the pointerdown coordinates: target is the `.textLayer` div itself (`isEmptyLayerSpace` true), matching Story 8.8's registry.
 
-- [ ] **Spike technique (A): caret-API resolved once at pointerdown** (AC: 1, 2, 3)
-  - [ ] Add a TEMPORARY probe (throwaway branch, not the shipped diff): on the existing empty-origin pointerdown path, call `document.caretRangeFromPoint(e.clientX, e.clientY)` (fall back to `caretPositionFromPoint` where `caretRangeFromPoint` is absent) EXACTLY ONCE, synchronously, before any pointermove. Log the resolved `{ node, offset, node.textContent }` and the resolved node's page.
-  - [ ] **The decisive A/B measurement:** at fixed screen coordinates over the same empty space, compare the resolved node/offset (a) on the FIRST drag of a fresh page load vs (b) on a REPEATED drag after several prior clicks/drags have touched the text layer in the SAME session. If (b) returns an empty span / offset 0 / the wrong page while (a) is correct, the caret poison recurs even for a single pointerdown-time call and technique (A) is DEAD. Record the exact observed corruption. Do NOT try to patch around it (deferred-work.md L182-187 already eliminated DPR, pointer capture, preventDefault timing, selectstart, scroll, overlay DOM, and re-render races as causes).
-  - [ ] If (A) resolves correctly and stably across repeated same-session drags, wire it into the real gate (next task) using that resolved point.
+- [x] **Spike technique (A): caret-API resolved once at pointerdown** (AC: 1, 2, 3)
+  - [x] Added a temporary probe on the empty-origin pointerdown path calling `document.caretRangeFromPoint(e.clientX, e.clientY)` exactly once, logging the resolved node/offset.
+  - [x] **Decisive A/B measurement:** at fixed coordinates, the FIRST fresh-load drag resolved correctly (`DIV`, offset 142, the layer's own child-index — technique A's raw output needs further walking even when "correct"). After interleaving on-text drags/clicks elsewhere on the page (touching the text layer) and repeating the SAME empty-space drag 9 more times at the identical coordinates, 3 of 9 repeats returned the exact poison signature `deferred-work.md`'s Story 3.8 entry documents: empty resolved node, offset 0. Non-deterministic but a genuine, repeated recurrence — technique (A) is DEAD per AC 2's own bar. No patch was attempted (per AC 2's explicit instruction). Full trace recorded in `deferred-work.md`.
+  - [x] Technique (A) did not validate — proceeded to technique (B). Probe reverted (`git checkout -- client/src/render/textSelection.ts`).
 
-- [ ] **Spike technique (B), only if (A) fails: manual Range + getClientRects binary search** (AC: 2, 3, 4)
-  - [ ] Prototype a caret-API-free resolver LOCAL to `render/` (see Dev Notes "The manual-Range technique" for the recommended algorithm and the AD-9 constraint that `render/` must NOT import from `anchor/`). Given the empty-origin pointer point and the origin `.textLayer`, pick the glyph `<span>` whose line (vertical band) is nearest the pointer Y in that layer, then binary-search the character offset within that span's text node via `Range.setStart`/`setEnd` on successive midpoints, comparing each sub-range's `getClientRects()` horizontal edge against the pointer X, to land on the nearest character boundary.
-  - [ ] Live-smoke it on your OWN servers at DPR>1 across REPEATED same-session drags. Verify the resolved point lands on the intended line's nearest character (not a different column, not the wrong line), and that repeated drags stay correct.
+- [x] **Spike technique (B): manual Range + getClientRects binary search** (AC: 2, 3, 4)
+  - [x] Prototyped `client/src/render/nearestTextAnchor.ts` (caret-API-free, local to `render/`, no `anchor/` import): `groupSpanLines` (vertical-band line grouping, filtering pdf.js's rotated `--rotate` glyph runs — found and fixed a real bug where an unfiltered rotated margin span's page-tall post-transform bounding box merged every line on the page into one band), `nearestLine` (preceding-line tiebreak on equidistance), `nearestSpanInLine` (horizontal nearest-span), `nearestOffsetInTextNode` (binary search over non-collapsed single-character sub-ranges, injectable `rectsOf` mirroring `collectTextRects`).
+  - [x] Live-smoked on own servers at DPR=1.25 across repeated same-session drags: the resolver itself was CORRECT and non-flaky (5/5 repeats resolved the exact intended character boundary, unlike technique A). However, the AC-3 hand-off ("`selection.collapse()` then let native drag-extension run") does not work when the pointerdown pixel itself misses glyph content: a control drag starting 1px inside the nearest glyph (x=599) correctly armed native extension; the identical drag from the blank-space point (x=640) stayed fully collapsed regardless of `selection.collapse()` to the correctly-resolved anchor, and regardless of `preventDefault()` on `pointerdown`, `selectstart`, both, or neither. This is a browser constraint (native selection-arm requires its own successful hit-test at the mousedown pixel), not a resolver bug — confirmed decisively, not worked around, since a fix would require driving `pointermove`-continuous extension ourselves (the explicitly out-of-scope continuous controller). Full trace recorded in `deferred-work.md`.
+  - [x] Technique (B) did not validate (anchor resolution correct; native-extension hand-off does not occur). All spike code reverted (`git checkout -- client/src/render/textSelection.ts`; `rm client/src/render/nearestTextAnchor.ts`).
 
-- [ ] **If a technique validates: replace the empty-origin no-op with the snap in `render/textSelection.ts`** (AC: 3, 4, 6)
-  - [ ] On an empty-origin pointerdown (the existing `emptyOrigin` branch), resolve the nearest-text point ONCE via the validated technique and `selection.collapse(node, offset)` to it, then let native drag-extension run. Replace the `selectstart` preventDefault with the snap for the empty-origin case where a nearest line exists.
-  - [ ] Keep Story 8.8's no-op as the fallback when NO nearest line exists in the origin's column context within a reasonable proximity (a far, truly-empty margin): suppress as today. Snap only when there is a clear nearest line next to the origin (that is the user's ask).
-  - [ ] Reuse the existing `emptyOrigin` latch + its `pointerup`/`pointercancel`/`blur` reset (the `releasePointer` closure, textSelection.ts:126-136). Do not add a second global listener manager; keep everything `{ signal }`-scoped and share the existing teardown, exactly as Story 8.8 / 8.1 did.
+- [x] **If a technique validates: replace the empty-origin no-op with the snap in `render/textSelection.ts`** (AC: 3, 4, 6) — **N/A, not reached.** Both techniques failed live smoke (see above); per AC 5 this branch does not apply and no snap was wired in.
 
-- [ ] **Regression protection and unit tests** (AC: 6)
-  - [ ] Unit-test only what jsdom can see (the pure resolver's DOM-classification/selection-of-target logic, injecting a rect reader the way `collectTextRects` does with `rectsOf`); jsdom has no real Selection geometry, so the snap behavior itself is NOT assertable there. Do not delete or weaken the existing `isEmptyLayerSpace` tests or the `pointercancel` regression test.
-  - [ ] `cd client && npm test && npm run typecheck` clean. If no new `render/index.ts` barrel export is added (expected), the `vi.mock("./render")` barrels in `App.test.tsx`/`Reader.test.tsx` need no change; if you DO add one, update BOTH barrels in the same change (CLAUDE.md engineering principle).
+- [x] **Regression protection and unit tests** (AC: 6) — **N/A, not reached.** No production code lands (both techniques failed), so there is no new resolver to unit-test. The pre-existing `isEmptyLayerSpace` and `pointercancel` tests were not touched. `cd client && npm test && npm run typecheck` run clean against the reverted (baseline) tree as part of Task "Regression check on the reverted tree" below.
 
-- [ ] **Verify (live, own servers, DPR>1)** (AC: 1, 5, 6)
-  - [ ] Empty right-margin drag next to text now snaps and selects from the nearest line (both drag-down and drag-up), across REPEATED drags in one session.
-  - [ ] Empty cross-column gutter drag does NOT leak a cross-column or full-page highlight (8.8 AC-5).
-  - [ ] On-text single-line, multi-line, and CROSS-PAGE drags still select + highlight on release, and Ctrl+C still copies with the Story 8.1 paragraph-join intact (8.8 AC-2).
-  - [ ] Use trusted pointer input (raw mouse move/down/up), NOT `dispatchEvent`/`.click()` or a synthetic Range: this behavior only reproduces with a real native selection gesture (`[[drag-tools-dont-create-text-selection]]`, `[[use-trusted-input-for-focus-sensitive-smoke]]`). Shut the dev servers down after.
+- [x] **Verify (live, own servers, DPR>1)** (AC: 1, 5, 6) — **N/A as originally scoped** (there is no snap to verify — both techniques failed before reaching this task). What WAS verified live, at DPR=1.25 with trusted pointer input (`claude-in-chrome`'s CDP-backed drag, sanity-checked against a real on-text selection first): Story 8.8's no-op is unchanged post-revert (re-confirmed after `git checkout`), matching pre-spike baseline exactly. No cross-page/cross-column/on-text regression check was needed since no shipped file was modified in the final state (`git status` clean on `client/src/render/`).
 
-- [ ] **If BOTH techniques fail: document the negative result** (AC: 5)
-  - [ ] Append a "Discarded/Deferred: Story 8.9" section to `deferred-work.md` mirroring the "Discarded: Story 4.2 Part B" rigor: which technique failed, the exact observed failure (caret corruption trace, or the binary-search unreliability/latency), what was eliminated, and the condition under which a future revisit is worth it. Leave Story 8.8's no-op as the shipped baseline. No production code change lands.
+- [x] **If BOTH techniques fail: document the negative result** (AC: 5)
+  - [x] Appended "Discarded: Story 8.9 (snap empty-space drag to nearest text)" to `deferred-work.md` (plus a status-ledger row), mirroring the "Discarded: Story 4.2 Part B" rigor: both failure modes, exact observed corruption/blocker, what was fixed vs. what remains fatal, and the condition for a future revisit (the anchor-resolution half of technique B is reusable; the missing piece is a budgeted `pointermove`-driven extension design, explicitly out of THIS spike's scope). Story 8.8's no-op stays the shipped baseline; no production code change lands (`client/src/render/` is unmodified in the final diff).
 
 ## Dev Notes
 
@@ -146,8 +138,27 @@ Make the rect reader injectable (a `rectsOf: (r: Range) => ArrayLike<DOMRect>` p
 
 ### Agent Model Used
 
+Claude Sonnet 5
+
 ### Debug Log References
+
+- Live-smoke tool: `claude-in-chrome` extension (real host Chrome, DPR=1.25), fixture `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf`, own `uvicorn --port 8000` + `vite dev --port 5173`.
+- Technique A A/B trace (10 repeated empty-space drags at fixed coords, interleaved with on-text drags/clicks): correct/correct/**corrupted(empty,0)**/correct/correct/correct/**corrupted(empty,0)**/correct/correct/**corrupted(empty,0)** — 3/10 poisoned.
+- Technique B trace: resolver correct 5/5 repeats (offset 45 = line length, correctly clamped past the line's last glyph). Native-extension control test: drag from x=599 (on-glyph) → real selection extended through following paragraphs; identical drag from x=640 (blank margin, our resolved+collapsed anchor) → stayed `{rangeCount:1, isCollapsed:true, text:""}` under all four `preventDefault()` combinations tried (pointerdown only, selectstart only, both, neither).
+- Post-revert regression check: `npm test -- --run` → 1475/1476 pass (1 pre-existing flaky Reader.test.tsx Space-hold-pan timing test, passes in isolation, unrelated to this story — `client/src/render/` untouched); `npm run typecheck` clean; `git status --short client/ server/` empty.
 
 ### Completion Notes List
 
+- Spike executed per AC 1-2 exactly as scripted: baseline reproduced first (no code), technique (A) tried first, technique (B) tried only after (A) failed.
+- Technique (A) (`caretRangeFromPoint` resolved once at pointerdown) is DEAD: the decisive same-session A/B measurement reproduced the Story 3.8 corruption signature (empty node, offset 0) 3 times out of 10 repeated calls at fixed coordinates, after prior text-layer interaction. No patch attempted, per AC 2.
+- Technique (B) (manual `Range` + `getClientRects()` binary search) has a CORRECT, non-flaky anchor resolver (prototyped, live-smoked, a real rotated-span bug found and fixed along the way), but AC 3's "let native drag-extension run" hand-off does not occur when the pointerdown pixel itself misses glyph content — a browser constraint, confirmed via a same-page on-glyph vs off-glyph control drag, not worked around (a workaround would require the explicitly out-of-scope continuous `pointermove`-driven controller).
+- Both techniques failed → per AC 5 this is a complete, acceptable outcome. Negative result written up in `deferred-work.md` (new "Discarded: Story 8.9" section + status-ledger row) mirroring the Story 4.2 Part B rigor. All spike code (`render/textSelection.ts` probe edits, the prototype `render/nearestTextAnchor.ts`) reverted; `client/src/render/` is unmodified in the final diff.
+- Story 8.8's no-op stays the shipped baseline. No new FR assigned (per Dev Notes, only on a validated spike). Story 8.10 (Epic 8 refactor) is unblocked to proceed next as originally sequenced.
+
 ### File List
+
+- `.bmad/implementation-artifacts/deferred-work.md` (modified — new "Discarded: Story 8.9" section + status-ledger row; the only change this story ships)
+
+## Change Log
+
+- 2026-07-12: Spike executed; both named techniques (caret-API resolved-once, manual Range binary search) failed live smoke for different reasons (caret-API mid-session poisoning; native drag-extension does not arm from a script-collapsed selection on an off-glyph pointerdown). Negative result documented in `deferred-work.md`; no production code change. Story 8.8's no-op remains shipped.
