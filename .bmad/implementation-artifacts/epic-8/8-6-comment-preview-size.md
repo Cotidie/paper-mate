@@ -4,7 +4,7 @@ baseline_commit: 0e6cf3384cc6dbb4683232fedcc190c9482acc71
 
 # Story 8.6: Comment preview size reflects its adjusted full size
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
