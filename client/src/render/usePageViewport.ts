@@ -44,6 +44,9 @@ export function usePageViewport(
   active: boolean,
 ): PageViewport {
   const cards = useRef<Map<number, HTMLDivElement>>(new Map());
+  // Reverse lookup for the IO callback (entry.target -> pageNumber), kept in
+  // lockstep with `cards` so recompute() never has to scan the whole registry.
+  const elToPage = useRef<WeakMap<HTMLDivElement, number>>(new WeakMap());
   const [currentPage, setCurrentPage] = useState(1);
   const [live, setLive] = useState<PageWindow>(() => pageWindow(1, WINDOW_RADIUS, pageCount));
   // Capture support once: in jsdom (and SSR) there is no IntersectionObserver,
@@ -52,8 +55,14 @@ export function usePageViewport(
   const supportsIO = typeof IntersectionObserver !== "undefined";
 
   const registerCard = useCallback((pageNumber: number, el: HTMLDivElement | null) => {
-    if (el) cards.current.set(pageNumber, el);
-    else cards.current.delete(pageNumber);
+    if (el) {
+      cards.current.set(pageNumber, el);
+      elToPage.current.set(el, pageNumber);
+    } else {
+      const existing = cards.current.get(pageNumber);
+      if (existing) elToPage.current.delete(existing);
+      cards.current.delete(pageNumber);
+    }
   }, []);
 
   useEffect(() => {
@@ -62,11 +71,20 @@ export function usePageViewport(
     if (!container) return;
 
     let frame = 0;
+    // Pages IO currently reports as intersecting the container's viewport — the
+    // only candidates `currentPageInView` needs. Tracking membership from each
+    // IO delivery (instead of re-measuring every registered card every fire)
+    // avoids an O(N) getBoundingClientRect sweep that forces layout on far-off
+    // content-visibility:auto cards whose layout a tab-hide/return cycle can
+    // discard (Story 8.7 tab-switch-resume diagnosis).
+    const intersecting = new Set<number>();
     const recompute = () => {
       frame = 0;
       const view = container.getBoundingClientRect();
       const extents: PageExtent[] = [];
-      for (const [pageNumber, el] of cards.current) {
+      for (const pageNumber of intersecting) {
+        const el = cards.current.get(pageNumber);
+        if (!el) continue;
         const r = el.getBoundingClientRect();
         extents.push({ pageNumber, top: r.top, bottom: r.bottom });
       }
@@ -78,13 +96,32 @@ export function usePageViewport(
       if (!frame) frame = requestAnimationFrame(recompute);
     };
 
-    const io = new IntersectionObserver(schedule, { root: container });
+    const io = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const pageNumber = elToPage.current.get(entry.target as HTMLDivElement);
+        if (pageNumber === undefined) continue;
+        if (entry.isIntersecting) intersecting.add(pageNumber);
+        else intersecting.delete(pageNumber);
+      }
+      schedule();
+    }, { root: container });
     for (const el of cards.current.values()) io.observe(el);
     schedule(); // establish the initial page + window once cards are laid out
+
+    // Re-establish the window as soon as the tab becomes visible again, rather
+    // than deferring that cost to the user's first post-return scroll/zoom
+    // (AC1: no stall on the first interaction). Document-level listener,
+    // cleaned up on unmount — same shape as usePanControl's Space-release
+    // handler, not overloading it (CLAUDE.md document-level handler rule).
+    const onVisible = () => {
+      if (!document.hidden) schedule();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       io.disconnect();
       if (frame) cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [active, supportsIO, pageCount, scrollRef]);
 
