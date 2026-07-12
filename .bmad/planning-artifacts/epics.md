@@ -1913,7 +1913,7 @@ So that Epic 7 closes on legible modular seams instead of an over-large table co
 
 ## Epic 8: Reader & annotation polish, round 2 (post-v1, Phase-1.5)
 
-> Added 2026-07-07 via correct-course (`sprint-change-proposal-2026-07-07-deferred-review.md`) as Epic 9; RENUMBERED Epic 9 → Epic 8 on 2026-07-11 (correct-course: Remote sync un-numbered, this took its slot). A deferred-work review removed every reader-fidelity item that had since shipped (4.1 copy/selection + de-flake, 4.2A gutter split, 3.7 convert, 5.1 settings, 5.5 hide-all, 5.6 layered-Esc, 5.0/5.3/5.4 refactors, 3.1 memo move/resize, 7.8 Starred-lens column) and promoted the one still-open, still-wanted reader bug (Story 8.1). **BROADENED 2026-07-11 via correct-course (`sprint-change-proposal-2026-07-11-epic-8-9-stories.md`):** the epic's original "fix correctness, add no capability, no new FRs" charter is RETIRED. From a ten-request user batch (whose three heavyweight Phase-2 features were split into the new Epic 9), this epic now also holds Annotation-Bank capability (filter + reading-order sort), the comment-on-region completion, a Library venue-display refinement, and three reader defects. Story 8.1 (paragraph-aware copy) is kept verbatim; 8.2–8.8 are the new polish/defect stories. New reader FRs: FR-23 (Bank filter), FR-24 (Bank sort), FR-25 (comment on a region). Sequenced post-v1.
+> Added 2026-07-07 via correct-course (`sprint-change-proposal-2026-07-07-deferred-review.md`) as Epic 9; RENUMBERED Epic 9 → Epic 8 on 2026-07-11 (correct-course: Remote sync un-numbered, this took its slot). A deferred-work review removed every reader-fidelity item that had since shipped (4.1 copy/selection + de-flake, 4.2A gutter split, 3.7 convert, 5.1 settings, 5.5 hide-all, 5.6 layered-Esc, 5.0/5.3/5.4 refactors, 3.1 memo move/resize, 7.8 Starred-lens column) and promoted the one still-open, still-wanted reader bug (Story 8.1). **BROADENED 2026-07-11 via correct-course (`sprint-change-proposal-2026-07-11-epic-8-9-stories.md`):** the epic's original "fix correctness, add no capability, no new FRs" charter is RETIRED. From a ten-request user batch (whose three heavyweight Phase-2 features were split into the new Epic 9), this epic now also holds Annotation-Bank capability (filter + reading-order sort), the comment-on-region completion, a Library venue-display refinement, and three reader defects. Story 8.1 (paragraph-aware copy) is kept verbatim; 8.2–8.8 are the new polish/defect stories. New reader FRs: FR-23 (Bank filter), FR-24 (Bank sort), FR-25 (comment on a region). Sequenced post-v1. **Broadened again 2026-07-12 via correct-course** (`sprint-change-proposal-2026-07-12-epic-8-snap-select-refactor.md`): Story 8.9 spikes a snap-to-nearest-text UX for the Story 8.8 empty-space-origin case (investigation-first, may end in a documented discard); Story 8.10 is the epic's structural-refactor pass, same footing as Stories 5.0/5.3/5.4/6.8, sequenced last.
 
 ### Story 8.1: Paragraph-aware copy (join soft-wrapped lines)
 
@@ -2120,6 +2120,66 @@ So that I do not accidentally select or copy the nearby text lines.
 **Then** it is live-smoked with an empty-margin drag AND a cross-column empty-gutter drag at DPR>1, and it does NOT reintroduce the full-page-highlight or cross-column leak the anchor layer guards
 
 > **Scope guard:** this is the narrow "empty-space drag origin" fix, NOT the deferred layered multi-column selection controller (that stays deferred). **Open design calls:** confirm "underlying rows" = PDF text lines (assumed) vs any table/list surface; the exact empty-space behavior (no-op vs tool-defer); how "empty space" is detected (no text node hit vs geometry).
+
+### Story 8.9: Snap empty-space drag to nearest text (spike) (added 2026-07-12)
+
+> User request: instead of a no-op (Story 8.8's AC-3 design call), a drag starting in blank space next to text should snap to the nearest text — starting from the end of the preceding line when dragging down, or ending there when dragging up. Not virgin territory: `deferred-work.md` documents four prior column-aware/snap-selection attempts, all built and reverted (`03d471b`, `a294ca9`), and a hard Chromium `caretRangeFromPoint`/`caretPositionFromPoint` corruption bug mid-drag (Story 3.8, also blocking Story 4.2 Part B). Those attempts needed CONTINUOUS column-aware tracking through an active cross-column drag; this ask only needs a ONE-TIME anchor resolution at gesture start — narrower, and closer to deferred-work's own named-but-untested escape route (AE3-7: "resolve once, not continuously") than to the discarded controller. Investigation-first, same pattern as Story 8.7 and the Story 4.2 Part B design-gate: a negative result is a valid, complete outcome for this story. No new FR yet — assigned at create-story only if the spike validates, mirroring how 8.2-8.4 earned FR-23/24/25 once their design was committed.
+
+As a reader,
+I want a drag that starts in empty page space to snap its selection to the nearest text instead of doing nothing,
+So that the gesture works the way I'd expect on a page with visible text nearby.
+
+**Acceptance Criteria:**
+
+**Given** the empty-space-origin no-op behavior Story 8.8 shipped
+**Then** this story STARTS with a design/prototyping spike, not a committed implementation: prototype ONE candidate technique for resolving a stable nearest-text anchor from an empty-space pointerdown, and live-smoke it against a real two-column paper at DPR>1 across REPEATED drags in the same session — not only a fresh page load, since the Story 3.8 caret corruption needs prior interaction to manifest and a fresh-load-only test would falsely pass
+
+**Given** the two candidate techniques named in `deferred-work.md`
+**Then** the spike evaluates `caretRangeFromPoint`/`caretPositionFromPoint` resolved EXACTLY ONCE at pointerdown, before any drag motion begins, FIRST (cheapest to prototype, untested per AE3-7), and only invests in the manual `Range` + `getClientRects()` binary-search alternative (avoids the caret-API family entirely) if the caret approach fails live smoke
+
+**Given** a validated technique
+**Then** the fix resolves the nearest text position EXACTLY ONCE at gesture start — never continuously mid-drag, unlike the four discarded multi-column attempts — and hands off to native `Selection`/`Range` extension for the rest of the gesture: dragging down from blank space starts the selection at that resolved point and extends downward; dragging up extends the anchor/focus the same way normal reverse-direction selection already does. One resolved point + `Selection.collapse` to it covers both directions symmetrically; no separate up/down branch is needed
+
+**Given** "nearest text" must not reopen the abandoned controller
+**Then** it resolves to the nearest glyph in the SAME column/line context as the empty-space origin (not the arbitrary next node in raw DOM order that produced the Story 8.8 defect); this story does NOT attempt cross-column-aware selection DURING a drag, only a single-shot anchor resolution AT THE ORIGIN
+
+**Given** the spike's outcome is genuinely uncertain
+**Then** if BOTH techniques fail live smoke (the Story 3.8 corruption recurs, or the manual binary search proves unreliable or too slow), the story documents the negative result in `deferred-work.md` with the same rigor as the Story 4.2 Part B write-up, and Story 8.8's no-op stays the shipped baseline — a complete, acceptable outcome, not a failed story
+
+**Given** any implementation lands
+**Then** it does not regress Story 8.8's guarantees: an on-text drag origin is unaffected (8.8 AC-2), and a cross-column empty-gutter drag still does not leak a cross-column or full-page highlight (8.8 AC-5), live-smoked at DPR>1 exactly as 8.8 was
+
+**Given** any new user-facing string (none expected)
+**Then** it contains no em-dash (UX-DR13)
+
+> **Out of scope:** reopening the full multi-column drag-select controller (continuous column-aware tracking during an active cross-column drag) — stays deferred per `deferred-work.md`. **Open design calls for create-story:** the exact binary-search algorithm if the caret approach fails; whether "nearest" means nearest-in-reading-order or nearest-by-Euclidean-distance when the blank point is equidistant between two lines; the time/attempt budget before declaring the spike discarded again.
+
+### Story 8.10: Epic 8 structural refactor (added 2026-07-12)
+
+> User request: reduce code complexity and unify Epic 8's code into OOP objects, same footing as Stories 5.0/5.3/5.4 (Epic 2/5-era refactor) and Story 6.8 (the Epic 6 Library refactor) — a per-epic cleanup pass, its own PR(s), never folded into a feature story. Sequenced last so its scope reflects whatever Story 8.9 actually adds (or doesn't). No new FR, no behavior/contract change.
+
+As a developer-user,
+I want the code Epic 8 added or touched unified behind clear OOP boundaries with reduced conditional sprawl,
+So that the next reader-polish epic builds on cohesive modules instead of accreting patches onto the same god-files.
+
+**Acceptance Criteria:**
+
+**Given** every file touched by Stories 8.1-8.9 (finalize the list once 8.9 lands or is discarded)
+**Then** each is audited for the same code smells Stories 5.3/6.8 targeted: god-objects/god-functions doing more than one concern, near-duplicate conditional branches that should be one descriptor/registry (mirroring the AD-5 `anchor.kind`-keyed dispatch pattern already established), and any coordinate math computed outside `anchor/` (AD-9 boundary check)
+
+**Given** `render/textSelection.ts` has accreted Story 4.1 (endOfContent bounding), Story 8.1 (copy/paragraph-join), Story 8.8 (empty-origin gate), and possibly Story 8.9 (anchor resolution) as one flat class with growing private state
+**Then** it is decomposed along cohesive OOP lines — one class/module per concern (layer registry, selection-bounding, copy-interception, origin-gating), each with a narrow single-purpose interface, wired together by one composing controller — the same encapsulation approach Story 5.3 applied to Reader/AnnotationLayer/AnnotationInteraction
+
+**Given** the Annotation Bank gained a type-filter (8.2) and a reading-order sort (8.3) as client view-state
+**Then** they are unified behind one composable view-state model (filter and sort composing cleanly, per 8.3's own AC) rather than two independent conditional passes over the list
+
+**Given** this is a pure refactor thread, same footing as Stories 5.0/5.3/5.4/6.8
+**Then** it changes NO behavior and NO contract: every existing Epic 1-8 test still passes unmodified in intent (tests may move or rename to follow new module boundaries, but assertions don't change), and there is no anchor/store/API-contract change
+
+**Given** the refactor
+**Then** it lands in its own PR(s), separate from any feature story, per the established Story 5.0/5.3/5.4/6.8 precedent — never folded into a feature story
+
+> **Out of scope:** any new capability; touching client/server modules Epic 8 did not touch; the still-deferred multi-column selection controller and cross-type unified hit-layer (those stay in `deferred-work.md`, tracked separately, not incidentally swept up here). **Open design calls for create-story:** the exact module boundaries for the `textSelection.ts` split; final scope depends on Story 8.9's outcome (sequenced after it for exactly this reason).
 
 ## Epic 9: Phase 2 kickoff, reading helper & paper portability (post-v1, Phase-2)
 

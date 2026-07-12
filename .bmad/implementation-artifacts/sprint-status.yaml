@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-12 (story 8-7-tab-switch-resume -> done, PR #69 merged)"
+last_updated: "2026-07-12 (story 8-8-empty-space-drag-no-select: Codex review finding fixed -> review)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -272,7 +272,9 @@ development_status:
   8-5-venue-short-name: done
   8-6-comment-preview-size: done
   8-7-tab-switch-resume: done
-  8-8-empty-space-drag-no-select: backlog
+  8-8-empty-space-drag-no-select: review
+  8-9-snap-empty-space-drag-to-text: backlog
+  8-10-epic-8-structural-refactor: backlog
   epic-8-retrospective: optional
 
   # Epic 9: Phase 2 kickoff — reading helper & paper portability (post-v1, Phase-2) — added
