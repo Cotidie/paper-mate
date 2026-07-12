@@ -11,7 +11,7 @@ import { denormalizeRect, denormalizePoint, type PageCardRef } from "@/anchor";
 import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "@/store";
 import type { Annotation } from "@/api/client";
 import { clampToViewport, QUICK_BOX_GAP } from "@/annotations/position";
-import { quickBoxSpec, usesLeftVerticalQuickBox, type QuickBoxSpec } from "@/annotations/marks";
+import { quickBoxSpec, usesLeftVerticalQuickBox, hasOwnTextEntry, type QuickBoxSpec } from "@/annotations/marks";
 import { isExempt } from "./shared";
 import { isEditableTarget } from "@/lib/domFocus";
 
@@ -269,10 +269,12 @@ export function useSelection(opts: {
     };
   }, [enabled, selectedAnno, clearSelection, deleteAnnotation]);
 
-  // A memo or a box comment (fix request) owns its OWN focus (its textarea/compact
-  // bubble autofocuses for typing), so the box must not steal focus to the first
-  // swatch on open — the focus effect checks this.
+  // Left-vertical layout (memo, box comment, or box highlight — fix request)
+  // vs. the "owns its own focus" subset (memo or box comment only — a box
+  // highlight has no textarea, so it keeps the default first-swatch autofocus
+  // the effect below applies). Two DIFFERENT sets — see marks.ts.
   const isVerticalQuickBox = usesLeftVerticalQuickBox(selectedAnno);
+  const ownsOwnFocus = hasOwnTextEntry(selectedAnno);
   // Story 5.0: the selected mark's quick-box capability comes from the descriptor
   // registry (one source per tool).
   const selectedSpec = selectedAnno ? quickBoxSpec(selectedAnno) : null;
@@ -392,12 +394,14 @@ export function useSelection(opts: {
     if (showSelectionBox) {
       const el = selectionBoxRef.current;
       if (!el) return;
-      if (!restoreSelectionFocusRef.current && !isVerticalQuickBox) {
+      if (!restoreSelectionFocusRef.current && !ownsOwnFocus) {
         // First open: remember where focus was, move it into the box. EXCEPTION: a
         // memo or a box comment owns its own focus (its textarea is autofocused for
         // typing) — pulling focus to the first swatch would fight that, so their
         // quick-box never grabs focus on open. The textarea is the keyboard entry
-        // point; the swatches stay reachable by Tab.
+        // point; the swatches stay reachable by Tab. A box highlight has no
+        // textarea of its own (fix request), so it's NOT in this set — it still
+        // gets the default first-swatch autofocus, same as any other highlight.
         restoreSelectionFocusRef.current = (document.activeElement as HTMLElement | null) ?? document.body;
         el.querySelector<HTMLElement>("button")?.focus();
       }

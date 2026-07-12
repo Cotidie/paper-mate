@@ -2209,6 +2209,31 @@ describe("AnnotationInteraction box-select gesture (Story 2.11 — AC1,2,5,6)", 
     await screen.findByTestId("selection-quick-box");
     expect(screen.getByTestId("quick-box-delete")).toBeTruthy();
   });
+
+  it("a selected box highlight's quick-box is the VERTICAL variant, beside the region instead of inside it (fix request), but STILL autofocuses the first swatch (no textarea of its own, unlike memo/box-comment)", async () => {
+    const region: Annotation = {
+      id: "rg2",
+      doc_id: "doc-1",
+      type: "highlight",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.5 } },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: null,
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+    useAnnotationStore.getState().addAnnotation(region);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("rg2"));
+
+    const box = await screen.findByTestId("selection-quick-box");
+    expect(box.className).toContain("quick-box--vertical");
+    // Unlike memo/box-comment (which own their own textarea and must NOT have
+    // focus stolen from it), a box highlight has no text entry of its own, so
+    // it keeps the default first-swatch autofocus every other highlight gets.
+    expect(box.contains(document.activeElement)).toBe(true);
+  });
 });
 
 describe("AnnotationInteraction box-comment gesture (Story 8.4 — AC1,5, Design D2/D3)", () => {

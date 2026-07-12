@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Annotation } from "@/api/client";
 import { ANNOTATION_TOOLS } from "@/lib/tools";
-import { MARK_DESCRIPTORS, quickBoxSpec, isBoxComment, usesLeftVerticalQuickBox } from "./marks";
+import { MARK_DESCRIPTORS, quickBoxSpec, isBoxComment, isBoxHighlight, usesLeftVerticalQuickBox, hasOwnTextEntry } from "./marks";
 
 function anno(type: Annotation["type"], kind: Annotation["anchor"]["kind"]): Annotation {
   const base = { id: "a", doc_id: "d", type, group_id: null, style: { color: "annotation-default", stroke_width: null, alpha: null }, body: null, created_at: "t", updated_at: "t" };
@@ -61,12 +61,29 @@ describe("quickBoxSpec (selection quick-box capability)", () => {
     expect(isBoxComment(pin)).toBe(false);
   });
 
-  it("usesLeftVerticalQuickBox: true for a memo or a box comment, false otherwise (or null)", () => {
+  it("isBoxHighlight: true only for a highlight with a kind=rect (region) anchor", () => {
+    expect(isBoxHighlight(anno("highlight", "rect"))).toBe(true);
+    expect(isBoxHighlight(anno("highlight", "text"))).toBe(false);
+    expect(isBoxHighlight(anno("underline", "rect"))).toBe(false);
+    expect(isBoxHighlight(anno("memo", "rect"))).toBe(false);
+  });
+
+  it("usesLeftVerticalQuickBox: true for a memo, a box comment, or a box highlight (fix request), false otherwise (or null)", () => {
     expect(usesLeftVerticalQuickBox(anno("memo", "rect"))).toBe(true);
     expect(usesLeftVerticalQuickBox(anno("comment", "rect"))).toBe(true);
+    expect(usesLeftVerticalQuickBox(anno("highlight", "rect"))).toBe(true);
     expect(usesLeftVerticalQuickBox(anno("comment", "text"))).toBe(false);
-    expect(usesLeftVerticalQuickBox(anno("highlight", "rect"))).toBe(false);
+    expect(usesLeftVerticalQuickBox(anno("highlight", "text"))).toBe(false);
+    expect(usesLeftVerticalQuickBox(anno("underline", "rect"))).toBe(false);
     expect(usesLeftVerticalQuickBox(null)).toBe(false);
+  });
+
+  it("hasOwnTextEntry: true for a memo or a box comment (own autofocusing textarea), false for a box highlight (fix request: box highlight has no textarea, so it keeps the default first-swatch autofocus)", () => {
+    expect(hasOwnTextEntry(anno("memo", "rect"))).toBe(true);
+    expect(hasOwnTextEntry(anno("comment", "rect"))).toBe(true);
+    expect(hasOwnTextEntry(anno("highlight", "rect"))).toBe(false);
+    expect(hasOwnTextEntry(anno("comment", "text"))).toBe(false);
+    expect(hasOwnTextEntry(null)).toBe(false);
   });
 
   it("highlight + underline → no extra rows, Highlight actions label (text or region)", () => {

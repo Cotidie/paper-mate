@@ -92,14 +92,38 @@ export function isBoxComment(anno: Annotation): boolean {
   );
 }
 
+/** A box highlight (Story 2.11/8.4 box-highlight mode, fix request): a
+ *  `type=highlight` mark drawn as a region (`kind=rect`) rather than over
+ *  selected text (`kind=text`). Always real-area — the box-drag gesture
+ *  enforces a minimum drag distance (`BOX_DRAG_THRESHOLD`) before it commits —
+ *  unlike a box comment's degenerate click-placed pin, so no extra area check
+ *  is needed here. */
+export function isBoxHighlight(anno: Annotation): boolean {
+  return anno.type === "highlight" && anno.anchor.kind === "rect";
+}
+
 /** Whether a selected mark's quick-box renders as a LEFT-side vertical strip
  *  (mirrors `MemoBox`'s own left-side action strip) instead of the default
- *  horizontal row below the mark. True for a memo, or a box comment (fix
- *  request) — both have their OWN separate text-entry surface floating beside
- *  the strip, so the strip must never steal focus into itself (`useSelection.ts`
- *  reads this same function for that focus-guard). */
+ *  horizontal row below the mark. True for a memo, a box comment, or a box
+ *  highlight (fix request: previously only memo/box-comment, which left a box
+ *  highlight's quick-box rendering horizontally INSIDE the top of its own
+ *  region instead of beside it). NOT the same set as `hasOwnTextEntry` below —
+ *  a box highlight has no textarea of its own, just a different geometry. */
 export function usesLeftVerticalQuickBox(anno: Annotation | null): boolean {
   if (!anno || anno.anchor.kind !== "rect") return false;
+  return anno.type === "memo" || isBoxHighlight(anno) || isBoxComment(anno);
+}
+
+/** Whether a selected mark owns its OWN focus — an autofocusing textarea
+ *  (memo) or compact bubble (box comment) of its own — so its quick-box must
+ *  never steal focus to the first swatch on open (`useSelection.ts` reads
+ *  this for that focus-guard). Deliberately NARROWER than
+ *  `usesLeftVerticalQuickBox`: a box highlight is ALSO left-vertical (above)
+ *  but has no text entry of its own, so it keeps the default first-swatch
+ *  autofocus — same as any other highlight (fix request: conflating the two
+ *  would have silently regressed that keyboard behavior for a box highlight). */
+export function hasOwnTextEntry(anno: Annotation | null): boolean {
+  if (!anno) return false;
   return anno.type === "memo" || isBoxComment(anno);
 }
 
