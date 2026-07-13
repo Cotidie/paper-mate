@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect } from "react";
 import { X, Highlighter, TextUnderline, PencilSimple, TextT, ChatCircle, type Icon } from "@phosphor-icons/react";
-import { useAnnotationStore } from "@/store";
-import { bankItems, filterBankItems, TYPE_LABEL, BANK_FILTER_TYPES, DEFAULT_BANK_FILTER, type BankItem } from "@/lib/bank";
+import { TYPE_LABEL, BANK_FILTER_TYPES, type BankItem } from "@/lib/bank";
 import type { Annotation } from "@/api/client";
+import { useBankView } from "./useBankView";
 import "./BankPanel.css";
 
 /** The rail's own per-tool glyph (ToolRail.tsx), reused so a Bank row reads as
@@ -43,8 +43,7 @@ export default function BankPanel({
   onJump: (item: BankItem) => void;
   onClose: () => void;
 }) {
-  const annotations = useAnnotationStore((s) => s.annotations);
-  const [activeTypes, setActiveTypes] = useState<ReadonlySet<Annotation["type"]>>(DEFAULT_BANK_FILTER);
+  const { rows, activeTypes, toggleType } = useBankView(open, docId);
 
   // Esc closes (UX-DR17), mirroring TocPanel verbatim. Listener mounted only
   // while open.
@@ -57,31 +56,7 @@ export default function BankPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // `ReaderPage` always renders `<BankPanel open={bankOpen} .../>` — this
-  // component instance stays mounted across close/reopen (only its render
-  // output disappears below), so `useState`'s initial value alone would NOT
-  // reset the filter on a reopen. Reset explicitly on the open transition
-  // (AC #2: "the DEFAULT every time the Bank opens is comments only").
-  // `useLayoutEffect`, not `useEffect`: a passive effect fires AFTER the
-  // browser paints, so the very first open-transition frame would still
-  // show whatever filter was active when the panel was last closed (a
-  // stale-rows flash) before snapping back to comments-only.
-  useLayoutEffect(() => {
-    if (open) setActiveTypes(DEFAULT_BANK_FILTER);
-  }, [open]);
-
   if (!open) return null;
-
-  function toggleType(type: Annotation["type"]) {
-    setActiveTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
-  }
-
-  const rows = filterBankItems(bankItems(annotations.values(), docId), activeTypes);
 
   return (
     <aside className="bank-panel" data-testid="bank-panel" aria-label="Annotation bank">
