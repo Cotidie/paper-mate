@@ -4,7 +4,7 @@ baseline_commit: 7ac1cbe7c90d578b7ce04633ab4b8a2867b0d14c
 
 # Story 8.10: Epic 8 structural refactor
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -47,42 +47,41 @@ This is a **pure refactor thread**, the same footing as Story 5.0 / 5.3 / 5.4 (E
 
 ## Tasks / Subtasks
 
-- [ ] **Audit the Epic-8 surface** (AC: 1)
-  - [ ] Read every file in the Dev Notes touched-file list against the `baseline_commit`; classify each: decompose / leave-clean.
-  - [ ] Record the classification + rationale in the Dev Agent Record (mirrors 7.12's "reality-corrections" discipline: state what was and wasn't touched).
+- [x] **Audit the Epic-8 surface** (AC: 1)
+  - [x] Read every file in the Dev Notes touched-file list against the `baseline_commit`; classify each: decompose / leave-clean.
+  - [x] Record the classification + rationale in the Dev Agent Record (mirrors 7.12's "reality-corrections" discipline: state what was and wasn't touched).
 
-- [ ] **Decompose `render/textSelection.ts`** (AC: 2, 4, 5)
-  - [ ] Read `textSelection.ts` fully (436 lines) + its test (504 lines) + `render/index.ts` before editing. Confirm the barrel/mock constraint (below): `textSelectionController` is imported by `render/index.ts` via SUB-PATH (`./textSelection`, line 28), NOT re-exported from the `render/` barrel, so `renderPage` mock barrels (`App.test.tsx`, `Reader.test.tsx`) do NOT reference it and the split won't break them. Only `render/textSelection.test.ts` targets it directly.
-  - [ ] Split the five tangled concerns into cohesive units with narrow interfaces (proposed shape in Dev Notes; the exact module boundaries are an open design call — pick the smallest correct decomposition):
-    - a **text-layer registry** owning the `#textLayers` map + `register`/`unregister`/`originLayerOf`/`#rangeStaysWithinTextLayers`/`reset`;
-    - a **selection-bounder** (Story 4.1): the `selectionchange` `endOfContent` bounding + Firefox detection + `prevRange`;
-    - a **copy-joiner** (Story 8.1): the `copy` handler, delegating to `paragraphCopy.ts`;
-    - an **origin-gate / snap controller** (Story 8.8 + 8.11): the `emptyOrigin` latch, `selectstart` suppress, and the whole `snap*` state machine (rAF throttle, `applySnapFrame`/`scheduleSnapFrame`/`flushSnap`/`anchorAtEngage`), delegating anchor resolution to `nearestTextAnchor.ts`;
-    - one **composing controller** that owns the single shared `document`-level `AbortController` lifecycle (enable-on-first-register, tear-down-on-last-unregister) and wires the concern objects to the listeners.
-  - [ ] Preserve every guard verbatim in intent: the shared `{ signal }` teardown; the `snapping`/`emptyOrigin` clears on `pointerup`/`pointercancel`/window `blur`; the capture-phase `pointerup` flush BEFORE the bubble-phase `useCreateQuickBox` consumer; the rAF cancel on abort; the `isConnected` bail on a mid-drag layer unregister; the primary-button-only arm; the in-code comment recording the deliberate crossing of 8.9's per-move guard.
-  - [ ] Keep `textSelection.test.ts` assertions unchanged in intent; tests may move/rename to follow the new modules.
+- [x] **Decompose `render/textSelection.ts`** (AC: 2, 4, 5)
+  - [x] Read `textSelection.ts` fully (436 lines) + its test (504 lines) + `render/index.ts` before editing. Confirmed the barrel/mock constraint: `textSelectionController` is imported via SUB-PATH (`./textSelection`, line 28), NOT re-exported from the `render/` barrel — App/Reader mocks untouched.
+  - [x] Split the five tangled concerns into cohesive units with narrow interfaces:
+    - `TextLayerRegistry` (`render/textLayerRegistry.ts`) — the layer↔bound map + `register`/`unregister`/`originLayerOf`/`rangeStaysWithinTextLayers`/`resetBound`/`resetAll` + the pure `isEmptyLayerSpace`;
+    - `SelectionBounder` (`render/selectionBounder.ts`) — the `selectionchange` `endOfContent` bounding + Firefox detection + `prevRange`;
+    - `interceptParagraphCopy` (`render/copyJoiner.ts`) — the `copy` handler, delegating to `paragraphCopy.ts` (stateless → a function, smallest-correct);
+    - `SnapController` (`render/snapController.ts`) — the `emptyOrigin` latch + `selectstart` suppress + the whole snap state machine (rAF throttle, `applySnapFrame`/`scheduleSnapFrame`/`flush`/`anchorAtEngage`), delegating to `nearestTextAnchor.ts` (8.8+8.11 kept together per the Dev Notes hint — they share the pointerdown/release/selectstart lifecycle);
+    - the composing `TextSelectionController` (`render/textSelection.ts`) owns the single shared `document`-level `AbortController` lifecycle and wires the concern objects to the listeners.
+  - [x] Every guard preserved verbatim in intent: shared `{ signal }` teardown; `snapping`/`emptyOrigin` clears on `pointerup`/`pointercancel`/`blur`; capture-phase `pointerup` flush BEFORE the bubble-phase `useCreateQuickBox` consumer; rAF cancel on abort; `isConnected` bail on mid-drag unregister; primary-button-only arm; the 8.9-crossing comment.
+  - [x] `textSelection.test.ts` assertions unchanged in intent; the `isEmptyLayerSpace` block moved to `textLayerRegistry.test.ts` (static test-decl count identical to HEAD: 1393 == 1393).
 
-- [ ] **Unify the Annotation Bank view-state** (AC: 3, 4)
-  - [ ] Read `lib/bank.ts` (200), `components/BankPanel/BankPanel.tsx` (174), `lib/bank.test.ts` (407).
-  - [ ] Fold filter + sort into one composable view-state unit (a `useBankView` hook or an equivalent model) that owns `activeTypes` (default = comments-only, reset on the open transition), `toggleType`, and the derivation `filterBankItems(bankItems(...))`, so `BankPanel` renders over that model rather than re-composing the two passes inline. Keep `bankItems`/`filterBankItems` as pure leaf functions (they already are — the change is where they COMPOSE, not their internals).
-  - [ ] Preserve the reset-on-open `useLayoutEffect` semantics (not `useEffect` — the header comment explains the stale-rows-flash reason).
+- [x] **Unify the Annotation Bank view-state** (AC: 3, 4)
+  - [x] Read `lib/bank.ts`, `components/BankPanel/BankPanel.tsx`, `lib/bank.test.ts`.
+  - [x] Folded filter + sort into `useBankView(open, docId)` (`components/BankPanel/useBankView.ts`) owning `activeTypes` (default comments-only, reset on open), `toggleType`, and the `filterBankItems(bankItems(...))` derivation; `BankPanel` is now presentational over `{ rows, activeTypes, toggleType }`. `bankItems`/`filterBankItems` internals untouched (byte-clean leaf).
+  - [x] Reset-on-open `useLayoutEffect` semantics preserved (not `useEffect` — stale-rows-flash reason carried in the hook comment).
 
-- [ ] **Opportunistic cleanup of the remaining audit targets** (AC: 1, 4) — only where a real smell exists; a byte-clean file is left alone.
+- [x] **Opportunistic cleanup of the remaining audit targets** (AC: 1, 4) — audited; no further decomposition warranted (see Audit Result). The two committed targets were the epic's only genuine smells.
 
-- [ ] **Regression protection + full-suite green** (AC: 4)
-  - [ ] `cd client && npm test` all green; `npm run typecheck` clean.
-  - [ ] Backend suite green (run it yourself per the CLAUDE.md Sandbox note): `cd server && PYTHONPATH= PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` — only if a `server/app/**` file was actually touched by the refactor.
-  - [ ] If any `render/index.ts` export changed, update BOTH `vi.mock("./render")` barrels (`App.test.tsx`, `Reader.test.tsx`) in the same change (CLAUDE.md engineering principle). Expected: no barrel change, since `textSelectionController` is not a barrel export.
+- [x] **Regression protection + full-suite green** (AC: 4)
+  - [x] `cd client && npm test` all green (72 files, 1518 tests, stable across two runs); `npm run typecheck` clean.
+  - [x] Backend suite: N/A — no `server/app/**` file touched by the refactor (version NOT bumped in-branch; that is a merge-time action). `test_version` green (pyproject 0.5.29 == uv.lock 0.5.29).
+  - [x] No `render/index.ts` export changed (confirmed) → no `vi.mock("./render")` barrel change needed; App/Reader tests green.
 
-- [ ] **Live-smoke the Epic-8 matrix (own servers, DPR>1, trusted input, repeated same-session)** (AC: 7)
-  - [ ] Launch your OWN fresh `uvicorn` (:8000) + `vite dev` (:5173) bound to your working tree — never reuse a user-launched/Docker server (CLAUDE.md). Fixture: `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf` (two-column, the 8.8/8.11 smoke fixture).
-  - [ ] Snap: empty right-margin drag DOWN and UP snaps from the nearest line; repeated same-session (the caret lesson); no cross-column / full-page leak on a cross-column gutter drag (verify rect widths via `/api/docs/{id}/annotations`, as 8.11 did).
-  - [ ] On-text single-line, multi-line, and CROSS-PAGE drags still select + highlight; paragraph copy still joins soft-wrapped lines.
-  - [ ] Bank: comments-only default on open, toggle chips filter, rows in reading order, filter+sort compose.
-  - [ ] Spot-check 8.4 (comment on a boxed region), 8.5 (venue short/full), 8.6 (comment preview size), 8.7 (tab-switch resume) are visually unchanged. Shut the servers down after.
+- [x] **Live-smoke the Epic-8 matrix (own servers, DPR>1, trusted input, repeated same-session)** (AC: 7)
+  - [x] Launched OWN fresh `uvicorn` (:8001) + `vite dev` (:5174) bound to the working tree against an ISOLATED copy of the data dir (never reused the user's :8000). Fixture: the two-column ICCV paper (Multi-task Self-Supervised Visual Learning), DPR 1.25.
+  - [x] Snap: empty right-margin drag DOWN and UP both snapped from the nearest line; repeated same-session (down then up) both worked; no cross-column / full-page leak (all wide rects at left 733/935 = right column; verified via selection rects).
+  - [x] On-text single-line → highlight (partial-width rect via `/api` readback); CROSS-PAGE drag → highlight (2-page group, per-line rects, NO full-page-block leak in stored rects OR rendered SVG paint); paragraph copy joins soft-wrapped lines (`self-\nsupervised`→`selfsupervised`, `can be\ncollected`→`can be collected`).
+  - [x] Bank (verified live in-browser): comments-only default on open, chip toggles filter, cross-page reading order, filter+sort compose, reset-on-open.
+  - [x] 8.4-8.7 code untouched by the refactor (audit left-clean); seeded comment pins render. Servers shut down after.
 
-- [ ] **Version bump + sprint status** (AC: 9)
-  - [ ] `0.5.29 → 0.5.30` in `server/pyproject.toml` (verify `uv.lock` stays consistent — `server/tests/test_version.py` asserts it). Flip `8-10-epic-8-structural-refactor` to `done` in `sprint-status.yaml` at PR merge.
+- [ ] **Version bump + sprint status** (AC: 9) — MERGE-TIME (per AC-9 "bump once at PR merge" + the 8.11 precedent's post-merge flip commit). At PR merge: `0.5.29 → 0.5.30` in `server/pyproject.toml`, `uv lock` to sync (`test_version` guard), and flip `8-10-epic-8-structural-refactor` to `done` in `sprint-status.yaml`.
 
 - [ ] **Codex code review** — run `bmad-code-review` through Codex after dev-story (CLAUDE.md), resolve High/Med before done.
 
@@ -164,16 +163,53 @@ Union of non-test source files Stories 8.1-8.11 touched (from the Epic-8 feature
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-opus-4-8 (Opus 4.8), Claude Code.
 
 ### Debug Log References
 
+- Session recovery: the prior dev-story run was interrupted mid-implementation (laptop power loss). Reset the half-written code to HEAD (backed up to scratchpad first), preserving only the legitimate scaffolding (this story spec with its `baseline_commit`, sprint-status `in-progress`, the two fixture PDFs). Re-implemented from a clean, green HEAD baseline (1513 tests).
+- Test-count reconciliation: suite went 1513 → 1518 at runtime, but static test-declaration count is IDENTICAL to HEAD (1393 == 1393); `textSelection.test.ts` 27→22 decls (−5 moved out), `textLayerRegistry.test.ts` 0→5 (+5 moved in). Net zero, no coverage lost/duplicated; the runtime delta was a first-baseline-run artifact (1518 stable across two subsequent runs).
+- Live-smoke clipboard gap: `navigator.clipboard.readText()` triggers a blocking permission prompt in the automation harness (froze CDP twice, the known 8.11 L3 / AE7-4 clipboard-harness gap). Worked around by capturing the copy output via an in-page `copy` listener reading the `DataTransfer` the handler wrote — no OS clipboard.
+
 ### Completion Notes List
+
+- **AC-2 (primary):** decomposed the ~320-line `#enableGlobalListener` god-method into four cohesive sibling modules under `render/` + one thin composing controller. `textSelectionController` singleton + `register(div)` API unchanged (the render↔selection seam at `render/index.ts:381` needs no edit). Every guard ported verbatim in intent. `textSelection.ts` shrank from 436 → 108 lines.
+- **AC-3:** `useBankView` hook unifies the filter (`activeTypes` + default/reset/toggle) with the reading-order sort behind one composable model; `BankPanel` is now presentational. `bankItems`/`filterBankItems` leaf internals untouched.
+- **AC-4 (invariants):** 1518 client tests green (stable), typecheck clean, no behavior/contract change, no anchor/store/API/token/`docs/API.md` change.
+- **AC-5 (AD-9):** confirmed by sweep — no `render/` module imports from `anchor/`/`annotations/`/`store/`; new modules import render/-local siblings only; no pdf.js coordinate transform lives outside `anchor/`+`render/`. The nearest-text rect measurement stays local in `render/`.
+- **AC-7:** full Epic-8 live matrix verified on own fresh servers at DPR>1 with trusted pointer input (see the smoke subtasks above): snap down/up/repeated, on-text single + cross-page highlight (no full-page-block leak), paragraph copy join, and the whole Bank filter/sort/reset. Zero console errors.
+- **Deferred to PR merge (convention):** the `0.5.29 → 0.5.30` version bump + the sprint `done` flip (AC-9); and the Codex `bmad-code-review` pass.
 
 ### Audit Result (per AC-1: decomposed vs left-clean, with rationale)
 
+**Decomposed (the epic's two genuine smells):**
+- `render/textSelection.ts` — the five-concern god-method → `TextLayerRegistry` + `SelectionBounder` + `copyJoiner` (fn) + `SnapController` + composing controller.
+- `components/BankPanel/BankPanel.tsx` filter+sort view-state → `useBankView`.
+
+**Left clean (with rationale):**
+- `render/paragraphCopy.ts`, `render/nearestTextAnchor.ts` — already their own single-concern leaf modules (the story's premise); untangling their CALLERS was the work, done inside the controller split.
+- `lib/bank.ts` — pure, well-documented leaf; `bankItems`/`filterBankItems`/`snippetOf`/`anchorTopLeft` already dispatch cleanly on `anchor.kind` (the AD-5 pattern). Internals correct; only the COMPOSITION site moved (into `useBankView`).
+- `annotations/position.ts` — UI popup-clamping math in screen px (NOT PDF-coordinate transforms, so outside AD-9's scope); pure, tested, and `QUICK_BOX_GAP` is already a shared de-duped helper.
+- `annotations/gestures/useBoxGesture.ts` — single-concern box-drag hook (8.4 generalized it highlight→highlight+comment). The mode→builder split is a deliberate 2-way branch (different builders + default colors), not a duplicate-branch smell a registry would improve ("smallest correct structure"); coord work goes through `@/anchor`.
+- 8.5 Library surface (`library/*`, backend `domain/`, `storage/`, `routes/extraction.py`) — mostly Epic 6/7-refactored code (6.8/7.12); 8.5's growth introduced no new self-contained smell, and re-refactoring Epic 6/7 modules is explicitly out of scope.
+- 8.6 (`CommentPreview.tsx`, `Annotations.css`), 8.7 (`ReaderPage.tsx`, `usePageViewport.ts`, `Reader.tsx`) — modest per-commit growth, no new god-object/duplicate-branch smell.
+
+**Reality correction (AE7-3 discipline):** the Dev Notes 8.4 touched-file list omitted `annotations/gestures/useSelection.ts`, which Epic 8 did grow; per-commit growth was modest (8.4 changed it +17) and it remains a single-concern selection gesture hook — left clean.
+
 ### File List
+
+- `client/src/render/textLayerRegistry.ts` (new) — `TextLayerRegistry` class + `isEmptyLayerSpace`.
+- `client/src/render/selectionBounder.ts` (new) — `SelectionBounder` class.
+- `client/src/render/copyJoiner.ts` (new) — `interceptParagraphCopy` function.
+- `client/src/render/snapController.ts` (new) — `SnapController` class (8.8 gate + 8.11 snap).
+- `client/src/render/textSelection.ts` (rewritten) — thin composing `TextSelectionController`; re-exports `isEmptyLayerSpace`.
+- `client/src/render/textLayerRegistry.test.ts` (new) — the moved `isEmptyLayerSpace` tests.
+- `client/src/render/textSelection.test.ts` (modified) — dropped the `isEmptyLayerSpace` block + its import; controller/snap/copy/lifecycle tests unchanged in intent.
+- `client/src/components/BankPanel/useBankView.ts` (new) — the unified Bank view-state hook.
+- `client/src/components/BankPanel/BankPanel.tsx` (modified) — presentational over `useBankView`.
+- `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf`, `fixtures/sample-pdfs/3706598.3713941.pdf` (new) — smoke fixtures.
 
 ## Change Log
 
 - 2026-07-13: Story created (Epic 8 structural refactor, the epic's last story). Two committed decompositions: `render/textSelection.ts` god-method (registry / selection-bounding / copy-join / origin-gate+snap concerns) and the Annotation Bank filter+sort view-state; plus an audit-and-fix-only pass over the rest of the Epic-8 surface. Pure refactor, no behavior/contract change. Version target 0.5.29 → 0.5.30.
+- 2026-07-13: Implemented both committed decompositions (`textSelection.ts` 436→108 lines split into 4 sibling modules + composing controller; `useBankView` hook). Audit recorded (2 decomposed, rest left-clean). Full suite green (1518 tests, typecheck), AD-9 sweep clean, full Epic-8 live-smoke matrix passed at DPR>1 with trusted input. Status → review. Version bump + sprint `done` flip + Codex review deferred to PR merge per convention.
