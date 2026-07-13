@@ -5,7 +5,7 @@
 // (Story 4.1 AC-5, "no leak / lifecycle-safe").
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { isEmptyLayerSpace, textSelectionController } from "./textSelection";
+import { textSelectionController } from "./textSelection";
 import * as nearest from "./nearestTextAnchor";
 
 // Story 8.11: the controller resolves the origin anchor context + the live
@@ -36,46 +36,6 @@ beforeEach(() => {
   });
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {
     rafQueue = [];
-  });
-});
-
-describe("isEmptyLayerSpace", () => {
-  it("is true for the registered .textLayer container element itself", () => {
-    const div = document.createElement("div");
-    const endOfContent = document.createElement("div");
-    const textLayers = new Map([[div, endOfContent]]);
-    expect(isEmptyLayerSpace(div, textLayers)).toBe(true);
-  });
-
-  it("is true for the layer's endOfContent child", () => {
-    const div = document.createElement("div");
-    const endOfContent = document.createElement("div");
-    endOfContent.className = "endOfContent";
-    div.append(endOfContent);
-    const textLayers = new Map([[div, endOfContent]]);
-    expect(isEmptyLayerSpace(endOfContent, textLayers)).toBe(true);
-  });
-
-  it("is false for a glyph span descendant of the layer", () => {
-    const div = document.createElement("div");
-    const endOfContent = document.createElement("div");
-    const span = document.createElement("span");
-    span.textContent = "NYU v2.";
-    div.append(span, endOfContent);
-    const textLayers = new Map([[div, endOfContent]]);
-    expect(isEmptyLayerSpace(span, textLayers)).toBe(false);
-  });
-
-  it("is false for an unrelated/unregistered element", () => {
-    const div = document.createElement("div");
-    const endOfContent = document.createElement("div");
-    const textLayers = new Map([[div, endOfContent]]);
-    const other = document.createElement("div");
-    expect(isEmptyLayerSpace(other, textLayers)).toBe(false);
-  });
-
-  it("is false for a null target", () => {
-    expect(isEmptyLayerSpace(null, new Map())).toBe(false);
   });
 });
 
@@ -346,6 +306,35 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     expect(mockOrigin).not.toHaveBeenCalled();
 
     unregister();
+  });
+
+  it("does NOT carry a stale empty-origin latch across a full teardown + re-register (Codex review, High)", () => {
+    // Pre-refactor the gate state was closure-local to the enable cycle and
+    // discarded on last-layer teardown; the decomposition must preserve that.
+    const { div, unregister } = setupLayer();
+    const endOfContent = div.querySelector(".endOfContent")!;
+    mockOrigin.mockReturnValue(null); // empty origin, no nearby text -> emptyOrigin latched, not snapping
+
+    // Empty-origin pointerdown latches emptyOrigin=true (Story 8.8 path).
+    endOfContent.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 10, clientY: 10, button: 0 }));
+
+    // Full teardown mid-gesture: every layer unregisters BEFORE pointerup, so
+    // `release()` never fires — only the abort path runs.
+    unregister();
+
+    // A fresh layer registers (new enable cycle).
+    const div2 = document.createElement("div");
+    div2.className = "textLayer";
+    document.body.append(div2);
+    const unregister2 = textSelectionController.register(div2);
+
+    // A selectstart with no preceding pointerdown (e.g. Ctrl+A) must NOT be
+    // suppressed: the latch must be fresh, not carried over from the aborted cycle.
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(false);
+
+    unregister2();
   });
 
   it("cancels a pending snap frame when the controller tears down (M3)", () => {

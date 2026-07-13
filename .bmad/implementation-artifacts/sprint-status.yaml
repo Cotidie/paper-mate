@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-13 (story 8-11-snap-empty-space-drag-to-text-attempt-2: review -> done at PR #71 merge; version 0.5.29)"
+last_updated: "2026-07-13 (story 8-10-epic-8-structural-refactor: in-progress -> review via dev-story)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -277,7 +277,7 @@ development_status:
   # 8-11 sequenced BEFORE 8-10: the snap it adds is one of the concerns 8-10's
   # textSelection.ts refactor absorbs (added 2026-07-12, design-spec attempt 2 after 8-9 negative spike).
   8-11-snap-empty-space-drag-to-text-attempt-2: done
-  8-10-epic-8-structural-refactor: backlog
+  8-10-epic-8-structural-refactor: review
   epic-8-retrospective: optional
 
   # Epic 9: Phase 2 kickoff — reading helper & paper portability (post-v1, Phase-2) — added

@@ -1,434 +1,88 @@
-// render/textSelection — reproduces pdf.js `TextLayerBuilder`'s post-render
-// selection machinery (the `endOfContent` bound + the shared global
-// `.selecting` listener; `pdf_viewer.mjs:6195-6403`) over OUR persistent,
-// atomically-swapped text-layer divs (`renderPage` in `render/index.ts`).
+// render/textSelection — the composing controller for the live-selection
+// machinery over OUR persistent, atomically-swapped text-layer divs
+// (`renderPage` in `render/index.ts`). It owns ONE shared `document`-level
+// listener set (enabled on the first `register`, torn down when the last card
+// unregisters, so scrolling/zooming a long paper never accumulates listeners)
+// and wires the four cohesive concerns to it:
 //
-// Two bugs this fixes (Story 4.1): without `endOfContent` bounding the live
-// selection, a drag that ends on a short trailing run (e.g. a line-ending
-// period) extends unbounded into the text layer's remaining height, painting
-// a tall `::selection` band; and the `<br role="presentation">` pdf.js emits
-// per line must stay selectable (never `user-select: none`) for its `\n` to
-// reach `selection.toString()`, which is how inter-line whitespace survives
-// copy.
+//   - `TextLayerRegistry`   — the live layer↔bound map + its queries.
+//   - `SelectionBounder`    — Story 4.1 `endOfContent` bounding (selectionchange).
+//   - `interceptParagraphCopy` — Story 8.1 soft-wrap-joining copy.
+//   - `SnapController`      — Story 8.8 empty-origin gate + Story 8.11 snap.
 //
-// Adopt-stable-solutions (Epic-1 retro / AD-2 applied under the custom-
-// overlay choice): this ports the reference implementation's algorithm
-// rather than re-deriving selection-bounding math from scratch. Imported by
-// `render/index.ts` directly (sub-path, like `usePageViewport`), NOT
-// re-exported from the `render/` barrel — `renderPage` is what Reader/App
-// tests mock, so this stays a real, isolated, unit-testable module (AD-9: no
-// import from anchor/, annotations/, or store/).
-//
-// Story 8.1 adds one more `{ signal }`-scoped listener here: `copy`, which
-// rewrites the clipboard so a soft-wrapped paragraph pastes as one line (see
-// `paragraphCopy.ts`). It reuses this controller's registry/lifecycle rather
-// than standing up a second global listener manager.
-//
-// Story 8.11 adds the empty-origin SNAP: instead of Story 8.8's flat no-op, a
-// drag starting in blank space next to text resolves the nearest glyph once
-// (via `nearestTextAnchor`, caret-API-free — the caret family is poisoned
-// mid-session, see deferred-work.md#Discarded: Story 8.9) and seeds a real
-// native selection with `setBaseAndExtent` each `pointermove`. Everything
-// downstream (create-on-release, copy, quick-box) already reads
-// `window.getSelection()`, so it works unchanged. The no-op stays as the
-// fallback when no line is near (a far, truly-empty margin).
+// This is the pdf.js `TextLayerBuilder` selection port (the `endOfContent`
+// bound + shared `.selecting` listener; `pdf_viewer.mjs:6195-6403`), split
+// along OOP lines. Imported by `render/index.ts` directly (sub-path, like
+// `usePageViewport`), NOT re-exported from the `render/` barrel — `renderPage`
+// is what Reader/App tests mock, so this stays a real, isolated, unit-testable
+// module (AD-9: no import from anchor/, annotations/, or store/).
 
-import { joinParagraphLines, measureSelectedLines } from "./paragraphCopy";
-import { resolveNearestText, resolveOrigin, type OriginContext, type NearestTextPoint } from "./nearestTextAnchor";
+import { interceptParagraphCopy } from "./copyJoiner";
+import { SelectionBounder } from "./selectionBounder";
+import { SnapController } from "./snapController";
+import { TextLayerRegistry } from "./textLayerRegistry";
 
-/**
- * True when `target` is empty page space in a registered text layer: the
- * `.textLayer` container element itself, or its `endOfContent` bound child.
- * False for a glyph `<span>` (or any other descendant) and for anything
- * outside a registered layer. Target classification only, no layout reads
- * (Story 8.8 AC-4) — pointerdown over empty space must not start a native
- * selection that then grabs whatever text the drag wanders across.
- */
-export function isEmptyLayerSpace(target: EventTarget | null, textLayers: ReadonlyMap<Element, HTMLElement>): boolean {
-  if (!(target instanceof Element)) return false;
-  if (textLayers.has(target)) return true;
-  for (const endOfContent of textLayers.values()) {
-    if (target === endOfContent) return true;
-  }
-  return false;
-}
+export { isEmptyLayerSpace } from "./textLayerRegistry";
 
-/**
- * Shared across every live page card (mirrors `TextLayerBuilder`'s static
- * registry): one `document`-level `selectionchange`/pointer listener set,
- * enabled on the first `register` and torn down when the last card
- * unregisters, so scrolling/zooming a long paper never accumulates listeners.
- */
 class TextSelectionController {
-  #textLayers = new Map<Element, HTMLElement>();
-  #selectionChangeAbort: AbortController | null = null;
+  // The registry PERSISTS across enable cycles (it holds the live layer map,
+  // and is empty at teardown so it carries no stale refs). The snap gate and the
+  // selection-bounder, by contrast, are built FRESH per enable cycle (see
+  // `#enableGlobalListener`) — matching the pre-refactor closure-local state, so
+  // an interrupted gesture cannot leave `emptyOrigin`/`prevRange` stale for the
+  // next document's cycle.
+  #registry = new TextLayerRegistry();
+  #abort: AbortController | null = null;
 
   /**
-   * Wire the live selection machinery onto `div` (a rendered `.textLayer`):
-   * append its `endOfContent` bound, toggle `.selecting` on mousedown, and
-   * ensure the shared global listener is running. Returns the cleanup to run
-   * on cancel/re-render so the div never stays registered past its content.
+   * Wire the live selection machinery onto `div` (a rendered `.textLayer`) and
+   * ensure the shared global listener is running. Returns the cleanup to run on
+   * cancel/re-render so the div never stays registered past its content.
    */
   register(div: HTMLElement): () => void {
-    const endOfContent = document.createElement("div");
-    endOfContent.className = "endOfContent";
-    div.append(endOfContent);
-    div.addEventListener("mousedown", () => div.classList.add("selecting"));
-    this.#textLayers.set(div, endOfContent);
+    this.#registry.register(div);
     this.#enableGlobalListener();
     return () => this.#unregister(div);
   }
 
-  /**
-   * True only if EVERY text node `range` touches sits inside one of our
-   * registered text layers. Checking just the range's start/end containers
-   * (as an earlier version did) misses content interposed between them in
-   * document order — a range can start and end inside registered layers
-   * while still covering non-layer content along the way. Bounding the walk
-   * to `range.commonAncestorContainer` keeps this cheap (proportional to the
-   * selection, not the document).
-   */
-  #rangeStaysWithinTextLayers(range: Range): boolean {
-    const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT, {
-      acceptNode: (node) => (range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
-    });
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const layer = node.parentElement?.closest<HTMLElement>(".textLayer");
-      if (!layer || !this.#textLayers.has(layer)) return false;
-    }
-    return true;
-  }
-
   #unregister(div: Element): void {
-    this.#textLayers.delete(div);
-    if (this.#textLayers.size === 0) {
-      this.#selectionChangeAbort?.abort();
-      this.#selectionChangeAbort = null;
+    this.#registry.unregister(div);
+    if (this.#registry.size === 0) {
+      this.#abort?.abort();
+      this.#abort = null;
     }
   }
 
   #enableGlobalListener(): void {
-    if (this.#selectionChangeAbort) return;
+    if (this.#abort) return;
     const controller = new AbortController();
-    this.#selectionChangeAbort = controller;
+    this.#abort = controller;
     const { signal } = controller;
+    const registry = this.#registry;
+    // Fresh per enable cycle (last-layer teardown aborts + discards these; a
+    // re-register rebuilds them), so a gesture interrupted by a full teardown
+    // can't carry `emptyOrigin`/`prevRange`/Firefox-detection into the next one.
+    const snap = new SnapController(registry);
+    const bounder = new SelectionBounder();
 
-    const reset = (endOfContent: HTMLElement, div: Element): void => {
-      div.append(endOfContent);
-      endOfContent.style.width = "";
-      endOfContent.style.height = "";
-      div.classList.remove("selecting");
-    };
+    signal.addEventListener("abort", () => snap.abort());
 
-    let pointerDown = false;
-    let emptyOrigin = false;
-    // Story 8.11 snap state: on an empty-origin pointerdown that resolves a
-    // nearest glyph, `snapLayer` is the origin page's text layer, `snapOrigin`
-    // the direction-aware anchor context (paragraph-boundary anchoring in a
-    // gap), and `snapFocus` the last resolved drag point. `snapping` gates the
-    // drag that drives the native selection.
-    let snapping = false;
-    let snapLayer: Element | null = null;
-    let snapOrigin: OriginContext | null = null;
-    // The snap does not paint until the cursor first TOUCHES a text row (Issue
-    // #1): `snapEngaged` flips true on the first frame the focus is in a line's
-    // vertical band, and only then is `snapAnchor` fixed (by drag direction for
-    // a gap origin, or the in-band char for a side origin) and the selection
-    // extended. Before engaging, nothing is painted.
-    let snapEngaged = false;
-    let snapAnchor: NearestTextPoint | null = null;
-    let snapFocus: NearestTextPoint | null = null;
-    // rAF throttle: an empty-origin snap drives the selection ITSELF (unlike an
-    // on-text drag the browser drives natively). Calling setBaseAndExtent on
-    // every pointermove fires the selectionchange handler + forces layout
-    // synchronously many times per frame, thrashing and starving event delivery
-    // (the "laggy from empty space, fast from text" report). Coalesce to one
-    // update per animation frame, matching the browser's own native cadence.
-    let snapPoint: { x: number; y: number } | null = null;
-    let snapRaf = 0;
-    let isFirefox: boolean | undefined;
-    let prevRange: Range | null = null;
-
-    // The registered `.textLayer` the pointer target is (or is inside): the
-    // target IS a layer, or is a layer's `endOfContent` bound child.
-    const originLayerOf = (target: EventTarget | null): Element | null => {
-      if (!(target instanceof Element)) return null;
-      if (this.#textLayers.has(target)) return target;
-      for (const [div, endOfContent] of this.#textLayers) if (target === endOfContent) return div;
-      return null;
-    };
-
-    // The anchor fixed at ENGAGE (first row-touch): a side origin (pointer beside
-    // a line) uses that line's in-band char; a gap origin uses the paragraph
-    // boundary in the drag's direction — dragging up anchors at the end of the
-    // line above the gap, dragging down at the start of the line below.
-    const anchorAtEngage = (ctx: OriginContext, pointerY: number): NearestTextPoint | null => {
-      if (ctx.inBand) return ctx.inBand;
-      if (pointerY < ctx.originY) return ctx.aboveEnd ?? ctx.belowStart;
-      return ctx.belowStart ?? ctx.aboveEnd;
-    };
-
-    // Apply one snap frame. Re-resolve the focus LIVE (nearest text to the
-    // current pointer; re-measuring keeps it correct as the page scrolls under
-    // the drag). Until the cursor first reaches a text row (focus.onRow), paint
-    // nothing (Issue #1). On that first touch, ENGAGE: fix the anchor once (so
-    // it can't flip mid-drag) and start extending. Once engaged: while the
-    // cursor is on a row, extend the selection to it — no horizontal gate, so a
-    // cursor deep in the side margin (same row) keeps tracking (Issue #2); while
-    // the cursor sits in a blank vertical gap between paragraphs (off-row),
-    // COLLAPSE to the anchor so no stale selection lingers at a point with no
-    // text.
-    const applySnapFrame = (): void => {
-      snapRaf = 0;
-      if (!snapping || !snapOrigin || !snapLayer || !snapPoint) return;
-      // The origin layer can be unregistered mid-drag (a scroll/zoom re-render
-      // detaches it) while other pages stay registered. Its glyph rects then read
-      // as zero and its anchor nodes are detached, so bail rather than call
-      // setBaseAndExtent with detached nodes.
-      if (!snapLayer.isConnected) return;
-      const focus = resolveNearestText(snapLayer, snapPoint.x, snapPoint.y);
-      const onRow = !!focus && focus.onRow;
-      if (!snapEngaged) {
-        if (!onRow) return; // still in blank space — paint nothing
-        snapEngaged = true;
-        snapAnchor = anchorAtEngage(snapOrigin, snapPoint.y);
-      }
-      // On a row → extend to it; off a row (blank gap) → collapse to the anchor.
-      snapFocus = onRow ? { node: focus!.node, offset: focus!.offset } : snapAnchor;
-      const a = snapAnchor;
-      const f = snapFocus ?? snapAnchor;
-      if (a && f) document.getSelection()?.setBaseAndExtent(a.node, a.offset, f.node, f.offset);
-    };
-    const scheduleSnapFrame = (): void => {
-      if (snapping && snapRaf === 0) snapRaf = requestAnimationFrame(applySnapFrame);
-    };
-    // Teardown of the whole controller (last text layer unregisters) removes
-    // these listeners but cannot clear a rAF already queued for a snap frame —
-    // cancel it so no orphaned frame fires against detached geometry.
-    signal.addEventListener("abort", () => {
-      if (snapRaf !== 0) {
-        cancelAnimationFrame(snapRaf);
-        snapRaf = 0;
-      }
-      snapping = false;
-    });
-
-    document.addEventListener(
-      "pointerdown",
-      (event) => {
-        pointerDown = true;
-        emptyOrigin = isEmptyLayerSpace(event.target, this.#textLayers);
-        snapping = false;
-        snapLayer = null;
-        snapOrigin = null;
-        snapEngaged = false;
-        snapAnchor = null;
-        snapFocus = null;
-        snapPoint = null;
-        if (!emptyOrigin) return;
-        // Story 8.11: resolve the origin's direction-aware anchor context ONCE.
-        // If the pointer is near enough to text (the proximity gate = the accepted
-        // "start border"; a far, truly-empty margin does NOT snap), arm the snap;
-        // the drag paints only once the cursor touches a row (see applySnapFrame).
-        // Otherwise fall through to Story 8.8's selectstart-suppress no-op below.
-        // Only the PRIMARY button drives a text selection; a middle/right-button
-        // empty-space press must not arm the snap or preventDefault (that would
-        // interfere with middle-button autoscroll and the right-click place-a-
-        // comment/memo picker).
-        if (event.button !== 0) return;
-        const layer = originLayerOf(event.target);
-        const origin = layer ? resolveOrigin(layer, event.clientX, event.clientY) : null;
-        const seed = origin && (origin.inBand ?? origin.belowStart ?? origin.aboveEnd);
-        if (layer && origin && seed) {
-          // We DRIVE the native selection per-frame (rAF-throttled) here — a
-          // deliberate crossing of Story 8.9's spike-budget "no per-move
-          // selection driving" guard. That guard's rationale was the reverted
-          // attempts' column-band CLIPPING; we never clip. `setBaseAndExtent`
-          // yields the plain native contiguous range, identical to an on-text
-          // drag between the same two points — so a snap drag behaves exactly
-          // like a text drag (it can extend across columns as the pointer moves),
-          // only with its START snapped to the nearest text. preventDefault stops
-          // the browser's click-to-collapse on release, which would otherwise
-          // wipe the built selection before pointerup reads it
-          // (deferred-work.md#Discarded: Story 4.2 Part B).
-          event.preventDefault();
-          // Clear any pre-existing selection when arming: the snap paints nothing
-          // until the cursor first touches a row, so a stale range left over from
-          // an earlier gesture must not linger on screen or be consumed on release
-          // if this drag never engages.
-          document.getSelection()?.removeAllRanges();
-          snapping = true;
-          snapLayer = layer;
-          snapOrigin = origin;
-        }
-      },
-      { signal },
-    );
-    document.addEventListener(
-      "pointermove",
-      (event) => {
-        if (!snapping) return;
-        snapPoint = { x: event.clientX, y: event.clientY };
-        scheduleSnapFrame();
-      },
-      { signal },
-    );
-    // Scrolling mid-drag (the user wheel-scrolls while holding the button) fires
-    // no pointermove, but the content under the cursor changes — re-resolve from
-    // the last pointer position against the new (scrolled) geometry so the
-    // selection tracks. Capture phase: the pdf-canvas scrolls, and `scroll` does
-    // not bubble.
-    document.addEventListener("scroll", scheduleSnapFrame, { signal, capture: true });
-    const releasePointer = (): void => {
-      pointerDown = false;
-      emptyOrigin = false;
-      snapping = false;
-      snapLayer = null;
-      snapOrigin = null;
-      snapEngaged = false;
-      snapAnchor = null;
-      snapFocus = null;
-      snapPoint = null;
-      if (snapRaf !== 0) {
-        cancelAnimationFrame(snapRaf);
-        snapRaf = 0;
-      }
-      this.#textLayers.forEach(reset);
-    };
-    // The rAF throttle means the LAST pointermove of a drag may still be queued
-    // (or a whole quick drag may fit within one frame) when the button releases.
-    // Flush it synchronously in the CAPTURE phase — before the bubble-phase
-    // create-on-release consumer (`useCreateQuickBox`) reads `window.getSelection()`
-    // — so the mark is built from the final range, not a stale one (and a
-    // single-frame drag still forms its selection). Runs before `releasePointer`
-    // clears the state.
-    const flushSnap = (): void => {
-      if (!snapping || !snapPoint) return;
-      if (snapRaf !== 0) {
-        cancelAnimationFrame(snapRaf);
-        snapRaf = 0;
-      }
-      applySnapFrame();
-    };
-    document.addEventListener("pointerup", flushSnap, { signal, capture: true });
-    document.addEventListener("pointerup", releasePointer, { signal });
+    document.addEventListener("pointerdown", (event) => snap.onPointerDown(event), { signal });
+    document.addEventListener("pointermove", (event) => snap.onPointerMove(event), { signal });
+    // Capture phase: the pdf-canvas scrolls, and `scroll` does not bubble.
+    document.addEventListener("scroll", () => snap.onScroll(), { signal, capture: true });
+    // Capture-phase flush BEFORE the bubble-phase create-on-release consumer.
+    document.addEventListener("pointerup", () => snap.flush(), { signal, capture: true });
+    document.addEventListener("pointerup", () => snap.release(), { signal });
     // A cancelled gesture (e.g. the browser revoking pointer capture) skips
     // pointerup entirely; without this, emptyOrigin stays latched and blocks
     // an unrelated later selectstart until the next pointerdown/blur.
-    document.addEventListener("pointercancel", releasePointer, { signal });
-    window.addEventListener("blur", releasePointer, { signal });
-    // A drag whose origin is empty page space with NO nearby line must not
-    // start a native selection at all (Story 8.8 AC-1): it would anchor at the
-    // nearest glyph and drag through every span in between. `emptyOrigin` is
-    // latched at pointerdown so this also covers a drag that starts blank and
-    // wanders onto text. On-text origins are untouched (AC-2). When the snap is
-    // active (`snapping`), the selection is intentional, so do NOT suppress it.
-    document.addEventListener(
-      "selectstart",
-      (event) => {
-        if (emptyOrigin && !snapping) event.preventDefault();
-      },
-      { signal },
-    );
-    document.addEventListener(
-      "keyup",
-      () => {
-        if (!pointerDown) this.#textLayers.forEach(reset);
-      },
-      { signal },
-    );
-
-    document.addEventListener(
-      "copy",
-      (event: ClipboardEvent) => {
-        const selection = document.getSelection();
-        if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
-        // A discontiguous multi-range selection (e.g. Firefox ctrl+drag) is
-        // rare, and the join heuristic operates over a single contiguous
-        // range's lines. Rather than silently keep only the first range,
-        // fall through to native copy so nothing is dropped.
-        if (selection.rangeCount !== 1) return;
-        const range = selection.getRangeAt(0);
-
-        // AC-5: only act when the range is entirely within OUR registered
-        // text layers. Anything else (a memo/comment editor, Bank text, app
-        // chrome, or a mixed selection spanning one of those) falls through
-        // to native copy untouched — no preventDefault.
-        if (!this.#rangeStaysWithinTextLayers(range)) return;
-
-        const lines = measureSelectedLines(selection);
-        if (lines.length === 0) return;
-        const joined = joinParagraphLines(lines);
-        if (!joined) return;
-
-        event.clipboardData?.setData("text/plain", joined);
-        event.preventDefault();
-      },
-      { signal },
-    );
-
-    document.addEventListener(
-      "selectionchange",
-      () => {
-        const selection = document.getSelection();
-        if (!selection || selection.rangeCount === 0) {
-          this.#textLayers.forEach(reset);
-          return;
-        }
-
-        const active = new Set<Element>();
-        for (let i = 0; i < selection.rangeCount; i++) {
-          const range = selection.getRangeAt(i);
-          for (const div of this.#textLayers.keys()) {
-            if (!active.has(div) && range.intersectsNode(div)) active.add(div);
-          }
-        }
-        for (const [div, endOfContent] of this.#textLayers) {
-          if (active.has(div)) div.classList.add("selecting");
-          else reset(endOfContent, div);
-        }
-
-        // Firefox reports the vendor-prefixed property back from
-        // getComputedStyle; other browsers don't recognize `-moz-user-select`
-        // and return "". The endOfContent div always has `user-select: none`
-        // set (vendor pdf_viewer.css), so this detects Firefox without a UA
-        // sniff (mirrors pdf.js).
-        const [firstEndOfContent] = this.#textLayers.values();
-        isFirefox ??=
-          firstEndOfContent !== undefined &&
-          getComputedStyle(firstEndOfContent).getPropertyValue("-moz-user-select") === "none";
-        if (isFirefox) return;
-
-        // Bound the selection: move `endOfContent` to sit right after the
-        // selection's trailing edge within its text layer, so a drag that
-        // extends past the last glyph can't paint into the layer's full
-        // remaining height.
-        const range = selection.getRangeAt(0);
-        const modifyStart =
-          prevRange !== null &&
-          (range.compareBoundaryPoints(Range.END_TO_END, prevRange) === 0 ||
-            range.compareBoundaryPoints(Range.START_TO_END, prevRange) === 0);
-        let anchor: Node | null = modifyStart ? range.startContainer : range.endContainer;
-        if (anchor.nodeType === Node.TEXT_NODE) anchor = anchor.parentNode;
-        if (!modifyStart && range.endOffset === 0) {
-          do {
-            while (anchor && !anchor.previousSibling) anchor = anchor.parentNode;
-            anchor = anchor ? anchor.previousSibling : null;
-          } while (anchor && anchor.childNodes.length === 0);
-        }
-
-        const parentTextLayer = anchor?.parentElement?.closest<HTMLElement>(".textLayer") ?? null;
-        const boundDiv = parentTextLayer ? this.#textLayers.get(parentTextLayer) : undefined;
-        if (anchor && parentTextLayer && boundDiv) {
-          boundDiv.style.width = parentTextLayer.style.width;
-          boundDiv.style.height = parentTextLayer.style.height;
-          boundDiv.style.userSelect = "text";
-          anchor.parentElement?.insertBefore(boundDiv, modifyStart ? anchor : anchor.nextSibling);
-        }
-        prevRange = range.cloneRange();
-      },
-      { signal },
-    );
+    document.addEventListener("pointercancel", () => snap.release(), { signal });
+    window.addEventListener("blur", () => snap.release(), { signal });
+    document.addEventListener("selectstart", (event) => snap.suppressSelectStart(event), { signal });
+    document.addEventListener("keyup", () => snap.onKeyup(), { signal });
+    document.addEventListener("copy", (event) => interceptParagraphCopy(event, registry), { signal });
+    document.addEventListener("selectionchange", () => bounder.handleSelectionChange(registry), { signal });
   }
 }
 
