@@ -4,7 +4,7 @@ baseline_commit: 7ac1cbe7c90d578b7ce04633ab4b8a2867b0d14c
 
 # Story 8.10: Epic 8 structural refactor
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -81,7 +81,7 @@ This is a **pure refactor thread**, the same footing as Story 5.0 / 5.3 / 5.4 (E
   - [x] Bank (verified live in-browser): comments-only default on open, chip toggles filter, cross-page reading order, filter+sort compose, reset-on-open.
   - [x] 8.4-8.7 code untouched by the refactor (audit left-clean); seeded comment pins render. Servers shut down after.
 
-- [ ] **Version bump + sprint status** (AC: 9) — MERGE-TIME (per AC-9 "bump once at PR merge" + the 8.11 precedent's post-merge flip commit). At PR merge: `0.5.29 → 0.5.30` in `server/pyproject.toml`, `uv lock` to sync (`test_version` guard), and flip `8-10-epic-8-structural-refactor` to `done` in `sprint-status.yaml`.
+- [x] **Version bump + sprint status** (AC: 9) — done at PR #72 merge: `0.5.29 → 0.5.30` in `server/pyproject.toml` + `uv.lock` synced (`test_version` green), story + `sprint-status.yaml` flipped to `done`.
 
 - [x] **Codex code review** — ran `bmad-code-review` through Codex (GPT-5-Codex). 1 High found + fixed (concern state outliving the enable cycle), regression test added; review approved, no open findings. See the Senior Developer Review section.
 
