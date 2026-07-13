@@ -83,7 +83,7 @@ This is a **pure refactor thread**, the same footing as Story 5.0 / 5.3 / 5.4 (E
 
 - [ ] **Version bump + sprint status** (AC: 9) — MERGE-TIME (per AC-9 "bump once at PR merge" + the 8.11 precedent's post-merge flip commit). At PR merge: `0.5.29 → 0.5.30` in `server/pyproject.toml`, `uv lock` to sync (`test_version` guard), and flip `8-10-epic-8-structural-refactor` to `done` in `sprint-status.yaml`.
 
-- [ ] **Codex code review** — run `bmad-code-review` through Codex after dev-story (CLAUDE.md), resolve High/Med before done.
+- [x] **Codex code review** — ran `bmad-code-review` through Codex (GPT-5-Codex). 1 High found + fixed (concern state outliving the enable cycle), regression test added; review approved, no open findings. See the Senior Developer Review section.
 
 ## Dev Notes
 
@@ -209,7 +209,18 @@ claude-opus-4-8 (Opus 4.8), Claude Code.
 - `client/src/components/BankPanel/BankPanel.tsx` (modified) — presentational over `useBankView`.
 - `fixtures/sample-pdfs/Multi-task self-supervised visual learning.pdf`, `fixtures/sample-pdfs/3706598.3713941.pdf` (new) — smoke fixtures.
 
+## Senior Developer Review (AI) — Codex (GPT-5-Codex), 2026-07-13
+
+Ran `bmad-code-review` through Codex (a different model than the Opus implementer, per CLAUDE.md) over `7ac1cbe..HEAD` (client/ + server/), read-only. Adversarial layers focused on behavior preservation vs the pre-refactor `textSelection.ts`.
+
+**Outcome:** Approved after one fix. 1 High (patch), resolved. 0 decision-needed, 0 deferred. Listener order/phases, rAF binding/coalescing, copy guards, AD-9 boundary, Bank view-state, and relocated test assertions all verified preserved.
+
+### Review Findings
+
+- [x] **[Review][Patch] High — Concern state outlived the enable cycle** [`client/src/render/textSelection.ts:28`] — RESOLVED. Pre-refactor, the gate/snap/bounder state (`emptyOrigin`, `pointerDown`, `prevRange`, `isFirefox`, snap refs) was closure-local to `#enableGlobalListener`, so it was discarded on last-layer teardown and rebuilt fresh on re-register. The decomposition made `SnapController`/`SelectionBounder` singleton instance fields, and `abort()` only cleared `snapRaf`+`snapping` — leaving `#emptyOrigin`/`#prevRange` stale. Failure: an empty-origin gesture interrupted by a full layer teardown (zoom/scroll re-render before `pointerup`) leaves `emptyOrigin` latched; after re-register a `selectstart` with no fresh `pointerdown` (Ctrl+A, shift-arrow) is wrongly suppressed. **Fix:** construct `snap`+`bounder` fresh per enable cycle (registry stays persistent — it is empty at teardown), restoring the old closure-local semantics exactly. Added regression test (verified: fails on the singleton design, passes with the fix). Full suite 1519 green, typecheck clean.
+
 ## Change Log
 
 - 2026-07-13: Story created (Epic 8 structural refactor, the epic's last story). Two committed decompositions: `render/textSelection.ts` god-method (registry / selection-bounding / copy-join / origin-gate+snap concerns) and the Annotation Bank filter+sort view-state; plus an audit-and-fix-only pass over the rest of the Epic-8 surface. Pure refactor, no behavior/contract change. Version target 0.5.29 → 0.5.30.
-- 2026-07-13: Implemented both committed decompositions (`textSelection.ts` 436→108 lines split into 4 sibling modules + composing controller; `useBankView` hook). Audit recorded (2 decomposed, rest left-clean). Full suite green (1518 tests, typecheck), AD-9 sweep clean, full Epic-8 live-smoke matrix passed at DPR>1 with trusted input. Status → review. Version bump + sprint `done` flip + Codex review deferred to PR merge per convention.
+- 2026-07-13: Implemented both committed decompositions (`textSelection.ts` 436→108 lines split into 4 sibling modules + composing controller; `useBankView` hook). Audit recorded (2 decomposed, rest left-clean). Full suite green (1518 tests, typecheck), AD-9 sweep clean, full Epic-8 live-smoke matrix passed at DPR>1 with trusted input. Status → review. Version bump + sprint `done` flip deferred to PR merge per convention.
+- 2026-07-13: Codex `bmad-code-review` — 1 High (concern state outliving the enable cycle) found and fixed (fresh `snap`/`bounder` per enable cycle), regression test added. Full suite 1519 green, typecheck clean. Review approved; no open findings.

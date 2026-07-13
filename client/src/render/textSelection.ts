@@ -25,9 +25,13 @@ import { TextLayerRegistry } from "./textLayerRegistry";
 export { isEmptyLayerSpace } from "./textLayerRegistry";
 
 class TextSelectionController {
+  // The registry PERSISTS across enable cycles (it holds the live layer map,
+  // and is empty at teardown so it carries no stale refs). The snap gate and the
+  // selection-bounder, by contrast, are built FRESH per enable cycle (see
+  // `#enableGlobalListener`) — matching the pre-refactor closure-local state, so
+  // an interrupted gesture cannot leave `emptyOrigin`/`prevRange` stale for the
+  // next document's cycle.
   #registry = new TextLayerRegistry();
-  #bounder = new SelectionBounder();
-  #snap = new SnapController(this.#registry);
   #abort: AbortController | null = null;
 
   /**
@@ -55,8 +59,11 @@ class TextSelectionController {
     this.#abort = controller;
     const { signal } = controller;
     const registry = this.#registry;
-    const snap = this.#snap;
-    const bounder = this.#bounder;
+    // Fresh per enable cycle (last-layer teardown aborts + discards these; a
+    // re-register rebuilds them), so a gesture interrupted by a full teardown
+    // can't carry `emptyOrigin`/`prevRange`/Firefox-detection into the next one.
+    const snap = new SnapController(registry);
+    const bounder = new SelectionBounder();
 
     signal.addEventListener("abort", () => snap.abort());
 

@@ -308,6 +308,35 @@ describe("TextSelectionController — empty-origin snap (Story 8.11 Method A)", 
     unregister();
   });
 
+  it("does NOT carry a stale empty-origin latch across a full teardown + re-register (Codex review, High)", () => {
+    // Pre-refactor the gate state was closure-local to the enable cycle and
+    // discarded on last-layer teardown; the decomposition must preserve that.
+    const { div, unregister } = setupLayer();
+    const endOfContent = div.querySelector(".endOfContent")!;
+    mockOrigin.mockReturnValue(null); // empty origin, no nearby text -> emptyOrigin latched, not snapping
+
+    // Empty-origin pointerdown latches emptyOrigin=true (Story 8.8 path).
+    endOfContent.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 10, clientY: 10, button: 0 }));
+
+    // Full teardown mid-gesture: every layer unregisters BEFORE pointerup, so
+    // `release()` never fires — only the abort path runs.
+    unregister();
+
+    // A fresh layer registers (new enable cycle).
+    const div2 = document.createElement("div");
+    div2.className = "textLayer";
+    document.body.append(div2);
+    const unregister2 = textSelectionController.register(div2);
+
+    // A selectstart with no preceding pointerdown (e.g. Ctrl+A) must NOT be
+    // suppressed: the latch must be fresh, not carried over from the aborted cycle.
+    const selectstart = new Event("selectstart", { cancelable: true, bubbles: true });
+    document.dispatchEvent(selectstart);
+    expect(selectstart.defaultPrevented).toBe(false);
+
+    unregister2();
+  });
+
   it("cancels a pending snap frame when the controller tears down (M3)", () => {
     const { div, glyph, unregister } = setupLayer();
     const node = glyph.firstChild as Text;
