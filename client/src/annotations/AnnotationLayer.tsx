@@ -26,14 +26,15 @@
 // Hover AND selection are GROUP-AWARE and live in the store: a two-page highlight
 // is two annotations in two per-page layers, so each layer reads the shared
 // `hoveredId`/`selectedId` and lights any mark that matches by id OR shares a
-// non-null `group_id` — both pages outline/ring as one (`inActiveGroup`).
+// non-null `group_id` — both pages outline/ring as one (`activeKeyForPage`).
 
 import { ChatCircle, Trash } from "@phosphor-icons/react";
+import { useShallow } from "zustand/react/shallow";
 import type { Annotation, Rect } from "@/api/client";
 import { useAnnotationStore } from "@/store";
 import { denormalizeRect, denormalizePoint, pointsBounds, type PageBox, type ScreenRect } from "@/anchor";
 import { strokeOutline, svgPathFromOutline } from "./pen";
-import { inActiveGroup, markClass, unionRect, markBounds } from "./markGeometry";
+import { markClass, unionRect, markBounds } from "./markGeometry";
 import { useTextEditSession } from "./useTextEditSession";
 import MemoBox from "./MemoBox";
 import "./Annotations.css";
@@ -43,6 +44,65 @@ import "./Annotations.css";
  *  Kept in sync with the CSS token by the comment; used as the `??` fallback on
  *  every pen path (the CSS var can't be read as a number in TSX). */
 const PEN_DEFAULT_ALPHA = 0.4;
+
+/** Build each immutable annotation-map snapshot's page index once. Zustand
+ * actions replace the Map on every real annotation edit, so a WeakMap gives us
+ * snapshot-scoped caching without invalidation bookkeeping or retained history.
+ * Layers then select one small, sorted array instead of each scanning the full
+ * document on every transient store update (notably hover). */
+const pageIndexCache = new WeakMap<Map<string, Annotation>, Map<string, Annotation[]>>();
+
+const pageKey = (docId: string, pageIndex: number) => `${docId}\0${pageIndex}`;
+
+function pageAnnotations(
+  annotations: Map<string, Annotation>,
+  docId: string,
+  pageIndex: number,
+): Annotation[] {
+  let index = pageIndexCache.get(annotations);
+  if (!index) {
+    index = new Map();
+    for (const annotation of annotations.values()) {
+      const key = pageKey(annotation.doc_id, annotation.anchor.page_index);
+      const page = index.get(key);
+      if (page) page.push(annotation);
+      else index.set(key, [annotation]);
+    }
+    for (const page of index.values()) {
+      page.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    }
+    pageIndexCache.set(annotations, index);
+  }
+  return index.get(pageKey(docId, pageIndex)) ?? [];
+}
+
+/** Return a primitive key only when the active annotation affects this page.
+ * A grouped annotation affects every page containing one of its siblings; an
+ * ungrouped annotation affects only its own page. Primitive equality lets
+ * Zustand skip every unrelated AnnotationLayer on hover/select/flash changes. */
+function activeKeyForPage(
+  annotations: Map<string, Annotation>,
+  activeId: string | null,
+  docId: string,
+  pageIndex: number,
+): string | null {
+  if (!activeId) return null;
+  const active = annotations.get(activeId);
+  if (!active || active.doc_id !== docId) return null;
+  if (!active.group_id) {
+    return active.anchor.page_index === pageIndex ? `id:${active.id}` : null;
+  }
+  return pageAnnotations(annotations, docId, pageIndex).some(
+    (annotation) => annotation.group_id === active.group_id,
+  )
+    ? `group:${active.group_id}`
+    : null;
+}
+
+function matchesActiveKey(annotation: Annotation, activeKey: string | null): boolean {
+  if (!activeKey) return false;
+  return activeKey === `id:${annotation.id}` || activeKey === `group:${annotation.group_id}`;
+}
 
 export default function AnnotationLayer({
   docId,
@@ -61,29 +121,60 @@ export default function AnnotationLayer({
   /** Current zoom scale (drives re-derivation, AC-6). */
   scale: number;
 }) {
-  // Subscribe to the keyed map; filter to this doc + page. (Story 2.2 keeps it
-  // simple; a per-page selector is an Epic-3 perf concern.) Recent-wins: sort by
-  // created_at ascending so the newest paints LAST (on top) and receives the
-  // pointer on overlap, matching the opacity-group "topmost wins on shared text".
-  const annotations = useAnnotationStore((s) => s.annotations);
-  const selectedId = useAnnotationStore((s) => s.selectedId);
+  // Select only this page's cached slice. useShallow preserves the prior array
+  // when an immutable Map update changes annotations on another page, so that
+  // page does not re-render. The cached array is already recent-wins sorted.
+  const marks = useAnnotationStore(
+    useShallow((s) => pageAnnotations(s.annotations, docId, pageIndex)),
+  );
+  const selectedId = useAnnotationStore((s) => {
+    if (!s.selectedId) return null;
+    const selected = s.annotations.get(s.selectedId);
+    return selected?.doc_id === docId && selected.anchor.page_index === pageIndex
+      ? s.selectedId
+      : null;
+  });
+  const selectedKey = useAnnotationStore((s) =>
+    activeKeyForPage(s.annotations, s.selectedId, docId, pageIndex),
+  );
   // The box-select marquee's multi-selection (user feature request): a SEPARATE
   // selection mode from selectedId (AD-12 extended) — see markState below for how
   // it joins the ring, and renderMultiSelectFrame for its own bulk Move/Delete
   // group frame (no recolor/restroke — deliberately not routed through the
   // single-mark quick-box).
-  const multiSelectedIds = useAnnotationStore((s) => s.multiSelectedIds);
+  const multiSelectedIds = useAnnotationStore(
+    useShallow((s) =>
+      s.multiSelectedIds.filter((id) => {
+        const annotation = s.annotations.get(id);
+        return annotation?.doc_id === docId && annotation.anchor.page_index === pageIndex;
+      }),
+    ),
+  );
   const deleteMany = useAnnotationStore((s) => s.deleteMany);
-  const hoveredId = useAnnotationStore((s) => s.hoveredId);
+  const hoveredKey = useAnnotationStore((s) =>
+    activeKeyForPage(s.annotations, s.hoveredId, docId, pageIndex),
+  );
   // The Annotation Bank's jump target (Story 3.6): a transient, group-aware
   // emphasis rendered exactly like hover/select — see markState below.
-  const flashId = useAnnotationStore((s) => s.flashId);
+  const flashKey = useAnnotationStore((s) =>
+    activeKeyForPage(s.annotations, s.flashId, docId, pageIndex),
+  );
   // Transient move/resize preview (Story 3.1): while a drag is in flight, render
   // the dragged mark + its frame at this anchor instead of the committed one.
-  const dragPreview = useAnnotationStore((s) => s.dragPreview);
+  const dragPreview = useAnnotationStore((s) => {
+    if (!s.dragPreview) return null;
+    const annotation = s.annotations.get(s.dragPreview.id);
+    return annotation?.doc_id === docId && s.dragPreview.anchor.page_index === pageIndex
+      ? s.dragPreview
+      : null;
+  });
   // Transient GROUP move preview (user feature request): the dragPreview twin for
   // a box-select multi-selection move in flight — see effAnchor below.
-  const groupDragPreview = useAnnotationStore((s) => s.groupDragPreview);
+  const groupDragPreview = useAnnotationStore(
+    useShallow((s) =>
+      s.groupDragPreview?.filter((preview) => preview.anchor.page_index === pageIndex) ?? null,
+    ),
+  );
   const select = useAnnotationStore((s) => s.select);
   const clearSelection = useAnnotationStore((s) => s.clearSelection);
   const setHovered = useAnnotationStore((s) => s.setHovered);
@@ -100,9 +191,6 @@ export default function AnnotationLayer({
   // untouched (still selectable). Hooks above stay unconditional.
   const hidden = useAnnotationStore((s) => s.hidden);
   if (hidden) return null;
-  const marks = [...annotations.values()]
-    .filter((a) => a.doc_id === docId && a.anchor.page_index === pageIndex)
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
   // Geometry-on-kind / style-on-type split (AD-5). Three groups:
   //  - text + NOT underline → the 0.4-opacity highlight fill group;
   //  - text + underline → the full-opacity underline group (2px line);
@@ -139,9 +227,9 @@ export default function AnnotationLayer({
   // request) — a SEPARATE mode from `selectedId`, so both are OR'd here rather
   // than one superseding the other.
   const markState = (a: Annotation) => ({
-    hovered: inActiveGroup(a, hoveredId, annotations),
-    selected: inActiveGroup(a, selectedId, annotations) || multiSelectedIds.includes(a.id),
-    flashed: inActiveGroup(a, flashId, annotations),
+    hovered: matchesActiveKey(a, hoveredKey),
+    selected: matchesActiveKey(a, selectedKey) || multiSelectedIds.includes(a.id),
+    flashed: matchesActiveKey(a, flashKey),
   });
 
   // While a move/resize drag is in flight, render the dragged mark (and its edit

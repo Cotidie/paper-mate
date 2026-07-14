@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
+import { Profiler } from "react";
 import AnnotationLayer from "./AnnotationLayer";
 import { useAnnotationStore } from "@/store";
 import type { Annotation } from "@/api/client";
@@ -170,6 +171,80 @@ describe("AnnotationLayer selection + hover (Story 2.5 — AC1, AC2, AC3)", () =
     expect(screen.getByTestId("annotation-mark-g-b").className).toContain("annotation-highlight--hovered");
     act(() => useAnnotationStore.getState().setHovered(null));
     expect(screen.getByTestId("annotation-mark-g-a").className).not.toContain("annotation-highlight--hovered");
+  });
+
+  it("hovering one page does not re-render an unrelated page layer", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("page-0", 0));
+    useAnnotationStore.getState().addAnnotation(textMark("page-74", 74));
+    let page0Renders = 0;
+    let page74Renders = 0;
+
+    render(
+      <>
+        <Profiler id="page-0" onRender={() => page0Renders++}>
+          <AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />
+        </Profiler>
+        <Profiler id="page-74" onRender={() => page74Renders++}>
+          <AnnotationLayer docId="doc-1" pageIndex={74} box={box} scale={1} />
+        </Profiler>
+      </>,
+    );
+    const page0BeforeHover = page0Renders;
+    const page74BeforeHover = page74Renders;
+
+    fireEvent.pointerEnter(screen.getByTestId("annotation-mark-page-0"));
+
+    expect(page0Renders).toBeGreaterThan(page0BeforeHover);
+    expect(page74Renders).toBe(page74BeforeHover);
+  });
+
+  it("hovering a grouped mark still re-renders and outlines its sibling on another page", () => {
+    useAnnotationStore.getState().addAnnotation(groupMark("group-page-0", "cross-page"));
+    const page74Sibling = groupMark("group-page-74", "cross-page");
+    useAnnotationStore.getState().addAnnotation({
+      ...page74Sibling,
+      anchor: { ...page74Sibling.anchor, page_index: 74 },
+    });
+
+    render(
+      <>
+        <AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />
+        <AnnotationLayer docId="doc-1" pageIndex={74} box={box} scale={1} />
+      </>,
+    );
+    fireEvent.pointerEnter(screen.getByTestId("annotation-mark-group-page-0"));
+
+    expect(screen.getByTestId("annotation-mark-group-page-0").className).toContain(
+      "annotation-highlight--hovered",
+    );
+    expect(screen.getByTestId("annotation-mark-group-page-74").className).toContain(
+      "annotation-highlight--hovered",
+    );
+  });
+
+  it("changing annotations on one page does not re-render an unrelated page layer", () => {
+    useAnnotationStore.getState().addAnnotation(textMark("page-0", 0));
+    useAnnotationStore.getState().addAnnotation(textMark("page-74", 74));
+    let page0Renders = 0;
+    let page74Renders = 0;
+
+    render(
+      <>
+        <Profiler id="page-0" onRender={() => page0Renders++}>
+          <AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />
+        </Profiler>
+        <Profiler id="page-74" onRender={() => page74Renders++}>
+          <AnnotationLayer docId="doc-1" pageIndex={74} box={box} scale={1} />
+        </Profiler>
+      </>,
+    );
+    const page0BeforeChange = page0Renders;
+    const page74BeforeChange = page74Renders;
+
+    act(() => useAnnotationStore.getState().addAnnotation(textMark("page-0-new", 0)));
+
+    expect(page0Renders).toBeGreaterThan(page0BeforeChange);
+    expect(page74Renders).toBe(page74BeforeChange);
   });
 
   it("selection is group-aware: the selected mark's group sibling also gets --selected", () => {
