@@ -142,11 +142,17 @@ export default function PageCard({
       ref={cardRef}
       className="page-surface"
       data-testid="page-surface"
-      // `content-visibility: auto` (Reader.css) skips off-screen layout/paint;
-      // feed it the reserved geometry so a skipped card reserves the right size
-      // and never collapses (NFR-1). Computed inline like width/height so no raw
-      // px literal lands in the stylesheet (no-raw-values rule).
-      style={{ width, height, containIntrinsicSize: `${width}px ${height}px` }}
+      // The app's explicit +/-WINDOW_RADIUS decides containment. `auto` left
+      // Chrome a browser-managed reveal backlog after a hidden-tab cycle, which
+      // could block the first returning interaction. Live cards stay visible;
+      // every other subtree is deterministically skipped while its explicit
+      // geometry remains reserved (NFR-1/NFR-2).
+      style={{
+        width,
+        height,
+        containIntrinsicSize: `${width}px ${height}px`,
+        contentVisibility: live ? "visible" : "hidden",
+      }}
     >
       {!painted && live && <div className="page-surface__skeleton" aria-hidden="true" />}
       <canvas ref={canvasRef} className="page-surface__canvas" />
