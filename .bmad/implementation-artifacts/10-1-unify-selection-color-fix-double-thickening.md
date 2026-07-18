@@ -4,7 +4,7 @@ baseline_commit: 2f3751fa388d78ef32d6654088aad91697753aa5
 
 # Story 10.1: Unify selection color and fix double-thickening over punctuation/whitespace
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
