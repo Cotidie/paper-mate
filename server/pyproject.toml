@@ -1,6 +1,6 @@
 [project]
 name = "paper-mate-server"
-version = "0.5.33"
+version = "0.5.34"
 description = "Paper Mate backend — thin FastAPI persistence + static SPA serving (AD-1, AD-10)."
 requires-python = ">=3.12"
 # PyMuPDF is AGPL-3.0 (copyleft); bundling it makes the combined distributed

@@ -4,7 +4,7 @@ baseline_commit: af0dde2ef40bf5583d16dc7b8f4d80462833a77a
 
 # Story 10.4: Resizable, persisted collapsed memo box
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
