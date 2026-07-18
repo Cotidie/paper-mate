@@ -61,11 +61,14 @@ import { useLiveRef } from "@/hooks/useLiveRef";
  *  Checks the FIRST range's `commonAncestorContainer` — the deepest node
  *  containing the WHOLE range — rather than just `selection.anchorNode`
  *  (only one endpoint, and direction-dependent): a selection that starts
- *  inside the text layer but is dragged out past it must NOT pass. */
+ *  inside the text layer but is dragged out past it must NOT pass. `.textLayer`
+ *  alone (not `.pdf-canvas .textLayer`) is enough: every real text layer is
+ *  always inside a `.pdf-canvas`, so the ancestor adds no discriminating
+ *  power here, only a second class name to require. */
 function isPdfTextSelection(selection: Selection): boolean {
   const container = selection.getRangeAt(0).commonAncestorContainer;
   const el = container instanceof Element ? container : container.parentElement;
-  return !!el?.closest(".pdf-canvas .textLayer");
+  return !!el?.closest(".textLayer");
 }
 
 export function useLiveSelectionPreview(opts: {
@@ -118,19 +121,11 @@ export function useLiveSelectionPreview(opts: {
     const captureFromLiveSelection = () => {
       raf = 0;
       const selection = window.getSelection();
-      // eslint-disable-next-line no-console
-      console.log("DEBUG capture", {
-        hasSelection: !!selection,
-        rangeCount: selection?.rangeCount,
-        isPdf: selection ? isPdfTextSelection(selection) : null,
-      });
       if (!selection || selection.rangeCount === 0 || !isPdfTextSelection(selection)) {
         setSnapshot(null);
         return;
       }
       const pages = rectsFromSelection(selection, getPagesRef.current(), scaleRef.current, rectReaderRef?.current);
-      // eslint-disable-next-line no-console
-      console.log("DEBUG pages", pages);
       setSnapshot(pages.length > 0 ? pages : null);
     };
     const scheduleCapture = () => {
@@ -161,8 +156,6 @@ export function useLiveSelectionPreview(opts: {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- takeoverActiveRef/snapshotRef are refs (stable, read live)
   }, [enabled, getPagesRef, scaleRef, rectReaderRef]);
 
-  // eslint-disable-next-line no-console
-  console.log("DEBUG render", { enabled, hasSnapshot: !!snapshot });
   if (!enabled || !snapshot) return [];
   // A cheap, SYNCHRONOUS render-time check, independent of `snapshot`: a
   // commit (`createTextTool`) calls `removeAllRanges()` directly inside the
@@ -174,12 +167,6 @@ export function useLiveSelectionPreview(opts: {
   // instantly, before the (later) `selectionchange` ever fires, so the old
   // preview and the new committed mark never paint on top of each other.
   const liveSelection = window.getSelection();
-  // eslint-disable-next-line no-console
-  console.log("DEBUG livecheck", {
-    has: !!liveSelection,
-    rangeCount: liveSelection?.rangeCount,
-    isCollapsed: liveSelection?.isCollapsed,
-  });
   if (!liveSelection || liveSelection.rangeCount === 0 || liveSelection.isCollapsed) return [];
   const cardOf = (pageIndex: number): PageCardRef | null =>
     getPagesRef.current().find((p) => p.pageIndex === pageIndex) ?? null;

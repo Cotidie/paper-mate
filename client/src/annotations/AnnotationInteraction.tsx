@@ -247,8 +247,6 @@ export default function AnnotationInteraction({
   // construction (`useLiveSelectionPreview` goes inert once `pending` is
   // non-null), so this is never a double-render of the same band.
   const selectionPreviewRects = pending ? (pendingGeometry?.previewRects ?? []) : liveSelectionRects;
-  // eslint-disable-next-line no-console
-  console.log("DEBUG AI render", { pending: !!pending, liveSelectionRects, selectionPreviewRects, hidden });
   // Stands in for the native browser selection, whose `::selection` paint is
   // suppressed entirely (Story 10.1, Reader.css): mid-drag this is
   // `liveSelectionRects` (live native selection, re-read every
