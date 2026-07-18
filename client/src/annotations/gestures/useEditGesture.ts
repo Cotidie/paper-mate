@@ -96,6 +96,16 @@ interface DragState {
    *  Captured once at `onDown` from `anno.style.collapsed ?? false`; harmless
    *  (always false) for a non-memo mark. */
   collapsed: boolean;
+  /** The collapsed box's own persisted WIDTH (Story 10.4 review fix), when
+   *  known: a SIZED collapsed memo's `style.collapsed_width`, else `null` (a
+   *  non-memo mark, an expanded memo, or a never-resized/legacy collapsed memo
+   *  — its collapsed width already equals the expanded width, nothing extra to
+   *  clamp against). Collapsed HEIGHT is always one intrinsic CSS line and
+   *  never varies, so only width needs this. A MOVE clamps against whichever
+   *  footprint (expanded or collapsed) is WIDER, so a collapsed box resized
+   *  wider than its own expanded default can never be dragged off the page
+   *  even though only the (narrower) expanded rect is what actually commits. */
+  collapsedWidth: number | null;
   box: { width: number; height: number };
   scale: number;
   startX: number;
@@ -209,37 +219,46 @@ export function useEditGesture(opts: {
       const page = getPagesRef.current().find((p) => p.pageIndex === anno.anchor.page_index);
       if (!page) return;
       let startAnchor = anno.anchor;
-      // Memo-only, corner-resize only (Story 10.2 review fix, extended Story
-      // 10.4): a memo's RENDERED box can differ from its stored anchor rect
-      // (auto-grown taller, or a COLLAPSED box now carrying its own
-      // `collapsed_width`/`height`) — the box's TOP-LEFT always matches the
-      // stored x0/y0 (CSS `left`/`top` are set directly from them; only the
-      // extent is intrinsic/content-derived or state-specific), so seed the
-      // resize baseline's x1/y1 from the REAL rendered box. Without this, a
-      // corner-drag's delta lands on the stale stored extent instead of where
-      // the user visually grabbed the handle (the handle sits on the real
-      // corner; the resize MATH must track it too). A no-op for the expanded
-      // case (rendered width == stored width) — only a collapsed box's width
-      // now differs. MOVE is unaffected (`translateRect` only shifts the
-      // existing rect; size is untouched). jsdom has no layout (the measured
-      // rect is zeroed), so this is a no-op there — LIVE-SMOKE only.
+      // Memo-only, corner-resize only (Story 10.2 review fix): a memo's
+      // RENDERED height can differ from its stored anchor rect (auto-grown
+      // taller) — the box's TOP always matches the stored y0 (CSS `top` is set
+      // directly from it; only height is intrinsic/content-derived), so seed
+      // the resize baseline's y1 from the REAL rendered height. Without this, a
+      // corner-drag's delta lands on the stale stored height instead of where
+      // the user visually grabbed the handle. MOVE is unaffected (`translateRect`
+      // only shifts the existing rect; size is untouched). jsdom has no layout
+      // (the measured rect is zeroed), so this is a no-op there — LIVE-SMOKE only.
       if (anno.type === "memo" && handle !== "move" && startAnchor.kind === "rect") {
         const memoEl = handleEl.closest(".annotation-memo") as HTMLElement | null;
         const rendered = memoEl?.getBoundingClientRect();
-        const widthFrac = (rendered?.width ?? 0) / (page.box.width * scaleRef.current);
         const heightFrac = (rendered?.height ?? 0) / (page.box.height * scaleRef.current);
         const r = startAnchor.rect;
         const next = { ...r };
-        if (Number.isFinite(widthFrac) && widthFrac > 0) next.x1 = r.x0 + widthFrac;
         if (Number.isFinite(heightFrac) && heightFrac > 0) next.y1 = r.y0 + heightFrac;
+        // WIDTH is re-seeded ONLY for a COLLAPSED memo (Story 10.4): its
+        // rendered width may be driven by `style.collapsed_width` instead of
+        // the stored `anchor.rect`, so the resize baseline must track the
+        // VISIBLE collapsed box. An EXPANDED memo's width is ALWAYS exactly
+        // `anchor.rect`'s own width (auto-grow only ever affects height,
+        // Story 2.9) — re-seeding it from a DOM measurement would only risk
+        // sub-pixel drift on a path that needs no correction at all.
+        if (anno.style.collapsed) {
+          const widthFrac = (rendered?.width ?? 0) / (page.box.width * scaleRef.current);
+          if (Number.isFinite(widthFrac) && widthFrac > 0) next.x1 = r.x0 + widthFrac;
+        }
         startAnchor = { ...startAnchor, rect: next };
       }
+      const collapsedWidth =
+        anno.type === "memo" && anno.style.collapsed && anno.style.collapsed_width != null
+          ? anno.style.collapsed_width
+          : null;
       dragRef.current = {
         id,
         handle,
         startAnchor,
         type: anno.type,
         collapsed: anno.style.collapsed ?? false,
+        collapsedWidth,
         box: page.box,
         scale: scaleRef.current,
         startX: e.clientX,
@@ -271,7 +290,7 @@ export function useEditGesture(opts: {
         const next = computeAnchor(d, dx, dy);
         if (!next) return;
         d.lastAnchor = next;
-        setDragPreview({ id: d.id, anchor: next });
+        setDragPreview({ id: d.id, anchor: next, handle: d.handle });
         e.preventDefault();
         return;
       }
@@ -301,15 +320,13 @@ export function useEditGesture(opts: {
         if (d.moved && d.lastAnchor) {
           const isCollapsedResize = d.collapsed && d.type === "memo" && d.handle !== "move";
           if (isCollapsedResize && d.lastAnchor.kind === "rect") {
-            // Collapsed memo corner-resize (Story 10.4): commit to the
-            // COLLAPSED size, not `anchor.rect` (that stays the expanded size,
-            // AC #2). One command-path call → one undoable zundo step (AR-7).
+            // Collapsed memo corner-resize (Story 10.4): commit the WIDTH to
+            // `style.collapsed_width`, not `anchor.rect` (that stays the
+            // expanded size, AC #2). Height is discarded — always one
+            // intrinsic CSS line while collapsed, never persisted. One
+            // command-path call → one undoable zundo step (AR-7).
             const r = d.lastAnchor.rect;
-            resizeCollapsedMemo(
-              d.id,
-              { w: r.x1 - r.x0, h: r.y1 - r.y0 },
-              new Date().toISOString(),
-            );
+            resizeCollapsedMemo(d.id, r.x1 - r.x0, new Date().toISOString());
           } else {
             setAnnotationGeometry(d.id, d.lastAnchor, new Date().toISOString());
           }
@@ -389,31 +406,57 @@ export function useEditGesture(opts: {
 function computeAnchor(d: DragState, dx: number, dy: number): Annotation["anchor"] | null {
   const a = d.startAnchor;
   if (a.kind === "rect") {
-    if (d.handle === "move") return { ...a, rect: translateRect(a.rect, dx, dy) };
+    if (d.handle === "move") {
+      // Review fix (Story 10.4): `a.rect` is always the EXPANDED extent for a
+      // move (never re-seeded, so its width is what actually commits).
+      // `translateRect`'s own clamp only protects THAT rect's edges — if a
+      // collapsed memo's OWN persisted WIDTH is wider than its expanded
+      // default (it was resized wider while collapsed), clamping against only
+      // the expanded rect would let the visibly-wider collapsed box get
+      // dragged past the page edge. Clamp the X axis against whichever
+      // footprint (expanded or collapsed) is WIDER instead; height is
+      // unaffected (the collapsed height never varies, always one intrinsic
+      // line). A non-memo/expanded/legacy-collapsed mark has no
+      // `collapsedWidth` and this is a no-op, identical to `translateRect`.
+      if (d.collapsedWidth != null) {
+        const { x0, y0, x1, y1 } = a.rect;
+        const effX1 = Math.max(x1, x0 + d.collapsedWidth);
+        const cdx = Math.max(-x0, Math.min(1 - effX1, dx));
+        const cdy = Math.max(-y0, Math.min(1 - y1, dy));
+        return { ...a, rect: { x0: x0 + cdx, y0: y0 + cdy, x1: x1 + cdx, y1: y1 + cdy } };
+      }
+      return { ...a, rect: translateRect(a.rect, dx, dy) };
+    }
     // Memo-only min floor (Story 10.2): normalized page fraction, so it stays
     // the same real-world size at every zoom. Region/comment rects get no min.
     const min =
       d.type === "memo"
         ? { w: MIN_MEMO_WIDTH_PX / d.box.width, h: MIN_MEMO_HEIGHT_PX / d.box.height }
         : undefined;
-    const next = resizeRectCorner(a.rect, d.handle, dx, dy, min);
-    // A collapsed memo's corner-resize (Story 10.4) keeps the top-left FIXED
-    // and grows/shrinks the extent from it, so the collapsed size stays
-    // distinct from the expanded position/size (AC #1/#2) — every corner
+    // A collapsed memo's corner-resize (Story 10.4, user decision) only ever
+    // adjusts WIDTH — height is fixed at one intrinsic CSS line while
+    // collapsed, never tracked in normalized space. Keep the top-left FIXED
+    // and grow/shrink WIDTH ONLY from it (dy passed as 0 so `resizeRectCorner`'s
+    // height math is inert; its min-height floor is passed as 0 for the same
+    // reason, so it can't artificially bump the unused y1). Every corner
     // re-anchors to the memo's stored top-left rather than letting nw/ne/sw
     // move it. MOVE (handled above) is unaffected — position is shared across
     // both states and moves only via the move grip.
     if (d.collapsed && d.type === "memo") {
-      return {
-        ...a,
-        rect: {
-          x0: a.rect.x0,
-          y0: a.rect.y0,
-          x1: a.rect.x0 + (next.x1 - next.x0),
-          y1: a.rect.y0 + (next.y1 - next.y0),
-        },
-      };
+      const next = resizeRectCorner(a.rect, d.handle, dx, 0, min && { w: min.w, h: 0 });
+      // Review fix: `next` is clamped to [0,1] relative to the MOVING corner
+      // (e.g. nw's own x0), not the FIXED top-left we re-anchor to below —
+      // reapplying its width onto `a.rect.x0` can overshoot past 1 (e.g.
+      // dragging nw far left grows `next`'s width up to the page edge from
+      // x=0, which added onto a much-larger `a.rect.x0` overflows). Clamp the
+      // reconstructed x1 to the page edge; x0 never moves so it stays valid,
+      // and width can only ever shrink here, never flip. y0/y1 pass through
+      // `a.rect` unchanged (irrelevant downstream: the renderer never applies
+      // an explicit height for a collapsed box).
+      const x1 = Math.min(1, a.rect.x0 + (next.x1 - next.x0));
+      return { ...a, rect: { x0: a.rect.x0, y0: a.rect.y0, x1, y1: a.rect.y1 } };
     }
+    const next = resizeRectCorner(a.rect, d.handle, dx, dy, min);
     return { ...a, rect: next };
   }
   if (a.kind === "path") {

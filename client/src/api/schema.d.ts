@@ -694,14 +694,16 @@ export interface components {
          *     CSS-px chrome size (NOT page-anchored geometry, scale-independent, mirrors
          *     ``--comment-bubble-width``); ``None`` = the default CSS size, until the
          *     user drags the bubble's corner handle to resize it.
-         *     ``collapsed_width``/``collapsed_height`` are memo-only: the COLLAPSED box's
-         *     own size, distinct from the expanded size (which stays in ``anchor.rect``).
+         *     ``collapsed_width`` is memo-only: the COLLAPSED box's own WIDTH, distinct
+         *     from the expanded width (which stays in ``anchor.rect``). The collapsed
+         *     HEIGHT is always exactly one intrinsic CSS line (user decision) -- never
+         *     resizable, never persisted, so there is no ``collapsed_height`` field.
          *     Unlike ``bubble_width``/``bubble_height`` (a floating, scale-independent
-         *     popup), the collapsed memo box is page-anchored, so these are normalized
-         *     ``[0,1]`` fractions of the scale-1.0 page box, exactly like ``anchor.rect``
-         *     (rides zoom, NFR-3) -- NOT CSS px. ``None`` = the legacy fixed collapsed
-         *     size, until the user drags the collapsed box's own corner handle.
-         *     Additive + optional (AD-8).
+         *     popup), the collapsed memo box is page-anchored, so ``collapsed_width`` is
+         *     a normalized ``[0,1]`` fraction of the scale-1.0 page box, exactly like
+         *     ``anchor.rect`` (rides zoom, NFR-3) -- NOT CSS px. ``None`` = the legacy
+         *     fixed collapsed width, until the user drags the collapsed box's own corner
+         *     handle. Additive + optional (AD-8).
          */
         Style: {
             /** Color */
@@ -718,8 +720,6 @@ export interface components {
             bubble_height?: number | null;
             /** Collapsed Width */
             collapsed_width?: number | null;
-            /** Collapsed Height */
-            collapsed_height?: number | null;
         };
         /**
          * TextAnchor

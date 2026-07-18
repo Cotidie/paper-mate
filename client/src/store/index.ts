@@ -39,6 +39,14 @@ import type { AnnotationTool } from "@/lib/tools";
  *  (Story 2.13) and memo (fix request, the memo twin). */
 type AlphaTool = "pen" | "memo";
 
+/** Which edit-frame handle drove a `dragPreview` (Story 10.4): the move grip or
+ *  one of the four resize corners. Duplicated here (not imported from the
+ *  gesture layer's `EditHandle`) to keep the store's downward-dependency rule
+ *  (store sits BELOW gestures) — a renderer needs this to tell a collapsed
+ *  memo's move-preview (extent must stay the persisted COLLAPSED size) apart
+ *  from its resize-preview (extent IS the live evolving collapsed size). */
+type DragPreviewHandle = "move" | "nw" | "ne" | "sw" | "se";
+
 /** A memo box-size preset (Story 2.9). The box dimensions ARE the memo's size:
  *  the rect the placement bakes (and `resizeMemoAnnotation` rewrites) carries
  *  them, so there is NO contract field for size (AD-5). `width`/`height` are
@@ -171,9 +179,11 @@ export interface AnnotationStore {
    *  on release (so Story 3.2's zundo records one undo step, not N). UI-only state,
    *  never persisted; EXCLUDE from the zundo partialize like `selectedId`/
    *  `hoveredId`. Null = no drag in flight. */
-  dragPreview: { id: string; anchor: Annotation["anchor"] } | null;
+  dragPreview: { id: string; anchor: Annotation["anchor"]; handle: DragPreviewHandle } | null;
   /** Set or clear the transient drag preview. */
-  setDragPreview: (preview: { id: string; anchor: Annotation["anchor"] } | null) => void;
+  setDragPreview: (
+    preview: { id: string; anchor: Annotation["anchor"]; handle: DragPreviewHandle } | null,
+  ) => void;
   /** Transient live GROUP-drag preview: the `dragPreview` twin for a box-select
    *  multi-selection move (user feature request) — every member's IN-PROGRESS
    *  anchor while the group drag is in flight, so the layer renders the whole
@@ -266,19 +276,19 @@ export interface AnnotationStore {
    *  Guarded to `type=comment` so a stale non-comment id is never mutated
    *  (AR-5). A no-op for an unknown id. */
   resizeCommentAnnotation: (id: string, size: { width: number; height: number }, now: string) => void;
-  /** Resize a memo's COLLAPSED box (Story 10.4) and bump `updated_at` — the
-   *  collapsed-size twin of `resizeMemoAnnotation`, but written to
-   *  `style.collapsed_width`/`collapsed_height` instead of the anchor rect: the
-   *  anchor rect stays the EXPANDED size, which is what keeps the two sizes
-   *  distinct (AC #2). Single `id`, per-instance (mirrors `resizeCommentAnnotation`,
-   *  not a group batch). `size` is a normalized `[0,1]` page-fraction width/height
-   *  (NOT CSS px, unlike `resizeCommentAnnotation`'s bubble size) — the collapsed
-   *  box is page-anchored and must ride zoom (NFR-3), like `anchor.rect`. Guarded
-   *  to `kind=rect`+`type=memo`, same shape as `setMemoCollapsed`/
-   *  `resizeMemoAnnotation` (AR-5). A no-op for an unknown id or non-memo (state
-   *  unchanged, so zundo records no history step). Routes through the normal
-   *  command path, so it is one undoable step (AR-7). */
-  resizeCollapsedMemo: (id: string, size: { w: number; h: number }, now: string) => void;
+  /** Resize a memo's COLLAPSED box WIDTH (Story 10.4; user decision: collapsed
+   *  height is always exactly one intrinsic CSS line, never resizable/persisted
+   *  — only width varies) and bump `updated_at`. Written to `style.collapsed_width`
+   *  instead of the anchor rect: the anchor rect stays the EXPANDED width, which
+   *  is what keeps the two sizes distinct (AC #2). Single `id`, per-instance
+   *  (mirrors `resizeCommentAnnotation`, not a group batch). `width` is a
+   *  normalized `[0,1]` page-fraction (NOT CSS px, unlike `resizeCommentAnnotation`'s
+   *  bubble size) — the collapsed box is page-anchored and must ride zoom
+   *  (NFR-3), like `anchor.rect`. Guarded to `kind=rect`+`type=memo`, same shape
+   *  as `setMemoCollapsed`/`resizeMemoAnnotation` (AR-5). A no-op for an unknown
+   *  id or non-memo (state unchanged, so zundo records no history step). Routes
+   *  through the normal command path, so it is one undoable step (AR-7). */
+  resizeCollapsedMemo: (id: string, width: number, now: string) => void;
   /** Replace a mark's anchor GEOMETRY (a moved/resized rect or points) and bump
    *  `updated_at` — the Story 3.1 move/resize command-path action, shared by
    *  kind=rect (memo/region/comment-pin) and kind=path (pen). The CALLER (the edit
@@ -525,7 +535,7 @@ export const useAnnotationStore = create<AnnotationStore>()(
           });
           return { annotations: next };
         }),
-      resizeCollapsedMemo: (id, size, now) =>
+      resizeCollapsedMemo: (id, width, now) =>
         set((state) => {
           // Single-id (not patchAnnotations' ids-batch), mirrors resizeCommentAnnotation:
           // a per-instance collapsed size, not group-shared geometry.
@@ -534,7 +544,7 @@ export const useAnnotationStore = create<AnnotationStore>()(
           const next = new Map(state.annotations);
           next.set(id, {
             ...a,
-            style: { ...a.style, collapsed_width: size.w, collapsed_height: size.h },
+            style: { ...a.style, collapsed_width: width },
             updated_at: now,
           });
           return { annotations: next };

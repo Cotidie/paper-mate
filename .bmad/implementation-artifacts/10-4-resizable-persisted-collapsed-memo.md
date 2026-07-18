@@ -4,7 +4,7 @@ baseline_commit: af0dde2ef40bf5583d16dc7b8f4d80462833a77a
 
 # Story 10.4: Resizable, persisted collapsed memo box
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -61,6 +61,17 @@ so that collapsed memos fit the space I want them to occupy.
   - [x] (g) Confirm no regression to Story 8.6 comment preview/bubble size (leave `CommentBubble`/`CommentPreview` and `bubble_*` untouched — different surface, different field). Verified via the full green unit-test suite + diff review (zero touched comment files); did not re-verify live in-browser (see Dev Agent Record deviation note).
   - [x] Delete the transient test memo afterward and verify the sandbox doc's `annotations.json` is clean.
 - [x] **Task 7 — Version + docs.** No version bump in this change (happens at PR-merge time per CLAUDE.md versioning). Confirm `docs/API.md` is updated in the SAME change as the contract (Task 1). This IS an `/api` contract change (the annotation `Style` shape), so `docs/API.md` maintenance is mandatory.
+
+### Review Findings
+
+- [ ] [Review][Patch] [Med] Preserve the collapsed extent during single-memo move previews [client/src/annotations/AnnotationLayer.tsx:313]
+- [ ] [Review][Patch] [Med] Keep fixed-top-left collapsed resizes within page bounds after re-anchoring [client/src/annotations/gestures/useEditGesture.ts:399]
+- [ ] [Review][Patch] [Med] Clamp collapsed-memo moves using the collapsed extent when it differs from the expanded rect [client/src/annotations/gestures/useEditGesture.ts:392]
+- [ ] [Review][Patch] [Low] Avoid measurable-width re-seeding drift on the expanded memo resize path and cover the real rendered branch [client/src/annotations/gestures/useEditGesture.ts:226]
+- [ ] [Review][Patch] [Low] Validate collapsed dimensions as a positive paired normalized size [server/app/models.py:389]
+- [ ] [Review][Patch] [Low] Assert zundo history cardinality for successful and guarded no-op collapsed resizes [client/src/store/index.test.ts:618]
+- [ ] [Review][Patch] [Low] Make the collapsed-size round-trip tests serialize and re-validate the model [server/tests/test_models.py:158]
+- [ ] [Review][Patch] [Low] Correct Task 6(g)'s checked live-smoke claim or perform the omitted browser check [.bmad/implementation-artifacts/10-4-resizable-persisted-collapsed-memo.md:61]
 
 ## Dev Notes
 

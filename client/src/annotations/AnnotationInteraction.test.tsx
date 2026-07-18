@@ -2037,6 +2037,7 @@ describe("AnnotationInteraction comment overlay — bubble + hover preview (Stor
       useAnnotationStore.getState().setDragPreview({
         id: "c9",
         anchor: { kind: "rect", page_index: 0, rect: { x0: 0.4, y0: 0.5, x1: 0.4, y1: 0.5 } },
+        handle: "move",
       }),
     );
     // Preview anchor: x0=0.4,y0=0.5 → left=240, top=400.
