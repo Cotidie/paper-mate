@@ -148,6 +148,62 @@ def test_memo_annotation_no_collapsed_field_backward_compatible() -> None:
     assert ann.style.collapsed is None
 
 
+def test_style_collapsed_width_null_by_default() -> None:
+    """Story 10.4: collapsed_width defaults to None (backward-compatible, AD-8)."""
+    s = Style(color="annotation-default")
+    assert s.collapsed_width is None
+
+
+def test_style_collapsed_width_round_trips_through_serialization() -> None:
+    """Story 10.4: collapsed_width survives a real dump -> re-validate round trip
+    (not just constructor field access), confirming it is actually wire-serialized."""
+    s = Style(color="annotation-default", collapsed=True, collapsed_width=0.2)
+    reloaded = Style.model_validate(s.model_dump())
+    assert reloaded.collapsed_width == pytest.approx(0.2)
+
+
+def test_memo_annotation_with_collapsed_width_round_trips_through_serialization() -> None:
+    """Story 10.4: a memo Annotation with collapsed_width survives a real JSON
+    dump -> re-validate round trip (the actual persistence path, not just the
+    constructor)."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "memo",
+            "style": {"color": "annotation-default", "collapsed": True, "collapsed_width": 0.2},
+            "body": "a note",
+            "anchor": {"kind": "rect", "page_index": 0, "rect": {"x0": 0, "y0": 0, "x1": 0.1, "y1": 0.1}},
+        }
+    )
+    reloaded = Annotation.model_validate_json(ann.model_dump_json())
+    assert isinstance(reloaded.anchor, RectAnchor)
+    assert reloaded.style.collapsed_width == pytest.approx(0.2)
+
+
+def test_memo_annotation_no_collapsed_width_backward_compatible() -> None:
+    """AD-8: a pre-10.4 memo mark (no collapsed_width field) parses fine,
+    falls back to None (the legacy fixed collapsed size)."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "memo",
+            "style": {"color": "annotation-default", "collapsed": True},
+            "body": "a note",
+            "anchor": {"kind": "rect", "page_index": 0, "rect": {"x0": 0, "y0": 0, "x1": 0.1, "y1": 0.1}},
+        }
+    )
+    assert ann.style.collapsed_width is None
+
+
+def test_style_collapsed_width_rejects_non_positive() -> None:
+    """Review fix: collapsed_width must be a positive normalized fraction (a
+    zero/negative width is not a renderable box)."""
+    with pytest.raises(ValidationError):
+        Style(color="x", collapsed_width=0)
+    with pytest.raises(ValidationError):
+        Style(color="x", collapsed_width=-0.1)
+
+
 def test_annotation_surfaced_in_openapi_via_annotations_route() -> None:
     """AD-3: the real PUT + GET /annotations routes emit the Annotation schema
     (Story 3.4 PUT, Story 3.5 GET); the manual injection is gone."""

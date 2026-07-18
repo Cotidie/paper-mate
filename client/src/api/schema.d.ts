@@ -694,7 +694,16 @@ export interface components {
          *     CSS-px chrome size (NOT page-anchored geometry, scale-independent, mirrors
          *     ``--comment-bubble-width``); ``None`` = the default CSS size, until the
          *     user drags the bubble's corner handle to resize it.
-         *     Additive + optional (AD-8).
+         *     ``collapsed_width`` is memo-only: the COLLAPSED box's own WIDTH, distinct
+         *     from the expanded width (which stays in ``anchor.rect``). The collapsed
+         *     HEIGHT is always exactly one intrinsic CSS line (user decision) -- never
+         *     resizable, never persisted, so there is no ``collapsed_height`` field.
+         *     Unlike ``bubble_width``/``bubble_height`` (a floating, scale-independent
+         *     popup), the collapsed memo box is page-anchored, so ``collapsed_width`` is
+         *     a normalized ``[0,1]`` fraction of the scale-1.0 page box, exactly like
+         *     ``anchor.rect`` (rides zoom, NFR-3) -- NOT CSS px. ``None`` = the legacy
+         *     fixed collapsed width, until the user drags the collapsed box's own corner
+         *     handle. Additive + optional (AD-8).
          */
         Style: {
             /** Color */
@@ -709,6 +718,8 @@ export interface components {
             bubble_width?: number | null;
             /** Bubble Height */
             bubble_height?: number | null;
+            /** Collapsed Width */
+            collapsed_width?: number | null;
         };
         /**
          * TextAnchor

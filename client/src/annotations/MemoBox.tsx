@@ -115,6 +115,9 @@ export default function MemoBox({
         left: pos.left,
         top: pos.top,
         width: pos.width,
+        // Collapsed height is ALWAYS one intrinsic CSS line (Story 10.4, user
+        // decision: only width is resizable while collapsed) — never an
+        // explicit minHeight. Expanded keeps its own minHeight, unchanged.
         ...(collapsed ? {} : { minHeight: pos.height }),
         // Story 10.2 review fix: an explicit z-index only when `editable` so this
         // memo (and its nested handles) outranks OVERLAPPING sibling memos within

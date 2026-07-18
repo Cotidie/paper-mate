@@ -210,6 +210,29 @@ describe("useEditGesture (move/resize drag, Story 3.1)", () => {
     expect(m.anchor.rect.x1).toBeCloseTo(0.5 + 0.01, 10); // width unaffected by the height seed
   });
 
+  it("Story 10.4 review fix: an EXPANDED memo's corner-resize does NOT re-seed WIDTH from a real (nonzero) DOM measurement — only a COLLAPSED memo's width can legitimately differ from anchor.rect", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 })); // stored width 0.25 = 250px
+    mountGesture();
+    const btn = handle("se", "m");
+    const memoEl = document.createElement("div");
+    memoEl.className = "annotation-memo";
+    // A rendered width that WILDLY differs from the stored 250px — if width
+    // were wrongly re-seeded here (like the collapsed path), the resize's
+    // baseline would drift to this bogus measurement instead of anchor.rect.
+    memoEl.getBoundingClientRect = () => ({ width: 900, height: 250 }) as DOMRect;
+    memoEl.appendChild(btn);
+    document.body.appendChild(memoEl);
+    down(btn, 100, 100);
+    move(110, 100); // dx = 10/1000 = 0.01, dy = 0
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.anchor.kind).toBe("rect");
+    if (m.anchor.kind !== "rect") return;
+    // Grown from the STORED width (0.5-0.25=0.25) + the 0.01 drag delta, NOT
+    // from the bogus rendered 0.9 (900px).
+    expect(m.anchor.rect.x1).toBeCloseTo(0.5 + 0.01, 10);
+  });
+
   it("a memo MOVE is unaffected by the rendered-height seed (only corner-resize needs it)", () => {
     useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
     mountGesture();
@@ -295,6 +318,68 @@ describe("useEditGesture (move/resize drag, Story 3.1)", () => {
       // proving the intermediate sub-slop sample never became the new origin.
       expect(m.anchor.rect).toEqual({ x0: 0.5, y0: 0.25, x1: 0.75, y1: 0.5 });
     }
+  });
+});
+
+describe("useEditGesture collapsed memo corner-resize (Story 10.4, width-only)", () => {
+  it("a COLLAPSED memo corner-resize commits through resizeCollapsedMemo (WIDTH only), NOT setAnnotationGeometry, with the top-left held fixed", () => {
+    const collapsedMemo: Annotation = {
+      ...memo("m", { x0: 0.3, y0: 0.3, x1: 0.5, y1: 0.5 }),
+      style: { color: "annotation-default", stroke_width: null, alpha: null, collapsed: true },
+    };
+    useAnnotationStore.getState().addAnnotation(collapsedMemo);
+    mountGesture();
+    const btn = handle("nw", "m");
+    const memoEl = document.createElement("div");
+    memoEl.className = "annotation-memo";
+    // Rendered collapsed box: 100px wide scale-1 px = 0.1 normalized (differs
+    // from the expanded 0.2-wide anchor.rect — this is the collapsed_width).
+    memoEl.getBoundingClientRect = () => ({ width: 100, height: 40 }) as DOMRect;
+    memoEl.appendChild(btn);
+    document.body.appendChild(memoEl);
+    down(btn, 100, 100);
+    move(50, 80); // dx = -50/1000 = -0.05; dy is IGNORED for a collapsed resize (width-only)
+    up();
+
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    // The EXPANDED size (anchor.rect) is untouched — only resizeCollapsedMemo
+    // (not setAnnotationGeometry) commits, so it never rewrites anchor.rect.
+    expect(m.anchor.kind).toBe("rect");
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual({ x0: 0.3, y0: 0.3, x1: 0.5, y1: 0.5 });
+    // The collapsed WIDTH is written to style.collapsed_width, re-anchored to
+    // the fixed top-left (0.3) rather than letting the nw handle move it.
+    expect(m.style.collapsed_width).toBeCloseTo(0.15, 10);
+    expect(m.updated_at).not.toBe("2026-06-30T00:00:00Z");
+  });
+
+  it("a COLLAPSED memo corner-resize IGNORES the vertical drag component entirely (height stays fixed at one intrinsic line)", () => {
+    const collapsedMemo: Annotation = {
+      ...memo("m", { x0: 0.3, y0: 0.3, x1: 0.5, y1: 0.5 }),
+      style: { color: "annotation-default", stroke_width: null, alpha: null, collapsed: true },
+    };
+    useAnnotationStore.getState().addAnnotation(collapsedMemo);
+    mountGesture();
+    down(handle("se", "m"), 100, 100);
+    move(150, 999); // dx = 50/1000 = 0.05 (widens); dy is a huge, IGNORED vertical drag
+    up();
+
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    // Legacy width (0.5-0.3=0.2) + the 0.05 dx delta = 0.25; the huge dy never
+    // enters the math at all (no height field exists to have moved).
+    expect(m.style.collapsed_width).toBeCloseTo(0.25, 10);
+  });
+
+  it("an EXPANDED memo corner-resize still commits through setAnnotationGeometry (anchor.rect), leaving collapsed_width untouched", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    down(handle("se", "m"), 100, 100);
+    move(225, 225); // dx = dy = 0.125 → SE corner grows
+    up();
+
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.anchor.kind).toBe("rect");
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.625, y1: 0.625 });
+    expect(m.style.collapsed_width).toBeUndefined();
   });
 });
 

@@ -601,6 +601,53 @@ describe("resizeCommentAnnotation (comment bubble resize, user feature request)"
   });
 });
 
+describe("resizeCollapsedMemo (resizable collapsed memo box WIDTH, Story 10.4)", () => {
+  const rect = { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 };
+  const t = () => useAnnotationStore.temporal.getState();
+
+  it("sets style.collapsed_width and bumps updated_at, leaving anchor.rect (the expanded size) untouched", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-07-19T00:00:01Z"));
+    useAnnotationStore.getState().resizeCollapsedMemo("m", 0.15, "2026-07-19T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.style.collapsed_width).toBe(0.15);
+    expect(m.updated_at).toBe("2026-07-19T12:00:00Z");
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual(rect);
+  });
+
+  it("guards non-memo marks (a stale text/path id is untouched) and records NO history step", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("h", "annotation-default", "2026-07-19T00:00:01Z"));
+    t().clear();
+    const depth0 = t().pastStates.length;
+    useAnnotationStore.getState().resizeCollapsedMemo("h", 0.15, "2026-07-19T12:00:00Z");
+    const h = useAnnotationStore.getState().annotations.get("h")!;
+    expect(h.style.collapsed_width).toBeUndefined();
+    expect(h.updated_at).toBe("2026-07-19T00:00:01Z"); // not bumped
+    expect(t().pastStates.length).toBe(depth0); // guarded no-op: no spurious undo step
+  });
+
+  it("ignores an unknown id without throwing and records NO history step", () => {
+    t().clear();
+    const depth0 = t().pastStates.length;
+    useAnnotationStore.getState().resizeCollapsedMemo("missing", 0.15, "2026-07-19T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+    expect(t().pastStates.length).toBe(depth0);
+  });
+
+  it("is undoable via zundo in exactly ONE step (the normal command path, AR-7)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-07-19T00:00:01Z"));
+    t().clear();
+    const depth0 = t().pastStates.length;
+    useAnnotationStore.getState().resizeCollapsedMemo("m", 0.15, "2026-07-19T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.get("m")!.style.collapsed_width).toBe(0.15);
+    expect(t().pastStates.length).toBe(depth0 + 1); // exactly one history entry recorded
+    t().undo();
+    expect(useAnnotationStore.getState().annotations.get("m")!.style.collapsed_width).toBeUndefined();
+  });
+});
+
 describe("geometry edit — setAnnotationGeometry (move/resize command path, Story 3.1)", () => {
   const rect = { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 };
 
@@ -667,7 +714,7 @@ describe("geometry edit — setAnnotationGeometry (move/resize command path, Sto
   it("setDragPreview holds a transient preview WITHOUT touching the stored annotation", () => {
     const s = useAnnotationStore.getState();
     s.addAnnotation(memoMark("m", rect, "2026-06-29T00:00:01Z"));
-    s.setDragPreview({ id: "m", anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.5, y1: 0.6 } } });
+    s.setDragPreview({ id: "m", anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.5, y1: 0.6 } }, handle: "se" });
     expect(useAnnotationStore.getState().dragPreview?.id).toBe("m");
     // The committed annotation is untouched — the preview is separate transient state.
     const m = useAnnotationStore.getState().annotations.get("m")!;
@@ -771,7 +818,7 @@ describe("hydrate-on-open, doc-scoped (Story 3.5 + Story 5.8)", () => {
     s.addAnnotation(mark("old", "annotation-default", "2026-06-29T00:00:01Z"));
     s.select("old");
     s.setHovered("old");
-    s.setDragPreview({ id: "old", anchor: { kind: "text", page_index: 0, rects: [], text: "x" } });
+    s.setDragPreview({ id: "old", anchor: { kind: "text", page_index: 0, rects: [], text: "x" }, handle: "move" });
     s.setHidden(true);
 
     useAnnotationStore.getState().openDoc("doc-2", [

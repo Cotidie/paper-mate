@@ -299,11 +299,42 @@ export default function AnnotationLayer({
     if (anchor.kind !== "rect") return null;
     const { hovered, selected, flashed } = markState(a);
     const cls = markClass("annotation-memo", "annotation-memo", hovered, selected, flashed);
+    // Effective COLLAPSED WIDTH (Story 10.4, user decision: collapsed height is
+    // always one intrinsic CSS line, never resizable/persisted — only width
+    // varies). Position always comes from anchor.rect.x0/y0 (shared across
+    // both states); the y-values here are never read for a collapsed box
+    // (`MemoBox` never applies an explicit height while collapsed), so they
+    // pass through `anchor.rect` unchanged regardless of source.
+    let rect = anchor.rect;
+    if (a.style.collapsed) {
+      const isMovePreview = dragPreview?.id === a.id && dragPreview.handle === "move";
+      if (isMovePreview) {
+        // A MOVE only translates position (`computeAnchor`'s move branch
+        // preserves the EXPANDED rect's own width for the eventual
+        // `setAnnotationGeometry` commit) — the preview's `anchor.rect` width
+        // is the EXPANDED width, not this memo's own collapsed width, so
+        // re-derive it from the persisted `collapsed_width` instead of
+        // trusting the preview's width.
+        if (a.style.collapsed_width != null) {
+          const { x0, y0, y1 } = anchor.rect; // the preview's translated top-left
+          rect = { x0, y0, x1: x0 + a.style.collapsed_width, y1 };
+        }
+        // else: legacy (never resized) — `anchor.rect`'s translated width
+        // already matches "width from anchor.rect" (translate preserves size).
+      } else if (dragPreview?.id === a.id) {
+        // A collapsed corner-RESIZE preview: `anchor.rect`'s width IS the live
+        // evolving collapsed width (`computeAnchor` re-anchors it to the fixed
+        // top-left from the width-re-seeded `onDown` baseline) — usable as-is.
+      } else if (a.style.collapsed_width != null) {
+        const { x0, y0, y1 } = anchor.rect;
+        rect = { x0, y0, x1: x0 + a.style.collapsed_width, y1 };
+      }
+    }
     return (
       <MemoBox
         key={a.id}
         anno={a}
-        pos={denormalizeRect(anchor.rect, box, scale)}
+        pos={denormalizeRect(rect, box, scale)}
         cls={cls}
         selected={selected}
         // Single-selection only (Story 10.2): the SAME scope the old shared edit

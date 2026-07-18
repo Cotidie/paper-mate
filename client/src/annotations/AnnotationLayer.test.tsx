@@ -477,6 +477,7 @@ describe("AnnotationLayer comment (Story 2.10 — AC1,2,4,6)", () => {
       useAnnotationStore.getState().setDragPreview({
         id: "c9",
         anchor: { kind: "rect", page_index: 0, rect: { x0: 0.4, y0: 0.5, x1: 0.4, y1: 0.5 } },
+        handle: "move",
       }),
     );
     // Preview anchor: x0=0.4,y0=0.5 → left=240, top=400.
@@ -882,6 +883,78 @@ describe("AnnotationLayer memo collapse/expand (user feature request)", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     expect(screen.getByTestId("annotation-mark-m1").style.minHeight).toBe("160px");
+  });
+
+  it("Story 10.4: a collapsed memo WITH collapsed_width renders SIZED (width computed from it, position still from anchor.rect.x0/y0, height NEVER explicit)", () => {
+    const m = memoMark("m1", 0, "a note");
+    const sized: Annotation = {
+      ...m,
+      style: { ...m.style, collapsed: true, collapsed_width: 0.2 },
+    };
+    useAnnotationStore.getState().addAnnotation(sized);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const el = screen.getByTestId("annotation-mark-m1");
+    // Position from anchor.rect.x0/y0 (0.1*600=60, 0.2*800=160); width from
+    // collapsed_width (0.2*600=120) — NOT the expanded anchor.rect's own width
+    // (240). Height is NEVER explicit while collapsed (one intrinsic CSS line,
+    // user decision) — no minHeight, regardless of collapsed_width.
+    expect(el.style.left).toBe("60px");
+    expect(el.style.top).toBe("160px");
+    expect(parseFloat(el.style.width)).toBeCloseTo(120, 9);
+    expect(el.style.minHeight).toBe("");
+  });
+
+  it("Story 10.4: a collapsed memo WITHOUT collapsed_width renders LEGACY (width from anchor.rect, no explicit minHeight — today's behavior, unchanged)", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const el = screen.getByTestId("annotation-mark-m1");
+    expect(el.style.width).toBe("240px"); // anchor.rect width (0.4*600), same as expanded
+    expect(el.style.minHeight).toBe("");
+  });
+
+  it("Story 10.4 review fix: a SIZED collapsed memo mid-MOVE preview keeps its OWN persisted WIDTH (not the expanded rect's width, translated)", () => {
+    const m = memoMark("m1", 0, "a note");
+    const sized: Annotation = {
+      ...m,
+      style: { ...m.style, collapsed: true, collapsed_width: 0.2 },
+    };
+    useAnnotationStore.getState().addAnnotation(sized);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    // A move-preview translates the WHOLE expanded anchor.rect (0.4-wide
+    // fraction, 240px) by +0.1 — computeAnchor's move branch preserves the
+    // expanded width (needed for the eventual setAnnotationGeometry commit), so
+    // the preview's own rect is still 0.4 wide. The rendered box must NOT show
+    // that expanded width: it must keep showing its OWN collapsed_width (120px),
+    // positioned at the preview's new top-left.
+    act(() =>
+      useAnnotationStore.getState().setDragPreview({
+        id: "m1",
+        anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.6, y1: 0.5 } },
+        handle: "move",
+      }),
+    );
+    const el = screen.getByTestId("annotation-mark-m1");
+    expect(el.style.left).toBe("120px"); // 0.2*600 (the preview's translated top-left)
+    expect(el.style.top).toBe("240px"); // 0.3*800
+    expect(parseFloat(el.style.width)).toBeCloseTo(120, 9); // 0.2*600, the OWN collapsed width
+    expect(el.style.minHeight).toBe(""); // never explicit while collapsed
+  });
+
+  it("Story 10.4 review fix: a LEGACY (never-resized) collapsed memo mid-MOVE preview keeps the translated expanded width, still no explicit height", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() =>
+      useAnnotationStore.getState().setDragPreview({
+        id: "m1",
+        anchor: { kind: "rect", page_index: 0, rect: { x0: 0.2, y0: 0.3, x1: 0.6, y1: 0.5 } },
+        handle: "move",
+      }),
+    );
+    const el = screen.getByTestId("annotation-mark-m1");
+    expect(parseFloat(el.style.left)).toBeCloseTo(120, 9);
+    expect(parseFloat(el.style.top)).toBeCloseTo(240, 9);
+    expect(parseFloat(el.style.width)).toBeCloseTo(240, 9); // translate preserves the expanded width, matches legacy spec
+    expect(el.style.minHeight).toBe(""); // never explicit while collapsed
   });
 
   it("the collapse toggle is always present, expanded or collapsed", () => {
