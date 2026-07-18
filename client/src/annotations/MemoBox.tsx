@@ -145,9 +145,15 @@ export default function MemoBox({
         title={collapsed ? "Expand memo" : "Collapse memo"}
         // Stop the click from ALSO bubbling into the box's own onSelect above —
         // toggling is independent of selection (works whether selected or not).
+        // Blur immediately after: a browser focuses a <button> on click by
+        // default, and since Story 10.3 gates this chevron's visibility on
+        // `:focus-within`, an un-blurred click would leave it revealed
+        // indefinitely even after the pointer moves away (a plain click is a
+        // complete, one-shot action, not a reason to keep the chevron shown).
         onClick={(e) => {
           e.stopPropagation();
           onToggleCollapse(anno.id, !collapsed);
+          e.currentTarget.blur();
         }}
       >
         {collapsed ? <CaretDown aria-hidden /> : <CaretUp aria-hidden />}

@@ -618,6 +618,24 @@
   transition: opacity 0.1s ease-out;
 }
 
+/* Bridges the visual gap (--space-xxs) between the box's bottom edge and the
+   toggle's own top edge: without it, a pointer moving from the box straight
+   down onto the toggle crosses a strip that belongs to neither element, so
+   `.annotation-memo:hover` drops mid-transit and the toggle can vanish or go
+   unclickable before the pointer arrives (code-review finding). `pointer-
+   events: inherit` mirrors the toggle's own current state (none while hidden,
+   auto while revealed) so this invisible strip never intercepts clicks meant
+   for the page while idle. */
+.memo-collapse-toggle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: var(--space-xxs);
+  pointer-events: inherit;
+}
+
 .annotation-memo:hover .memo-collapse-toggle,
 .annotation-memo:focus-within .memo-collapse-toggle {
   opacity: 1;

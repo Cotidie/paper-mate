@@ -1487,14 +1487,27 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     expect(useAnnotationStore.getState().all().filter((a) => a.type === "memo")).toHaveLength(1);
   });
 
+  /** A realistic memo DOM shape: a `.annotation-memo` wrapper with a focusable
+   *  child (the real textarea is `.annotation-memo__body`, nested INSIDE the
+   *  wrapper, never the wrapper itself — matching MemoBox.tsx's actual markup),
+   *  so the blur check exercises `.closest(".annotation-memo")`, not a
+   *  same-element classname match. */
+  function memoWrapperWithFocusable(surf: HTMLElement, childTag: "textarea" | "button", childClass: string) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "annotation-memo";
+    const child = document.createElement(childTag);
+    child.className = childClass;
+    wrapper.appendChild(child);
+    surf.appendChild(wrapper);
+    return child;
+  }
+
   it("clicking empty space blurs a focused memo textarea (deselect behaves like Esc)", () => {
     const surf = canvasTarget();
     useAnnotationStore.getState().addAnnotation(memoMark("m1", "note"));
     // AnnotationInteraction doesn't render the layer, so stand in a focused memo
-    // textarea to represent the selected+focused memo.
-    const ta = document.createElement("textarea");
-    ta.className = "annotation-memo";
-    surf.appendChild(ta);
+    // textarea nested inside its real wrapper to represent the selected+focused memo.
+    const ta = memoWrapperWithFocusable(surf, "textarea", "annotation-memo__body");
     render(<AnnotationInteraction docId="doc-1" getPages={() => [fakeCard(0, 0)]} scale={1} enabled rectReader={reader} />);
     act(() => useAnnotationStore.getState().select("m1"));
     ta.focus();
@@ -1504,6 +1517,34 @@ describe("AnnotationInteraction memo gesture (Story 2.9 — AC1,2,3,6)", () => {
     // persist and look selected (the user-reported black-border-after-deselect bug).
     expect(useAnnotationStore.getState().selectedId).toBeNull();
     expect(document.activeElement).not.toBe(ta);
+  });
+
+  it("clicking empty space blurs a focused memo COLLAPSE TOGGLE, not just the textarea (Story 10.3 regression: :focus-within-gated chrome must not linger after deselect)", () => {
+    const surf = canvasTarget();
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "note"));
+    // The toggle is a sibling of the textarea inside the SAME wrapper, never the
+    // wrapper itself — the exact shape the old exact-classname check missed.
+    const toggle = memoWrapperWithFocusable(surf, "button", "memo-collapse-toggle");
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [fakeCard(0, 0)]} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    toggle.focus();
+    expect(document.activeElement).toBe(toggle);
+    fireEvent.pointerDown(surf, { button: 0, clientX: 60, clientY: 400 });
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(document.activeElement).not.toBe(toggle);
+  });
+
+  it("Escape also blurs a focused memo control, not just clear the selection (same lingering-focus bug via keyboard)", () => {
+    const surf = canvasTarget();
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", "note"));
+    const toggle = memoWrapperWithFocusable(surf, "button", "memo-collapse-toggle");
+    render(<AnnotationInteraction docId="doc-1" getPages={() => [fakeCard(0, 0)]} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    toggle.focus();
+    expect(document.activeElement).toBe(toggle);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(useAnnotationStore.getState().selectedId).toBeNull();
+    expect(document.activeElement).not.toBe(toggle);
   });
 
   it("with a memo selected, an empty-space click DESELECTS it instead of placing a new memo (user fix)", () => {
