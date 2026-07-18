@@ -152,6 +152,44 @@ describe("useEditGesture (move/resize drag, Story 3.1)", () => {
     if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.625, y1: 0.625 });
   });
 
+  it("floors a memo corner-resize at the minimum size (Story 10.2): a drag that would shrink below 48×32 scale-1 px commits at the floor instead, with the FIXED (nw) corner untouched", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    down(handle("se", "m"), 100, 100);
+    move(-200, -200); // dx = dy = -300/1000 = -0.3 — a drag far past the min from the nw corner
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.anchor.kind).toBe("rect");
+    if (m.anchor.kind !== "rect") return;
+    const minW = 48 / BOX.width;
+    const minH = 32 / BOX.height;
+    expect(m.anchor.rect.x0).toBeCloseTo(0.25, 10); // fixed corner unmoved
+    expect(m.anchor.rect.y0).toBeCloseTo(0.25, 10);
+    expect(m.anchor.rect.x1).toBeCloseTo(0.25 + minW, 10); // moving corner floored, not collapsed
+    expect(m.anchor.rect.y1).toBeCloseTo(0.25 + minH, 10);
+  });
+
+  it("does NOT floor a non-memo rect resize (region rects keep no minimum, Story 10.2): the same drag that floors a memo still flips/canonicalizes freely", () => {
+    const region: Annotation = {
+      id: "r",
+      doc_id: "doc-1",
+      type: "highlight",
+      group_id: null,
+      anchor: { kind: "rect", page_index: 0, rect: { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 } },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: null,
+      created_at: "2026-06-30T00:00:00Z",
+      updated_at: "2026-06-30T00:00:00Z",
+    };
+    useAnnotationStore.getState().addAnnotation(region);
+    mountGesture();
+    down(handle("se", "r"), 100, 100);
+    move(-200, -200); // same delta as the memo min-floor test above
+    up();
+    const r = useAnnotationStore.getState().annotations.get("r")!;
+    if (r.anchor.kind === "rect") expect(r.anchor.rect).toEqual({ x0: 0.2, y0: 0.2, x1: 0.25, y1: 0.25 });
+  });
+
   it("remembers a memo's RESIZED size as the session default (last-adjusted-size-wins)", () => {
     useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
     mountGesture();

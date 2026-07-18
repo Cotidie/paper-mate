@@ -219,8 +219,20 @@ export type RectCorner = "nw" | "ne" | "sw" | "se";
  * Resize a normalized rect by dragging one CORNER by (dx, dy) page fractions,
  * then `canonicalize` (so a drag past the opposite edge flips cleanly) and clamp
  * to [0,1]. Story 3.1 free corner-resize for kind=rect marks (the memo priority).
+ *
+ * `min` (Story 10.2, normalized page fractions) floors the moving corner's
+ * distance from the FIXED (opposite) corner, clamped BEFORE canonicalize so
+ * the moving edge can't cross the fixed one (no collapse/flip past the floor
+ * — mirrors `axisScale`'s pen no-collapse/no-flip logic). Omitted for region
+ * rects, which keep no minimum.
  */
-export function resizeRectCorner(rect: Rect, corner: RectCorner, dx: number, dy: number): Rect {
+export function resizeRectCorner(
+  rect: Rect,
+  corner: RectCorner,
+  dx: number,
+  dy: number,
+  min?: { w: number; h: number },
+): Rect {
   let { x0, y0, x1, y1 } = rect;
   if (corner === "nw") {
     x0 += dx;
@@ -234,6 +246,12 @@ export function resizeRectCorner(rect: Rect, corner: RectCorner, dx: number, dy:
   } else {
     x1 += dx;
     y1 += dy;
+  }
+  if (min) {
+    if (corner === "nw" || corner === "sw") x0 = Math.min(x0, x1 - min.w);
+    else x1 = Math.max(x1, x0 + min.w);
+    if (corner === "nw" || corner === "ne") y0 = Math.min(y0, y1 - min.h);
+    else y1 = Math.max(y1, y0 + min.h);
   }
   const c = canonicalize(x0, y0, x1, y1);
   return { x0: clamp01(c.x0), y0: clamp01(c.y0), x1: clamp01(c.x1), y1: clamp01(c.y1) };

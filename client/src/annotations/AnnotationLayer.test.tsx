@@ -683,11 +683,11 @@ describe("AnnotationLayer edit frame (Story 3.1)", () => {
     for (const c of ["nw", "ne", "sw", "se"]) expect(screen.getByTestId(`edit-handle-${c}-m1`)).toBeTruthy();
   });
 
-  it("shows ONLY the move grip for a selected COLLAPSED memo (user fix request: the stored-rect corner handles floated below the intrinsic collapsed box, and height resize is meaningless while collapsed)", () => {
+  it("shows a move grip + four corner handles for a selected COLLAPSED memo too (Story 10.2: handles render as the memo's OWN children, so they track its real collapsed box for free — the old stored-rect-frame mismatch that forced dropping the corners is gone)", () => {
     const collapsed = { ...memoMark("m1", 0), style: { color: "annotation-pink", collapsed: true } };
     seedAndSelect(collapsed);
     expect(screen.getByTestId("edit-handle-move-m1")).toBeTruthy();
-    for (const c of ["nw", "ne", "sw", "se"]) expect(screen.queryByTestId(`edit-handle-${c}-m1`)).toBeNull();
+    for (const c of ["nw", "ne", "sw", "se"]) expect(screen.getByTestId(`edit-handle-${c}-m1`)).toBeTruthy();
   });
 
   it("shows handles for a selected pen mark", () => {

@@ -44,6 +44,15 @@ export type EditHandle = "move" | RectCorner;
  *  can't scale a stroke to a zero/negative (flipped) size. */
 const MIN_PEN_SCALE = 0.05;
 
+/** Memo minimum resize floor, scale-1.0 CSS px (Story 10.2): small enough to
+ *  still hold a short word, tall enough for ~1 line of body-sm text plus the
+ *  memo's padding. Converted to a normalized page fraction at resize time
+ *  (`px / box.{width,height}`) so the floor is zoom-independent — a CSS-px
+ *  floor would change the allowable min rect as the user zooms. Region rects
+ *  pass no min (see `computeAnchor`) and keep no floor. */
+const MIN_MEMO_WIDTH_PX = 48;
+const MIN_MEMO_HEIGHT_PX = 32;
+
 /** Client-pixel distance from the pointerdown origin before a handle drag counts
  *  as "moved" (vs. a plain click). Mirrors the existing COMMENT_CLICK_SLOP
  *  convention (AnnotationInteraction.tsx) — needed here because the comment pin
@@ -77,6 +86,9 @@ interface DragState {
   id: string;
   handle: EditHandle;
   startAnchor: Annotation["anchor"];
+  /** The dragged mark's type (Story 10.2): `computeAnchor` needs it to know
+   *  whether to floor a corner-resize at the memo minimum. */
+  type: Annotation["type"];
   box: { width: number; height: number };
   scale: number;
   startX: number;
@@ -192,6 +204,7 @@ export function useEditGesture(opts: {
         id,
         handle,
         startAnchor: anno.anchor,
+        type: anno.type,
         box: page.box,
         scale: scaleRef.current,
         startX: e.clientX,
@@ -327,8 +340,14 @@ export function useEditGesture(opts: {
 function computeAnchor(d: DragState, dx: number, dy: number): Annotation["anchor"] | null {
   const a = d.startAnchor;
   if (a.kind === "rect") {
-    const rect = d.handle === "move" ? translateRect(a.rect, dx, dy) : resizeRectCorner(a.rect, d.handle, dx, dy);
-    return { ...a, rect };
+    if (d.handle === "move") return { ...a, rect: translateRect(a.rect, dx, dy) };
+    // Memo-only min floor (Story 10.2): normalized page fraction, so it stays
+    // the same real-world size at every zoom. Region/comment rects get no min.
+    const min =
+      d.type === "memo"
+        ? { w: MIN_MEMO_WIDTH_PX / d.box.width, h: MIN_MEMO_HEIGHT_PX / d.box.height }
+        : undefined;
+    return { ...a, rect: resizeRectCorner(a.rect, d.handle, dx, dy, min) };
   }
   if (a.kind === "path") {
     if (d.handle === "move") return { ...a, points: translatePoints(a.points, dx, dy) };
