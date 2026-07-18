@@ -390,6 +390,57 @@ describe("resizeRectCorner (free corner-drag resize, Story 3.1)", () => {
   });
 });
 
+describe("resizeRectCorner min floor (Story 10.2, memo minimum size)", () => {
+  const rect = { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 };
+  const min = { w: 0.1, h: 0.1 };
+
+  it("floors an SE drag that would otherwise flip/collapse the rect: the fixed NW corner stays put, the moving SE corner stops at the min distance from it", () => {
+    expect(resizeRectCorner(rect, "se", -0.5, -0.5, min)).toEqual({ x0: 0.25, y0: 0.25, x1: 0.35, y1: 0.35 });
+  });
+
+  it("floors an NW drag: the fixed SE corner stays put, the moving NW corner stops at the min distance from it", () => {
+    expect(resizeRectCorner(rect, "nw", 0.5, 0.5, min)).toEqual({ x0: 0.4, y0: 0.4, x1: 0.5, y1: 0.5 });
+  });
+
+  it("floors an NE drag independently per axis: the fixed x0/y1 stay put, the moving x1/y0 each stop at their own min", () => {
+    expect(resizeRectCorner(rect, "ne", -0.3, 0.3, min)).toEqual({ x0: 0.25, y0: 0.4, x1: 0.35, y1: 0.5 });
+  });
+
+  it("floors an SW drag independently per axis: the fixed x1/y0 stay put, the moving x0/y1 each stop at their own min", () => {
+    expect(resizeRectCorner(rect, "sw", 0.3, -0.3, min)).toEqual({ x0: 0.4, y0: 0.25, x1: 0.5, y1: 0.35 });
+  });
+
+  it("a resize that stays above the min is unaffected by the floor (identical to the no-min result)", () => {
+    expect(resizeRectCorner(rect, "se", 0.125, 0.125, min)).toEqual(resizeRectCorner(rect, "se", 0.125, 0.125));
+  });
+
+  it("no min (region rects, undefined) behaves exactly as before — can shrink toward zero", () => {
+    expect(resizeRectCorner(rect, "se", -0.5, -0.5, undefined)).toEqual(resizeRectCorner(rect, "se", -0.5, -0.5));
+  });
+
+  it("preserves the floor for a legacy rect whose fixed corner sits within `min` of the page edge (Codex review MED: clamp01 must not silently shrink below the floor)", () => {
+    // Fixed corner (x0,y0) at 0.97 — within min.w (0.048) of the right/bottom
+    // edge. A naive floor would push x1/y1 to 1.018, then clamp01 to 1,
+    // yielding a 0.03-wide result — below the requested floor.
+    const edgeRect = { x0: 0.97, y0: 0.97, x1: 0.99, y1: 0.99 };
+    const result = resizeRectCorner(edgeRect, "se", -0.5, -0.5, min);
+    expect(result.x1).toBe(1);
+    expect(result.y1).toBe(1);
+    expect(result.x1 - result.x0).toBeCloseTo(min.w, 10);
+    expect(result.y1 - result.y0).toBeCloseTo(min.h, 10);
+  });
+
+  it("preserves the floor for a legacy rect whose fixed corner sits within `min` of the page's top-left edge", () => {
+    // Fixed corner (x1,y1) at 0.02 — within min.h (0.032) of the top/left edge.
+    const edgeRect = { x0: 0, y0: 0, x1: 0.02, y1: 0.02 };
+    const result = resizeRectCorner(edgeRect, "nw", 0.5, 0.5, min);
+    expect(result.x0).toBe(0);
+    expect(result.y0).toBe(0);
+    expect(result.x1 - result.x0).toBeCloseTo(min.w, 10);
+    expect(result.y1 - result.y0).toBeCloseTo(min.h, 10);
+  });
+});
+
 describe("scalePoints (resize a pen stroke about an origin, Story 3.1)", () => {
   it("scales every point about the origin corner", () => {
     expect(

@@ -164,10 +164,14 @@ export default function AnnotationLayer({
   // Story 2.10) — it already moves via its own pin drag handle (`movable`,
   // below); excluded here so it doesn't ALSO grow four resize corners on a
   // zero-size frame (Codex 8.4 review, Med finding 2), which would let a plain
-  // point pin silently balloon into a region.
+  // point pin silently balloon into a region. Memos are ALSO excluded (Story
+  // 10.2): a memo's handles render as its OWN children (`renderMemo` below,
+  // `MemoBox`'s `editable` prop) so they track its real rendered box (auto-grow/
+  // collapse) instead of the stored anchor rect a shared frame would use.
   const isEditable = (a: Annotation): boolean =>
     a.anchor.kind === "path" ||
     (a.anchor.kind === "rect" &&
+      a.type !== "memo" &&
       (a.anchor.rect.x0 !== a.anchor.rect.x1 || a.anchor.rect.y0 !== a.anchor.rect.y1));
 
   // The one selected mark on THIS page that shows an edit frame (single selection).
@@ -302,6 +306,11 @@ export default function AnnotationLayer({
         pos={denormalizeRect(anchor.rect, box, scale)}
         cls={cls}
         selected={selected}
+        // Single-selection only (Story 10.2): the SAME scope the old shared edit
+        // frame used (`a.id === selectedId`), NOT the OR'd `selected` above — a
+        // box-select multi-selection member must show only the bulk group frame's
+        // move/delete, never its own resize corners.
+        editable={a.id === selectedId}
         onRetext={(id, body) => retextAnnotation(id, body, new Date().toISOString())}
         onSelect={select}
         onHover={setHovered}
@@ -381,27 +390,22 @@ export default function AnnotationLayer({
     );
   };
 
-  // The edit frame for the selected pen/memo/region mark: a move grip + four
-  // corner resize handles over its (preview-aware) bounding box. The handles carry
+  // The edit frame for the selected pen/region mark: a move grip + four corner
+  // resize handles over its (preview-aware) bounding box. The handles carry
   // data-edit-handle + data-edit-id; useEditGesture turns a drag on one into a
   // geometry edit. Positioned via the anchor service so it rides zoom (NFR-3); the
   // handles are <button>s so the document-level deselect/create handlers skip them
-  // (isExempt), keeping the mark selected during the drag.
+  // (isExempt), keeping the mark selected during the drag. Memos are excluded
+  // (Story 10.2, `isEditable`/`editMark` above) — their handles render as their
+  // own children instead (`renderMemo` → `MemoBox`'s `editable` prop), so this
+  // never sees `a.type === "memo"`.
   const renderEditFrame = (a: Annotation) => {
     const anchor = effAnchor(a);
     let fb: ScreenRect | null = null;
     if (anchor.kind === "rect") fb = denormalizeRect(anchor.rect, box, scale);
     else if (anchor.kind === "path") fb = denormalizeRect(pointsBounds(anchor.points), box, scale);
     if (!fb) return null;
-    // A collapsed memo (user fix request) renders at an intrinsic CSS height that
-    // no longer matches its stored anchor rect, so the frame's stored-height corner
-    // handles (esp. sw/se) float below the actual collapsed box. Rather than try to
-    // track the intrinsic CSS height from pure anchor math, just drop the resize
-    // corners entirely while collapsed — only the move grip remains (it anchors to
-    // the frame's TOP edge, unaffected by frame height, so it stays put correctly).
-    // Matches the feature's own "must expand first, then edit" precedent.
-    const collapsedMemo = a.type === "memo" && a.style.collapsed === true;
-    const handles = collapsedMemo ? (["move"] as const) : (["move", "nw", "ne", "sw", "se"] as const);
+    const handles = ["move", "nw", "ne", "sw", "se"] as const;
     return (
       <div
         className="annotation-edit-frame"

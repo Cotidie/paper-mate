@@ -16,6 +16,17 @@
 // outer box (testid, position, hover/select) stays the SAME element either way —
 // only its CHILD changes. Must expand first, then edit (user decision): a
 // collapsed memo has no textarea to type into until the toggle expands it.
+//
+// Edit handles (Story 10.2): when `editable`, the move grip + 4 corner resize
+// handles render as CHILDREN of this real `.annotation-memo` box (reusing
+// `.edit-handle`/`.edit-handle--*` verbatim) instead of a separate frame sized
+// from the stored anchor rect. This is CSS-native corner tracking: since the
+// box is `position:absolute; box-sizing:border-box`, an absolutely-positioned
+// child straddling `left/top/right/bottom:0` always sits on the box's REAL
+// corners, however auto-grow or collapse change its rendered height — no
+// measurement, no stale frame (the bug this story fixes: a shared frame sized
+// from `anchor.rect` desyncs the moment the box's rendered height differs from
+// it, e.g. content taller than the stored rect, or a collapsed box).
 
 import { useLayoutEffect, useRef } from "react";
 import { CaretDown, CaretUp } from "@phosphor-icons/react";
@@ -23,11 +34,17 @@ import type { Annotation } from "@/api/client";
 import type { ScreenRect } from "@/anchor";
 import "./Annotations.css";
 
+/** The memo edit-frame handles, rendered as the box's own children (Story 10.2).
+ *  Order matches the old shared-frame list; `useEditGesture` reads them purely
+ *  by `data-edit-handle`/`data-edit-id`, so wherever they live is transparent to it. */
+const EDIT_HANDLES = ["move", "nw", "ne", "sw", "se"] as const;
+
 export default function MemoBox({
   anno,
   pos,
   cls,
   selected,
+  editable,
   onRetext,
   onSelect,
   onHover,
@@ -40,6 +57,11 @@ export default function MemoBox({
   pos: ScreenRect;
   cls: string;
   selected: boolean;
+  /** Single-selection scope (Story 10.2, `a.id === selectedId`): whether THIS
+   *  memo shows its own move/resize handles. Deliberately NOT the same as
+   *  `selected` (which also lights up for box-select multi-selection — that
+   *  mode gets only the bulk group frame, never per-mark resize). */
+  editable: boolean;
   onRetext: (id: string, body: string) => void;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
@@ -90,6 +112,13 @@ export default function MemoBox({
         top: pos.top,
         width: pos.width,
         ...(collapsed ? {} : { minHeight: pos.height }),
+        // Story 10.2 review fix: an explicit z-index only when `editable` so this
+        // memo (and its nested handles) outranks OVERLAPPING sibling memos within
+        // the shared `.annotation-memos` stacking context — a plain z-index:auto
+        // sibling always loses to any explicitly z-indexed box, regardless of
+        // paint/creation order. `.annotation-memos`'s own z-index (2, vs comments'
+        // 1) handles winning against the comments group.
+        ...(editable ? { zIndex: 1 } : {}),
         borderColor: `var(--color-${anno.style.color})`,
         // Background also carries the mark's accent (user request: border-only
         // made too little difference). style.alpha (fix request, the memo twin
@@ -155,6 +184,18 @@ export default function MemoBox({
           onDoubleClick={() => ref.current?.focus()}
         />
       )}
+      {editable &&
+        EDIT_HANDLES.map((hh) => (
+          <button
+            key={hh}
+            type="button"
+            className={`edit-handle edit-handle--${hh}`}
+            data-edit-handle={hh}
+            data-edit-id={anno.id}
+            data-testid={`edit-handle-${hh}-${anno.id}`}
+            aria-label={hh === "move" ? "Move annotation" : "Resize annotation"}
+          />
+        ))}
     </div>
   );
 }
