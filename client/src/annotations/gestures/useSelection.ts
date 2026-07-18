@@ -15,6 +15,22 @@ import { quickBoxSpec, usesLeftVerticalQuickBox, hasOwnTextEntry, type QuickBoxS
 import { isExempt } from "./shared";
 import { isEditableTarget } from "@/lib/domFocus";
 
+/** Blur whatever's focused if it's inside a memo (its textarea, the collapse
+ *  toggle, or — while editable — a move/resize handle), before clearSelection
+ *  drops the `--selected` ring. A plain click on a non-focusable page area does
+ *  NOT blur the previously-focused element (the HTML focus-fixup rule: focus
+ *  only changes if the new click target is itself focusable), so without this,
+ *  DOM focus lingers on a memo control the user clicked or tabbed to — keeping
+ *  its `:focus-visible` ring AND any `:focus-within`-gated chrome (the collapse
+ *  toggle, Story 10.3) visible after the mark is no longer selected, making
+ *  deselect look like a no-op. Matches `.closest(".annotation-memo")`, not an
+ *  exact classname, so it covers every focusable descendant, not just the
+ *  (never-focusable) outer wrapper. */
+function blurMemoFocus(): void {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active.closest(".annotation-memo")) active.blur();
+}
+
 export interface SelectionApi {
   /** The selected mark, scoped to THIS doc (null if nothing/other-doc selected). */
   selectedAnno: Annotation | null;
@@ -230,7 +246,9 @@ export function useSelection(opts: {
           `memo-body-${selectedAnno.id}`;
       if (!inOwnMemoTextarea && isEditableTarget(e.target)) return;
       if (e.key === "Escape") {
-        // Esc clears the selection (the App-level Esc->cursor also runs).
+        // Esc clears the selection (the App-level Esc->cursor also runs). Blur
+        // first (see the pointerdown handler below for why).
+        blurMemoFocus();
         clearSelection();
         return;
       }
@@ -252,12 +270,7 @@ export function useSelection(opts: {
       );
       const inBox = selectionBoxRef.current?.contains(t as Node) ?? false;
       if (!onMark && !inBox) {
-        // Match ESC: blur a still-focused memo textarea. clearSelection drops the
-        // `--selected` ring, but a focused memo keeps its `:focus-visible` ring (the
-        // SAME 2px ink outline), so it would still LOOK selected. ESC explicitly
-        // blurs (MemoBox); an outside click must too, or deselect looks like a no-op.
-        const active = document.activeElement;
-        if (active instanceof HTMLElement && active.classList.contains("annotation-memo")) active.blur();
+        blurMemoFocus();
         clearSelection();
       }
     };

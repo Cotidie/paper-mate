@@ -15,7 +15,11 @@
 // swaps the editable textarea for a plain, non-editable one-line preview; the
 // outer box (testid, position, hover/select) stays the SAME element either way —
 // only its CHILD changes. Must expand first, then edit (user decision): a
-// collapsed memo has no textarea to type into until the toggle expands it.
+// collapsed memo has no textarea to type into until the toggle expands it. The
+// action itself is not selection-gated, but visibility is hidden until hover,
+// focus-within, OR the memo is selected (Story 10.3, CSS-only via
+// `.memo-collapse-toggle`'s opacity in Annotations.css) so idle memos stay
+// clean while a selected memo's chrome reads as complete, not missing a control.
 //
 // Edit handles (Story 10.2): when `editable`, the move grip + 4 corner resize
 // handles render as CHILDREN of this real `.annotation-memo` box (reusing
@@ -143,9 +147,15 @@ export default function MemoBox({
         title={collapsed ? "Expand memo" : "Collapse memo"}
         // Stop the click from ALSO bubbling into the box's own onSelect above —
         // toggling is independent of selection (works whether selected or not).
+        // Blur immediately after: a browser focuses a <button> on click by
+        // default, and since Story 10.3 gates this chevron's visibility on
+        // `:focus-within`, an un-blurred click would leave it revealed
+        // indefinitely even after the pointer moves away (a plain click is a
+        // complete, one-shot action, not a reason to keep the chevron shown).
         onClick={(e) => {
           e.stopPropagation();
           onToggleCollapse(anno.id, !collapsed);
+          e.currentTarget.blur();
         }}
       >
         {collapsed ? <CaretDown aria-hidden /> : <CaretUp aria-hidden />}

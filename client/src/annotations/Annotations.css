@@ -588,8 +588,19 @@
    corner: a SELECTED memo also renders its Story 3.1 edit frame (4 corner resize
    handles + the top-center move grip, same z-layer) — any corner or top-center
    position collides with one of those. Bottom-center is the one edge the edit
-   frame never touches. Always present (not selection-gated), so a reader can
-   collapse/expand a memo without first selecting it. */
+   frame never touches. The ACTION is not selection-gated (a reader can
+   collapse/expand a memo without first selecting it), but VISIBILITY is hidden
+   until hover, focus-within, OR the memo is selected (Story 10.3 + user fix
+   request: a selected memo already shows its own edit-frame chrome — corner
+   handles, move grip, quick-box — so hiding just this one control while
+   everything else stays visible reads as broken, not minimal). Matches the
+   .folder-panel__row-actions / .collection-table__open-button reveal pattern
+   for the hover/focus part: opacity-only (never display/visibility), because a
+   COLLAPSED memo has no textarea, so the chevron is the ONLY focusable control
+   inside it — display:none/visibility:hidden would drop it from the tab order
+   and make a collapsed memo permanently un-expandable by keyboard. opacity:0 +
+   pointer-events:none keeps it focusable while invisible; tabbing onto it (or
+   any control inside the memo) fires :focus-within and reveals it. */
 .memo-collapse-toggle {
   position: absolute;
   left: 50%;
@@ -606,6 +617,33 @@
   border-radius: var(--radius-pill);
   color: var(--color-ink);
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease-out;
+}
+
+/* Bridges the visual gap (--space-xxs) between the box's bottom edge and the
+   toggle's own top edge: without it, a pointer moving from the box straight
+   down onto the toggle crosses a strip that belongs to neither element, so
+   `.annotation-memo:hover` drops mid-transit and the toggle can vanish or go
+   unclickable before the pointer arrives (code-review finding). `pointer-
+   events: inherit` mirrors the toggle's own current state (none while hidden,
+   auto while revealed) so this invisible strip never intercepts clicks meant
+   for the page while idle. */
+.memo-collapse-toggle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: var(--space-xxs);
+  pointer-events: inherit;
+}
+
+.annotation-memo:hover .memo-collapse-toggle,
+.annotation-memo:focus-within .memo-collapse-toggle,
+.annotation-memo--selected .memo-collapse-toggle {
+  opacity: 1;
   pointer-events: auto;
 }
 

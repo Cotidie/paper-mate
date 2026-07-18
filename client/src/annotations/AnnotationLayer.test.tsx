@@ -893,11 +893,31 @@ describe("AnnotationLayer memo collapse/expand (user feature request)", () => {
     expect(screen.getByTestId("memo-collapse-toggle-m1")).toBeTruthy();
   });
 
+  it("the collapse toggle stays keyboard-focusable on a collapsed memo (Story 10.3: hidden via opacity, not display/visibility, so it never leaves the tab order)", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const toggle = screen.getByTestId("memo-collapse-toggle-m1") as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+    expect(toggle.tabIndex).toBe(0);
+  });
+
   it("clicking the toggle on an expanded memo calls setMemoCollapsed(id, true, ...)", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
     fireEvent.click(screen.getByTestId("memo-collapse-toggle-m1"));
     expect(useAnnotationStore.getState().annotations.get("m1")!.style.collapsed).toBe(true);
+  });
+
+  it("clicking the toggle blurs it (Story 10.3 fix: a browser focuses a button on click, and since visibility is :focus-within-gated, an un-blurred click would leave the chevron revealed forever after the pointer moves away)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const toggle = screen.getByTestId("memo-collapse-toggle-m1") as HTMLButtonElement;
+    // jsdom's fireEvent.click doesn't perform the browser's own click-focuses-
+    // button default action, so focus it first to represent that real state.
+    toggle.focus();
+    expect(document.activeElement).toBe(toggle);
+    fireEvent.click(toggle);
+    expect(document.activeElement).not.toBe(toggle);
   });
 
   it("clicking the toggle on a collapsed memo calls setMemoCollapsed(id, false, ...) (expands it back)", () => {
