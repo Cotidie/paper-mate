@@ -601,6 +601,45 @@ describe("resizeCommentAnnotation (comment bubble resize, user feature request)"
   });
 });
 
+describe("resizeCollapsedMemo (resizable collapsed memo box, Story 10.4)", () => {
+  const rect = { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 };
+
+  it("sets style.collapsed_width/height and bumps updated_at, leaving anchor.rect (the expanded size) untouched", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-07-19T00:00:01Z"));
+    useAnnotationStore.getState().resizeCollapsedMemo("m", { w: 0.15, h: 0.03 }, "2026-07-19T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.style.collapsed_width).toBe(0.15);
+    expect(m.style.collapsed_height).toBe(0.03);
+    expect(m.updated_at).toBe("2026-07-19T12:00:00Z");
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual(rect);
+  });
+
+  it("guards non-memo marks (a stale text/path id is untouched)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(mark("h", "annotation-default", "2026-07-19T00:00:01Z"));
+    useAnnotationStore.getState().resizeCollapsedMemo("h", { w: 0.15, h: 0.03 }, "2026-07-19T12:00:00Z");
+    const h = useAnnotationStore.getState().annotations.get("h")!;
+    expect(h.style.collapsed_width).toBeUndefined();
+    expect(h.updated_at).toBe("2026-07-19T00:00:01Z"); // not bumped
+  });
+
+  it("ignores an unknown id without throwing", () => {
+    useAnnotationStore.getState().resizeCollapsedMemo("missing", { w: 0.15, h: 0.03 }, "2026-07-19T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+  });
+
+  it("is undoable via zundo in one step (the normal command path, AR-7)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", rect, "2026-07-19T00:00:01Z"));
+    useAnnotationStore.temporal.getState().clear();
+    useAnnotationStore.getState().resizeCollapsedMemo("m", { w: 0.15, h: 0.03 }, "2026-07-19T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.get("m")!.style.collapsed_width).toBe(0.15);
+    useAnnotationStore.temporal.getState().undo();
+    expect(useAnnotationStore.getState().annotations.get("m")!.style.collapsed_width).toBeUndefined();
+  });
+});
+
 describe("geometry edit — setAnnotationGeometry (move/resize command path, Story 3.1)", () => {
   const rect = { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 };
 

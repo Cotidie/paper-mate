@@ -298,6 +298,53 @@ describe("useEditGesture (move/resize drag, Story 3.1)", () => {
   });
 });
 
+describe("useEditGesture collapsed memo corner-resize (Story 10.4)", () => {
+  it("a COLLAPSED memo corner-resize commits through resizeCollapsedMemo (collapsed extent), NOT setAnnotationGeometry, with the top-left held fixed", () => {
+    const collapsedMemo: Annotation = {
+      ...memo("m", { x0: 0.3, y0: 0.3, x1: 0.5, y1: 0.5 }),
+      style: { color: "annotation-default", stroke_width: null, alpha: null, collapsed: true },
+    };
+    useAnnotationStore.getState().addAnnotation(collapsedMemo);
+    mountGesture();
+    const btn = handle("nw", "m");
+    const memoEl = document.createElement("div");
+    memoEl.className = "annotation-memo";
+    // Rendered collapsed box: 100x40 scale-1 px = 0.1 x 0.04 normalized (differs
+    // from the expanded 0.2x0.2 anchor.rect — this is the collapsed_* extent).
+    memoEl.getBoundingClientRect = () => ({ width: 100, height: 40 }) as DOMRect;
+    memoEl.appendChild(btn);
+    document.body.appendChild(memoEl);
+    down(btn, 100, 100);
+    move(50, 80); // dx = -50/1000 = -0.05, dy = -20/1000 = -0.02
+    up();
+
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    // The EXPANDED size (anchor.rect) is untouched — only resizeCollapsedMemo
+    // (not setAnnotationGeometry) commits, so it never rewrites anchor.rect.
+    expect(m.anchor.kind).toBe("rect");
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual({ x0: 0.3, y0: 0.3, x1: 0.5, y1: 0.5 });
+    // The collapsed size is written to style.collapsed_width/height, re-anchored
+    // to the fixed top-left (0.3,0.3) rather than letting the nw handle move it.
+    expect(m.style.collapsed_width).toBeCloseTo(0.15, 10);
+    expect(m.style.collapsed_height).toBeCloseTo(0.06, 10);
+    expect(m.updated_at).not.toBe("2026-06-30T00:00:00Z");
+  });
+
+  it("an EXPANDED memo corner-resize still commits through setAnnotationGeometry (anchor.rect), leaving collapsed_width/height untouched", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    down(handle("se", "m"), 100, 100);
+    move(225, 225); // dx = dy = 0.125 → SE corner grows
+    up();
+
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.anchor.kind).toBe("rect");
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual({ x0: 0.25, y0: 0.25, x1: 0.625, y1: 0.625 });
+    expect(m.style.collapsed_width).toBeUndefined();
+    expect(m.style.collapsed_height).toBeUndefined();
+  });
+});
+
 function pen(id: string, points: { x: number; y: number }[]): Annotation {
   return {
     id,

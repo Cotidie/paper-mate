@@ -46,6 +46,7 @@ const EDIT_HANDLES = ["move", "nw", "ne", "sw", "se"] as const;
 export default function MemoBox({
   anno,
   pos,
+  collapsedSized,
   cls,
   selected,
   editable,
@@ -59,6 +60,11 @@ export default function MemoBox({
 }: {
   anno: Annotation;
   pos: ScreenRect;
+  /** Whether `pos.height` is a real SIZED collapsed extent (a live drag preview
+   *  or a persisted `style.collapsed_width`/`height`, Story 10.4) rather than
+   *  the legacy fallback (box width from `anchor.rect`, intrinsic one-line
+   *  height). Irrelevant while expanded. */
+  collapsedSized: boolean;
   cls: string;
   selected: boolean;
   /** Single-selection scope (Story 10.2, `a.id === selectedId`): whether THIS
@@ -115,7 +121,14 @@ export default function MemoBox({
         left: pos.left,
         top: pos.top,
         width: pos.width,
-        ...(collapsed ? {} : { minHeight: pos.height }),
+        // Expanded → minHeight from the expanded rect. Collapsed + SIZED (a
+        // live drag preview or a persisted collapsed_width/height, Story 10.4)
+        // → minHeight from the collapsed rect. Collapsed + legacy (neither) →
+        // no explicit minHeight, so the box stays its intrinsic one-line
+        // height (today's behavior). `.annotation-memo__preview` stays
+        // single-line (nowrap/ellipsis) regardless — a taller resized
+        // collapsed box just leaves whitespace below the first line.
+        ...(collapsed && !collapsedSized ? {} : { minHeight: pos.height }),
         // Story 10.2 review fix: an explicit z-index only when `editable` so this
         // memo (and its nested handles) outranks OVERLAPPING sibling memos within
         // the shared `.annotation-memos` stacking context — a plain z-index:auto

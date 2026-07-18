@@ -89,6 +89,13 @@ interface DragState {
   /** The dragged mark's type (Story 10.2): `computeAnchor` needs it to know
    *  whether to floor a corner-resize at the memo minimum. */
   type: Annotation["type"];
+  /** Whether the dragged memo was COLLAPSED at pointerdown (Story 10.4):
+   *  `computeAnchor`/`onUp` route a collapsed memo's corner-resize to the
+   *  collapsed size (`resizeCollapsedMemo`) instead of `anchor.rect`
+   *  (`setAnnotationGeometry`), keeping the two sizes distinct (AC #2).
+   *  Captured once at `onDown` from `anno.style.collapsed ?? false`; harmless
+   *  (always false) for a non-memo mark. */
+  collapsed: boolean;
   box: { width: number; height: number };
   scale: number;
   startX: number;
@@ -123,6 +130,7 @@ export function useEditGesture(opts: {
   const { enabled, getPagesRef, scaleRef, multiSelectActive = false } = opts;
   const setDragPreview = useAnnotationStore((s) => s.setDragPreview);
   const setAnnotationGeometry = useAnnotationStore((s) => s.setAnnotationGeometry);
+  const resizeCollapsedMemo = useAnnotationStore((s) => s.resizeCollapsedMemo);
   const setGroupDragPreview = useAnnotationStore((s) => s.setGroupDragPreview);
   const setAnnotationGeometries = useAnnotationStore((s) => s.setAnnotationGeometries);
   const setActiveMemoSize = useAnnotationStore((s) => s.setActiveMemoSize);
@@ -201,31 +209,37 @@ export function useEditGesture(opts: {
       const page = getPagesRef.current().find((p) => p.pageIndex === anno.anchor.page_index);
       if (!page) return;
       let startAnchor = anno.anchor;
-      // Memo-only, corner-resize only (Story 10.2 review fix): a memo's
-      // RENDERED height can differ from its stored anchor rect (auto-grown
-      // taller, or collapsed shorter) — the box's TOP always matches the
-      // stored y0 (CSS `top` is set directly from it; only height is
-      // intrinsic/content-derived), so seed the resize baseline's y1 from the
-      // REAL rendered height. Without this, a corner-drag's delta lands on the
-      // stale stored height instead of where the user visually grabbed the
-      // handle (Task 2 moved the handle to the real corner; the resize MATH
-      // must track it too). MOVE is unaffected (`translateRect` only shifts
-      // the existing rect; size is untouched). jsdom has no layout (the
-      // measured rect is zeroed), so this is a no-op there — LIVE-SMOKE only.
+      // Memo-only, corner-resize only (Story 10.2 review fix, extended Story
+      // 10.4): a memo's RENDERED box can differ from its stored anchor rect
+      // (auto-grown taller, or a COLLAPSED box now carrying its own
+      // `collapsed_width`/`height`) — the box's TOP-LEFT always matches the
+      // stored x0/y0 (CSS `left`/`top` are set directly from them; only the
+      // extent is intrinsic/content-derived or state-specific), so seed the
+      // resize baseline's x1/y1 from the REAL rendered box. Without this, a
+      // corner-drag's delta lands on the stale stored extent instead of where
+      // the user visually grabbed the handle (the handle sits on the real
+      // corner; the resize MATH must track it too). A no-op for the expanded
+      // case (rendered width == stored width) — only a collapsed box's width
+      // now differs. MOVE is unaffected (`translateRect` only shifts the
+      // existing rect; size is untouched). jsdom has no layout (the measured
+      // rect is zeroed), so this is a no-op there — LIVE-SMOKE only.
       if (anno.type === "memo" && handle !== "move" && startAnchor.kind === "rect") {
         const memoEl = handleEl.closest(".annotation-memo") as HTMLElement | null;
-        const renderedHeight = memoEl?.getBoundingClientRect().height ?? 0;
-        const heightFrac = renderedHeight / (page.box.height * scaleRef.current);
-        if (Number.isFinite(heightFrac) && heightFrac > 0) {
-          const r = startAnchor.rect;
-          startAnchor = { ...startAnchor, rect: { ...r, y1: r.y0 + heightFrac } };
-        }
+        const rendered = memoEl?.getBoundingClientRect();
+        const widthFrac = (rendered?.width ?? 0) / (page.box.width * scaleRef.current);
+        const heightFrac = (rendered?.height ?? 0) / (page.box.height * scaleRef.current);
+        const r = startAnchor.rect;
+        const next = { ...r };
+        if (Number.isFinite(widthFrac) && widthFrac > 0) next.x1 = r.x0 + widthFrac;
+        if (Number.isFinite(heightFrac) && heightFrac > 0) next.y1 = r.y0 + heightFrac;
+        startAnchor = { ...startAnchor, rect: next };
       }
       dragRef.current = {
         id,
         handle,
         startAnchor,
         type: anno.type,
+        collapsed: anno.style.collapsed ?? false,
         box: page.box,
         scale: scaleRef.current,
         startX: e.clientX,
@@ -285,7 +299,20 @@ export function useEditGesture(opts: {
         // Commit ONE geometry mutation (so 3.2's zundo records one step). A handle
         // press with no real drag changes nothing → no commit, no updated_at bump.
         if (d.moved && d.lastAnchor) {
-          setAnnotationGeometry(d.id, d.lastAnchor, new Date().toISOString());
+          const isCollapsedResize = d.collapsed && d.type === "memo" && d.handle !== "move";
+          if (isCollapsedResize && d.lastAnchor.kind === "rect") {
+            // Collapsed memo corner-resize (Story 10.4): commit to the
+            // COLLAPSED size, not `anchor.rect` (that stays the expanded size,
+            // AC #2). One command-path call → one undoable zundo step (AR-7).
+            const r = d.lastAnchor.rect;
+            resizeCollapsedMemo(
+              d.id,
+              { w: r.x1 - r.x0, h: r.y1 - r.y0 },
+              new Date().toISOString(),
+            );
+          } else {
+            setAnnotationGeometry(d.id, d.lastAnchor, new Date().toISOString());
+          }
           // A real move (moved beyond slop) never fires the wrapper's own click
           // (browsers suppress "click" after pointer movement), so an UNSELECTED
           // memo dragged from empty space (user feature request) would otherwise
@@ -302,11 +329,12 @@ export function useEditGesture(opts: {
             useAnnotationStore.getState().select(d.id);
           }
           // Remember a memo's last RESIZED size as the session default, so the next
-          // new memo lands at it (user request: last-adjusted-size-wins). Only on a
-          // corner resize (not a move) of a memo; size is scale-1.0 px = normalized
-          // rect * the page box (which is the scale-1.0 box).
+          // new memo lands at it (user request: last-adjusted-size-wins). Only on an
+          // EXPANDED corner resize (not a move, not a collapsed resize — Story 10.4:
+          // a shared default COLLAPSED size is out of scope, see Dev Notes); size is
+          // scale-1.0 px = normalized rect * the page box (which is the scale-1.0 box).
           const anno = useAnnotationStore.getState().annotations.get(d.id);
-          if (d.handle !== "move" && anno?.type === "memo" && d.lastAnchor.kind === "rect") {
+          if (!isCollapsedResize && d.handle !== "move" && anno?.type === "memo" && d.lastAnchor.kind === "rect") {
             const r = d.lastAnchor.rect;
             setActiveMemoSize({
               key: "medium",
@@ -368,7 +396,25 @@ function computeAnchor(d: DragState, dx: number, dy: number): Annotation["anchor
       d.type === "memo"
         ? { w: MIN_MEMO_WIDTH_PX / d.box.width, h: MIN_MEMO_HEIGHT_PX / d.box.height }
         : undefined;
-    return { ...a, rect: resizeRectCorner(a.rect, d.handle, dx, dy, min) };
+    const next = resizeRectCorner(a.rect, d.handle, dx, dy, min);
+    // A collapsed memo's corner-resize (Story 10.4) keeps the top-left FIXED
+    // and grows/shrinks the extent from it, so the collapsed size stays
+    // distinct from the expanded position/size (AC #1/#2) — every corner
+    // re-anchors to the memo's stored top-left rather than letting nw/ne/sw
+    // move it. MOVE (handled above) is unaffected — position is shared across
+    // both states and moves only via the move grip.
+    if (d.collapsed && d.type === "memo") {
+      return {
+        ...a,
+        rect: {
+          x0: a.rect.x0,
+          y0: a.rect.y0,
+          x1: a.rect.x0 + (next.x1 - next.x0),
+          y1: a.rect.y0 + (next.y1 - next.y0),
+        },
+      };
+    }
+    return { ...a, rect: next };
   }
   if (a.kind === "path") {
     if (d.handle === "move") return { ...a, points: translatePoints(a.points, dx, dy) };

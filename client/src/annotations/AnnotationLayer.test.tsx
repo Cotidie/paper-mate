@@ -884,6 +884,32 @@ describe("AnnotationLayer memo collapse/expand (user feature request)", () => {
     expect(screen.getByTestId("annotation-mark-m1").style.minHeight).toBe("160px");
   });
 
+  it("Story 10.4: a collapsed memo WITH collapsed_width/height renders SIZED (minHeight/width computed from those fields, position still from anchor.rect.x0/y0)", () => {
+    const m = memoMark("m1", 0, "a note");
+    const sized: Annotation = {
+      ...m,
+      style: { ...m.style, collapsed: true, collapsed_width: 0.2, collapsed_height: 0.05 },
+    };
+    useAnnotationStore.getState().addAnnotation(sized);
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const el = screen.getByTestId("annotation-mark-m1");
+    // Position from anchor.rect.x0/y0 (0.1*600=60, 0.2*800=160); extent from
+    // collapsed_width/height (0.2*600=120, 0.05*800=40) — NOT the expanded
+    // anchor.rect's own width/height (240/160).
+    expect(el.style.left).toBe("60px");
+    expect(el.style.top).toBe("160px");
+    expect(parseFloat(el.style.width)).toBeCloseTo(120, 9);
+    expect(parseFloat(el.style.minHeight)).toBeCloseTo(40, 9);
+  });
+
+  it("Story 10.4: a collapsed memo WITHOUT collapsed_width/height renders LEGACY (width from anchor.rect, no explicit minHeight — today's behavior, unchanged)", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const el = screen.getByTestId("annotation-mark-m1");
+    expect(el.style.width).toBe("240px"); // anchor.rect width (0.4*600), same as expanded
+    expect(el.style.minHeight).toBe("");
+  });
+
   it("the collapse toggle is always present, expanded or collapsed", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
     const { rerender } = render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);

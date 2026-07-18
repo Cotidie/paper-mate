@@ -266,6 +266,19 @@ export interface AnnotationStore {
    *  Guarded to `type=comment` so a stale non-comment id is never mutated
    *  (AR-5). A no-op for an unknown id. */
   resizeCommentAnnotation: (id: string, size: { width: number; height: number }, now: string) => void;
+  /** Resize a memo's COLLAPSED box (Story 10.4) and bump `updated_at` — the
+   *  collapsed-size twin of `resizeMemoAnnotation`, but written to
+   *  `style.collapsed_width`/`collapsed_height` instead of the anchor rect: the
+   *  anchor rect stays the EXPANDED size, which is what keeps the two sizes
+   *  distinct (AC #2). Single `id`, per-instance (mirrors `resizeCommentAnnotation`,
+   *  not a group batch). `size` is a normalized `[0,1]` page-fraction width/height
+   *  (NOT CSS px, unlike `resizeCommentAnnotation`'s bubble size) — the collapsed
+   *  box is page-anchored and must ride zoom (NFR-3), like `anchor.rect`. Guarded
+   *  to `kind=rect`+`type=memo`, same shape as `setMemoCollapsed`/
+   *  `resizeMemoAnnotation` (AR-5). A no-op for an unknown id or non-memo (state
+   *  unchanged, so zundo records no history step). Routes through the normal
+   *  command path, so it is one undoable step (AR-7). */
+  resizeCollapsedMemo: (id: string, size: { w: number; h: number }, now: string) => void;
   /** Replace a mark's anchor GEOMETRY (a moved/resized rect or points) and bump
    *  `updated_at` — the Story 3.1 move/resize command-path action, shared by
    *  kind=rect (memo/region/comment-pin) and kind=path (pen). The CALLER (the edit
@@ -508,6 +521,20 @@ export const useAnnotationStore = create<AnnotationStore>()(
           next.set(id, {
             ...a,
             style: { ...a.style, bubble_width: size.width, bubble_height: size.height },
+            updated_at: now,
+          });
+          return { annotations: next };
+        }),
+      resizeCollapsedMemo: (id, size, now) =>
+        set((state) => {
+          // Single-id (not patchAnnotations' ids-batch), mirrors resizeCommentAnnotation:
+          // a per-instance collapsed size, not group-shared geometry.
+          const a = state.annotations.get(id);
+          if (!a || a.anchor.kind !== "rect" || a.type !== "memo") return state;
+          const next = new Map(state.annotations);
+          next.set(id, {
+            ...a,
+            style: { ...a.style, collapsed_width: size.w, collapsed_height: size.h },
             updated_at: now,
           });
           return { annotations: next };

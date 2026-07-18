@@ -299,11 +299,32 @@ export default function AnnotationLayer({
     if (anchor.kind !== "rect") return null;
     const { hovered, selected, flashed } = markState(a);
     const cls = markClass("annotation-memo", "annotation-memo", hovered, selected, flashed);
+    // Effective COLLAPSED extent (Story 10.4): position always comes from
+    // anchor.rect.x0/y0 (shared across both states); only width/height differ
+    // by source. Mid-drag, `anchor` (effAnchor) already IS the live preview —
+    // for a collapsed move OR corner-resize, `computeAnchor` (useEditGesture)
+    // re-seeds/re-anchors it to the real collapsed extent, so it's usable as-is
+    // with no extra work here. Otherwise fall back to the persisted
+    // `collapsed_width`/`height`, or (neither) today's legacy behavior: box
+    // width from `anchor.rect`, intrinsic one-line height (`collapsedSized`
+    // false tells `MemoBox` to apply no explicit `minHeight`).
+    let rect = anchor.rect;
+    let collapsedSized = false;
+    if (a.style.collapsed) {
+      if (dragPreview?.id === a.id) {
+        collapsedSized = true;
+      } else if (a.style.collapsed_width != null && a.style.collapsed_height != null) {
+        const { x0, y0 } = anchor.rect;
+        rect = { x0, y0, x1: x0 + a.style.collapsed_width, y1: y0 + a.style.collapsed_height };
+        collapsedSized = true;
+      }
+    }
     return (
       <MemoBox
         key={a.id}
         anno={a}
-        pos={denormalizeRect(anchor.rect, box, scale)}
+        pos={denormalizeRect(rect, box, scale)}
+        collapsedSized={collapsedSized}
         cls={cls}
         selected={selected}
         // Single-selection only (Story 10.2): the SAME scope the old shared edit

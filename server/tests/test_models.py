@@ -148,6 +148,57 @@ def test_memo_annotation_no_collapsed_field_backward_compatible() -> None:
     assert ann.style.collapsed is None
 
 
+def test_style_collapsed_size_null_by_default() -> None:
+    """Story 10.4: collapsed_width/height default to None (backward-compatible, AD-8)."""
+    s = Style(color="annotation-default")
+    assert s.collapsed_width is None
+    assert s.collapsed_height is None
+
+
+def test_style_collapsed_size_round_trips() -> None:
+    """Story 10.4: collapsed_width/height are stored and retrieved exactly."""
+    s = Style(color="annotation-default", collapsed=True, collapsed_width=0.2, collapsed_height=0.05)
+    assert s.collapsed_width == pytest.approx(0.2)
+    assert s.collapsed_height == pytest.approx(0.05)
+
+
+def test_memo_annotation_with_collapsed_size_round_trips() -> None:
+    """Story 10.4: a memo Annotation with collapsed_width/height parses correctly."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "memo",
+            "style": {
+                "color": "annotation-default",
+                "collapsed": True,
+                "collapsed_width": 0.2,
+                "collapsed_height": 0.05,
+            },
+            "body": "a note",
+            "anchor": {"kind": "rect", "page_index": 0, "rect": {"x0": 0, "y0": 0, "x1": 0.1, "y1": 0.1}},
+        }
+    )
+    assert isinstance(ann.anchor, RectAnchor)
+    assert ann.style.collapsed_width == pytest.approx(0.2)
+    assert ann.style.collapsed_height == pytest.approx(0.05)
+
+
+def test_memo_annotation_no_collapsed_size_backward_compatible() -> None:
+    """AD-8: a pre-10.4 memo mark (no collapsed_width/height field) parses fine,
+    falls back to None (the legacy fixed collapsed size)."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "memo",
+            "style": {"color": "annotation-default", "collapsed": True},
+            "body": "a note",
+            "anchor": {"kind": "rect", "page_index": 0, "rect": {"x0": 0, "y0": 0, "x1": 0.1, "y1": 0.1}},
+        }
+    )
+    assert ann.style.collapsed_width is None
+    assert ann.style.collapsed_height is None
+
+
 def test_annotation_surfaced_in_openapi_via_annotations_route() -> None:
     """AD-3: the real PUT + GET /annotations routes emit the Annotation schema
     (Story 3.4 PUT, Story 3.5 GET); the manual injection is gone."""
