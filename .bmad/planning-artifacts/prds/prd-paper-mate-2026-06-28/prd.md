@@ -52,6 +52,10 @@ FR IDs are global and stable.
 - **FR-10** Textbox memo — free-floating text typed directly onto the page.
 - **FR-11** Comment — a note pinned/anchored to a spot, opens on click.
 - **FR-12** Range/area (box) selection of a region.
+- **FR-28** *(post-v1, Epic 11 Story 11.1)* Textbox tool: a text-only floating block placed on the page, distinct from the FR-10 memo (no sticky-note fill/chrome).
+- **FR-29** *(post-v1, Epic 11 Story 11.2, spike-first)* Image attachment block: upload an image from disk, place it on the page, resize via handles. Persists a binary asset (the byte-storage seam is an architecture-spine decision).
+
+> FR-28/FR-29 (added 2026-07-18 via correct-course) introduce two new on-page block types beyond the v1 text/pen/memo/comment/region set. FR-29's persisted image bytes are the first binary asset in the annotation model; its storage location (client-embedded data-URI vs a server-stored asset) is gated by a spike.
 
 ### FG-C · Annotation interaction
 
@@ -61,6 +65,11 @@ FR IDs are global and stable.
 - **FR-16** Undo / redo.
 - **FR-17** Delete an annotation.
 - **FR-25** *(post-v1, Epic 8 Story 8.4)* Attach a comment to a boxed region (comment on a `kind=rect` area, not only on text).
+- **FR-30** *(post-v1, Epic 11 Story 11.3, spike-first)* Clipboard paste to block: pasting onto the page creates a textbox block (text payload, FR-28) or an image block (image payload, FR-29). Depends on FR-28 + FR-29.
+- **FR-31** *(post-v1, Epic 10 Story 10.5)* Persist a moved comment box's position: a dragged comment bubble stays where dropped and restores across close/reopen (stored as a scale-independent offset from the pin). Extends FR-15.
+- **FR-32** *(post-v1, Epic 10 Story 10.4)* Resizable, persisted collapsed memo box: the collapsed memo box is resizable and its size persists, distinct from the expanded size. Extends FR-15.
+
+> FR-30/FR-31/FR-32 (added 2026-07-18 via correct-course). FR-31/FR-32 make an annotation's popup geometry (position, collapsed size) persisted state rather than a fixed derived default; both are additive to the annotation contract (no `schema_version` break: a mark without the field falls back to the current default). FR-30's paste target and permission path are gated by a spike.
 
 ### FG-D · Annotation Bank
 
@@ -76,6 +85,9 @@ FR IDs are global and stable.
 
 - **FR-21** Save annotations local-first to disk (see Storage in addendum).
 - **FR-22** On reopening a PDF, restore its annotations exactly (reserved across sessions).
+- **FR-33** *(post-v1, Epic 10 Story 10.7)* Remember and restore last view position: on close, remember the page + intra-page scroll offset per document; restore it on reopen (scale-independent, so a zoom change since last visit still lands on the right content). First-time open is unchanged (top of page 1).
+
+> FR-33 (added 2026-07-18 via correct-course) extends persistence from "restore WHAT (annotations)" to "restore WHERE (reading position)." Its storage location (client-only view-prefs vs `meta.json`) is a create-story call; it is view state, never part of the annotation contract.
 
 ## Cross-cutting requirements (NFRs)
 
@@ -97,6 +109,11 @@ Lightweight roadmap for later versions (kept here so v1 architecture reserves ro
   - **FR-26** *(Epic 9 Story 9.2)* Export a PDF containing the user's annotations (the export-with-highlights item, promoted).
   - **FR-27** *(Epic 9 Story 9.3)* Inline preview of a clicked footnote, reference/citation (`[n]`), or `Figure N`/`Table N` mention, without leaving the reading position.
 - **Phase 3 — AI Companion (the north star).** Q&A against **local CLI agents only** (no hosted API), vendor-switchable (Claude / Codex / Antigravity) behind one interface, paper digest auto-injected into context, drag/click-to-chat that resolves the exact PDF location or a Figure/Table selection.
+
+**Post-v1 batch (added 2026-07-18 via correct-course, `sprint-change-proposal-2026-07-18.md`).** A 13-request user batch, split by weight:
+
+- **Epic 10: reader polish, round 3 (Phase-1.5).** Defects + small polish (no new FR) plus three small persistence FRs: **FR-31** (comment-box position), **FR-32** (collapsed-memo resize), **FR-33** (last-view restore). Also two AC-extensions of existing FRs, NOT new FRs: a fourth (thinner) pen width extends FR-9; multi-select zip download extends Library FR-30.
+- **Epic 11: annotation blocks (Phase-2).** Three new on-page block types: **FR-28** (textbox tool), **FR-29** (image attachment block, spike-first), **FR-30** (clipboard paste to block, spike-first). FR-29 introduces the first persisted binary asset (storage seam is an architecture-spine decision).
 
 Two through-lines the v1 build must not paint into a corner (detail in addendum):
 
