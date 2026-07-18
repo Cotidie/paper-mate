@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-13 (story 8-10-epic-8-structural-refactor: review -> done at PR #72 merge; version 0.5.30)"
+last_updated: "2026-07-19 (dev-story 10-1-unify-selection-color-fix-double-thickening: story in-progress->review)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -264,7 +264,7 @@ development_status:
   # Bank capability (8-2 filter, 8-3 sort), comment-on-region (8-4), a venue-display refinement
   # (8-5), and three reader defects (8-6/8-7/8-8). New reader FRs: FR-23/24/25. No story files
   # yet -> backlog.
-  epic-8: in-progress
+  epic-8: done
   8-1-paragraph-aware-copy: done
   8-2-annotation-bank-filter-by-type: done
   8-3-sort-annotations-reading-order: done
@@ -273,7 +273,11 @@ development_status:
   8-6-comment-preview-size: done
   8-7-tab-switch-resume: done
   8-8-empty-space-drag-no-select: done
-  8-9-snap-empty-space-drag-to-text: review
+  # 2026-07-18 correct-course (sprint-change-proposal-2026-07-18.md): 8-9 was a
+  # NEGATIVE spike (both named techniques failed live smoke); superseded by 8-11
+  # (attempt 2) and its concern absorbed by 8-10's textSelection.ts refactor.
+  # review -> blocked (attempted-and-reverted flavor) so epic-8 can close done.
+  8-9-snap-empty-space-drag-to-text: blocked
   # 8-11 sequenced BEFORE 8-10: the snap it adds is one of the concerns 8-10's
   # textSelection.ts refactor absorbs (added 2026-07-12, design-spec attempt 2 after 8-9 negative spike).
   8-11-snap-empty-space-drag-to-text-attempt-2: done
@@ -289,10 +293,46 @@ development_status:
   # (preview); Library FR-30 (download). 9-2/9-3 want an architecture-spine note at create-story.
   # No story files yet -> backlog.
   epic-9: backlog
+  # 2026-07-18 correct-course (sprint-change-proposal-2026-07-18.md): AMENDED IN
+  # PLACE (no new story) -- add multi-select -> zip download + a Download button
+  # on the Library buttons panel (item 13). AC-extension of Library FR-30.
   9-1-download-paper: backlog
   9-2-export-annotated-pdf: backlog
   9-3-footnote-reference-preview: backlog
   epic-9-retrospective: optional
+
+  # === Reader/annotation polish + blocks run — added 2026-07-18 from epics.md ===
+  # Source: sprint-change-proposal-2026-07-18.md (13-request user batch). Split by
+  # weight (precedent: the 2026-07-11 batch -> polish=Epic 8, heavyweight=Epic 9):
+  # Epic 10 = defects/polish/small-persistence; Epic 11 = the three heavyweight new
+  # capabilities (new reader FRs FR-28..30 + arch-spine note). No story files yet -> backlog.
+
+  # Epic 10: Reader & annotation polish, round 3 (post-v1, Phase-1.5). Eight
+  # defect/polish/small-persistence stories + a terminal structural refactor (AE7-5).
+  # New reader FRs FR-31 (comment-box position), FR-32 (collapsed memo resize),
+  # FR-33 (remember last view) -> recommend a reader-PRD addendum before dev.
+  epic-10: in-progress
+  10-1-unify-selection-color-fix-double-thickening: review   # items 1+2 (defect, root-cause)
+  10-2-memo-resize-handle-position-min-size: backlog          # item 3 (defect)
+  10-3-hide-memo-expand-icon-until-focus: backlog             # item 4 (polish)
+  10-4-resizable-persisted-collapsed-memo: backlog            # item 10 (FR-32)
+  10-5-persist-comment-box-position: backlog                  # item 5 (FR-31)
+  10-6-quick-box-right-of-selection: backlog                  # item 7 (polish)
+  10-7-remember-last-view-on-reopen: backlog                  # item 11 (FR-33)
+  10-8-pen-four-width-levels: backlog                         # item 12 (AC-ext of FR-9)
+  10-9-epic-10-structural-refactor: backlog                   # terminal refactor (AE7-5)
+  epic-10-retrospective: optional
+
+  # Epic 11: Annotation blocks -- textbox, image & clipboard (post-v1, Phase-2).
+  # The three heavyweight new capabilities. New reader FRs FR-28 (textbox), FR-29
+  # (image block), FR-30-reader (clipboard paste). 11-2/11-3 SPIKE-FIRST; 11-2 wants
+  # an architecture-spine note (image binary-asset seam) at create-story. No story
+  # files yet -> backlog.
+  epic-11: backlog
+  11-1-textbox-tool: backlog                                  # item 6 (FR-28)
+  11-2-image-attachment-block: backlog                        # item 8 (FR-29, SPIKE-FIRST)
+  11-3-clipboard-paste-to-block: backlog                      # item 9 (FR-30, SPIKE-FIRST; depends on 11-1+11-2)
+  epic-11-retrospective: optional
 
 action_items:
   - epic: 1

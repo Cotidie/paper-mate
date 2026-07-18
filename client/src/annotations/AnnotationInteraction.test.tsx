@@ -39,10 +39,21 @@ function stubSelection(rects: { left: number; top: number; right: number; bottom
         y: r.top,
       }) as DOMRect,
   );
+  // Wrapped in a `.textLayer` ancestor: `useLiveSelectionPreview`'s
+  // `isPdfTextSelection` guard (Story 10.1 code review finding) requires the
+  // selection's range to sit inside a rendered PDF text layer, so a bare
+  // `document.body`-appended span would be silently rejected. Deliberately
+  // NOT also wrapped in `.pdf-canvas`: `document.querySelector(".pdf-canvas")`
+  // (the live-preview viewport-clip lookup) would pick up a stray fixture
+  // element ahead of any real one and clip every rect away (jsdom zeroes its
+  // `getBoundingClientRect()`) — `.textLayer` alone is enough for the guard.
+  const layer = document.createElement("div");
+  layer.className = "textLayer";
   const span = document.createElement("span");
   span.appendChild(document.createTextNode("selected text"));
-  document.body.appendChild(span);
-  stubNodes.push(span);
+  layer.appendChild(span);
+  document.body.appendChild(layer);
+  stubNodes.push(layer);
   const range = document.createRange();
   range.selectNodeContents(span.firstChild as Text);
   const removeAllRanges = vi.fn();
@@ -367,6 +378,144 @@ describe("AnnotationInteraction cursor-mode tool-type picker (Story 2.12 — AC1
     fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
     await screen.findByTestId("quick-box");
     expect(screen.getByTestId("pending-selection-preview")).toBeTruthy();
+  });
+
+  describe("live (pre-release) selection preview (Story 10.1: native ::selection is suppressed, this stands in from the FIRST selectionchange, before any pointerup)", () => {
+    it("renders BEFORE any pointerup, from the live native selection alone", () => {
+      stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+      const pages = [fakeCard(0, 0)];
+      render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+      // No pointerUp fired: no quick-box, but the live preview must already show.
+      expect(screen.queryByTestId("quick-box")).toBeNull();
+      expect(screen.getByTestId("pending-selection-preview")).toBeTruthy();
+    });
+
+    it("paints pixel-identical rects (count AND full geometry, across MULTIPLE bands) mid-drag and just after release (AC-1: no release 'thickening')", async () => {
+      // Two bands (two lines), not one: the count itself is part of what must
+      // stay identical across the transition, not just one rect's geometry.
+      stubSelection([
+        { left: 10, top: 100, right: 200, bottom: 120 },
+        { left: 10, top: 120, right: 150, bottom: 140 },
+      ]);
+      const pages = [fakeCard(0, 0)];
+      render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+      const beforeRelease = screen.getAllByTestId("pending-selection-preview").map((el) => el.getAttribute("style"));
+      expect(beforeRelease).toHaveLength(2);
+
+      fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+      await screen.findByTestId("quick-box");
+      const afterRelease = screen.getAllByTestId("pending-selection-preview").map((el) => el.getAttribute("style"));
+
+      expect(afterRelease).toEqual(beforeRelease);
+    });
+
+    it("stays inert while the pen tool is armed (a pen drag is not a text selection)", () => {
+      stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+      const pages = [fakeCard(0, 0)];
+      render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="pen" rectReader={reader} />);
+      expect(screen.queryByTestId("pending-selection-preview")).toBeNull();
+    });
+
+    it("stays inert while the memo tool is armed (a memo click is not a text selection)", () => {
+      stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+      const pages = [fakeCard(0, 0)];
+      render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="memo" rectReader={reader} />);
+      expect(screen.queryByTestId("pending-selection-preview")).toBeNull();
+    });
+
+    it("stays inert while a box-mode drag is active (the box gesture owns its own preview)", () => {
+      stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+      const pages = [fakeCard(0, 0)];
+      render(
+        <AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled boxMode="highlight" rectReader={reader} />,
+      );
+      expect(screen.queryByTestId("pending-selection-preview")).toBeNull();
+    });
+
+    it("updates on a bare selectionchange event, with no pointer gesture at all", async () => {
+      const pages = [fakeCard(0, 0)];
+      render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+      expect(screen.queryByTestId("pending-selection-preview")).toBeNull();
+
+      stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+      // The capture is rAF-throttled (coalesces a fast drag's many
+      // `selectionchange` events to one per frame, code review finding), so
+      // this one — fired outside of any drag — needs a frame to land.
+      act(() => {
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+      await screen.findByTestId("pending-selection-preview");
+    });
+
+    it("disappears the instant an armed-tool commit clears the native selection (createTextTool), with no lingering stale preview OR a missed/duplicated commit", async () => {
+      stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+      const pages = [fakeCard(0, 0)];
+      render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled armedTool="highlight" rectReader={reader} />);
+      expect(screen.getByTestId("pending-selection-preview")).toBeTruthy();
+      expect(useAnnotationStore.getState().all()).toHaveLength(0);
+
+      fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+      // Highlight-armed commits directly (no quick-box): the live preview must
+      // be gone in the SAME commit as the new mark, not lag behind waiting for
+      // a `selectionchange` event.
+      expect(screen.queryByTestId("pending-selection-preview")).toBeNull();
+      expect(screen.queryByTestId("quick-box")).toBeNull();
+      // The commit actually landed exactly once — not skipped (a false "no
+      // stale preview" reading could otherwise hide a swallowed commit) and
+      // not duplicated (a race producing two marks from one release).
+      const created = useAnnotationStore.getState().all();
+      expect(created).toHaveLength(1);
+      expect(created[0].type).toBe("highlight");
+    });
+
+    it("tracks a scroll mid-drag instead of leaving a ghost band frozen at the old position (bug fix: a scroll with no accompanying selectionchange left the preview stale)", () => {
+      stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+      let cardTop = 0;
+      const el = document.createElement("div");
+      el.getBoundingClientRect = () =>
+        ({ left: 0, top: cardTop, right: 600, bottom: cardTop + 800, width: 600, height: 800, x: 0, y: cardTop }) as DOMRect;
+      const pages: PageCardRef[] = [{ pageIndex: 0, cardEl: el, box }];
+      render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+      const initialTop = screen.getByTestId("pending-selection-preview").style.top;
+
+      // A real scroll moves the card AND the selected text's absolute
+      // getClientRects() together (they're the same DOM subtree) — re-stub
+      // the bands shifted by the SAME delta as the card to model that,
+      // rather than leaving the text's absolute rect fixed while only the
+      // card moves (which is not what a scroll actually does).
+      cardTop = -200;
+      stubSelection([{ left: 10, top: -100, right: 200, bottom: -80 }]);
+      // Dispatched on a DESCENDANT, not `document` itself: `scroll` does not
+      // bubble, so this only reaches the hook's listener if its capture-phase
+      // registration (`document.addEventListener("scroll", ..., true)`, code
+      // review finding) genuinely works for a non-bubbling event originating
+      // from a child — the real `.pdf-canvas` scrolls, not `document`.
+      const scroller = document.createElement("div");
+      document.body.appendChild(scroller);
+      fireEvent.scroll(scroller, {});
+      scroller.remove();
+
+      expect(screen.getByTestId("pending-selection-preview").style.top).not.toBe(initialTop);
+    });
+
+    it("splits a live selection spanning two page cards into a rect on EACH page (cross-page, no full-page leak) — code review finding: no component test drove this path", () => {
+      // Page 0 occupies viewport y [0,800), page 1 [800,1600) — two bands,
+      // one inside each, routed to their own page purely by `pickPage`'s
+      // geometry (mirrors a real cross-page drag; no `render/` layout needed
+      // since `rectReader` supplies the bands directly).
+      stubSelection([
+        { left: 10, top: 700, right: 200, bottom: 720 },
+        { left: 10, top: 820, right: 150, bottom: 840 },
+      ]);
+      const pages = [fakeCard(0, 0), fakeCard(1, 800)];
+      render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+      const previews = screen.getAllByTestId("pending-selection-preview").map((el) => el.getBoundingClientRect());
+      expect(previews).toHaveLength(2);
+      // Neither rect is anywhere near page-card-sized (800 tall): a leaked
+      // full-page border box would show as one with height close to 800.
+      for (const r of previews) expect(r.height).toBeLessThan(100);
+    });
   });
 
   it("re-derives (does NOT dismiss) the quick-box position on scroll — it now tracks the selection instead of disappearing (Story 4.x fix)", async () => {
@@ -2713,12 +2862,27 @@ describe("AnnotationInteraction hide-all toggle (Story 5.5, AC-2, AC-3)", () => 
     expect(screen.queryByTestId("selection-quick-box")).toBeNull();
   });
 
-  it("renders nothing while hidden even with a live selection", () => {
+  it("renders nothing while hidden with a stale SELECTED MARK but no live text selection (does not leak a comment/selection bubble)", () => {
     const mark = textMark("m1");
     useAnnotationStore.setState({ annotations: new Map([[mark.id, mark]]), selectedId: "m1", hidden: true });
     const { container } = render(
       <AnnotationInteraction docId="doc-1" getPages={() => [fakeCard(0, 0)]} scale={1} enabled rectReader={reader} />,
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it("keeps the raw text-selection preview visible while hidden (bug fix, code review finding): Hide All suspends annotation creation, not the reader's plain select-and-copy affordance", () => {
+    stubSelection([{ left: 10, top: 100, right: 200, bottom: 120 }]);
+    useAnnotationStore.setState({ hidden: true });
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+
+    // The selection tint shows...
+    expect(screen.getByTestId("pending-selection-preview")).toBeTruthy();
+    // ...but nothing annotation-related does: a release still creates/opens
+    // nothing while hidden (unchanged from the existing hide-all behavior).
+    fireEvent.pointerUp(document, { button: 0, clientX: 50, clientY: 110 });
+    expect(screen.queryByTestId("quick-box")).toBeNull();
+    expect(useAnnotationStore.getState().all()).toHaveLength(0);
   });
 });

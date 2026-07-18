@@ -423,6 +423,34 @@ export function clipRectToViewport(rect: ScreenRect, viewport: { top: number; bo
 }
 
 /**
+ * Offset each page's CARD-LOCAL preview rects (`pendingSelectionGeometry`'s
+ * `pages`) by that page's LIVE `getBoundingClientRect()` into `position:
+ * fixed` viewport pixels, clipped to the reader's visible vertical band. The
+ * DOM-touching half of the CREATE quick-box preview pass (`pendingSelectionGeometry`
+ * above is the DOM-free half) — factored out so the post-release pending
+ * preview (`useCreateQuickBox`) and the pre-release live-drag preview
+ * (`useLiveSelectionPreview`) paint from the exact same geometry pass instead
+ * of each hand-rolling their own (Story 10.1, AC-1: one uniform tint across
+ * both phases, no release "thickening").
+ */
+export function viewportRectsFromPages(
+  pages: { pageIndex: number; rects: ScreenRect[] }[],
+  cardOf: (pageIndex: number) => PageCardRef | null,
+  viewportBand: { top: number; bottom: number } | null,
+): ScreenRect[] {
+  return pages.flatMap(({ pageIndex, rects }) => {
+    const card = cardOf(pageIndex);
+    if (!card) return [];
+    const cardRect = card.cardEl.getBoundingClientRect();
+    return rects.flatMap((r) => {
+      const screen = { left: cardRect.left + r.left, top: cardRect.top + r.top, width: r.width, height: r.height };
+      const clipped = viewportBand ? clipRectToViewport(screen, viewportBand) : screen;
+      return clipped ? [clipped] : [];
+    });
+  });
+}
+
+/**
  * The on-screen rects of the TEXT a `range` selects — one set of line boxes per
  * text node it covers, EXCLUDING element border boxes.
  *

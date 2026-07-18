@@ -18,7 +18,7 @@ import {
   normalizeRect,
   pickPage,
   pendingSelectionGeometry,
-  clipRectToViewport,
+  viewportRectsFromPages,
   type PageCardRef,
   type PageSelection,
 } from "@/anchor";
@@ -149,18 +149,11 @@ export function useCreateQuickBox(opts: {
       // mark does — a row scrolled past the top/bottom of the reader would
       // otherwise paint over the top-bar/other chrome instead of going hidden.
       const readerViewport = document.querySelector(".pdf-canvas")?.getBoundingClientRect() ?? null;
-      const previewRects = geom.pages.flatMap(({ pageIndex, rects }) => {
-        const card = cardOf(pageIndex);
-        if (!card) return [];
-        const cardRect = card.cardEl.getBoundingClientRect();
-        return rects.flatMap((r) => {
-          const screen = { left: cardRect.left + r.left, top: cardRect.top + r.top, width: r.width, height: r.height };
-          const clipped = readerViewport
-            ? clipRectToViewport(screen, { top: readerViewport.top, bottom: readerViewport.bottom })
-            : screen;
-          return clipped ? [clipped] : [];
-        });
-      });
+      const previewRects = viewportRectsFromPages(
+        geom.pages,
+        cardOf,
+        readerViewport ? { top: readerViewport.top, bottom: readerViewport.bottom } : null,
+      );
       const anchorCard = cardOf(geom.anchor.pageIndex);
       if (!anchorCard) return null;
       const anchorRect = anchorCard.cardEl.getBoundingClientRect();

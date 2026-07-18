@@ -66,13 +66,15 @@ This document provides the complete epic and story breakdown for Paper Mate, dec
 
 **FG-F · Post-v1 polish & quality** *(added 2026-06-30 via correct-course — `sprint-change-proposal-2026-06-30.md`)*
 
-> Surfaced during the Epic 1–2 build and logged in `.bmad/implementation-artifacts/deferred-work.md`. NOT in the original PRD FR-1..22; promoted here as **post-v1 (Phase-1.5)** scope grouped into Epic 4 (fidelity) and Epic 5 (preferences & polish). Recommend a matching PRD addendum so the PRD stays the FR source of truth. Fidelity bugs (copy-spaces, trailing-band, gutter-join, multi-column selection) and the on-page-treatment fixes are quality of existing FRs (FR-2/4/7/8/11) under NFR-3, so they are tracked as Epic-4 stories rather than new FRs; the small UX refinements (layered Esc, confirm-check, collapse stroke-width dropdown, dim ToC) are AC-level under existing UX-DRs.
+> Surfaced during the Epic 1–2 build and logged in `.bmad/implementation-artifacts/deferred-work.md`. NOT in the original PRD FR-1..22; promoted here as **post-v1 (Phase-1.5)** scope grouped into Epic 4 (fidelity) and Epic 5 (preferences & polish). Fidelity bugs (copy-spaces, trailing-band, gutter-join, multi-column selection) and the on-page-treatment fixes are quality of existing FRs (FR-2/4/7/8/11) under NFR-3, so they are tracked as Epic-4 stories rather than new FRs; the small UX refinements (layered Esc, confirm-check, collapse stroke-width dropdown, dim ToC) are AC-level under existing UX-DRs.
 
-- **FR-23** Hide/show ALL annotations at once — a view-only global visibility toggle (no mutation).
-- **FR-24** Settings modal with custom **hotkey rebinding** (requires a keymap-as-data enabler).
-- **FR-25** Per-tool remembered default color + user **custom color slots** (color-system extension).
-- **FR-26** Adjust the **text range** of an existing text-anchored annotation (extend/shrink the run).
-- **FR-27** **Convert** an annotation between highlight and comment, both ways.
+> ⚠️ **SUPERSEDED NUMBERING (2026-07-18 reconciliation, do not cite these FR-23..27 numbers).** The 2026-07-11 correct-course RE-USED FR-23/24/25 for Annotation-Bank features and FR-26/27 for Epic 9 export/preview in the authoritative `prd.md`; the five capabilities below kept their scope but LOST these 2026-06-30 numbers. They are now tracked BY STORY, not by FR number. `prd.md` is the single FR source of truth (FR-1..33; the 2026-07-18 additions FR-28..33 landed inline there, not in a separate addendum). The five orphaned capabilities:
+>
+> - Hide/show ALL annotations at once (view-only global toggle, no mutation) → Epic 5 Story 5.5 (**done**)
+> - Settings modal with custom hotkey rebinding (keymap-as-data enabler) → Epic 5 Story 5.1 (**done**)
+> - Per-tool remembered default color + custom color slots → Epic 5 Story 5.2 (**blocked/descoped**)
+> - Adjust the text range of a text-anchored annotation → Epic 3 Story 3.8 (**blocked**)
+> - Convert an annotation between highlight and comment, both ways → Epic 3 Story 3.7 (**done**)
 
 ### NonFunctional Requirements
 
@@ -146,11 +148,12 @@ From DESIGN.md (visual identity / tokens / component catalog) and EXPERIENCE.md 
 - **FR-20** Bank click-to-jump → Epic 3
 - **FR-21** Save annotations local-first to disk → Epic 3
 - **FR-22** Restore annotations exactly on reopen → Epic 3
-- **FR-23** Hide/show all annotations toggle → Epic 5 (post-v1)
-- **FR-24** Settings modal + hotkey rebinding → Epic 5 (post-v1; keymap-as-data enabler)
-- **FR-25** Per-tool default color + custom color slots → Epic 5 Story 5.2 — **descoped from v1 (2026-07-02, product decision, never attempted; see `deferred-work.md`)**
-- **FR-26** Adjust annotation text range → Epic 3 Story 3.8 — **attempted 2026-07-02, discarded on a hard Chromium `caretRangeFromPoint`/`caretPositionFromPoint` blocker during live smoke (see `deferred-work.md`); descoped from v1, open for a future revisit**
-- **FR-27** Convert highlight ↔ comment → Epic 3 Story 3.7 (post-v1 slice on the command path)
+> **Post-v1 capabilities (story-tracked; FR-23..27 numbers RE-USED in `prd.md`, see the FG-F SUPERSEDED note above).** These kept their scope but not their 2026-06-30 numbers:
+- Hide/show all annotations toggle → Epic 5 Story 5.5 (**done**)
+- Settings modal + hotkey rebinding (keymap-as-data enabler) → Epic 5 Story 5.1 (**done**)
+- Per-tool default color + custom color slots → Epic 5 Story 5.2 (**descoped from v1**, 2026-07-02, product decision, never attempted; see `deferred-work.md`)
+- Adjust annotation text range → Epic 3 Story 3.8 (**blocked**, attempted 2026-07-02, discarded on a hard Chromium `caretRangeFromPoint`/`caretPositionFromPoint` blocker during live smoke; see `deferred-work.md`)
+- Convert highlight ↔ comment → Epic 3 Story 3.7 (**done**, post-v1 slice on the command path)
 
 > **Quality/fidelity (no new FR — quality of existing FRs under NFR-3):** copy-text spaces (FR-2/4) → Epic 4 Story 4.1; trailing-punctuation selection band (FR-2) → Epic 4 Story 4.1; highlights join across the gutter + multi-column selection (FR-7/13, NFR-3) → Epic 4 Story 4.2; comment-vs-highlight distinct on-page treatment + memo transparent treatment (FR-10/11, UX-DR7) → Epic 4 Story 4.3.
 
@@ -170,7 +173,7 @@ Mark up the page with all six tools — highlight, underline, pen, memo, comment
 
 ### Epic 3: Edit, persist & review
 Make the annotated record durable and curatable: select, move, resize, restyle, re-edit text, undo/redo, and delete — all through one command stack — plus autosave to disk with exact restore on reopen, and the Annotation Bank (list + click-to-jump). Groups everything that flows through the store/command-stack and persistence path.
-**FRs covered:** FR-15, FR-16, FR-17, FR-18, FR-19, FR-20, FR-21, FR-22 (+ post-v1 FR-26, FR-27 added 2026-06-30)
+**FRs covered:** FR-15, FR-16, FR-17, FR-18, FR-19, FR-20, FR-21, FR-22 (+ post-v1 convert-highlight-comment via Story 3.7, and adjust-text-range via Story 3.8 (blocked); both were the 2026-06-30 FR-26/FR-27, numbers since RE-USED in `prd.md`, now story-tracked, see FG-F SUPERSEDED note)
 **NFRs:** NFR-4 (durability), NFR-1 (Bank overlay)
 **Architecture:** AR-6 (ownership), AR-7 (command stack + autosave), AR-8 (persistence), AR-9 (boundary)
 
@@ -182,7 +185,7 @@ Make the annotated record durable and curatable: select, move, resize, restyle, 
 
 ### Epic 5: Reader preferences & polish (post-v1, Phase-1.5)
 > Added 2026-06-30 via correct-course, grouping the preferences / color-system / UX-refinement / structural-refactor items from `deferred-work.md`. Add user-facing preferences (settings + hotkey rebinding, per-tool + custom colors, hide/show-all toggle), the small interaction-polish refinements (layered Esc, in-editor confirm, collapsed stroke-width control, dimmed ToC), and the standing codebase structural refactor (data contracts + conditional/FSM unification + src module split) as an enabler.
-> **FRs covered:** FR-23, FR-24, FR-25 (post-v1)
+> **FRs covered:** post-v1 hide/show-all (Story 5.5), settings + hotkey rebinding (Story 5.1), per-tool + custom colors (Story 5.2, blocked): the 2026-06-30 FR-23/24/25, numbers since RE-USED in `prd.md`, now story-tracked (see FG-F SUPERSEDED note)
 > **NFRs:** NFR-1, NFR-5 (immersion), NFR-3 (unchanged by polish)
 > **Architecture:** AR-3 (contract preserved by refactor), AR-6/AR-7 (doc-scoped store + autosave), AR-9 (layering), AD-11 (FSM)
 
@@ -2197,7 +2200,7 @@ So that the gesture works the way I'd expect on a page with visible text nearby.
 
 ### Story 9.1: Download a library paper's original file
 
-> User request: "download papers from my library so that I can save or access them outside Paper Mate." Reuses the existing `GET /api/docs/{doc_id}/file` served PDF (docs.py `get_doc_file`). Library **FR-30** (feature group F9).
+> User request: "download papers from my library so that I can save or access them outside Paper Mate." Reuses the existing `GET /api/docs/{doc_id}/file` served PDF (docs.py `get_doc_file`). Library **FR-30** (feature group F9). **AMENDED 2026-07-18 via correct-course (`sprint-change-proposal-2026-07-18.md`, item 13):** scope now includes a **multi-select → zip** download and a **Download button on the Library buttons panel** (beside Display / Move / Star / Delete / Add) — the single-file path and the bulk-zip path are one story, not two. The bulk/zip case moved from Out-of-scope into scope; the client-vs-server zip mechanism is a create-story call.
 
 As a reader,
 I want to download a paper from my library,
@@ -2206,8 +2209,16 @@ So that I can save or open it outside Paper Mate.
 **Acceptance Criteria:**
 
 **Given** a paper in the collection
-**When** I choose Download (a row action or the reader)
+**When** I choose Download (a row action, the Library buttons panel, or the reader)
 **Then** the browser downloads its original PDF with a sensible filename (the original upload name or the paper title), reusing the existing `GET /api/docs/{doc_id}/file` served file with `Content-Disposition: attachment` (FR-30, NFR-1-Library)
+
+**Given** a Download button on the Library buttons panel (beside Display / Move / Star / Delete / Add)
+**When** ONE paper is selected and I click Download
+**Then** that paper's original PDF downloads (same single-file path as the row action) (FR-30)
+
+**Given** MULTIPLE papers selected
+**When** I click Download
+**Then** the selected originals download together as a single `.zip` (byte-identical members, sensible per-file names, deduped on name collision), via a client-side zip (JSZip) or a server zip route — decided at create-story (FR-30)
 
 **Given** the download
 **Then** it is byte-identical to the stored original (no re-encoding), works fully offline (local file server, no network), and never triggers the row's open/arm gesture (FR-30, NFR-6-Library)
@@ -2218,7 +2229,7 @@ So that I can save or open it outside Paper Mate.
 **Given** the Download control label/tooltip
 **Then** it contains no em-dash (L-UX-DR13)
 
-> **Out of scope:** downloading an ANNOTATED PDF (that is Story 9.2, export); bulk/zip download of a multi-selection (create-story call). **Open design calls:** dedicated download route vs a `?download=1` flag on the existing file route; filename source (upload name vs title); whether download appears in the reader too.
+> **Out of scope:** downloading an ANNOTATED PDF (that is Story 9.2, export). **Open design calls:** dedicated download route vs a `?download=1` flag on the existing file route; client-side (JSZip) vs a server zip route for the multi-select case; filename source (upload name vs title); whether download appears in the reader too.
 
 ### Story 9.2: Export an annotated PDF (SPIKE-FIRST)
 
@@ -2269,3 +2280,322 @@ So that I can check a supporting note or citation without losing my place.
 **Then** it degrades gracefully (no preview / a muted "couldn't locate" affordance), never a broken or mis-placed popup (FR-27)
 
 > **Out of scope:** click-to-chat / AI targeting (Phase 3); synthesizing a reference list when the PDF has none; OCR for scanned PDFs. **Open design calls:** which marker classes ship first (footnotes vs `[n]` vs Figure/Table); detection strategy (regex over text-layer spans + geometry); the reading-helper resolver seam location (a new `render/`-adjacent module), recorded as an architecture-spine decision at create-story.
+
+## Epic 10: Reader & annotation polish, round 3 (post-v1, Phase-1.5)
+
+> Added 2026-07-18 via correct-course (`sprint-change-proposal-2026-07-18.md`). From a 13-request user batch, this epic holds the reader/annotation **defects**, small **polish**, and three small **persistence** features; the three heavyweight new capabilities (textbox, image, clipboard) split into Epic 11, and the Library download (item 13) amended Story 9.1. Same split-by-weight precedent as the 2026-07-11 batch (polish stayed in Epic 8, heavyweight went to Epic 9). Three stories carry a new reader FR (proposed FR-31/32/33), recommended into a reader-PRD addendum before dev; the rest are quality-of-existing-FR (no new FR). Story 10-9 is the epic's terminal structural-refactor pass, same footing as Stories 5.0/5.3/5.4/6.8/8.10 (AE7-5: refactor as the last story so it absorbs the whole epic's debt). Sequenced post-v1; Epic 10 runs before Epic 11 (defects first, heavy capabilities after).
+
+### Story 10.1: Unify selection color and fix double-thickening over punctuation/whitespace (items 1+2)
+
+> User request (item 1): "mid-selection and post-mouse-up must not thicken; unify the selection color." User request (item 2): "some letters, especially over a `.` or the whitespace after it, are twice-thickened; find the root cause and fix." One root-cause story: both are the same rendering surface (the native `::selection` tint plus the per-line highlight rects that stack alpha where sub-ranges overlap). Touches `render/selectionBounder.ts` (Story 4.1 `endOfContent` bounding) and the per-line rects from `anchor/collectTextRects`. Defect, investigation-first. No new FR (defends FR-7/FR-8, NFR-3).
+
+As a reader,
+I want the selection tint to stay one uniform color and never darken on release or double up over punctuation,
+So that reading stays comfortable and highlights look clean.
+
+**Acceptance Criteria:**
+
+**Given** an active text selection (mid-drag) and the same selection after mouse-up
+**When** it is painted
+**Then** the tint is ONE uniform color at ONE opacity, with no visible darkening or "thickening" step on release (item 1, FR-7/FR-8)
+
+**Given** the story
+**Then** it STARTS with a root-cause diagnosis: identify why release changes the appearance (native `::selection` vs the created-highlight fill vs an overlay double-paint) and why glyphs adjacent to a `.` or a whitespace render darker (overlapping/adjacent per-line sub-range rects stacking a semi-transparent fill), before committing a fix (item 2)
+
+**Given** two per-line rects that abut or overlap at a punctuation/whitespace boundary
+**Then** the fix stops the alpha from compounding (merge/clip adjacent rects, or paint the highlight as one opaque-composited layer) so every covered glyph shows the exact same tint density (item 2, NFR-3)
+
+**Given** the fix
+**Then** it is live-smoked on a real paper at DPR>1 across a selection that spans sentence-ending punctuation and inter-word spaces, confirming uniform density, and it does NOT regress the Story 4.1 trailing-band / inter-line-space fixes or the Story 4.2 column-aware geometry
+
+> **Out of scope:** changing the selection color VALUE (this is about uniformity, not palette); the multi-column selection controller (stays deferred). **Open design calls for create-story:** whether the fix is CSS-only (`::selection` + highlight compositing) or needs a rect-merge pass in `anchor/`; whether "unify" means the live selection adopts the created-highlight color or vice versa.
+
+### Story 10.2: Memo resize-handle position and minimum-size fix (item 3)
+
+> User request: "the memo's two bottom handles are off their position; there is a fixed minimum height/width; examine and fix." Defect in the `MemoBox` edit-frame corner-handle geometry plus `resizeMemoAnnotation` (which regrows the rect from the top-left anchor). No new FR (defends FR-10/FR-15).
+
+As a reader,
+I want a memo's resize handles to sit exactly on its corners at any size,
+So that I can grab and resize it precisely.
+
+**Acceptance Criteria:**
+
+**Given** a selected memo in its edit frame
+**When** the corner handles render
+**Then** all four (including the two bottom handles) sit exactly on the box corners at every size and zoom level, not offset from the box edge (item 3, FR-15, NFR-3)
+
+**Given** the story
+**Then** it diagnoses the offset cause (a min-height/min-width clamp fighting the handle placement, a border-box vs content-box mismatch, or a stale scale factor) before the fix (item 3)
+
+**Given** the fixed minimum height/width
+**Then** the memo can be resized down to a sensible smaller minimum (create-story sets the floor) without the handles detaching, and shrinking never clips the text-entry unusably (item 3, FR-10)
+
+**Given** the fix
+**Then** it is live-smoked at DPR>1 by resizing a memo from large to the new minimum and back, confirming handle tracking, and it does not regress the Story 3.1 memo move/resize command path or Story 8.6's preview-size behavior
+
+> **Open design calls for create-story:** the exact new min width/height; whether the min is scale-1.0 px or CSS px; confirm the offset is geometry (handle placement) not a transform.
+
+### Story 10.3: Hide the memo expand icon until hover or focus (item 4)
+
+> User request: "the memo expand icon is always visible; hide it unless hovered or focused." Polish on the `MemoBox` chrome. No new FR (FR-10, UX minimal-chrome principle).
+
+As a reader,
+I want the memo expand icon hidden until I hover or focus the memo,
+So that idle memos stay clean and unobtrusive.
+
+**Acceptance Criteria:**
+
+**Given** a memo that is neither hovered nor focused
+**When** it renders
+**Then** its expand icon is hidden (the memo shows only its content/box), keeping idle chrome minimal (item 4, UX-DR minimal-chrome)
+
+**Given** the memo is hovered OR has focus-within (its text-entry or a control focused)
+**Then** the expand icon appears and is fully clickable/keyboard-reachable, and it does not shift the memo's layout when it appears/disappears (item 4, UX-DR17)
+
+**Given** keyboard-only use
+**Then** the icon is reachable when the memo is focused (never hover-only), so it is not lost to keyboard users (UX-DR17)
+
+> **Open design calls for create-story:** whether "expand" means the collapse/expand toggle or a separate control; the exact reveal trigger (`:hover` + `:focus-within`); a short fade vs instant.
+
+### Story 10.4: Resizable, persisted collapsed memo box (item 10)
+
+> User request: "the collapsed memo box is a fixed size; I want to resize it, and have that persist." Today `setMemoCollapsed` is a boolean and the collapsed box has a fixed size. This adds a persisted collapsed dimension (a contract addition). Proposed reader **FR-32** (finalize in the PRD addendum). Shares the `MemoBox` surface with 10-2/10-3.
+
+As a reader,
+I want to resize a memo's collapsed box and have the size stick,
+So that collapsed memos fit the space I want them to occupy.
+
+**Acceptance Criteria:**
+
+**Given** a collapsed memo
+**When** I drag its resize handles
+**Then** the collapsed box resizes (independently of the expanded size), with handles tracking the corners exactly (consistent with 10-2) (item 10, FR-15)
+
+**Given** a resized collapsed memo
+**When** I reload the paper (Story 3.5 restore)
+**Then** the collapsed box restores at its persisted size, not the fixed preset (item 10, proposed FR-32, AR-6)
+
+**Given** the persisted collapsed size
+**Then** it is stored as annotation style/geometry through the command path (AR-7, undoable) and added additively to the contract (no `schema_version` break; an existing annotation without it falls back to the current fixed size) (proposed FR-32, AD-8)
+
+**Given** the collapsed and expanded sizes
+**Then** they are tracked distinctly (resizing one does not silently change the other) and both survive reload; live-smoked at DPR>1
+
+> **Out of scope:** a shared "default collapsed size" preference across memos (create-story call). **Open design calls:** the exact stored field(s) (a `collapsed_size` vs reusing `bubble_*`); the collapsed min-size floor; how this composes with Story 8.6's preview-size behavior.
+
+### Story 10.5: Persist a moved comment box's position (item 5)
+
+> User request: "when I drag and move the white comment box, I want it to persist." Today `resizeCommentAnnotation` stores `bubble_width/height` in style but the bubble POSITION is derived from the pin (not stored), so a moved box snaps back. This adds a persisted position offset (a contract addition). Proposed reader **FR-31** (finalize in the PRD addendum).
+
+As a reader,
+I want a comment box I dragged to a new spot to stay there,
+So that I can place a note where it reads best and keep it there.
+
+**Acceptance Criteria:**
+
+**Given** an open comment box (bubble)
+**When** I drag it to a new position
+**Then** it moves and stays where I dropped it for the session (item 5, FR-11/FR-15)
+
+**Given** a moved comment box
+**When** I close and reopen it, or reload the paper (Story 3.5)
+**Then** it reopens at its persisted position, not snapped back to the pin default (item 5, proposed FR-31, AR-6)
+
+**Given** the persisted position
+**Then** it is stored as an offset from the pin/anchor (scale-independent, so it holds across zoom), written through the command path (undoable), and added additively to the contract (no `schema_version` break; a box without it falls back to the pin-relative default) (proposed FR-31, AD-4/AD-8)
+
+**Given** a box dragged near a page edge
+**Then** it still renders in the fixed-overlay path without page-edge clipping (the [[comment-bubble-page-edge-clipping]] guard) and without reflowing the canvas (NFR-1)
+
+> **Open design calls for create-story:** store the offset in normalized page fractions vs a pin-relative delta; whether the pin stays fixed while only the box moves (assumed yes); per-page scope for a multi-page comment group.
+
+### Story 10.6: Quick-box pops to the right of the selection (item 7)
+
+> User request: "when I highlight/underline/select or use the quick box, put its popup on the RIGHT side of the selection so it obstructs reading less." Polish on the quick-box placement (`annotations/marks.ts` affordance flags + the placement logic in the interaction layer). No new FR (FR-14, UX minimal-obstruction).
+
+As a reader,
+I want the quick-box to appear to the right of my selection,
+So that it does not cover the text I just selected or the line I am reading.
+
+**Acceptance Criteria:**
+
+**Given** a completed text selection (or an armed/selected mark that shows the quick-box)
+**When** the quick-box opens
+**Then** it is positioned to the RIGHT of the selection by default, clear of the selected text and the current reading line (item 7, FR-14, NFR-1)
+
+**Given** a selection near the right page edge where a right-side box would overflow
+**Then** the placement falls back gracefully (flip to left/below) so the box stays fully on-screen and never clips (item 7, NFR-1)
+
+**Given** the existing left-vertical-strip marks (memo, box comment, box highlight, per `usesLeftVerticalQuickBox`)
+**Then** the change is reconciled with them (create-story: does right-side become the default for text marks only, or unify the strip placement) without regressing those marks' current behavior (FR-14)
+
+**Given** the placement change
+**Then** it is live-smoked at DPR>1 across a selection at the left, center, and right of a page, confirming no clipping and no reading-line occlusion
+
+> **Open design calls for create-story:** exact anchor point (selection's right edge, vertically centered vs top-aligned); the overflow flip order; whether the left-vertical-strip marks change or stay.
+
+### Story 10.7: Remember and restore last view position on reopen (item 11)
+
+> User request: "when I close a PDF, remember the location (page or scroll); restore it when the doc is reopened." Today `openDoc` restores annotations but clears all transient view state (no scroll/page memory). This adds per-doc last-view persistence. Proposed reader **FR-33** (finalize in the PRD addendum).
+
+As a reader,
+I want a paper to reopen at the page and scroll position where I left off,
+So that I resume reading without hunting for my place.
+
+**Acceptance Criteria:**
+
+**Given** an open paper scrolled to some page/position
+**When** I close it (leave the reader / switch documents)
+**Then** its last view position (page index + intra-page scroll offset) is captured per document (item 11, proposed FR-33)
+
+**Given** I reopen that paper
+**When** the reader loads
+**Then** it restores to the remembered page and scroll offset (scale-independent, so a zoom change since last visit still lands on the right content), not the top of page 1 (item 11, proposed FR-33, AR-6)
+
+**Given** a first-time open (no remembered position)
+**Then** it opens at the top, unchanged (proposed FR-33)
+
+**Given** the restore
+**Then** it composes with the Story 1.7 render windowing (the target page is rendered before the jump) and is live-smoked at DPR>1 on a 50+ page paper, landing at the remembered spot without a visible scroll-jank burst (NFR-2)
+
+> **Out of scope:** cross-device sync of the position (Remote sync stays deferred); remembering per-page zoom level (create-story call). **Open design calls for create-story:** where the position lives (client `localStorage` view-prefs, like the Story 7.10 table-prefs store, vs `meta.json` server-side); whether position is stored as a normalized fraction or page + px offset; debounce/flush timing on close.
+
+### Story 10.8: Pen width, four levels including a thinner one (item 12)
+
+> User request: "support a thinner pen width; four levels rather than the current three." Today `activeStrokeWidth` defaults to 8 (`--pen-stroke-medium`); three `--pen-stroke-*` tokens exist. This adds a fourth, thinner level (a DESIGN.md token plus the stroke-width row going 3 to 4 options). AC-extension of FR-9 (pen); no new FR.
+
+As a reader,
+I want a fourth, thinner pen width,
+So that I can draw finer marks than the current thinnest stroke.
+
+**Acceptance Criteria:**
+
+**Given** the pen stroke-width picker
+**When** it renders
+**Then** it offers FOUR levels, the thinnest strictly thinner than today's current thinnest, ordered thin to thick (item 12, FR-9)
+
+**Given** the widths
+**Then** the fourth (thinner) value is a new `--pen-stroke-*` token in DESIGN.md (regenerated into `tokens.css`), not a raw px, and the picker reads the token set (item 12, DESIGN token contract)
+
+**Given** a stroke drawn at the new thinnest width
+**Then** it renders crisply at DPR>1 (not sub-pixel-invisible) and persists/restores at that width like any other pen stroke (FR-9, AR-6)
+
+**Given** the picker layout
+**Then** four options fit the existing stroke-width row without breaking the flyout layout (create-story: adjust the row) (item 12, NFR-1)
+
+> **Open design calls for create-story:** the exact four values (and whether the default stays medium or shifts); the token names; whether the picker also grows for a future fifth level or is fixed at four.
+
+### Story 10.9: Epic 10 structural refactor (terminal)
+
+> User request (standing pattern, AE7-5): reduce complexity and unify Epic 10's code behind clear OOP boundaries, same footing as Stories 5.0/5.3/5.4/6.8/8.10. Sequenced LAST so its scope reflects everything Stories 10.1 to 10.8 touched. No new FR, no behavior/contract change.
+
+As a developer-user,
+I want the code Epic 10 added or touched unified behind cohesive modules with reduced conditional sprawl,
+So that the next reader epic builds on clean boundaries instead of accreting patches onto the same files.
+
+**Acceptance Criteria:**
+
+**Given** every file touched by Stories 10.1 to 10.8 (finalize the list once they land)
+**Then** each is audited for the same smells Stories 5.3/6.8/8.10 targeted: god-objects/god-functions, near-duplicate conditional branches that should be one descriptor/registry (the AD-5 `anchor.kind`-keyed dispatch pattern), and any coordinate math outside `anchor/` (AD-9 boundary check)
+
+**Given** the `MemoBox`/comment-box surface grew (10.2 handles, 10.3 icon-reveal, 10.4 collapsed-resize, 10.5 box-position)
+**Then** its resize/position/collapse concerns are unified behind one cohesive box-geometry model rather than parallel per-story conditionals
+
+**Given** this is a pure refactor thread
+**Then** it changes NO behavior and NO contract: every existing Epic 1 to 10 test still passes unmodified in intent, and there is no anchor/store/API-contract change
+
+**Given** the refactor
+**Then** it lands in its own PR(s), separate from any feature story, per the Story 5.0/5.3/5.4/6.8/8.10 precedent
+
+> **Out of scope:** any new capability; touching modules Epic 10 did not touch; the still-deferred multi-column selection controller. **Open design calls for create-story:** the exact module boundaries; final scope depends on which of 10.1 to 10.8 shipped.
+
+## Epic 11: Annotation blocks, textbox, image and clipboard (post-v1, Phase-2)
+
+> Added 2026-07-18 via correct-course (`sprint-change-proposal-2026-07-18.md`). The three heavyweight items from the 13-request batch: each adds a net-new capability with FR/contract surface, so they were grouped here (the defects/polish stayed in Epic 10), the same split-by-weight the 2026-07-11 batch used (Epic 8 vs Epic 9). This is the SECOND capability set to cross the v1 to Phase-2 line (after Epic 9). New reader FRs: FR-28 (textbox), FR-29 (image block), FR-30-reader (clipboard paste) (proposed; finalize in a reader-PRD addendum before dev). Story 11-2 introduces a persisted binary-asset seam not in the current annotation model and wants an architecture-spine note at create-story; 11-2 and 11-3 are SPIKE-FIRST (feasibility gate before commit). Dependency: 11-3 depends on 11-1 and 11-2.
+
+### Story 11.1: Plain textbox tool (text-only block, distinct from the memo) (item 6)
+
+> User request: "support a normal text box tool that has only text, not a sticky note." A new `AnnotationTool` plus a `MARK_DESCRIPTORS` entry: a text-only `kind=rect` block distinct from the memo's sticky styling. Proposed reader **FR-28** (finalize in the PRD addendum).
+
+As a reader,
+I want a plain textbox tool that places text directly on the page,
+So that I can type a clean label or note without the sticky-note styling of a memo.
+
+**Acceptance Criteria:**
+
+**Given** the tool rail
+**When** I pick the textbox tool and click/drag on the page
+**Then** a text-only block is created (`type=textbox`, `anchor kind=rect`), editable inline, with NO sticky-note fill/chrome (transparent or minimal background), created through the command path (item 6, proposed FR-28, AR-5/AR-7)
+
+**Given** the textbox is a new mark type
+**Then** it is added as one `MARK_DESCRIPTORS` entry (the AD-5 dispatch pattern) plus its contract type, additively (no `schema_version` break; existing docs still load) (proposed FR-28, AD-5/AD-8)
+
+**Given** a textbox
+**Then** it can be selected, moved, resized, recolored (text color), re-edited, deleted, and undone/redone through the SAME command path as other marks, and it appears in the Annotation Bank (respecting 8.2 filter, sorted by 8.3 reading order) (FR-15/FR-16/FR-17, FR-19)
+
+**Given** a textbox
+**When** I zoom or reload
+**Then** it stays anchored at its PDF coordinates and its text restores exactly (NFR-3, AR-6)
+
+**Given** any textbox UI string
+**Then** it contains no em-dash (UX-DR13)
+
+> **Out of scope:** rich text (bold/italic/lists); the image block (Story 11-2); paste (Story 11-3). **Open design calls for create-story:** how a textbox differs from a memo in the model (a new `type` vs a memo style flag); default background (fully transparent vs hairline); font/size controls (reuse memo's or minimal).
+
+### Story 11.2: Image attachment block with resize handles (SPIKE-FIRST) (item 8)
+
+> User request: "support an image attachment tool where I upload an image from the filesystem; the attached image's size is adjustable with handles." Introduces a persisted BINARY asset, which the current annotation model (scalar/rect/path/text) does not carry. SPIKE-FIRST on where the bytes live; the choice is an architecture-spine decision recorded at create-story. Proposed reader **FR-29** (finalize in the PRD addendum).
+
+As a reader,
+I want to attach an image from my computer onto the page and resize it with handles,
+So that I can pin a figure, screenshot, or diagram alongside the paper.
+
+**Acceptance Criteria:**
+
+**Given** the story
+**Then** it STARTS with a storage spike: decide where image bytes live (client-embedded data-URI inside the annotation vs a server-stored asset with a new upload route and a `/data` asset dir), weighing `~/.paper-mate` size, the AD-8 persistence-format impact, and offline/same-origin serving, and record the decision as an architecture-spine note before the full build (item 8, proposed FR-29, AD-8)
+
+**Given** the image tool
+**When** I choose an image file from disk
+**Then** an image block is placed on the page (`type=image`, `anchor kind=rect`), created through the command path, and persisted so it restores on reload (item 8, proposed FR-29, AR-6/AR-7)
+
+**Given** a selected image block
+**When** I drag its handles
+**Then** it resizes (aspect-ratio behavior is a create-story call), handles tracking the corners exactly at any zoom (consistent with 10-2), staying anchored at its PDF coordinates (FR-15, NFR-3)
+
+**Given** an image block
+**Then** it selects/moves/deletes/undoes through the shared command path and appears in the Annotation Bank (8.2 filter, 8.3 order), and a very large image is bounded (create-story: max dimension/byte cap) so it cannot bloat `~/.paper-mate` or jank the page (FR-15/FR-17/FR-19, NFR-2)
+
+**Given** the block
+**Then** it is live-smoked at DPR>1: attach, resize, zoom, reload, confirm placement and fidelity
+
+> **Out of scope:** image editing (crop/rotate/filters); drag-and-drop-from-desktop and clipboard paste (paste is Story 11-3); annotating ON the image. **Open design calls for create-story:** the storage decision (the spike); upload route + contract shape if server-stored (then `docs/API.md`); aspect-lock default; max size/dimension caps.
+
+### Story 11.3: Clipboard paste into a textbox or image block (SPIKE-FIRST) (item 9)
+
+> User request: "support copy/paste from the clipboard: if it is an image, attach it as an image block; if it is text, attach it as a textbox block." A paste gesture that routes by clipboard content type onto the Story 11-1 textbox and Story 11-2 image blocks. SPIKE-FIRST on the Clipboard API + paste-target resolution. Proposed reader **FR-30-reader** (finalize in the PRD addendum). Depends on Stories 11-1 and 11-2.
+
+As a reader,
+I want to paste from my clipboard onto the page,
+So that copied text lands as a textbox and a copied image lands as an image block, without a separate tool step.
+
+**Acceptance Criteria:**
+
+**Given** the story
+**Then** it STARTS with a spike: prototype reading the paste payload (`ClipboardEvent`/async Clipboard API), classifying image vs text, and resolving WHERE the block lands (the paste point vs the current view center), validating the permission/security path in the same-origin app before the full build (item 9, proposed FR-30-reader)
+
+**Given** clipboard TEXT
+**When** I paste onto the page
+**Then** a textbox block (Story 11-1) is created containing that text, through the command path (item 9, proposed FR-30-reader, AR-7)
+
+**Given** a clipboard IMAGE
+**When** I paste onto the page
+**Then** an image block (Story 11-2) is created from those bytes, through the same storage decision Story 11-2 made, through the command path (item 9, proposed FR-30-reader, AR-7)
+
+**Given** paste
+**Then** it is undoable/redoable as one step, respects focus (a paste into an editing textarea inserts text normally, not a new block), and degrades gracefully when the clipboard is empty or an unsupported type (no crash, no ghost block) (FR-16, UX-DR)
+
+**Given** the paste flow
+**Then** it is live-smoked at DPR>1 with both a copied text passage and a copied image, confirming the right block type and placement
+
+> **Out of scope:** pasting rich HTML as formatted text (paste as plain text); multi-item clipboard payloads (create-story call); copying a Paper Mate mark to the clipboard (the reverse direction). **Open design calls for create-story:** placement (caret/pointer vs view center); the permission model for the async Clipboard API; precedence when the clipboard carries both text and image.

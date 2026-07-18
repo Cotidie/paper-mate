@@ -16,8 +16,10 @@ import {
   rectsIntersect,
   pendingSelectionGeometry,
   clipRectToViewport,
+  viewportRectsFromPages,
   type PageBox,
   type PageSelection,
+  type PageCardRef,
 } from "./index";
 
 const box: PageBox = { width: 600, height: 800 };
@@ -549,5 +551,54 @@ describe("clipRectToViewport (fixed-position CREATE preview clipped to the reade
   it("returns null for a rect that exactly touches the viewport edge with zero overlap", () => {
     const rect = { left: 10, top: 8, width: 200, height: 40 };
     expect(clipRectToViewport(rect, viewport)).toBeNull();
+  });
+});
+
+describe("viewportRectsFromPages (denormalize-and-clip to viewport pixels, shared by the live-drag and pending selection previews, Story 10.1)", () => {
+  const cardAt = (pageIndex: number, left: number, top: number): PageCardRef => ({
+    pageIndex,
+    cardEl: {
+      getBoundingClientRect: () =>
+        ({ left, top, right: left + 600, bottom: top + 800, width: 600, height: 800, x: left, y: top }) as DOMRect,
+    } as HTMLElement,
+    box,
+  });
+
+  it("offsets card-local rects by the card's live viewport position", () => {
+    const pages = [{ pageIndex: 0, rects: [{ left: 10, top: 20, width: 100, height: 30 }] }];
+    const cardOf = (i: number): PageCardRef | null => (i === 0 ? cardAt(0, 50, 200) : null);
+    expect(viewportRectsFromPages(pages, cardOf, null)).toEqual([{ left: 60, top: 220, width: 100, height: 30 }]);
+  });
+
+  it("skips a page whose card is not currently mounted", () => {
+    const pages = [{ pageIndex: 9, rects: [{ left: 0, top: 0, width: 10, height: 10 }] }];
+    expect(viewportRectsFromPages(pages, () => null, null)).toEqual([]);
+  });
+
+  it("clips a rect to a given viewport band (Story 4.2: a row scrolled behind the top-bar must not bleed through)", () => {
+    const pages = [{ pageIndex: 0, rects: [{ left: 10, top: -30, width: 100, height: 50 }] }];
+    const cardOf = (i: number): PageCardRef | null => (i === 0 ? cardAt(0, 0, 200) : null);
+    // Screen rect: top = 200 + (-30) = 170, bottom = 220. Band top 190 clips 30px off the top.
+    expect(viewportRectsFromPages(pages, cardOf, { top: 190, bottom: 1000 })).toEqual([
+      { left: 10, top: 190, width: 100, height: 30 },
+    ]);
+  });
+
+  it("drops a rect entirely outside the given viewport band", () => {
+    const pages = [{ pageIndex: 0, rects: [{ left: 10, top: 0, width: 100, height: 20 }] }];
+    const cardOf = (i: number): PageCardRef | null => (i === 0 ? cardAt(0, 0, 0) : null);
+    expect(viewportRectsFromPages(pages, cardOf, { top: 100, bottom: 1000 })).toEqual([]);
+  });
+
+  it("flattens rects across multiple pages, preserving page order", () => {
+    const pages = [
+      { pageIndex: 0, rects: [{ left: 0, top: 0, width: 10, height: 10 }] },
+      { pageIndex: 1, rects: [{ left: 0, top: 0, width: 20, height: 20 }] },
+    ];
+    const cardOf = (i: number): PageCardRef | null => cardAt(i, i * 1000, 0);
+    expect(viewportRectsFromPages(pages, cardOf, null)).toEqual([
+      { left: 0, top: 0, width: 10, height: 10 },
+      { left: 1000, top: 0, width: 20, height: 20 },
+    ]);
   });
 });

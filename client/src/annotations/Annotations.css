@@ -158,20 +158,28 @@
   background-color: var(--color-text-selection);
 }
 
-/* The pending-selection preview: fixed rects standing in for a text-drag
-   selection while its CREATE quick-box is open (Story 4.x fix — "selection
-   resets on zoom/scroll"). The mark doesn't exist yet, so there is no
-   AnnotationLayer fill to ride out a zoom re-render; these are re-derived
-   from the stored (scale-independent) selection on every scroll/resize/zoom
-   instead of relying on the native ::selection, which a text-layer DOM swap
-   destroys outright. Same z-tier as the other live previews. Tinted with the
-   neutral `--color-text-selection` token (the SAME one Reader.css uses for
-   the raw text layer's native ::selection) — NOT the armed tool's active
-   color: nothing has been chosen as highlight/underline/comment yet, so a
-   yellow (or other tool-colored) band here reads as "this is already a
-   highlight," which it isn't. A plain blue-ish selection is the reader's
-   familiar "text is selected" affordance (matches any normal reader/browser),
-   independent of which mark it becomes. */
+/* The (live-or-pending) selection preview: fixed rects standing in for a
+   text-drag selection, in EITHER of its two phases (Story 10.1 unification;
+   originally Story 4.x fix — "selection resets on zoom/scroll"):
+     - mid-drag, before release: `useLiveSelectionPreview` re-derives these
+       every `selectionchange` from the LIVE native selection (whose own
+       `::selection` paint is suppressed, Reader.css — a pdf.js glyph span
+       can overlap its neighbor's rect by a sub-pixel amount, and native
+       per-span paint can't be merged/flattened to avoid the resulting
+       darker patch).
+     - after release, while the CREATE quick-box is open: `useCreateQuickBox`
+       re-derives these from the STORED (scale-independent) selection on
+       every scroll/resize/zoom instead of relying on the native selection,
+       which a text-layer DOM swap can destroy outright.
+   Both phases run through the SAME `mergeRects`-flattened `anchor/` geometry
+   pass, so they paint pixel-identically — no visible "thickening" step at
+   release (AC-1). Same z-tier as the other live previews. Tinted with the
+   neutral `--color-text-selection` token, NOT the armed tool's active color:
+   nothing has been chosen as highlight/underline/comment yet, so a yellow (or
+   other tool-colored) band here reads as "this is already a highlight," which
+   it isn't. A plain blue-ish selection is the reader's familiar "text is
+   selected" affordance (matches any normal reader/browser), independent of
+   which mark it becomes. */
 .pending-selection-preview {
   position: fixed;
   pointer-events: none;
