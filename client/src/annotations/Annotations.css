@@ -588,8 +588,15 @@
    corner: a SELECTED memo also renders its Story 3.1 edit frame (4 corner resize
    handles + the top-center move grip, same z-layer) — any corner or top-center
    position collides with one of those. Bottom-center is the one edge the edit
-   frame never touches. Always present (not selection-gated), so a reader can
-   collapse/expand a memo without first selecting it. */
+   frame never touches. Not selection-gated (a reader can collapse/expand a memo
+   without first selecting it) but hidden until hover/focus (Story 10.3, matches
+   the .folder-panel__row-actions / .collection-table__open-button reveal
+   pattern): opacity-only (never display/visibility), because a COLLAPSED memo
+   has no textarea, so the chevron is the ONLY focusable control inside it —
+   display:none/visibility:hidden would drop it from the tab order and make a
+   collapsed memo permanently un-expandable by keyboard. opacity:0 +
+   pointer-events:none keeps it focusable while invisible; tabbing onto it (or
+   any control inside the memo) fires :focus-within and reveals it. */
 .memo-collapse-toggle {
   position: absolute;
   left: 50%;
@@ -606,6 +613,14 @@
   border-radius: var(--radius-pill);
   color: var(--color-ink);
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease-out;
+}
+
+.annotation-memo:hover .memo-collapse-toggle,
+.annotation-memo:focus-within .memo-collapse-toggle {
+  opacity: 1;
   pointer-events: auto;
 }
 

@@ -893,6 +893,14 @@ describe("AnnotationLayer memo collapse/expand (user feature request)", () => {
     expect(screen.getByTestId("memo-collapse-toggle-m1")).toBeTruthy();
   });
 
+  it("the collapse toggle stays keyboard-focusable on a collapsed memo (Story 10.3: hidden via opacity, not display/visibility, so it never leaves the tab order)", () => {
+    useAnnotationStore.getState().addAnnotation(collapsedMemo("m1", "a note"));
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    const toggle = screen.getByTestId("memo-collapse-toggle-m1") as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+    expect(toggle.tabIndex).toBe(0);
+  });
+
   it("clicking the toggle on an expanded memo calls setMemoCollapsed(id, true, ...)", () => {
     useAnnotationStore.getState().addAnnotation(memoMark("m1", 0, "a note"));
     render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
