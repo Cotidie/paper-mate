@@ -4,7 +4,7 @@ baseline_commit: 7122e0b4175088346b084592abdf7b44a0202357
 
 # Story 10.3: Hide the memo expand icon until hover or focus
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -175,4 +175,5 @@ Transient test memos deleted after each round; sandbox `annotations.json` verifi
 - 2026-07-19: User live-tested the shipped change and reported: select a memo, hover/click Collapse, deselect — the chevron lingers. Root-caused to `useSelection.ts`'s deselect handlers never actually blurring the memo's focused control (a dead exact-classname check on the pointerdown path; no blur at all on the Escape path), exposed by this story's new `:focus-within` dependency. Fixed with a corrected `blurMemoFocus()` helper (`.closest(".annotation-memo")`) called from both paths; added 2 regression tests and corrected a pre-existing test's unrealistic fixture that had masked the same bug class. Full suite re-verified 1551/1551 green, typecheck clean; both fixes live-verified at DPR 2 in a fresh throwaway sandbox.
 - 2026-07-19: User reported a related bug: clicking the toggle to COLLAPSE (not deselect) also leaves the chevron lingering, since the memo stays selected and the deselect fix above never fires. Root-caused to the browser's default click-focuses-button behavior with nothing blurring the toggle after its one-shot action. Fixed with `e.currentTarget.blur()` at the end of the toggle's `onClick` in `MemoBox.tsx`. Added 1 regression test. Full suite re-verified 1552/1552 green, typecheck clean; live-verified at DPR 2 via ground-truth DOM query in a fresh throwaway sandbox.
 - 2026-07-19: User fix request: while a memo is selected, don't hide the chevron even without hover/focus-within — a selected memo already shows its edit-frame chrome, so hiding just the chevron read as inconsistent. AC #1/#2 amended (selected is now a third reveal trigger). Fixed by adding `.annotation-memo--selected .memo-collapse-toggle` to the reveal rule (`Annotations.css`) — pure CSS, no new test needed (same posture as the existing hover/focus-within rules: LIVE-SMOKE only, jsdom doesn't apply real stylesheet cascade). Live-verified at DPR 2: selected-only state (no hover, no focus-within) keeps the chevron at `opacity:"1"`.
-- 2026-07-19: All Review Findings resolved (no unresolved High/Med), live-smoked end-to-end across all four rounds. Status stays `review`, ready for PR (flips to `done` + PATCH version bump at merge, per CLAUDE.md versioning).
+- 2026-07-19: All Review Findings resolved (no unresolved High/Med), live-smoked end-to-end across all four rounds.
+- 2026-07-19: PR #75 ("Feat: Hide Memo Toggle Until Hover or Focus") merged to `main` (commit `9178566`). Story flipped to `done`; version bumped to `0.5.33` (PATCH +1, standalone story) per CLAUDE.md versioning.
