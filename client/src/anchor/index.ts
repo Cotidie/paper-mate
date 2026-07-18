@@ -252,6 +252,28 @@ export function resizeRectCorner(
     else x1 = Math.max(x1, x0 + min.w);
     if (corner === "nw" || corner === "ne") y0 = Math.min(y0, y1 - min.h);
     else y1 = Math.max(y1, y0 + min.h);
+    // A legacy/edge-adjacent rect whose FIXED corner sits within `min` of the
+    // page boundary can push the floor past [0,1] (e.g. a fixed corner at
+    // x=0.97 with min.w=0.048 floors x1 to 1.018). The later `clamp01` would
+    // silently chop that back to 1, shrinking the result BELOW the requested
+    // floor. Slide the fixed corner inward instead so the floor still holds —
+    // only engages at this rare page-edge case; a no-op everywhere else.
+    if (x1 > 1) {
+      x1 = 1;
+      x0 = Math.min(x0, 1 - min.w);
+    }
+    if (x0 < 0) {
+      x0 = 0;
+      x1 = Math.max(x1, min.w);
+    }
+    if (y1 > 1) {
+      y1 = 1;
+      y0 = Math.min(y0, 1 - min.h);
+    }
+    if (y0 < 0) {
+      y0 = 0;
+      y1 = Math.max(y1, min.h);
+    }
   }
   const c = canonicalize(x0, y0, x1, y1);
   return { x0: clamp01(c.x0), y0: clamp01(c.y0), x1: clamp01(c.x1), y1: clamp01(c.y1) };

@@ -190,6 +190,44 @@ describe("useEditGesture (move/resize drag, Story 3.1)", () => {
     if (r.anchor.kind === "rect") expect(r.anchor.rect).toEqual({ x0: 0.2, y0: 0.2, x1: 0.25, y1: 0.25 });
   });
 
+  it("seeds a memo corner-resize from the RENDERED height, not the stale stored rect, when auto-grow makes them diverge (Codex review HIGH)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const btn = handle("se", "m");
+    const memoEl = document.createElement("div");
+    memoEl.className = "annotation-memo";
+    memoEl.getBoundingClientRect = () => ({ height: 600 }) as DOMRect; // rendered far taller than the stored 250px
+    memoEl.appendChild(btn);
+    document.body.appendChild(memoEl); // must be attached so the pointerdown bubbles to the document listener
+    down(btn, 100, 100);
+    move(110, 110); // dx = dy = 10/1000 = 0.01
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.anchor.kind).toBe("rect");
+    if (m.anchor.kind !== "rect") return;
+    expect(m.anchor.rect.y0).toBeCloseTo(0.25, 10); // top (fixed) untouched
+    expect(m.anchor.rect.y1).toBeCloseTo(0.25 + 0.6 + 0.01, 10); // seeded from the rendered 0.6, not the stale stored 0.25
+    expect(m.anchor.rect.x1).toBeCloseTo(0.5 + 0.01, 10); // width unaffected by the height seed
+  });
+
+  it("a memo MOVE is unaffected by the rendered-height seed (only corner-resize needs it)", () => {
+    useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
+    mountGesture();
+    const btn = handle("move", "m");
+    const memoEl = document.createElement("div");
+    memoEl.className = "annotation-memo";
+    memoEl.getBoundingClientRect = () => ({ height: 600 }) as DOMRect;
+    memoEl.appendChild(btn);
+    document.body.appendChild(memoEl); // must be attached so the pointerdown bubbles to the document listener
+    down(btn, 100, 100);
+    move(350, 350); // dx = dy = 0.25
+    up();
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    // Same delta/result as the plain top-level move test — size (and thus the
+    // rendered-height seed) never enters a translate.
+    if (m.anchor.kind === "rect") expect(m.anchor.rect).toEqual({ x0: 0.5, y0: 0.5, x1: 0.75, y1: 0.75 });
+  });
+
   it("remembers a memo's RESIZED size as the session default (last-adjusted-size-wins)", () => {
     useAnnotationStore.getState().addAnnotation(memo("m", { x0: 0.25, y0: 0.25, x1: 0.5, y1: 0.5 }));
     mountGesture();

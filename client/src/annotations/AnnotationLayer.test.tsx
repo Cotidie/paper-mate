@@ -683,6 +683,15 @@ describe("AnnotationLayer edit frame (Story 3.1)", () => {
     for (const c of ["nw", "ne", "sw", "se"]) expect(screen.getByTestId(`edit-handle-${c}-m1`)).toBeTruthy();
   });
 
+  it("gives the selected (editable) memo a z-index so it and its handles outrank an overlapping unselected sibling memo (Codex review MED: handles must not be covered)", () => {
+    useAnnotationStore.getState().addAnnotation(memoMark("m1", 0));
+    useAnnotationStore.getState().addAnnotation(memoMark("m2", 0)); // later mark, would paint on top by DOM order alone
+    render(<AnnotationLayer docId="doc-1" pageIndex={0} box={box} scale={1} />);
+    act(() => useAnnotationStore.getState().select("m1"));
+    expect(screen.getByTestId("annotation-mark-m1").style.zIndex).toBe("1");
+    expect(screen.getByTestId("annotation-mark-m2").style.zIndex).toBe("");
+  });
+
   it("shows a move grip + four corner handles for a selected COLLAPSED memo too (Story 10.2: handles render as the memo's OWN children, so they track its real collapsed box for free — the old stored-rect-frame mismatch that forced dropping the corners is gone)", () => {
     const collapsed = { ...memoMark("m1", 0), style: { color: "annotation-pink", collapsed: true } };
     seedAndSelect(collapsed);

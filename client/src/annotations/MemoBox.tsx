@@ -112,6 +112,13 @@ export default function MemoBox({
         top: pos.top,
         width: pos.width,
         ...(collapsed ? {} : { minHeight: pos.height }),
+        // Story 10.2 review fix: an explicit z-index only when `editable` so this
+        // memo (and its nested handles) outranks OVERLAPPING sibling memos within
+        // the shared `.annotation-memos` stacking context — a plain z-index:auto
+        // sibling always loses to any explicitly z-indexed box, regardless of
+        // paint/creation order. `.annotation-memos`'s own z-index (2, vs comments'
+        // 1) handles winning against the comments group.
+        ...(editable ? { zIndex: 1 } : {}),
         borderColor: `var(--color-${anno.style.color})`,
         // Background also carries the mark's accent (user request: border-only
         // made too little difference). style.alpha (fix request, the memo twin

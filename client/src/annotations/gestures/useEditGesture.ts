@@ -200,10 +200,31 @@ export function useEditGesture(opts: {
       if (!anno) return;
       const page = getPagesRef.current().find((p) => p.pageIndex === anno.anchor.page_index);
       if (!page) return;
+      let startAnchor = anno.anchor;
+      // Memo-only, corner-resize only (Story 10.2 review fix): a memo's
+      // RENDERED height can differ from its stored anchor rect (auto-grown
+      // taller, or collapsed shorter) — the box's TOP always matches the
+      // stored y0 (CSS `top` is set directly from it; only height is
+      // intrinsic/content-derived), so seed the resize baseline's y1 from the
+      // REAL rendered height. Without this, a corner-drag's delta lands on the
+      // stale stored height instead of where the user visually grabbed the
+      // handle (Task 2 moved the handle to the real corner; the resize MATH
+      // must track it too). MOVE is unaffected (`translateRect` only shifts
+      // the existing rect; size is untouched). jsdom has no layout (the
+      // measured rect is zeroed), so this is a no-op there — LIVE-SMOKE only.
+      if (anno.type === "memo" && handle !== "move" && startAnchor.kind === "rect") {
+        const memoEl = handleEl.closest(".annotation-memo") as HTMLElement | null;
+        const renderedHeight = memoEl?.getBoundingClientRect().height ?? 0;
+        const heightFrac = renderedHeight / (page.box.height * scaleRef.current);
+        if (Number.isFinite(heightFrac) && heightFrac > 0) {
+          const r = startAnchor.rect;
+          startAnchor = { ...startAnchor, rect: { ...r, y1: r.y0 + heightFrac } };
+        }
+      }
       dragRef.current = {
         id,
         handle,
-        startAnchor: anno.anchor,
+        startAnchor,
         type: anno.type,
         box: page.box,
         scale: scaleRef.current,

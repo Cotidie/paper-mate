@@ -417,6 +417,28 @@ describe("resizeRectCorner min floor (Story 10.2, memo minimum size)", () => {
   it("no min (region rects, undefined) behaves exactly as before — can shrink toward zero", () => {
     expect(resizeRectCorner(rect, "se", -0.5, -0.5, undefined)).toEqual(resizeRectCorner(rect, "se", -0.5, -0.5));
   });
+
+  it("preserves the floor for a legacy rect whose fixed corner sits within `min` of the page edge (Codex review MED: clamp01 must not silently shrink below the floor)", () => {
+    // Fixed corner (x0,y0) at 0.97 — within min.w (0.048) of the right/bottom
+    // edge. A naive floor would push x1/y1 to 1.018, then clamp01 to 1,
+    // yielding a 0.03-wide result — below the requested floor.
+    const edgeRect = { x0: 0.97, y0: 0.97, x1: 0.99, y1: 0.99 };
+    const result = resizeRectCorner(edgeRect, "se", -0.5, -0.5, min);
+    expect(result.x1).toBe(1);
+    expect(result.y1).toBe(1);
+    expect(result.x1 - result.x0).toBeCloseTo(min.w, 10);
+    expect(result.y1 - result.y0).toBeCloseTo(min.h, 10);
+  });
+
+  it("preserves the floor for a legacy rect whose fixed corner sits within `min` of the page's top-left edge", () => {
+    // Fixed corner (x1,y1) at 0.02 — within min.h (0.032) of the top/left edge.
+    const edgeRect = { x0: 0, y0: 0, x1: 0.02, y1: 0.02 };
+    const result = resizeRectCorner(edgeRect, "nw", 0.5, 0.5, min);
+    expect(result.x0).toBe(0);
+    expect(result.y0).toBe(0);
+    expect(result.x1 - result.x0).toBeCloseTo(min.w, 10);
+    expect(result.y1 - result.y0).toBeCloseTo(min.h, 10);
+  });
 });
 
 describe("scalePoints (resize a pen stroke about an origin, Story 3.1)", () => {

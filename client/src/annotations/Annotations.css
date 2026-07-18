@@ -504,12 +504,17 @@
    highlight/underline/pen sheets this group is NOT aria-hidden and NOT
    pointer-transparent at the box level — each memo is an interactive <textarea>
    the user types into. The group itself stays pointer-transparent so the page
-   text between memos remains selectable (NFR-1); each box opts back in. */
+   text between memos remains selectable (NFR-1); each box opts back in.
+   z-index 2 (Story 10.2 review fix, was 1): a memo's edit handles now render as
+   its OWN children (no separate `.annotation-edit-frames` layer for memos, see
+   `renderMemo`/`MemoBox`), so the GROUP itself must out-rank `.annotation-comments`
+   (z-index 1, rendered after) or an overlapping comment pin would paint over a
+   selected memo's handles, making them ungrabbable. */
 .annotation-memos {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
 }
 
 /* A memo box = a free-floating container over the page card (DESIGN.md
@@ -1045,6 +1050,39 @@
   transform: translate(-50%, calc(-100% - var(--space-xxs)));
   border-radius: var(--radius-pill);
   cursor: move;
+}
+
+/* Border-edge compensation (Story 10.2 review fix, AC #1 "exactly on the box
+   corners"): the pen/region `.annotation-edit-frame` is borderless, so a
+   handle's `left/top/right/bottom: 0` lands on its outer edge. A memo's own
+   handles (rendered as its DIRECT children, `MemoBox.tsx`) instead resolve
+   `0` against `.annotation-memo`'s PADDING box (the CSS containing-block rule
+   for absolutely-positioned children of a bordered ancestor) — one hairline
+   INSIDE the visual corner. Only the child-combinator selectors below need
+   the offset; `.edit-handle--*` alone stays verbatim for the frame's own
+   (borderless) handles. */
+.annotation-memo > .edit-handle--nw {
+  left: calc(-1 * var(--hairline-width));
+  top: calc(-1 * var(--hairline-width));
+}
+
+.annotation-memo > .edit-handle--ne {
+  right: calc(-1 * var(--hairline-width));
+  top: calc(-1 * var(--hairline-width));
+}
+
+.annotation-memo > .edit-handle--sw {
+  left: calc(-1 * var(--hairline-width));
+  bottom: calc(-1 * var(--hairline-width));
+}
+
+.annotation-memo > .edit-handle--se {
+  right: calc(-1 * var(--hairline-width));
+  bottom: calc(-1 * var(--hairline-width));
+}
+
+.annotation-memo > .edit-handle--move {
+  top: calc(-1 * var(--hairline-width));
 }
 
 /* Box-select multi-selection's own group frame (user feature request): a single
