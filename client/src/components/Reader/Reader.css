@@ -2,26 +2,29 @@
    Text-layer span positioning comes from the vendor pdf_viewer.css imported in
    render/index.ts (not authored here). */
 
-/* Visible live selection over the pdf.js text layer. The vendor pdf_viewer.css
-   sets `.textLayer ::selection { background: transparent }` (pdf.js paints its
-   own selection; we use the raw text layer, AD-2), so the drag selection would
-   be invisible. Re-show it with a token tint, scoped to glyph SPANS only (not
-   the per-line `<br>`s) so the vendor's `br::selection { background:
-   transparent }` (pdf_viewer.css) keeps suppressing the brs' own paint — a
-   higher-specificity `::selection` on `.textLayer` would otherwise repaint
-   their caret-height slivers in the left margin. Scoped under `.pdf-canvas` to
-   win on specificity over the vendor rule regardless of stylesheet order.
-   Un-gated on `.selecting` (Story 4.1): a reader expects the highlighted band
-   to persist after releasing the drag, not vanish on mouseup like pdf.js's own
-   (unused here) highlighter overlay. The brs stay selectable (no `user-select:
-   none`) so pdf.js's per-line `\n` reaches `selection.toString()` and copy
-   keeps inter-line whitespace (`render/textSelection.ts` bounds the selection
-   instead, via `endOfContent`, so an unbounded br sliver never appears). */
+/* Native `::selection` paint is suppressed here (Story 10.1 fix; the vendor
+   pdf_viewer.css already defaults `.textLayer ::selection` to transparent, so
+   this rule is now a no-op override kept explicit for clarity/specificity).
+   A pdf.js glyph SPAN's client rect can overlap its neighbor's by a
+   sub-pixel amount (most often a sentence/word-ending punctuation span
+   followed by its trailing whitespace span), and the browser paints
+   `::selection` PER SPAN — restyling can't merge or flatten that, so any two
+   overlapping spans compound their translucent backgrounds into a visibly
+   darker patch. `useLiveSelectionPreview` (mid-drag) and
+   `useCreateQuickBox`'s `pendingGeometry` (post-release) paint the visible
+   tint instead, through the SAME `mergeRects`-flattened, single-opacity-layer
+   geometry the committed `.annotation-highlights` group uses — no per-glyph
+   stacking, one uniform density in every phase (AC-1/AC-3).
+   This is PURE PAINT: it does not touch the `Selection`/`Range` objects, so
+   `SelectionBounder`'s `endOfContent` bounding (Story 4.1 trailing-band fix)
+   and `copyJoiner.ts`'s `Ctrl/Cmd+C` (Story 8.1) are unaffected — the brs stay
+   selectable (no `user-select: none`) so pdf.js's per-line `\n` still reaches
+   `selection.toString()`. */
 .pdf-canvas .textLayer span::selection {
-  background: var(--color-text-selection);
+  background: transparent;
 }
 .pdf-canvas .textLayer span::-moz-selection {
-  background: var(--color-text-selection);
+  background: transparent;
 }
 
 /* pdf-canvas: the scroll region on the reader-backdrop floor. Pixel-stable —

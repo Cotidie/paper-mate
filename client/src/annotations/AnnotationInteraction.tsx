@@ -36,6 +36,7 @@ import { useSelection } from "./gestures/useSelection";
 import { useMultiSelectGesture } from "./gestures/useMultiSelectGesture";
 import { useUndoRedo } from "./gestures/useUndoRedo";
 import { useCreateQuickBox } from "./gestures/useCreateQuickBox";
+import { useLiveSelectionPreview } from "./gestures/useLiveSelectionPreview";
 import { useLiveRef } from "@/hooks/useLiveRef";
 import { useTextEditSession } from "./useTextEditSession";
 import { inActiveGroup, commentGroupIds } from "./markGeometry";
@@ -208,11 +209,78 @@ export default function AnnotationInteraction({
     rectReaderRef,
     boxActive: boxMode != null,
   });
+  // True while a gesture OTHER than a plain text drag owns the pointer — Pen,
+  // Memo, a box mode, or the multi-select marquee — each with its OWN gesture
+  // path that never reads the text selection. Named separately from the
+  // `enabled` computation below because it ALSO decides whether to clear a
+  // stale selection on takeover (see `useLiveSelectionPreview`'s
+  // `takeoverActive` param): switching to one of these mid-drag must clear
+  // it, but the `pending` transition (cursor-mode release, which ALSO
+  // disables the live preview) deliberately must NOT (Ctrl+C preservation) —
+  // `takeoverActive` excludes `pending` on purpose (code review finding).
+  const takeoverActive = boxMode != null || armedTool === "pen" || armedTool === "memo" || multiSelectActive;
+  // The live (pre-release) half of the text-selection preview (Story 10.1):
+  // active only for a plain text drag that no other gesture already owns —
+  // once the quick-box pops (`pending`), `pendingGeometry` above takes over
+  // painting the exact same rects from the stored (scale-independent)
+  // selection instead. Gated on `enabled` (the phase-ready gate), NOT `active`
+  // (`enabled && !hidden`): "Hide All" (Story 5.5) suspends ANNOTATION
+  // creation/visibility, but native `::selection` is suppressed permanently
+  // now (Reader.css), so this preview is the reader's ONLY remaining "what
+  // text am I selecting" affordance — losing it while hidden would silently
+  // break plain select-and-copy, a capability that has nothing to do with
+  // annotations and worked regardless of `hidden` before this story (bug fix,
+  // code review finding). `pending`/`takeoverActive` stay meaningful gates
+  // even while hidden: `pending` is always null then (`useCreateQuickBox` IS
+  // still `active`-gated, so it never opens), and `takeoverActive`'s inputs
+  // are plain props from App, not derived from `hidden`.
+  const liveSelectionRects = useLiveSelectionPreview({
+    enabled: enabled && pending === null && !takeoverActive,
+    takeoverActive,
+    getPagesRef,
+    scaleRef,
+    rectReaderRef,
+  });
+  // One flattened tint across BOTH phases (AC-1): while pending, the stored-
+  // selection geometry (survives the DOM swap a zoom/scroll re-render can
+  // cause); otherwise the live native selection. Mutually exclusive by
+  // construction (`useLiveSelectionPreview` goes inert once `pending` is
+  // non-null), so this is never a double-render of the same band.
+  const selectionPreviewRects = pending ? (pendingGeometry?.previewRects ?? []) : liveSelectionRects;
+  // eslint-disable-next-line no-console
+  console.log("DEBUG AI render", { pending: !!pending, liveSelectionRects, selectionPreviewRects, hidden });
+  // Stands in for the native browser selection, whose `::selection` paint is
+  // suppressed entirely (Story 10.1, Reader.css): mid-drag this is
+  // `liveSelectionRects` (live native selection, re-read every
+  // `selectionchange`); once the quick-box pops, it's
+  // `pendingGeometry.previewRects` (re-derived from the stored,
+  // scale-independent selection on every scroll/resize/zoom, so it survives
+  // what the native Selection can't). Both phases paint from the SAME
+  // `mergeRects`-flattened geometry, so there is no visible "thickening" step
+  // at release (AC-1). Tinted by the CSS class with the neutral selection
+  // token, NOT the active tool color — nothing has been chosen as
+  // highlight/underline/comment yet. Computed once, shared by the hidden
+  // branch below and the main render path.
+  const selectionPreviewEls = selectionPreviewRects.map((r, i) => (
+    <div
+      key={i}
+      className="pending-selection-preview"
+      data-testid="pending-selection-preview"
+      aria-hidden="true"
+      style={{ left: r.left, top: r.top, width: r.width, height: r.height }}
+    />
+  ));
 
-  // Belt-and-suspenders (Story 5.5): `active` already suppressed every gesture
-  // above, so this state is already empty while hidden, but an explicit check
-  // documents the invariant directly at the render gate.
-  if (hidden) return null;
+  // Hide-all (Story 5.5) still suspends every ANNOTATION affordance (marks,
+  // quick-boxes, comments, previews) — `active` already made all of those
+  // empty above — but the raw text-selection preview is not an annotation
+  // affordance and must survive it (see the comment above). Handled as its
+  // OWN explicit branch, not a threaded-through condition below: `selectedId`
+  // (and therefore `selectedComment`) can still point at a mark chosen BEFORE
+  // hidden was toggled on, so falling through to the general render path
+  // could leak a stale comment bubble; while hidden, render ONLY the
+  // selection preview (or nothing) and skip every other branch entirely.
+  if (hidden) return selectionPreviewRects.length === 0 ? null : <>{selectionPreviewEls}</>;
 
   // Comment overlay (see the "Comment overlay" subscriptions above): the
   // selected comment's full bubble (recolor/convert/delete/resize — REPLACES
@@ -269,7 +337,8 @@ export default function AnnotationInteraction({
     !boxPreview &&
     !multiSelectPreview &&
     !selectedCommentPoint &&
-    commentPreviewMarks.length === 0
+    commentPreviewMarks.length === 0 &&
+    selectionPreviewRects.length === 0
   ) {
     return null;
   }
@@ -332,23 +401,7 @@ export default function AnnotationInteraction({
           }}
         />
       )}
-      {pending &&
-        pendingGeometry?.previewRects.map((r, i) => (
-          // Stands in for the native browser selection (cleared on present,
-          // Story 4.x fix) while the CREATE quick-box is open: re-derived from
-          // the stored, scale-independent selection on every scroll/resize/
-          // zoom, so it survives what the native Selection can't. Tinted by
-          // the CSS class with the neutral selection token, NOT the active
-          // tool color — nothing has been chosen as highlight/underline/
-          // comment yet.
-          <div
-            key={i}
-            className="pending-selection-preview"
-            data-testid="pending-selection-preview"
-            aria-hidden="true"
-            style={{ left: r.left, top: r.top, width: r.width, height: r.height }}
-          />
-        ))}
+      {selectionPreviewEls}
       {pending && (
         // Cursor-mode tool-type picker (Story 2.12). Drag-select → H/U/C (icon
         // only). Click on empty page → Comment+Memo (icon only). Machine, shell,
