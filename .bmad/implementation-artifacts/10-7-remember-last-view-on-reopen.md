@@ -4,7 +4,7 @@ baseline_commit: ab744739e5021842e8eb45a817bea6e36f40e9b4
 
 # Story 10.7: Remember and restore last view position on reopen
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -187,3 +187,4 @@ Both fixes verified: typecheck clean, full suite 1642 tests passing (13 in `useR
 - 2026-07-19: Implemented (bmad-dev-story). Tasks 1-7 complete. Live smoke (Task 6) surfaced and fixed a genuine restore-on-reopen bug: `PageCard`'s card-registration effect ran as a passive `useEffect`, so the card registry was still empty when the new restore `useLayoutEffect` fired on initial mount — promoted it to `useLayoutEffect` (see Debug Log). All ACs verified live at DPR 2 on a 62-page paper. Full suite green (1636 tests), typecheck clean.
 - 2026-07-19: Follow-up (direct user request): also remember zoom level, reversing AC #6's original scope. See "Post-implementation follow-up" in Dev Agent Record. Full suite green (1640 tests), typecheck clean, live-smoked.
 - 2026-07-19: Senior Developer Review via Codex (`bmad-code-review`, `codex exec`). Verdict Changes Requested (High 1 / Med 1); both fixed, both live/test-reverified. See "Senior Developer Review (AI)" in Dev Agent Record. Full suite green (1642 tests), typecheck clean.
+- 2026-07-19: Status flipped to `done`. Version bumped `0.5.36` → `0.5.37` (`server/pyproject.toml` + `server/uv.lock`, per CLAUDE.md versioning — PATCH+1 per story). Full backend suite green (324 tests, incl. `test_version.py` pyproject/uv.lock consistency check).
