@@ -140,10 +140,11 @@
   /* annotation-underline: the accent line painted under a text run
      (DESIGN.md components.annotation-underline). */
   --annotation-underline-width: 3px;
-  /* annotation-pen (DESIGN.md components.annotation-pen): the three freehand
+  /* annotation-pen (DESIGN.md components.annotation-pen): the four freehand
      stroke widths offered by the pen quick-box, in scale-1.0 CSS px (the renderer
      multiplies by the current zoom). --pen-stroke-medium is the store default
      (activeStrokeWidth). The width-step preview dot sizes mirror these. */
+  --pen-stroke-fine: 2px;
   --pen-stroke-thin: 4px;
   --pen-stroke-medium: 8px;
   --pen-stroke-thick: 16px;

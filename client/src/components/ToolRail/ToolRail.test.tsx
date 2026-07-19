@@ -478,9 +478,9 @@ describe("ToolRail", () => {
     expect(screen.getByTestId("stroke-width-trigger")).toBeTruthy();
     expect(screen.getByTestId("alpha-trigger")).toBeTruthy();
     expect(flyout.querySelectorAll(".stroke-width-step")).toHaveLength(0);
-    // Expand Thickness: three width steps, the active width armed.
+    // Expand Thickness: four width steps, the active width armed.
     fireEvent.click(screen.getByTestId("stroke-width-trigger"));
-    expect(flyout.querySelectorAll(".stroke-width-step")).toHaveLength(3);
+    expect(flyout.querySelectorAll(".stroke-width-step")).toHaveLength(4);
     expect(screen.getByTestId("stroke-width-8").className).toContain("stroke-width-step--armed");
     // Expand Opacity: four alpha steps, the active alpha armed.
     fireEvent.click(screen.getByTestId("alpha-trigger"));

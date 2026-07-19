@@ -1,8 +1,8 @@
 // StrokeWidthRow — the pen Thickness picker (UX-DR5/DR7, DESIGN.md#annotation-pen).
 // COLLAPSIBLE like SizeRow: an ICON-ONLY trigger (a horizontal ink weight-bar whose
 // thickness previews the current width — toolrail-glyph sized, no caret, no text)
-// that expands a small floating menu to the RIGHT of the three width steps
-// (thin/medium/thick) as round dots whose size previews the line weight; the applied
+// that expands a small floating menu to the RIGHT of the four width steps
+// (fine/thin/medium/thick) as round dots whose size previews the line weight; the applied
 // width shows the 2px ink armed ring. Keyboard-reachable (it lives inside the rail
 // flyout / quick-box `role="menu"`); the meaning lives in the aria-label / tooltip,
 // not visible text (the rail stays icon-only).
@@ -19,12 +19,13 @@ interface Step {
   width: number;
   /** Token key — the dot size comes from `--pen-stroke-<key>` via a CSS class, so
    *  no raw px lives in this component (the token layer owns the px). */
-  key: "thin" | "medium" | "thick";
+  key: "fine" | "thin" | "medium" | "thick";
   /** Accessible name + hover tooltip (no em-dash; plain word). */
   label: string;
 }
 
 const STEPS: Step[] = [
+  { width: 2, key: "fine", label: "Fine" },
   { width: 4, key: "thin", label: "Thin" },
   { width: 8, key: "medium", label: "Medium" },
   { width: 16, key: "thick", label: "Thick" },
@@ -40,7 +41,7 @@ export default function StrokeWidthRow({
   onPick: (width: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const current = STEPS.find((s) => s.width === value) ?? STEPS[1];
+  const current = STEPS.find((s) => s.width === value) ?? STEPS.find((s) => s.key === "medium") ?? STEPS[0];
   return (
     <div className="stroke-width-row" role="group" aria-label="Pen stroke width">
       <button

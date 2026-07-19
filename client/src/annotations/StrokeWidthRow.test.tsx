@@ -12,10 +12,11 @@ describe("StrokeWidthRow (Story 2.8) — collapsible pen thickness picker", () =
     expect(screen.getByTestId("stroke-width-trigger").getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("opening the trigger reveals the three width steps (4/8/16)", () => {
+  it("reveals the four width steps (2/4/8/16)", () => {
     render(<StrokeWidthRow value={8} onPick={vi.fn()} />);
     fireEvent.click(screen.getByTestId("stroke-width-trigger"));
-    expect(screen.getAllByRole("menuitemradio")).toHaveLength(3);
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(4);
+    expect(screen.getByTestId("stroke-width-2")).toBeTruthy();
     expect(screen.getByTestId("stroke-width-4")).toBeTruthy();
     expect(screen.getByTestId("stroke-width-8")).toBeTruthy();
     expect(screen.getByTestId("stroke-width-16")).toBeTruthy();
@@ -27,6 +28,18 @@ describe("StrokeWidthRow (Story 2.8) — collapsible pen thickness picker", () =
     expect(screen.getByTestId("stroke-width-16").className).toContain("stroke-width-step--armed");
     expect(screen.getByTestId("stroke-width-4").className).not.toContain("stroke-width-step--armed");
     expect(screen.getByTestId("stroke-width-16").getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("arms the fine step, picking it calls onPick and collapses", () => {
+    const onPick = vi.fn();
+    render(<StrokeWidthRow value={2} onPick={onPick} />);
+    fireEvent.click(screen.getByTestId("stroke-width-trigger"));
+    expect(screen.getByTestId("stroke-width-2").className).toContain("stroke-width-step--armed");
+    expect(screen.getByTestId("stroke-width-2").getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByTestId("stroke-width-2"));
+    expect(onPick).toHaveBeenCalledWith(2);
+    // Collapsed again after the pick.
+    expect(screen.queryByTestId("stroke-width-2")).toBeNull();
   });
 
   it("picking a step calls onPick with the chosen width and collapses", () => {
