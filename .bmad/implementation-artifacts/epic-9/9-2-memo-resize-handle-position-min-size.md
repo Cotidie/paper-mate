@@ -2,7 +2,7 @@
 baseline_commit: f1a69f1360c2cb1629c0c2e8260716ffe0947257
 ---
 
-# Story 10.2: Memo resize-handle position and minimum-size fix
+# Story 9.2: Memo resize-handle position and minimum-size fix
 
 Status: done
 
@@ -49,7 +49,7 @@ so that I can grab and resize memos precisely.
 
 ## Dev Notes
 
-**This is an investigation-first defect story (like 10.1): write the diagnosis before the fix.** The Dev Notes below are a strong hypothesis derived from reading the code; confirm/correct it live at DPR>1.
+**This is an investigation-first defect story (like 9.1): write the diagnosis before the fix.** The Dev Notes below are a strong hypothesis derived from reading the code; confirm/correct it live at DPR>1.
 
 ### Root-cause hypothesis (confirm in Task 1)
 
@@ -68,7 +68,7 @@ This is the SAME frame/rendered-height mismatch the codebase already hacked arou
 
 ### Fix approach (confirm the mechanism in Task 1; the min floor is decided)
 
-**Defect A — recommended: render the memo's edit handles as children of the real `.annotation-memo` box.** CSS-native tracking: `position:absolute` handles on a border-box element sit on its real corners no matter how auto-grow or zoom change the height — zero DOM measurement, zero coordinate/unit conversion, no timing lag, robust at DPR>1. It also lets the collapsed drop-corners hack be removed (handles track the collapsed box for free). Cost: forks handle rendering (memo handles in `MemoBox`; pen/region handles stay in `renderEditFrame`) and duplicates the handle `<button>` markup — acceptable; the epic's terminal refactor (Story 10.9) can unify. The `data-edit-handle`/`data-edit-id` wiring works identically wherever the buttons live (`useEditGesture` reads them at the document level via `closest('[data-edit-handle]')`); a press on a corner button resolves to that corner, not the wrapper's `data-edit-handle="move"`.
+**Defect A — recommended: render the memo's edit handles as children of the real `.annotation-memo` box.** CSS-native tracking: `position:absolute` handles on a border-box element sit on its real corners no matter how auto-grow or zoom change the height — zero DOM measurement, zero coordinate/unit conversion, no timing lag, robust at DPR>1. It also lets the collapsed drop-corners hack be removed (handles track the collapsed box for free). Cost: forks handle rendering (memo handles in `MemoBox`; pen/region handles stay in `renderEditFrame`) and duplicates the handle `<button>` markup — acceptable; the epic's terminal refactor (Story 9.9) can unify. The `data-edit-handle`/`data-edit-id` wiring works identically wherever the buttons live (`useEditGesture` reads them at the document level via `closest('[data-edit-handle]')`); a press on a corner button resolves to that corner, not the wrapper's `data-edit-handle="move"`.
 
 - **Alternative (fallback if the fork is undesirable): measure-and-size-the-frame.** Lift the memo's rendered box height (measured in `MemoBox`'s existing layout effect) up to `renderEditFrame` and size the frame to `max(fb.height, measuredHeight)`. Downsides that made it the fallback: a cross-component measured-height channel, a passive-effect re-measure on body/pos/collapsed change (the `[[ancestor-ref-passive-effect]]` timing class), and a px→frame-unit conversion across the page-card scale. Only pick this if Task 1 shows the child-handles fork is worse.
 
@@ -94,24 +94,24 @@ This is the SAME frame/rendered-height mismatch the codebase already hacked arou
 - **Story 3.1 memo move/resize command path:** the drag still previews via `dragPreview` and commits ONE `setAnnotationGeometry` on release (one zundo step). The move grip (top-center, anchored to the top edge) must stay put. Don't break the empty-space drag-to-move-while-unselected (`isBelowMemoText`).
 - **Story 8.6 comment-preview-size:** memo-specific change; leave `CommentBubble.tsx` `MIN_BUBBLE_WIDTH`/`MIN_BUBBLE_HEIGHT` untouched.
 - **Auto-grow (Codex MED, Story 2.9):** the textarea must still re-fit height on body/scale change — do not remove the `MemoBox` layout effect.
-- **Collapsed memo (10.3/10.4 not yet built):** keep collapsed behaving; do not couple to a future persisted-collapsed-size (10.4).
+- **Collapsed memo (9.3/9.4 not yet built):** keep collapsed behaving; do not couple to a future persisted-collapsed-size (9.4).
 
 ### Testing standards
 
 - Frontend: Vitest (`cd client && npm test`), typecheck (`npm run typecheck`). Keep both `vi.mock("./render")` barrels in sync if any `render/index.ts` export changes (not expected here).
 - jsdom has NO layout (scrollHeight/getBoundingClientRect return 0), so the frame-tracks-real-height assertion is LIVE-SMOKE only. Unit tests cover the pure `resizeRectCorner` min math and the gesture's min-pass-through.
-- **Live smoke is mandatory at DPR>1 on a real paper with YOUR OWN dev servers** (never reuse a user-launched server — see CLAUDE.md). Prefer trusted input (`claude-in-chrome` `computer` for a real pointer drag) over synthetic `dispatchEvent` for the resize gesture, since focus/pointer-capture matter (`[[use-trusted-input-for-focus-sensitive-smoke]]`, `[[verify-on-hidpi-and-real-host]]`). If `claude-in-chrome` is unavailable, note the deviation as 10.1 did.
+- **Live smoke is mandatory at DPR>1 on a real paper with YOUR OWN dev servers** (never reuse a user-launched server — see CLAUDE.md). Prefer trusted input (`claude-in-chrome` `computer` for a real pointer drag) over synthetic `dispatchEvent` for the resize gesture, since focus/pointer-capture matter (`[[use-trusted-input-for-focus-sensitive-smoke]]`, `[[verify-on-hidpi-and-real-host]]`). If `claude-in-chrome` is unavailable, note the deviation as 9.1 did.
 
 ### Project Structure Notes
 
-- Downward-dependency rule holds: `anchor/` (pure math) ← gestures ← components. The min-clamp is pure geometry → belongs in `anchor/`. No new module needed; this is a targeted defect fix. If the child-handles path duplicates handle markup, that debt is explicitly in-scope for the terminal Story 10.9 refactor, not this story.
+- Downward-dependency rule holds: `anchor/` (pure math) ← gestures ← components. The min-clamp is pure geometry → belongs in `anchor/`. No new module needed; this is a targeted defect fix. If the child-handles path duplicates handle markup, that debt is explicitly in-scope for the terminal Story 9.9 refactor, not this story.
 
 ### References
 
-- Epic + ACs: [Source: .bmad/planning-artifacts/epics.md#Story 10.2] (lines 2313-2336).
+- Epic + ACs: [Source: .bmad/planning-artifacts/epics.md#Story 9.2] (lines 2313-2336).
 - FR-10 (memo), FR-15 (edit: move/resize/restyle), NFR-3 (anchor fidelity across zoom): [Source: .bmad/planning-artifacts/prds/prd-paper-mate-2026-06-28/prd.md] (FR-10 L52, FR-15 L64, NFR-3 L96).
 - AD-4 (normalized `[0,1]` top-left anchor; discriminated `anchor.kind`; type→kinds matrix memo={rect}) and AD-9 (anchor service owns screen↔normalized math): [Source: .bmad/planning-artifacts/architecture/architecture-paper-mate-2026-06-28/review-adversary.md] (AD-4 fix L28/L52, AD-9 L48-60).
-- Prior story continuity (diagnosis-first + DPR>1 smoke discipline, own dev servers, delete transient test data): [Source: .bmad/implementation-artifacts/10-1-unify-selection-color-fix-double-thickening.md].
+- Prior story continuity (diagnosis-first + DPR>1 smoke discipline, own dev servers, delete transient test data): [Source: .bmad/implementation-artifacts/9-1-unify-selection-color-fix-double-thickening.md].
 - Code touch points (verbatim, current): `resizeRectCorner` `client/src/anchor/index.ts:223-240`; edit-frame render `client/src/annotations/AnnotationLayer.tsx:390-424`; handle CSS `client/src/annotations/Annotations.css:985-1048`; memo box `client/src/annotations/MemoBox.tsx:61-107`; memo CSS `client/src/annotations/Annotations.css:525-567`; resize gesture `client/src/annotations/gestures/useEditGesture.ts:134-283,327-351`; SizeRow store action `client/src/store/index.ts:478-489`; MEMO_SIZES/DEFAULT `client/src/store/index.ts:55-68`.
 
 ## Dev Agent Record
@@ -122,7 +122,7 @@ Claude Sonnet 5
 
 ### Debug Log References
 
-- Own dev servers (not any user-launched instance): backend `uv run uvicorn app.main:app --port 8010`, frontend `npm run dev -- --port 5183` (proxied to 8010 via `PAPER_MATE_API_TARGET`). `claude-in-chrome` extension unavailable this session ("Browser extension is not connected") — used `chrome-devtools-mcp` instead (same fallback as Story 10.1), `emulate({viewport: "1400x900x2"})` for a real DPR-2 Chrome instance. Diagnosis performed against the existing imported paper ("Multi-task Self-Supervised Visual Learning", `doc_id 3e63cb04...`) already in `.paper-mate/library.json` — no upload needed. Drives were real `PointerEvent`s dispatched at specific screen coordinates (the app's `useEditGesture` document listeners are not `isTrusted`-gated), with a `setTimeout` yield between dispatch and DOM read so React's state update actually commits before measuring (a same-tick read before the yield showed stale geometry — a test-methodology trap, not an app bug).
+- Own dev servers (not any user-launched instance): backend `uv run uvicorn app.main:app --port 8010`, frontend `npm run dev -- --port 5183` (proxied to 8010 via `PAPER_MATE_API_TARGET`). `claude-in-chrome` extension unavailable this session ("Browser extension is not connected") — used `chrome-devtools-mcp` instead (same fallback as Story 9.1), `emulate({viewport: "1400x900x2"})` for a real DPR-2 Chrome instance. Diagnosis performed against the existing imported paper ("Multi-task Self-Supervised Visual Learning", `doc_id 3e63cb04...`) already in `.paper-mate/library.json` — no upload needed. Drives were real `PointerEvent`s dispatched at specific screen coordinates (the app's `useEditGesture` document listeners are not `isTrusted`-gated), with a `setTimeout` yield between dispatch and DOM read so React's state update actually commits before measuring (a same-tick read before the yield showed stale geometry — a test-methodology trap, not an app bug).
 
 ### Root-Cause Diagnosis (Task 1, AC #2) — written before any fix
 
@@ -145,7 +145,7 @@ Both defects are confirmed GEOMETRY issues in the two places Dev Notes named: `r
 
 - **Defect A fix (handles-as-memo-children, the recommended path).** `MemoBox.tsx` now renders the move grip + 4 corner `.edit-handle`/`.edit-handle--*` buttons (reused verbatim) as its OWN children when `editable` (a new prop, `a.id === selectedId` — deliberately NOT the OR'd `selected` prop, which also lights up for a box-select multi-selection member that must show only the bulk group frame). Since `.annotation-memo` is `position:absolute; box-sizing:border-box`, the handles track its REAL rendered corners at every size (auto-grow, collapse, or the new min floor) with zero measurement. `AnnotationLayer.tsx`'s `isEditable` now excludes `type === "memo"` so `editMark`/`renderEditFrame` never sees a memo; the now-dead collapsed-memo drop-corners hack (`AnnotationLayer.tsx:396-404`) is removed — collapsed memos get all 5 handles too, correctly tracking the collapsed box (a behavior IMPROVEMENT over the old "move-grip only while collapsed" hack), confirmed both live (DPR 2) and by an updated `AnnotationLayer.test.tsx` case.
 - **Defect B fix (min floor).** `resizeRectCorner` (`anchor/index.ts`) takes an optional normalized `min: {w, h}`, clamping the moving corner's distance from the FIXED opposite corner BEFORE `canonicalize` (mirrors `axisScale`'s pen no-collapse/no-flip logic) — omitted entirely for non-memo rects, so region/comment resize is byte-identical to before. `useEditGesture`'s `DragState` now captures `anno.type` at pointerdown; `computeAnchor` passes `{w: 48/box.width, h: 32/box.height}` (scale-1.0 px → normalized fraction, zoom-independent) only when `type === "memo"`. The `MEMO_SIZES` preset path (`resizeMemoAnnotation`, store) was NOT touched — its smallest preset (160×64) is already well above the floor, per the story's own note (no churn).
-- **Live-smoke confirmed (DPR 2, `chrome-devtools-mcp`, `claude-in-chrome` unavailable this session — same fallback as Story 10.1):** typed-taller-than-box now puts se/sw handle centers within ~1px of the real bottom edge (was 854px off before the fix); a corner-resize toward the fixed corner now floors at EXACTLY 48×32 scale-1 px (96×64 CSS px at 200% zoom) with the textarea still usable (82×34 CSS px), instead of collapsing toward 0 with a 0-width textarea; a large→min→large round trip and a second zoom level (128%) both kept handles attached within the same ~1px hairline-border inset (see "Known minor gap" below); Story 3.1's move grip still drags the whole memo correctly (single-commit, untouched code path); Story 8.6's `CommentBubble.tsx` was not touched. Transient test memo deleted from the real doc afterward; verified `meta.json` has no `annotations` key.
+- **Live-smoke confirmed (DPR 2, `chrome-devtools-mcp`, `claude-in-chrome` unavailable this session — same fallback as Story 9.1):** typed-taller-than-box now puts se/sw handle centers within ~1px of the real bottom edge (was 854px off before the fix); a corner-resize toward the fixed corner now floors at EXACTLY 48×32 scale-1 px (96×64 CSS px at 200% zoom) with the textarea still usable (82×34 CSS px), instead of collapsing toward 0 with a 0-width textarea; a large→min→large round trip and a second zoom level (128%) both kept handles attached within the same ~1px hairline-border inset (see "Known minor gap" below); Story 3.1's move grip still drags the whole memo correctly (single-commit, untouched code path); Story 8.6's `CommentBubble.tsx` was not touched. Transient test memo deleted from the real doc afterward; verified `meta.json` has no `annotations` key.
 - **Known minor gap, noted then RESOLVED by the code-review round (see below):** nesting the handles inside `.annotation-memo` (which has a 1px hairline border + padding) initially left every handle ~1px inside the visual corner (CSS containing-block padding-edge vs the old borderless frame's exact edge). Codex's review caught this as a MEDIUM finding against AC #1's "exactly"; fixed with a border-compensating CSS override (see Codex review section).
 - Full frontend suite green (1543/1543, 72 files), typecheck clean. Backend `test_version.py` re-run and still passes; `server/uv.lock` picked up an incidental sync (`paper-mate-server` version 0.5.30 → 0.5.31) when `uv run uvicorn` started for live-smoke — the lockfile was already stale against `pyproject.toml`'s committed `0.5.31` (a pre-existing drift from the prior story's merge, not something this story's diff introduces); left in place since AE3-6 exists specifically to keep these in sync.
 
@@ -169,7 +169,7 @@ The bare `uv run uvicorn` dev flow's ACTUAL default `PAPER_MATE_DATA` is `~/.pap
 - `client/src/annotations/AnnotationLayer.tsx` — `isEditable` excludes `type === "memo"`; `renderMemo` passes the new `editable` prop (`a.id === selectedId`) to `MemoBox`; `renderEditFrame` and its doc comment drop the now-dead collapsed-memo hack (memo never reaches it).
 - `client/src/annotations/AnnotationLayer.test.tsx` — updated the collapsed-memo handle test: now expects ALL 5 handles (behavior improvement), not just the move grip.
 - `client/src/annotations/MemoBox.tsx` — new `editable` prop; renders the move grip + 4 corner `.edit-handle` buttons as children when true; new `EDIT_HANDLES` constant + doc comment explaining the CSS-native tracking mechanism.
-- `.bmad/implementation-artifacts/sprint-status.yaml` — `10-2-…`: `ready-for-dev` → `in-progress` → `review` → (Codex round) `in-progress` → `review`.
+- `.bmad/implementation-artifacts/sprint-status.yaml` — `9-2-…`: `ready-for-dev` → `in-progress` → `review` → (Codex round) `in-progress` → `review`.
 - `server/uv.lock` — incidental version-field sync (`0.5.30` → `0.5.31`) matching the already-committed `pyproject.toml`, picked up when the backend dev server started for live-smoke; not a functional change.
 
 **Codex code-review round additions:**

@@ -2,7 +2,7 @@
 baseline_commit: ab744739e5021842e8eb45a817bea6e36f40e9b4
 ---
 
-# Story 10.7: Remember and restore last view position on reopen
+# Story 9.7: Remember and restore last view position on reopen
 
 Status: done
 
@@ -68,12 +68,12 @@ so that I resume reading without hunting for my place.
   - [x] Extend `client/src/reader/usePageNav` coverage if a nav test file exists (else fold into the hook test): `restoreView` clamps `pageNumber` into range and, given a card, calls the container `scrollTo` with `top = offsetTop + frac*clientHeight`, `behavior:"auto"` (mock the container like the existing nav mechanic tests). The pixel MATH under real layout is live-smoke-only (jsdom has no layout).
   - [x] No `render/index.ts` export change and no new `Reader`/`AnnotationInteraction` prop → the two `vi.mock("./render")` barrels (`App.test.tsx`, `Reader.test.tsx`) need NO edit (verify). Run the full suite + `npm run typecheck`.
 
-- [x] **Task 6 — Live smoke at DPR>1 on a 50+ page paper (AC: #4, #7), OWN dev servers, throwaway `PAPER_MATE_DATA`.** Start YOUR OWN `uvicorn` + `vite dev` (never a user-launched/Docker server, CLAUDE.md) with an explicit throwaway `PAPER_MATE_DATA` scratch dir (never `~/.paper-mate`, the Story 10.2/10.4/10.5/10.6 process note). Import a real 50+ page PDF at DPR 2:
+- [x] **Task 6 — Live smoke at DPR>1 on a 50+ page paper (AC: #4, #7), OWN dev servers, throwaway `PAPER_MATE_DATA`.** Start YOUR OWN `uvicorn` + `vite dev` (never a user-launched/Docker server, CLAUDE.md) with an explicit throwaway `PAPER_MATE_DATA` scratch dir (never `~/.paper-mate`, the Story 9.2/9.4/9.5/9.6 process note). Import a real 50+ page PDF at DPR 2:
   - [x] (a) Scroll to a mid-document position (e.g. partway down page ~30), go Back to Library, reopen the paper → it lands at that page + intra-page offset, not page 1, with no visible page-1 flash first (AC #2, #4).
   - [x] (b) Reopen again after CHANGING the zoom (zoom in a couple of steps first, then Back, then reopen) → it lands on the SAME content line, not the same pixel offset (scale-independent, AC #2). Confirm `window.devicePixelRatio === 2`.
   - [x] (c) A never-opened paper (import a second PDF, open it fresh) → opens at the top of page 1 (AC #3).
   - [x] (d) Corrupt-entry resilience: hand-edit the `paper-mate:last-view` `localStorage` value to an out-of-range `page`/`frac`, reload, reopen → it opens at the top (or a clamped safe spot), never a broken scroll (AC #3).
-  - [x] Delete the transient test docs afterward and confirm `library.json` is clean; the position store is client-only `localStorage`, so also clear the `paper-mate:last-view` key. Note (as Stories 10.1-10.6 did) if `claude-in-chrome` is unavailable and the `chrome-devtools-mcp` `emulate({viewport:"…x2"})` fallback was used for DPR 2. (No text-selection here, so the drag-forms-a-real-Selection constraint does not apply — plain scroll + navigation is fine to script.)
+  - [x] Delete the transient test docs afterward and confirm `library.json` is clean; the position store is client-only `localStorage`, so also clear the `paper-mate:last-view` key. Note (as Stories 9.1-10.6 did) if `claude-in-chrome` is unavailable and the `chrome-devtools-mcp` `emulate({viewport:"…x2"})` fallback was used for DPR 2. (No text-selection here, so the drag-forms-a-real-Selection constraint does not apply — plain scroll + navigation is fine to script.)
 
 - [x] **Task 7 — Version + docs.** Bump `server/pyproject.toml` `[project].version` `0.5.36` → `0.5.37` at PR-merge time (per CLAUDE.md versioning — once, when the story flips to `done`; NOT mid-implementation). Pure client change: NO `/api` contract change, so `docs/API.md` needs NO edit; no new DESIGN.md token; no new user-facing UI copy, so no em-dash grep needed (but sanity-check any new string). No `render/` barrel change.
 
@@ -117,7 +117,7 @@ This is plain layout arithmetic (scroll offsets, card `offsetTop`/`clientHeight`
 
 - Backend: none (pure client story; no backend touched). Frontend: `cd client && npm test` + `npm run typecheck`.
 - jsdom has no layout (`offsetTop`/`clientHeight`/`scrollTop` = 0, no `scrollTo`, no `IntersectionObserver`), so the PIXEL round-trip (capture→restore landing spot) is **live-smoke only** (AC #7). Fully unit-testable in jsdom: `reconcile`, `viewOffsetFraction` (incl. the zoom-independence property), the store actions, and the hook's ORCHESTRATION (restore-once, no-restore-when-absent, capture-gated-after-restore, unmount-flush) via a mocked `restoreView` + fake timers.
-- **Live smoke mandatory at DPR>1 on a 50+ page paper** with YOUR OWN dev servers and an explicit throwaway `PAPER_MATE_DATA` (never `~/.paper-mate`, Story 10.2 process note). `[[verify-on-hidpi-and-real-host]]`.
+- **Live smoke mandatory at DPR>1 on a 50+ page paper** with YOUR OWN dev servers and an explicit throwaway `PAPER_MATE_DATA` (never `~/.paper-mate`, Story 9.2 process note). `[[verify-on-hidpi-and-real-host]]`.
 
 ### Project Structure Notes
 
@@ -125,7 +125,7 @@ This is plain layout arithmetic (scroll offsets, card `offsetTop`/`clientHeight`
 
 ### References
 
-- Epic + ACs + open design calls: [Source: .bmad/planning-artifacts/epics.md#Story 10.7] (L2437-2461).
+- Epic + ACs + open design calls: [Source: .bmad/planning-artifacts/epics.md#Story 9.7] (L2437-2461).
 - Source of the request (item 11, new FR): [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-07-18.md] (L36, L96, L137).
 - FR-33 (finalized in the reader PRD): [Source: .bmad/planning-artifacts/prds/prd-paper-mate-2026-06-28/prd.md] (L88, L90). AR-6 ownership/hydrate-on-open (applied loosely — last-view is the client view-prefs TIER, not backend-owned annotation data): [Source: .bmad/planning-artifacts/epics.md] (L96). AD-8 storage tiers: [Source: .bmad/planning-artifacts/architecture/architecture-paper-mate-2026-06-28/ARCHITECTURE-SPINE.md] (L96-98, L132).
 - Code touch points (verbatim, current):

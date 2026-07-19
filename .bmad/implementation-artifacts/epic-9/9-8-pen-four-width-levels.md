@@ -2,7 +2,7 @@
 baseline_commit: c3e15cb4d2b306680bf88ce45f49d4249142dc5b
 ---
 
-# Story 10.8: Pen width, four levels including a thinner one
+# Story 9.8: Pen width, four levels including a thinner one
 
 Status: done
 
@@ -48,7 +48,7 @@ so that I can draw finer marks than the current thinnest stroke.
 
 - [x] **Task 5 — DESIGN.md contract-doc fidelity (AC: #2).** In `DESIGN.md`, update the `annotation-pen` entry (L501) "stroke width from the pen quick-box" → "one of four stroke widths from the pen quick-box", so the contract doc matches shipped behavior (AE7-3: reconcile the spec, not only the story). Documentation only; the px tokens themselves live in `components.css` (Task 1), NOT in `DESIGN.md`/`tokens.css`. Do NOT run `gen:tokens` for this (it regenerates `tokens.css` from the DESIGN.md token scales and does not touch component dims). Verify no em-dash in the edited string.
 
-- [x] **Task 6 — Live smoke at DPR>1 (AC: #1, #3, #4).** Start YOUR OWN `uvicorn` + `vite dev` (never a user-launched/Docker server, CLAUDE.md) with an explicit throwaway `PAPER_MATE_DATA` scratch dir (never `~/.paper-mate`, the Story 10.2-10.7 process note). At DPR 2 (`claude-in-chrome`; if it lacks DPR control use the `chrome-devtools-mcp` `emulate({viewport:"…x2"})` fallback and note it):
+- [x] **Task 6 — Live smoke at DPR>1 (AC: #1, #3, #4).** Start YOUR OWN `uvicorn` + `vite dev` (never a user-launched/Docker server, CLAUDE.md) with an explicit throwaway `PAPER_MATE_DATA` scratch dir (never `~/.paper-mate`, the Story 9.2-10.7 process note). At DPR 2 (`claude-in-chrome`; if it lacks DPR control use the `chrome-devtools-mcp` `emulate({viewport:"…x2"})` fallback and note it):
   - [x] (a) Arm Pen, open the stroke-width picker in the rail flyout → FOUR dots show, the new thinnest (`Fine`) is first and visibly thinner than the old thinnest; the flyout row does not overflow/wrap (AC #4).
   - [x] (b) Pick `Fine`, draw a stroke → it renders as a crisp thin filled line (not invisible) at DPR 2; confirm `window.devicePixelRatio === 2`.
   - [x] (c) Select that pen stroke → its own quick-box stroke-width menu opens DOWN with all four cells fitting, `Fine` armed (AC #4). Reopen the paper (Back to Library → reopen) → the stroke restores at the Fine width, unchanged (AC #3, persist/restore).
@@ -115,7 +115,7 @@ The pen renders as ONE filled SVG `<path>` from the `perfect-freehand` outline (
 
 ### References
 
-- Epic + ACs + open design calls: [Source: .bmad/planning-artifacts/epics.md#Story 10.8] (L2463-2486).
+- Epic + ACs + open design calls: [Source: .bmad/planning-artifacts/epics.md#Story 9.8] (L2463-2486).
 - Source of the request (item 12, AC-extension of FR-9, not a new FR): [Source: .bmad/planning-artifacts/sprint-change-proposals/sprint-change-proposal-2026-07-18.md] (L37, L48, L98, L138).
 - Code touch points (verbatim, current):
   - Token layer to extend: `client/src/theme/components.css` — `annotation-pen` block L143-149 (`--pen-stroke-thin/medium/thick`); alpha-token precedent (Story 2.13's fourth level) L154-160.
@@ -152,7 +152,7 @@ Sonnet 5 (bmad-dev-story).
   - (c) Selected the stroke → its quick-box `Pen thickness: Fine` trigger showed Fine already armed; opened the picker → vertical DOWN column, all four cells fit, Fine ringed. Reloaded the reader (equivalent to Back to Library → reopen for restore purposes, since the store hydrates from the server on mount) → stroke restored unchanged at Fine width.
   - Deleted the transient test doc via `DELETE /api/docs/{id}`; confirmed the scratch `library.json` ended with empty `papers`/`folders`.
 - No store/anchor/render/contract change, confirmed: `store/index.test.ts` untouched and still green; no `render/index.ts` export added so the `vi.mock("./render")` barrels needed no edit.
-- Version bump (Task 7) intentionally deferred to PR-merge time per CLAUDE.md versioning (not done in this session) — matches the Story 10.7 precedent.
+- Version bump (Task 7) intentionally deferred to PR-merge time per CLAUDE.md versioning (not done in this session) — matches the Story 9.7 precedent.
 
 ### File List
 
@@ -166,6 +166,6 @@ Sonnet 5 (bmad-dev-story).
 ## Change Log
 
 - 2026-07-19: Story created (bmad-create-story). Resolved the four epics.md open design calls: values `2/4/8/16` (prepend `2`, keep the 2× ladder); default STAYS medium (`8`, store untouched); token/key/label `--pen-stroke-fine`/`"fine"`/`"Fine"`; picker FIXED at four (AlphaRow four-cell precedent). Corrected the AC's token-location error: the fourth `--pen-stroke-*` is a component-dims token in `client/src/theme/components.css` (where the existing three live, `theme/`-exempt from `no-raw-values`), NOT `DESIGN.md`/generated `tokens.css`; `DESIGN.md` gets a prose-fidelity touch only. Flagged the `STEPS[1]` collapsed-fallback index-shift trap (must repoint to medium). Scoped as: one token, one `STEP` + fallback fix, two CSS rule pairs, two step-count test updates (3→4, mirroring `AlphaRow`), one DESIGN.md line, DPR>1 live smoke of render-crispness + four-cell fit on both picker surfaces. No store/anchor/render/contract change; version bumps to 0.5.38 at PR merge.
-- 2026-07-19: Implemented (bmad-dev-story). Tasks 1-7 complete. Live smoke (Task 6) verified all ACs at DPR 2 with no surprises (no bugs surfaced, unlike 10.7). Full suite green (1643 tests), typecheck clean. Version bump deferred to PR-merge time per CLAUDE.md versioning.
+- 2026-07-19: Implemented (bmad-dev-story). Tasks 1-7 complete. Live smoke (Task 6) verified all ACs at DPR 2 with no surprises (no bugs surfaced, unlike 9.7). Full suite green (1643 tests), typecheck clean. Version bump deferred to PR-merge time per CLAUDE.md versioning.
 - 2026-07-19: Senior Developer Review via Codex (`bmad-code-review`, `codex exec --sandbox read-only`). Verdict: 0 High, 0 Medium, 1 Low (stale "three width steps" doc comment). Patch applied. See "Review Findings" under Tasks/Subtasks.
 - 2026-07-19: Status flipped to `done`. Version bumped `0.5.37` → `0.5.38` (`server/pyproject.toml` + `server/uv.lock`, per CLAUDE.md versioning — PATCH+1 per story). Full backend suite green (324 tests, incl. `test_version.py` pyproject/uv.lock consistency check).
