@@ -302,4 +302,12 @@
      bar renders on the matching side - both a left ("before") and a right
      ("after") variant share this width (`CollectionTable.css`). */
   --collection-table-drop-indicator-width: 2px;
+
+  /* Story 10.1 dev-only document-structure debug overlay (behind
+     ?debugStructure=1): the outline weight + the corner type-label chrome for
+     the boxes drawn over each detected element. Not shipped chrome -- a
+     placement-proof surface for the enabler. */
+  --structure-debug-border: 1.5px;
+  --structure-debug-label-size: 9px;
+  --structure-debug-label-pad: 2px;
 }

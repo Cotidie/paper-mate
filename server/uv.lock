@@ -325,6 +325,15 @@ wheels = [
 ]
 
 [[package]]
+name = "opendataloader-pdf"
+version = "2.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/89/33d36f3020d0e833d9faae509bf53a79df074d0b449c08e6a6cd52ec0305/opendataloader_pdf-2.5.0.tar.gz", hash = "sha256:6e77f876f90ee45c67168c8d79f39bd9ff8c5c85a885ae879a2e6abc0aaba878", size = 22539386, upload-time = "2026-07-14T09:23:40.647Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/78/c2e5aab0ad1076fc9f76234f021c622e2344543a6a3622152d220781f94f/opendataloader_pdf-2.5.0-py3-none-any.whl", hash = "sha256:0f415c75bafe824393276ac7814d53858190690e2ab1fce69944ff42f63535b0", size = 22552521, upload-time = "2026-07-14T09:23:37.039Z" },
+]
+
+[[package]]
 name = "packaging"
 version = "26.2"
 source = { registry = "https://pypi.org/simple" }
@@ -341,6 +350,7 @@ dependencies = [
     { name = "arxiv" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "opendataloader-pdf" },
     { name = "pydantic" },
     { name = "pymupdf" },
     { name = "pypdf" },
@@ -358,6 +368,7 @@ requires-dist = [
     { name = "arxiv", specifier = "==4.0.0" },
     { name = "fastapi", specifier = "==0.138.1" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "opendataloader-pdf", specifier = ">=2.5.0" },
     { name = "pydantic", specifier = "==2.13.4" },
     { name = "pymupdf", specifier = "==1.26.7" },
     { name = "pypdf", specifier = "==6.1.1" },

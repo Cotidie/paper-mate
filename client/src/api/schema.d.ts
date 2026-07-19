@@ -175,6 +175,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/docs/{doc_id}/structure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Structure
+         * @description Return a document's structure layer (AD-13, FR-34, Story 10.1).
+         *
+         *     The typed, box-anchored elements opendataloader extracted at import. An
+         *     imported-but-not-yet-analyzed doc (structure still running, or a non-PDF)
+         *     returns ``{"elements": []}`` (200, not 404) -- the client polls/re-reads it.
+         *     Unknown/unresolvable id -> 404; a corrupt or unknown-version disk file ->
+         *     500. Both use the single ``{ "detail" }`` envelope (AR-11).
+         */
+        get: operations["get_structure_api_docs__doc_id__structure_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/library": {
         parameters: {
             query?: never;
@@ -555,6 +581,22 @@ export interface components {
             year?: number | null;
         };
         /**
+         * DocStructure
+         * @description A document's whole structure = its elements in reading order (AD-13).
+         *
+         *     The order of ``elements`` IS the paper's reading order (opendataloader's
+         *     XY-Cut++ tree, pre-order). An unanalyzed or non-PDF doc, or a failed/thin
+         *     extraction, is the empty ``DocStructure()`` -- never an error (extraction is
+         *     total, like ``extract()``).
+         */
+        DocStructure: {
+            /**
+             * Elements
+             * @default []
+             */
+            elements: components["schemas"]["StructureElement"][];
+        };
+        /**
          * Folder
          * @description A folder in the collection's organizing tree (Epic 7 CRUD; the type is
          *     generated here so the client contract exists ahead of that epic). ``name``
@@ -682,6 +724,37 @@ export interface components {
             /** Page Index */
             page_index: number;
             rect: components["schemas"]["Rect"];
+        };
+        /**
+         * StructureElement
+         * @description One typed, box-anchored document element (AD-13, FR-34).
+         *
+         *     ``page_index`` is 0-based (matching the annotation anchor convention;
+         *     opendataloader's 1-indexed page number is converted in the adapter).
+         *     ``id`` is the stringified opendataloader element id (stable within a doc,
+         *     NOT a UUID -- this is not an ``Annotation``). ``rect`` is a normalized
+         *     ``[0,1]`` top-left ``Rect`` (AD-4), already flipped from PDF points by the
+         *     server-side adapter. ``text`` is the element's content (empty for an image/
+         *     figure). ``heading_level`` is non-null only for headings.
+         */
+        StructureElement: {
+            /** Id */
+            id: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "heading" | "paragraph" | "table" | "figure" | "caption" | "list" | "footnote" | "other";
+            /** Page Index */
+            page_index: number;
+            rect: components["schemas"]["Rect"];
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /** Heading Level */
+            heading_level?: number | null;
         };
         /**
          * Style
@@ -1166,6 +1239,55 @@ export interface operations {
                 };
             };
             /** @description The annotation set could not be saved. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_structure_api_docs__doc_id__structure_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocStructure"];
+                };
+            };
+            /** @description No document with this id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The stored structure is unreadable. */
             500: {
                 headers: {
                     [name: string]: unknown;

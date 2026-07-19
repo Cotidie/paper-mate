@@ -414,3 +414,56 @@ class Annotation(BaseModel):
     body: str | None = None
     created_at: str  # ISO-8601 UTC
     updated_at: str  # ISO-8601 UTC
+
+
+# --- Document-structure layer (AD-13, AD-L8, Story 10.1) --------------------
+#
+# One server-produced, box-anchored model of a paper's typed elements, extracted
+# at import by ``domain.structure`` (opendataloader-pdf) and persisted per-doc as
+# ``structure.json``. Every element's ``rect`` is already an AD-4 normalized
+# ``[0,1]`` top-left rect (the server does the PDF-points -> normalized flip once,
+# in the domain adapter), so the client ``structure/`` service denormalizes it to
+# screen exactly like an annotation anchor. Consumers (synthesized ToC, a
+# Figures/Tables index, reading-helper previews, structure-backed metadata) are
+# thin readers of this one layer (Epic 10 stories 10-2..10-6).
+
+
+#: Our structure-element vocabulary (AD-13). opendataloader's raw types are mapped
+#: onto this in the domain adapter; ``"other"`` is the catch-all so an unmapped or
+#: future opendataloader type can never break contract validation (e.g. its
+#: ``text block`` container and ``formula`` land here). ``footnote`` is reserved:
+#: opendataloader did not emit it across our spike corpus, so nothing produces it
+#: yet, but Story 10-4's reading-helper anticipates it.
+StructureType = Literal[
+    "heading", "paragraph", "table", "figure", "caption", "list", "footnote", "other"
+]
+
+
+class StructureElement(BaseModel):
+    """One typed, box-anchored document element (AD-13, FR-34).
+
+    ``page_index`` is 0-based (matching the annotation anchor convention;
+    opendataloader's 1-indexed page number is converted in the adapter).
+    ``id`` is the stringified opendataloader element id (stable within a doc,
+    NOT a UUID -- this is not an ``Annotation``). ``rect`` is a normalized
+    ``[0,1]`` top-left ``Rect`` (AD-4), already flipped from PDF points by the
+    server-side adapter. ``text`` is the element's content (empty for an image/
+    figure). ``heading_level`` is non-null only for headings."""
+
+    id: str
+    type: StructureType
+    page_index: int
+    rect: Rect
+    text: str = ""
+    heading_level: int | None = None
+
+
+class DocStructure(BaseModel):
+    """A document's whole structure = its elements in reading order (AD-13).
+
+    The order of ``elements`` IS the paper's reading order (opendataloader's
+    XY-Cut++ tree, pre-order). An unanalyzed or non-PDF doc, or a failed/thin
+    extraction, is the empty ``DocStructure()`` -- never an error (extraction is
+    total, like ``extract()``)."""
+
+    elements: list[StructureElement] = []

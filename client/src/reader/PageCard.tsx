@@ -11,6 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage, type PageBox, type PageRender } from "@/render";
 import { AnnotationLayer } from "@/annotations";
+import StructureDebugLayer from "@/structure/StructureDebugLayer";
 import "@/components/Reader/Reader.css";
 
 /**
@@ -162,6 +163,9 @@ export default function PageCard({
       {/* Annotation marks for this page, positioned card-local via the anchor
           service against this card's box + scale (re-derives on every zoom). */}
       <AnnotationLayer docId={docId} pageIndex={pageNumber - 1} box={box} scale={scale} />
+      {/* Dev-only structure-placement overlay (Story 10.1), renders nothing
+          unless ?debugStructure=1; same per-page box+scale contract. */}
+      <StructureDebugLayer docId={docId} pageIndex={pageNumber - 1} box={box} scale={scale} />
     </div>
   );
 }

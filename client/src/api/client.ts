@@ -30,6 +30,11 @@ export type PathAnchor = components["schemas"]["PathAnchor"];
 export type Anchor = TextAnchor | RectAnchor | PathAnchor;
 export type Annotation = components["schemas"]["Annotation"];
 
+// Document-structure layer (AD-13, Story 10.1), generated from the Pydantic
+// models — the `structure/` service imports these, never hand-authored (AD-3).
+export type StructureElement = components["schemas"]["StructureElement"];
+export type DocStructure = components["schemas"]["DocStructure"];
+
 /** Surface the single `{ detail }` error envelope (FastAPI default) as an Error. */
 async function envelopeError(res: Response): Promise<Error> {
   const body = (await res.json().catch(() => ({}))) as { detail?: string };
@@ -125,6 +130,18 @@ export async function getAnnotations(docId: string): Promise<Annotation[]> {
   const res = await fetch(`/api/docs/${encodeURIComponent(docId)}/annotations`);
   if (!res.ok) throw await envelopeError(res);
   return (await res.json()) as Annotation[];
+}
+
+/**
+ * Fetch a document's structure layer (`GET /api/docs/{doc_id}/structure`,
+ * AD-13, Story 10.1). An imported-but-not-yet-analyzed doc (or a non-PDF)
+ * returns `{ elements: [] }` (200), so the `structure/` service treats an
+ * empty result as "no structure yet", not an error. Mirrors `getAnnotations`.
+ */
+export async function getStructure(docId: string): Promise<DocStructure> {
+  const res = await fetch(`/api/docs/${encodeURIComponent(docId)}/structure`);
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as DocStructure;
 }
 
 /**

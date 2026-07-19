@@ -13,12 +13,14 @@ from app.models import (
     DocIdSet,
     DocMeta,
     DocPatch,
+    DocStructure,
     ExtractedMeta,
     Folder,
     Library,
     MoveRequest,
     PathAnchor,
     RectAnchor,
+    StructureElement,
     Style,
     TextAnchor,
 )
@@ -667,3 +669,48 @@ def test_move_request_still_validates_doc_ids_and_folder_id() -> None:
     move = MoveRequest(doc_ids=["d1", "d2"], folder_id="f1")
     assert move.doc_ids == ["d1", "d2"]
     assert move.folder_id == "f1"
+
+
+# --- Document-structure models (AD-13, Story 10.1) --------------------------
+
+
+def test_structure_element_defaults_and_round_trip() -> None:
+    el = StructureElement(
+        id="34",
+        type="heading",
+        page_index=0,
+        rect={"x0": 0.1, "y0": 0.1, "x1": 0.9, "y1": 0.2},
+        text="Title",
+        heading_level=2,
+    )
+    reparsed = StructureElement.model_validate_json(el.model_dump_json())
+    assert reparsed == el
+
+
+def test_structure_element_text_and_heading_level_optional() -> None:
+    el = StructureElement(
+        id="1", type="figure", page_index=3,
+        rect={"x0": 0, "y0": 0, "x1": 1, "y1": 1},
+    )
+    assert el.text == ""  # default
+    assert el.heading_level is None
+
+
+def test_structure_type_other_accepted() -> None:
+    el = StructureElement(
+        id="2", type="other", page_index=0,
+        rect={"x0": 0, "y0": 0, "x1": 1, "y1": 1},
+    )
+    assert el.type == "other"
+
+
+def test_structure_type_rejects_unknown() -> None:
+    with pytest.raises(ValidationError):
+        StructureElement(
+            id="3", type="banana", page_index=0,
+            rect={"x0": 0, "y0": 0, "x1": 1, "y1": 1},
+        )
+
+
+def test_doc_structure_defaults_empty() -> None:
+    assert DocStructure().elements == []
