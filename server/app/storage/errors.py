@@ -32,6 +32,14 @@ class CorruptAnnotationsError(StorageError):
     """
 
 
+class CorruptStructureError(StorageError):
+    """An on-disk ``structure.json`` is unreadable or has an invalid shape.
+
+    A distinct fault from ``CorruptAnnotationsError`` (a precise taxonomy);
+    both are ``StorageError`` so the route maps them to the single 500 envelope.
+    """
+
+
 class DocumentNotFoundError(StorageError):
     """No imported document (or its ``source.pdf``) exists for the given ``doc_id``."""
 

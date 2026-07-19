@@ -1,0 +1,77 @@
+{
+    "paperId": "2d57a3f90adf3fc28f0de61fb4b7b34bccb1b92d",
+    "externalIds": {
+        "DBLP": "journals/corr/abs-2201-07284",
+        "ArXiv": "2201.07284",
+        "DOI": "10.14778/3514061.3514067",
+        "CorpusId": 246035402
+    },
+    "publicationVenue": {
+        "id": "fcbcaf18-8ab1-43e1-a973-604bbc7e344e",
+        "name": "Proceedings of the VLDB Endowment",
+        "type": "journal",
+        "alternate_names": [
+            "Proceedings of The Vldb Endowment",
+            "Proc VLDB Endow",
+            "Proc Vldb Endow"
+        ],
+        "issn": "2150-8097",
+        "url": "http://dl.acm.org/toc.cfm?id=J1174",
+        "alternate_urls": [
+            "http://portal.acm.org/toc.cfm?CFID=21632689&CFTOKEN=99329904&WantType=Affiliated%20Organizations&coll=ACM&dl=ACM&id=J1174&idx=J1174&part=affil&title=VLDB%20Endowment&type=periodical"
+        ]
+    },
+    "title": "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data",
+    "venue": "Proceedings of the VLDB Endowment",
+    "year": 2022,
+    "referenceCount": 71,
+    "citationCount": 1011,
+    "isOpenAccess": false,
+    "openAccessPdf": {
+        "url": "",
+        "status": "CLOSED",
+        "license": null,
+        "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2201.07284, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+    },
+    "fieldsOfStudy": [
+        "Computer Science"
+    ],
+    "s2FieldsOfStudy": [
+        {
+            "category": "Computer Science",
+            "source": "external"
+        },
+        {
+            "category": "Computer Science",
+            "source": "s2-fos-model"
+        },
+        {
+            "category": "Engineering",
+            "source": "s2-fos-model"
+        }
+    ],
+    "publicationTypes": [
+        "JournalArticle"
+    ],
+    "publicationDate": "2022-01-18",
+    "journal": {
+        "name": "Proc. VLDB Endow.",
+        "pages": "1201-1214",
+        "volume": "15"
+    },
+    "authors": [
+        {
+            "authorId": "145780334",
+            "name": "Shreshth Tuli"
+        },
+        {
+            "authorId": "144805467",
+            "name": "G. Casale"
+        },
+        {
+            "authorId": "144626042",
+            "name": "N. Jennings"
+        }
+    ],
+    "abstract": "Efficient anomaly detection and diagnosis in multivariate time-series data is of great importance for modern industrial applications. However, building a system that is able to quickly and accurately pinpoint anomalous observations is a challenging problem. This is due to the lack of anomaly labels, high data volatility and the demands of ultra-low inference times in modern applications. Despite the recent developments of deep learning approaches for anomaly detection, only a few of them can address all of these challenges. In this paper, we propose TranAD, a deep transformer network based anomaly detection and diagnosis model which uses attention-based sequence encoders to swiftly perform inference with the knowledge of the broader temporal trends in the data. TranAD uses focus score-based self-conditioning to enable robust multi-modal feature extraction and adversarial training to gain stability. Additionally, model-agnostic meta learning (MAML) allows us to train the model using limited data. Extensive empirical studies on six publicly available datasets demonstrate that TranAD can outperform state-of-the-art baseline methods in detection and diagnosis performance with data and time-efficient training. Specifically, TranAD increases F1 scores by up to 17%, reducing training times by up to 99% compared to the baselines."
+}

@@ -957,25 +957,41 @@ def _import_leaks(source: str) -> set[str]:
     return {name for name in imported if name in _FORBIDDEN_IMPORTS or name.startswith("app.storage")}
 
 
+#: The OS-scratch stdlib ``structure.py`` may use (Story 10.1, AD-L8, a SURFACED
+#: AD-L2 deviation): opendataloader-pdf is a file-based binding, so its adapter
+#: round-trips PDF bytes through a throwaway ``tempfile.TemporaryDirectory``.
+#: That temp dir is transient OS scratch, NOT ``~/.paper-mate`` — storage remains
+#: the sole writer of the data root (AD-9), and structure.py still must NEVER
+#: import ``app.storage`` (it returns data; the route composes it with storage).
+#: Exempting these stdlib fs names for THIS module only keeps the guard's real
+#: intent (no data-root writes, no storage import) intact.
+_STRUCTURE_OS_SCRATCH = {"os", "pathlib", "tempfile"}
+
+
 def test_domain_modules_are_pure():
     """AD-L2: NO domain module imports storage or filesystem access.
 
     Parse the actual imports (not the docstring) of every ``app/domain/*.py``
     module so a prose mention of ``app.storage`` in a module header can't trip
-    the guard — and so the split into extract/enrich/crossref is covered, not
-    just one file. (``crossref`` legitimately imports ``httpx``: enrichment is
-    the one allowed network hop; the filesystem/storage ban is what we assert.)
+    the guard — and so the split into extract/enrich/crossref/structure is
+    covered, not just one file. (``crossref`` legitimately imports ``httpx``:
+    enrichment is the one allowed network hop; ``structure`` legitimately uses
+    OS temp scratch for the file-based opendataloader binding — see
+    ``_STRUCTURE_OS_SCRATCH``. The ``app.storage`` ban holds for EVERY module,
+    structure included.)
     """
     import pathlib
 
     from app import domain
 
     domain_dir = pathlib.Path(domain.__file__).parent
-    leaks = {
-        module_file.name: found
-        for module_file in sorted(domain_dir.glob("*.py"))
-        if (found := _import_leaks(module_file.read_text()))
-    }
+    leaks = {}
+    for module_file in sorted(domain_dir.glob("*.py")):
+        found = _import_leaks(module_file.read_text())
+        if module_file.name == "structure.py":
+            found -= _STRUCTURE_OS_SCRATCH  # allowed OS scratch; app.storage still caught
+        if found:
+            leaks[module_file.name] = found
     assert not leaks, f"domain must stay pure: found imports {leaks}"
 
 

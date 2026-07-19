@@ -19,6 +19,7 @@ This ``__init__`` is a thin facade over the package's focused modules:
 - ``paper_org``         — the set-based paper-org mutators (move/trash/restore/
                           star/unstar) + single-entry purge.
 - ``annotations_store`` — the per-document ``annotations.json`` read/write.
+- ``structure_store``   — the per-document ``structure.json`` read/write (AD-L8).
 - ``documents``         — the public per-document operations (import, source
                           path, meta read, the three meta mutators).
 
@@ -44,6 +45,7 @@ from app.storage.errors import (
     CorruptAnnotationsError,
     CorruptLibraryError,
     CorruptMetadataError,
+    CorruptStructureError,
     DocumentNotFoundError,
     FolderNotFoundError,
     InvalidPDFError,
@@ -68,18 +70,25 @@ from app.storage.paper_org import (
     unstar_papers,
 )
 from app.storage.meta_store import META_SCHEMA_VERSION
+from app.storage.structure_store import (
+    STRUCTURE_SCHEMA_VERSION,
+    read_structure,
+    write_structure,
+)
 
 __all__ = [
     # Schema versions.
     "META_SCHEMA_VERSION",
     "ANNOTATIONS_SCHEMA_VERSION",
     "LIBRARY_SCHEMA_VERSION",
+    "STRUCTURE_SCHEMA_VERSION",
     # Error taxonomy.
     "StorageError",
     "InvalidPDFError",
     "UnsupportedSchemaError",
     "CorruptMetadataError",
     "CorruptAnnotationsError",
+    "CorruptStructureError",
     "DocumentNotFoundError",
     "CorruptLibraryError",
     "FolderNotFoundError",
@@ -105,4 +114,7 @@ __all__ = [
     # Annotations store.
     "write_annotations",
     "read_annotations",
+    # Structure store (AD-L8).
+    "write_structure",
+    "read_structure",
 ]

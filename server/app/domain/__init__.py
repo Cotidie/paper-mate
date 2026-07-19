@@ -6,14 +6,29 @@ returns data out — it never touches the filesystem and never imports
 
 Split into focused modules behind this facade:
 
-- ``extract``  — the pure PyMuPDF ``extract`` (total, GROBID-swappable).
-- ``crossref`` — the ``Enricher`` port + the ``CrossrefEnricher`` (the only
-                 backend network call).
-- ``enrich``   — the ``enrich`` domain surface delegating to the port.
+- ``extract``   — the pure PyMuPDF ``extract`` (total, GROBID-swappable).
+- ``crossref``  — the ``Enricher`` port + the ``CrossrefEnricher`` (the only
+                  backend network call).
+- ``enrich``    — the ``enrich`` domain surface delegating to the port.
+- ``structure`` — the ``StructureExtractor`` port + the ``OpenDataLoaderExtractor``
+                  (structure extraction, AD-13/AD-L8, the domain's second tenant).
 """
 
 from app.domain.crossref import CrossrefEnricher, Enricher
 from app.domain.enrich import enrich
 from app.domain.extract import extract
+from app.domain.structure import (
+    OpenDataLoaderExtractor,
+    StructureExtractor,
+    extract_structure,
+)
 
-__all__ = ["extract", "enrich", "Enricher", "CrossrefEnricher"]
+__all__ = [
+    "extract",
+    "enrich",
+    "Enricher",
+    "CrossrefEnricher",
+    "extract_structure",
+    "StructureExtractor",
+    "OpenDataLoaderExtractor",
+]

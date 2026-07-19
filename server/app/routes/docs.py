@@ -23,7 +23,7 @@ from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app import storage
-from app.models import Annotation, Doc, DocPatch, Library
+from app.models import Annotation, Doc, DocPatch, DocStructure, Library
 from app.routes._errors import error_response, storage_errors
 from app.routes.extraction import run_extraction
 
@@ -190,6 +190,27 @@ async def get_annotations(doc_id: str) -> list[Annotation]:
     """
     with storage_errors("Could not read annotations"):
         return storage.read_annotations(doc_id)
+
+
+@router.get(
+    "/docs/{doc_id}/structure",
+    response_model=DocStructure,
+    responses={
+        404: error_response("No document with this id."),
+        500: error_response("The stored structure is unreadable."),
+    },
+)
+async def get_structure(doc_id: str) -> DocStructure:
+    """Return a document's structure layer (AD-13, FR-34, Story 10.1).
+
+    The typed, box-anchored elements opendataloader extracted at import. An
+    imported-but-not-yet-analyzed doc (structure still running, or a non-PDF)
+    returns ``{"elements": []}`` (200, not 404) -- the client polls/re-reads it.
+    Unknown/unresolvable id -> 404; a corrupt or unknown-version disk file ->
+    500. Both use the single ``{ "detail" }`` envelope (AR-11).
+    """
+    with storage_errors("Could not read structure"):
+        return storage.read_structure(doc_id)
 
 
 @router.put(

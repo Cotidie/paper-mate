@@ -15,6 +15,13 @@ RUN cd client && npm run build
 FROM python:3.13-slim AS runtime
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 WORKDIR /app
+# opendataloader-pdf (AD-13 document-structure extraction, Story 10.1) is a Java
+# core spawned via its Python binding, so the runtime needs a JRE (Java 11+).
+# default-jre-headless (Debian trixie: JRE 21) satisfies it with the smallest
+# footprint; it runs in-container at import, never a host CLI (AD-13).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends default-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 # Install deps from the committed lockfile (reproducible; no fresh resolve).
 COPY server/pyproject.toml server/uv.lock ./

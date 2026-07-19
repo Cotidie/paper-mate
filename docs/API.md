@@ -210,6 +210,46 @@ The disk envelope is stripped inside storage — the API body is the bare list (
   `annotations.json` or an unknown on-disk `schema_version` (rejected, never
   guessed — AD-8).
 
+### `GET /api/docs/{doc_id}/structure` — read the document-structure layer
+
+The section-awareness layer (AD-13, AD-L8, FR-34, Story 10.1): the typed,
+box-anchored elements `opendataloader-pdf` extracted from the paper at import
+(headings, paragraphs, tables, figures, captions, lists, in reading order). Each
+element's `rect` is already an AD-4 normalized `[0,1]` top-left rect (the server
+did the PDF-points → normalized flip once), so the client `structure/` service
+denormalizes it to screen exactly like an annotation anchor. Consumers (a
+synthesized ToC, a Figures/Tables index, reading-helper previews,
+structure-backed metadata) are thin readers of this one layer (Epic 10 stories
+10-2..10-6). Structure is extracted in the background import pipeline, so a
+freshly-imported paper may return empty for a moment until analysis settles.
+
+- **200** → `DocStructure` = `{ "elements": StructureElement[] }`, where each
+  `StructureElement` = `{ id, type, page_index, rect, text, heading_level? }`.
+  `type` ∈ `heading|paragraph|table|figure|caption|list|footnote|other`;
+  `page_index` is 0-based; `rect` is a normalized `Rect`. An
+  **imported-but-not-yet-analyzed** doc, a **non-PDF**, or a paper whose
+  extraction failed/was thin returns `{ "elements": [] }` (a normal 200, not a
+  404) — structure is best-effort and never blocks the paper (total).
+  ```json
+  {
+    "elements": [
+      {
+        "id": "34",
+        "type": "heading",
+        "page_index": 0,
+        "rect": { "x0": 0.097, "y0": 0.130, "x1": 0.876, "y1": 0.154 },
+        "text": "Learning Regularity in Skeleton Trajectories …",
+        "heading_level": 2
+      }
+    ]
+  }
+  ```
+- **404** → `{ "detail": "Document not found" }` — `doc_id` has no `meta.json`
+  (never imported).
+- **500** → `{ "detail": "Could not read structure" }` — a corrupt
+  `structure.json` or an unknown on-disk `schema_version` (rejected, never
+  guessed — AD-8).
+
 ### `GET /api/library` — read the collection index
 
 The organization layer (AD-L6): the collection table + folder tree in **one
@@ -440,6 +480,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-20 (Story 10.1, document-structure layer):** added `GET /api/docs/{doc_id}/structure` (the AD-13 section-awareness layer, FR-34) returning `DocStructure` = `{ elements: StructureElement[] }`. New `components.schemas`: `StructureElement` (`{ id, type ∈ heading|paragraph|table|figure|caption|list|footnote|other, page_index (0-based), rect (normalized `Rect`), text, heading_level? }`) + `DocStructure`. Additive (no `schema_version` bump on any existing file). Structure is extracted at import by `opendataloader-pdf` (in-container, Java core), persisted per-doc as `structure.json`, and is **total/best-effort**: an imported-but-not-yet-analyzed doc, a non-PDF, or a failed/thin extraction returns `{ elements: [] }` (200, not 404). Coordinates are flipped from PDF points to AD-4 normalized rects **server-side**.
 - **2026-07-19 (Story 10.5, persist moved comment box position):** `Style` gains `bubble_offset_x: float | null` + `bubble_offset_y: float | null` (comment-only; CSS-px, scale-independent offset from the pin, same unit family as `bubble_width`/`bubble_height`; `null` = the default pin-relative position; additive, no format break, AD-8). No endpoints added.
 - **2026-07-19 (Story 10.4, resizable collapsed memo):** `Style` gains `collapsed_width: float | null` (memo-only; NORMALIZED page fraction, `> 0` when present, distinct from the expanded width in `anchor.rect`; `null` = the legacy fixed collapsed width; additive, no format break, AD-8). The collapsed box's HEIGHT is always one intrinsic CSS line and is not part of the contract. No endpoints added.
 - **2026-07-12 (Story 8.5 fix request):** `enrich()`'s arXiv venue/year fallback (Story 7.9 fix request) gains a `venue_short` exception: when a paper exists on arXiv only (no `journal_ref` - the fallback's own `venue` is the literal `"arXiv"`), `venue_short` is set to `"arXiv"` too, matching `venue`, instead of staying blank or querying the Semantic Scholar fallback by arXiv's self-assigned DOI. A `journal_ref` (formally published elsewhere) is unaffected and still goes through the normal cascade. Verified live against a genuinely arXiv-only fixture (arXiv id `1907.10211`): `venue: "arXiv"`, `venue_short: "arXiv"`. No contract change, no new path.

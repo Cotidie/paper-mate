@@ -116,7 +116,7 @@ Inferred, not explicitly ratified by the user. Confirm during architecture / sto
 
 **Library (resolve during architecture / epics):**
 
-- Which external metadata service (Crossref vs Semantic Scholar vs both) and by what key (DOI extracted from the PDF vs title search)?
+- ~~Which external metadata service (Crossref vs Semantic Scholar vs both) and by what key (DOI extracted from the PDF vs title search)?~~ **RESOLVED 2026-07-20 (correct-course, `sprint-change-proposal-2026-07-20-metadata-semantic-scholar-first.md`, Story 10.7):** **both, Semantic Scholar primary + Crossref fallback.** S2 wins title/year/venue(full+short)/author-display-names; Crossref is the fallback and the reserved source for later AI features (full-given author names, reference graphs). Key order: DOI first, then arXiv id, then title-search (plausibility-gated). Motivated by Crossref's source-truncated title on DOI 10.14778/3514061.3514067. (FR-9 reframed accordingly: LFR-9.)
 - Bulk-upload UX on partial failure: if 3 of 10 PDFs fail to parse, what does the user see?
 
 **Sync (F8, resolve in the sync epic's own discovery, NOT this sprint):**

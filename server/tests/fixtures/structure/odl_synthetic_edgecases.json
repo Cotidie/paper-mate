@@ -1,0 +1,87 @@
+{
+  "file name": "synthetic.pdf",
+  "number of pages": 2,
+  "author": "A. Author",
+  "title": "Synthetic Title",
+  "kids": [
+    {
+      "type": "heading",
+      "id": 1,
+      "page number": 1,
+      "bounding box": [72.0, 700.0, 540.0, 730.0],
+      "heading level": 1,
+      "content": "Section One"
+    },
+    {
+      "type": "paragraph",
+      "id": 2,
+      "page number": 1,
+      "bounding box": [72.0, 600.0, 540.0, 690.0],
+      "content": "Body text of the first section."
+    },
+    {
+      "type": "text block",
+      "id": "3",
+      "page number": "1",
+      "bounding box": "[100.0, 400.0, 500.0, 550.0]",
+      "kids": [
+        {
+          "type": "image",
+          "id": 4,
+          "page number": 1,
+          "bounding box": [110.0, 410.0, 490.0, 540.0]
+        }
+      ]
+    },
+    {
+      "type": "caption",
+      "id": 5,
+      "page number": 1,
+      "bounding box": [110.0, 380.0, 490.0, 405.0],
+      "linked content id": 4,
+      "content": "Figure 1. A synthetic figure."
+    },
+    {
+      "type": "table",
+      "id": 6,
+      "page number": 2,
+      "bounding box": [72.0, 500.0, 540.0, 700.0],
+      "content": "col a col b"
+    },
+    {
+      "type": "formula",
+      "id": 7,
+      "page number": 2,
+      "bounding box": [200.0, 450.0, 400.0, 480.0],
+      "content": "E = mc^2"
+    },
+    {
+      "type": "list",
+      "id": 8,
+      "page number": 2,
+      "bounding box": [72.0, 300.0, 300.0, 440.0],
+      "list items": [
+        {
+          "type": "list item",
+          "id": 9,
+          "page number": 2,
+          "bounding box": [80.0, 420.0, 300.0, 440.0],
+          "content": "First item"
+        }
+      ]
+    },
+    {
+      "type": "unknown-future-type",
+      "id": 10,
+      "page number": 2,
+      "bounding box": [72.0, 250.0, 300.0, 280.0],
+      "content": "A type our mapping does not know."
+    },
+    {
+      "type": "paragraph",
+      "id": 11,
+      "page number": 2,
+      "bounding box": [72.0, 100.0, 540.0, 240.0]
+    }
+  ]
+}

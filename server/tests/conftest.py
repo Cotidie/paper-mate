@@ -35,6 +35,23 @@ def _stub_enrich(monkeypatch):
     monkeypatch.setattr(domain, "enrich", lambda meta: "skipped")
 
 
+@pytest.fixture(autouse=True)
+def _stub_structure(monkeypatch):
+    """Keep the JVM out of the general suite (Story 10.1).
+
+    ``run_extraction`` runs structure extraction after metadata, and the
+    ``TestClient`` runs that background task synchronously — so every
+    ``POST /api/docs`` test would otherwise spawn opendataloader's JVM (slow,
+    and it can hang under the review sandbox). Default ``domain.extract_structure``
+    to an empty result everywhere; a test exercising the real path feeds
+    ``_map_tree`` a captured fixture directly or re-patches this itself.
+    """
+    from app import domain
+    from app.models import DocStructure
+
+    monkeypatch.setattr(domain, "extract_structure", lambda pdf_bytes: DocStructure())
+
+
 def make_pdf_bytes(pages: int = 1, title: str | None = None) -> bytes:
     """Build a minimal, deterministic valid PDF in memory (no committed binary)."""
     writer = PdfWriter()
