@@ -289,6 +289,17 @@ export interface AnnotationStore {
    *  id or non-memo (state unchanged, so zundo records no history step). Routes
    *  through the normal command path, so it is one undoable step (AR-7). */
   resizeCollapsedMemo: (id: string, width: number, now: string) => void;
+  /** Reposition a comment's OWN note-popup bubble (Story 10.5, FR-31) and bump
+   *  `updated_at`. Single `id`, not group-aware (mirrors `resizeCommentAnnotation`'s
+   *  scope exactly): only one page's bubble is ever open/draggable at a time, so
+   *  there is no sibling to broadcast to. `offset` is a CSS-px, scale-independent
+   *  delta from the pin (same unit family as `bubble_width`/`bubble_height`, NOT
+   *  a normalized page fraction like `collapsed_width`), persisted on
+   *  `style.bubble_offset_x`/`bubble_offset_y` (additive optional fields, AD-8).
+   *  Guarded to `type=comment` so a stale non-comment id is never mutated (AR-5).
+   *  A no-op for an unknown id. Routes through the normal command path, so it is
+   *  one undoable step (AR-7). */
+  repositionCommentAnnotation: (id: string, offset: { x: number; y: number }, now: string) => void;
   /** Replace a mark's anchor GEOMETRY (a moved/resized rect or points) and bump
    *  `updated_at` — the Story 3.1 move/resize command-path action, shared by
    *  kind=rect (memo/region/comment-pin) and kind=path (pen). The CALLER (the edit
@@ -545,6 +556,20 @@ export const useAnnotationStore = create<AnnotationStore>()(
           next.set(id, {
             ...a,
             style: { ...a.style, collapsed_width: width },
+            updated_at: now,
+          });
+          return { annotations: next };
+        }),
+      repositionCommentAnnotation: (id, offset, now) =>
+        set((state) => {
+          // Single-id (not patchAnnotations' ids-batch), mirrors resizeCommentAnnotation
+          // exactly: the bubble is a per-instance popup, not group-shared geometry.
+          const a = state.annotations.get(id);
+          if (!a || a.type !== "comment") return state;
+          const next = new Map(state.annotations);
+          next.set(id, {
+            ...a,
+            style: { ...a.style, bubble_offset_x: offset.x, bubble_offset_y: offset.y },
             updated_at: now,
           });
           return { annotations: next };

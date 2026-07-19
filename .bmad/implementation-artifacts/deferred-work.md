@@ -212,3 +212,7 @@ Plan this thoroughly before coding (own story / correct-course): decide how sele
 ## Deferred from: code review of 10-2-memo-resize-handle-position-min-size (2026-07-19)
 
 - **Distinct, keyboard-operable memo resize handles** [client/src/annotations/MemoBox.tsx:182] — the four native buttons all expose the same "Resize annotation" accessible name and support pointer drags only, so keyboard and assistive-technology users cannot identify or operate a specific corner. This behavior predates Story 10.2 in the shared edit-frame markup; the story relocates it without expanding accessibility scope.
+
+## Deferred from: code review of 10-5-persist-comment-box-position (2026-07-19)
+
+- **Bubble and preview viewport clamps do not recompute on viewport resize** [client/src/annotations/CommentBubble.tsx:147] — a bubble that was visible before the browser narrows or rotates can remain outside the new viewport until another clamp dependency changes. This behavior predates Story 10.5; the story adds offset dependencies but does not introduce the missing resize signal.

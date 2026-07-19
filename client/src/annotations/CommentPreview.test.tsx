@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import CommentPreview from "./CommentPreview";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import CommentPreview, { HOVER_CLOSE_DELAY_MS } from "./CommentPreview";
 import type { Annotation } from "@/api/client";
 import type { ScreenRect } from "@/anchor";
 
@@ -95,13 +95,45 @@ describe("CommentPreview compact mode (box comment popup layout, fix request)", 
     const box = screen.getByTestId("comment-preview-p10");
     expect(box.style.left).toBe("100px");
     expect(box.style.top).toBe("100px");
-    expect(box.style.transform).toBe("");
+    expect(box.style.transform).toBe("translate(0px, 0px)");
   });
 
   it("a non-compact (or omitted) preview keeps the pin-offset transform", () => {
     renderPreview(comment("p11"));
     const box = screen.getByTestId("comment-preview-p11");
     expect(box.style.transform).toContain("translateY(calc(var(--comment-pin-size)");
+  });
+});
+
+describe("CommentPreview mirrors the persisted bubble position (Story 10.5)", () => {
+  it("a moved comment's preview renders its transform including the persisted offset translate", () => {
+    const anno = { ...comment("p30"), style: { ...comment("p30").style, bubble_offset_x: 40, bubble_offset_y: -8 } };
+    renderPreview(anno);
+    const box = screen.getByTestId("comment-preview-p30");
+    expect(box.style.transform).toContain("translate(40px, -8px)");
+  });
+
+  it("a never-moved comment (no bubble_offset fields) is unchanged: no extra translate beyond the pin-offset", () => {
+    renderPreview(comment("p31"));
+    const box = screen.getByTestId("comment-preview-p31");
+    expect(box.style.transform).toBe(`translateY(calc(var(--comment-pin-size) + var(--space-xxs))) translate(0px, 0px)`);
+  });
+
+  it("a moved COMPACT comment's preview applies the offset translate (no PIN_OFFSET_TRANSFORM prefix)", () => {
+    const anno = { ...comment("p32"), style: { ...comment("p32").style, bubble_offset_x: 15, bubble_offset_y: 25 } };
+    render(
+      <CommentPreview
+        anno={anno}
+        pos={pos}
+        hovered={true}
+        onRetext={noop}
+        onHoverEnter={noop}
+        onHoverLeave={noop}
+        compact
+      />,
+    );
+    const box = screen.getByTestId("comment-preview-p32");
+    expect(box.style.transform).toBe("translate(15px, 25px)");
   });
 });
 
@@ -209,5 +241,46 @@ describe("CommentPreview close timing (fix request: instant close once the box i
       <CommentPreview anno={anno} pos={pos} hovered={false} onRetext={noop} onHoverEnter={noop} onHoverLeave={noop} />,
     );
     expect(screen.getByTestId("comment-preview-p41")).toBeTruthy();
+  });
+});
+
+describe("CommentPreview grace window scales with pin-to-box distance (Story 10.5, Codex MED fix)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  async function tick(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  it("a never-moved comment (no persisted offset) still closes at exactly the base HOVER_CLOSE_DELAY_MS (unchanged)", async () => {
+    const anno = comment("p50");
+    const { rerender } = render(
+      <CommentPreview anno={anno} pos={pos} hovered={true} onRetext={noop} onHoverEnter={noop} onHoverLeave={noop} />,
+    );
+    rerender(
+      <CommentPreview anno={anno} pos={pos} hovered={false} onRetext={noop} onHoverEnter={noop} onHoverLeave={noop} />,
+    );
+    await tick(HOVER_CLOSE_DELAY_MS - 1);
+    expect(screen.getByTestId("comment-preview-p50")).toBeTruthy();
+    await tick(1);
+    expect(screen.queryByTestId("comment-preview-p50")).toBeNull();
+  });
+
+  it("a comment moved far from its pin gets a LONGER grace window — the fixed base delay alone would close it before the pointer could ever cross the gap", async () => {
+    // dist = 800 -> dist/2 = 400ms, well past the 200ms base floor.
+    const anno = { ...comment("p51"), style: { ...comment("p51").style, bubble_offset_x: 800, bubble_offset_y: 0 } };
+    const { rerender } = render(
+      <CommentPreview anno={anno} pos={pos} hovered={true} onRetext={noop} onHoverEnter={noop} onHoverLeave={noop} />,
+    );
+    rerender(
+      <CommentPreview anno={anno} pos={pos} hovered={false} onRetext={noop} onHoverEnter={noop} onHoverLeave={noop} />,
+    );
+    // Still open past the base delay — the OLD fixed-200ms behavior would have closed it here.
+    await tick(HOVER_CLOSE_DELAY_MS);
+    expect(screen.getByTestId("comment-preview-p51")).toBeTruthy();
+    await tick(200); // total 400ms, matching the scaled delay
+    expect(screen.queryByTestId("comment-preview-p51")).toBeNull();
   });
 });

@@ -107,6 +107,7 @@ export default function AnnotationInteraction({
   const deleteAnnotation = useAnnotationStore((s) => s.deleteAnnotation);
   const setActiveColor = useAnnotationStore((s) => s.setActiveColor);
   const resizeCommentAnnotation = useAnnotationStore((s) => s.resizeCommentAnnotation);
+  const repositionCommentAnnotation = useAnnotationStore((s) => s.repositionCommentAnnotation);
   const { onTextFocus: startCommentTextEditSession, onTextBlur: commitCommentTextEditSession } =
     useTextEditSession();
   // The active-tool defaults the CREATE paths read (Story 2.6/2.8/2.9/2.13). The
@@ -324,9 +325,19 @@ export default function AnnotationInteraction({
     };
   };
   const selectedCommentCompact = selectedComment ? isBoxComment(selectedComment) : false;
-  const selectedCommentRawPoint = selectedComment ? commentScreenPoint(selectedComment) : null;
-  const selectedCommentPoint =
-    selectedCommentRawPoint && selectedCommentCompact ? rightOf(selectedCommentRawPoint) : selectedCommentRawPoint;
+  // The selected comment's LIVE viewport anchor (the pin's screen point, shifted
+  // beside the highlight for a box comment). A FUNCTION, not a snapshot, so the
+  // bubble can re-derive it on scroll/resize/zoom (it is position: fixed) —
+  // `commentScreenPoint` reads the page card's live getBoundingClientRect +
+  // scaleRef each call. `selectedCommentPoint` below is just the render-time
+  // value (gates the bubble + seeds its first paint).
+  const getSelectedCommentPoint = (): ScreenRect | null => {
+    if (!selectedComment) return null;
+    const raw = commentScreenPoint(selectedComment);
+    if (!raw) return null;
+    return selectedCommentCompact ? rightOf(raw) : raw;
+  };
+  const selectedCommentPoint = getSelectedCommentPoint();
 
   if (
     !pending &&
@@ -545,13 +556,16 @@ export default function AnnotationInteraction({
 
       {/* Comment overlay (Story 2.10, relocated here — see the "Comment overlay"
           subscriptions above for why): the selected comment's full bubble
-          (recolor/convert/delete/resize) REPLACES the generic selection
+          (recolor/convert/delete/resize/reposition — recolor collapsed behind
+          a corner toggle, design request) REPLACES the generic selection
           quick-box above (Decision 4) — comments never show both. */}
       {selectedComment && selectedCommentPoint && (
         <CommentBubble
           key={selectedComment.id}
           anno={selectedComment}
           pos={selectedCommentPoint}
+          getScreenPoint={getSelectedCommentPoint}
+          scale={scale}
           compact={selectedCommentCompact}
           onRetext={(_id, body) =>
             // Group-aware (Codex HIGH): a two-page comment is grouped siblings;
@@ -574,6 +588,7 @@ export default function AnnotationInteraction({
           onTextFocus={startCommentTextEditSession}
           onTextBlur={commitCommentTextEditSession}
           onResize={(size) => resizeCommentAnnotation(selectedComment.id, size, new Date().toISOString())}
+          onReposition={(offset) => repositionCommentAnnotation(selectedComment.id, offset, new Date().toISOString())}
         />
       )}
       {/* Hover compact preview (user feature request): glance + quick text edit

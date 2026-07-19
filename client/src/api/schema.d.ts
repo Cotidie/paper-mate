@@ -704,6 +704,12 @@ export interface components {
          *     ``anchor.rect`` (rides zoom, NFR-3) -- NOT CSS px. ``None`` = the legacy
          *     fixed collapsed width, until the user drags the collapsed box's own corner
          *     handle. Additive + optional (AD-8).
+         *     ``bubble_offset_x``/``bubble_offset_y`` are comment-only: the note popup's
+         *     own CSS-px, scale-independent offset from its pin (Story 10.5, FR-31) --
+         *     same unit family as ``bubble_width``/``bubble_height`` (a floating popup,
+         *     NOT page-anchored geometry like ``collapsed_width``). May be negative
+         *     (dragged left/up of the pin) or zero; ``None`` = the default pin-relative
+         *     position, until the user drags the bubble to a new spot.
          */
         Style: {
             /** Color */
@@ -720,6 +726,10 @@ export interface components {
             bubble_height?: number | null;
             /** Collapsed Width */
             collapsed_width?: number | null;
+            /** Bubble Offset X */
+            bubble_offset_x?: number | null;
+            /** Bubble Offset Y */
+            bubble_offset_y?: number | null;
         };
         /**
          * TextAnchor

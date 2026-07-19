@@ -1,16 +1,19 @@
 // CommentBubble — the comment's note popup (Story 2.10): the twin of `MemoBox`,
 // but a floating surface off the pin (not the on-page box). Extracted from
-// AnnotationLayer (Story 5.0). A `<textarea>` bound to `body` + a `ColorSwatchRow`
-// (recolor tints the fill AND the pin) + a delete. Anchored at the pin's screen
-// point (`pos`); CSS nudges it below the pin. Mounts only while the comment is
-// selected → mount = open, unmount = close: it focuses its textarea on open (AC2)
-// and RETURNS focus to the prior element on close (the unmount cleanup). Owns its
-// ref + the auto-grow layout effect (like `MemoBox`).
+// AnnotationLayer (Story 5.0). A `<textarea>` bound to `body` + a flat top
+// control strip (design request): a collapsible color toggle that expands LEFT
+// into the 5-swatch row, delete, and convert-to-highlight (kind=text only).
+// Anchored at the pin's
+// screen point (`pos`); CSS nudges it below the pin. Mounts only while the
+// comment is selected → mount = open, unmount = close: it focuses its textarea
+// on open (AC2) and RETURNS focus to the prior element on close (the unmount
+// cleanup). Owns its ref + the auto-grow layout effect (like `MemoBox`).
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Highlighter, Trash } from "@phosphor-icons/react";
 import type { Annotation } from "@/api/client";
 import type { ScreenRect } from "@/anchor";
+import { useLiveRef } from "@/hooks/useLiveRef";
 import ColorSwatchRow from "./ColorSwatchRow";
 import { clampToViewport } from "./position";
 import "./Annotations.css";
@@ -20,10 +23,21 @@ import "./Annotations.css";
  *  same `transform` property, and only one `transform` can win per element. */
 const PIN_OFFSET_TRANSFORM = "translateY(calc(var(--comment-pin-size) + var(--space-xxs)))";
 
-/** Smallest the bubble's corner handle may shrink it to (CSS px) — small enough
- *  to still show a couple of textarea lines + the action row without clipping. */
-const MIN_BUBBLE_WIDTH = 160;
-const MIN_BUBBLE_HEIGHT = 96;
+/** Smallest the bubble's corner handle may shrink it to (CSS px). Fix request:
+ *  height floor 94 (border-box) = the card chrome (border 1x2 + padding 12x2 +
+ *  strip 20 + strip↔text gap 12 = 58) + a SINGLE textarea line
+ *  (--comment-bubble-text-min-height 36), so a comment can be dragged down to
+ *  one line (matches the measured resting one-line box). Width floor 140 same. */
+const MIN_BUBBLE_WIDTH = 140;
+const MIN_BUBBLE_HEIGHT = 94;
+
+/** Client-pixel distance from the pointerdown origin before a bubble drag counts
+ *  as "moved" (vs. a plain click) — Story 10.5. Mirrors the codebase's existing
+ *  `COMMENT_CLICK_SLOP` (useCreateQuickBox.ts) / `HANDLE_MOVE_SLOP`
+ *  (useEditGesture.ts) convention: without it, hand-tremor during a plain click
+ *  on the bubble's empty padding would commit a spurious near-zero-delta
+ *  position write and a spurious undo step once the drag persists. */
+const BUBBLE_MOVE_SLOP = 5;
 
 export default function CommentBubble({
   anno,
@@ -36,11 +50,16 @@ export default function CommentBubble({
   onTextFocus,
   onTextBlur,
   onResize,
+  onReposition,
+  getScreenPoint,
+  scale = 1,
   compact = false,
 }: {
   anno: Annotation;
   pos: ScreenRect;
   onRetext: (id: string, body: string) => void;
+  /** Recolors the comment (design request: collapsed by default behind the
+   *  corner color-toggle badge, expands to the full swatch row on click). */
   onRecolor: (color: string) => void;
   /** Turn this comment back into a highlight (Story 3.7, AC2). Only rendered
    *  for a `kind=text` comment (the reverse revert has no rect counterpart). */
@@ -54,6 +73,20 @@ export default function CommentBubble({
   /** Commits a corner-handle resize (user feature request): persisted on
    *  `anno.style.bubble_width`/`bubble_height` so it survives reselect/reload. */
   onResize: (size: { width: number; height: number }) => void;
+  /** Commits a drag-to-reposition (Story 10.5): persisted on
+   *  `anno.style.bubble_offset_x`/`bubble_offset_y` so it survives reselect/
+   *  reload. Only called once a drag crosses `BUBBLE_MOVE_SLOP` — a plain click
+   *  never fires this. */
+  onReposition: (offset: { x: number; y: number }) => void;
+  /** Live deriver of the bubble's CURRENT viewport anchor point (the pin's
+   *  screen position). The bubble is `position: fixed`, so it must re-read this
+   *  on scroll/resize/zoom to stay glued to the pin — `pos` is only the render-
+   *  time snapshot (goes stale on scroll, which fires no React re-render).
+   *  Defaults to `() => pos` (tests / any caller that doesn't move). */
+  getScreenPoint?: () => ScreenRect | null;
+  /** Current zoom scale. A change re-clamps the position one frame late (like
+   *  the selection quick-box) so the parent zoom re-centering settles first. */
+  scale?: number;
   /** True for a BOX comment (fix request, `isBoxComment` in `marks.ts`): the
    *  caller has already positioned `pos` beside the highlight (no pin-offset
    *  shift needed here) and owns recolor/delete via the shared quick-box, so
@@ -63,12 +96,26 @@ export default function CommentBubble({
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const body = anno.body ?? "";
-  // Manual reposition (temporary): a local offset added on top of the anchored
-  // `pos`. Resets to {0,0} on every mount — which happens each time the bubble
-  // opens (AnnotationLayer only mounts it while selected) — so closing and
-  // reopening the box always shows it back at the default position.
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const boxDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  // Manual reposition (Story 10.5, persisted): mirrors the corner-handle
+  // resize's OWN draft-vs-committed shape (`resizeDraft`/`manualWidth` below)
+  // rather than a plain local mirror — a `dragDraft` LIVE preview while
+  // dragging, `null` outside a drag, so the render otherwise falls through to
+  // the committed `anno.style.bubble_offset_x/y` (or {0,0} for a comment never
+  // moved). This matters even though the bubble remounts per selection: an
+  // UNDO (or any other external change) while the SAME bubble stays open must
+  // still show the reverted position immediately, not just on the next
+  // reopen — a plain `useState` initializer only reads the prop once at mount
+  // and would otherwise go stale the instant a drag ever ran.
+  const [dragDraft, setDragDraft] = useState<{ x: number; y: number } | null>(null);
+  const dragOffset = dragDraft ?? { x: anno.style.bubble_offset_x ?? 0, y: anno.style.bubble_offset_y ?? 0 };
+  const boxDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    moved: boolean;
+  } | null>(null);
   // Corner-handle resize (user feature request): a LIVE preview while dragging,
   // committed to the store (persisted per comment, AD-8) on release. `null`
   // outside a drag, so the render falls through to the committed
@@ -78,6 +125,15 @@ export default function CommentBubble({
   const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
   const manualWidth = resizeDraft?.width ?? anno.style.bubble_width ?? null;
   const manualHeight = resizeDraft?.height ?? anno.style.bubble_height ?? null;
+  // Design request: the recolor row is collapsed by default behind a small
+  // color-circle toggle in the top control strip; clicking it swaps the strip's
+  // middle slot from that single dot to the full 5-swatch row, which grows
+  // LEFTWARD in place (the strip is right-aligned, delete pinned at the right).
+  // Collapses again the instant a color is picked (or the current color is
+  // re-clicked). `false` on every fresh mount (matches the resize/reposition
+  // drafts resetting per open) — there is no persisted "was the picker left
+  // open" state to restore.
+  const [colorOpen, setColorOpen] = useState(false);
   // Focus moves INTO the textarea on open; on close (unmount) it RETURNS to the
   // element focused before the bubble opened (UX-DR8/DR17). Runs once per open.
   useEffect(() => {
@@ -98,25 +154,66 @@ export default function CommentBubble({
     el.style.height = "auto";
     if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
   }, [body, pos.left, pos.top, manualHeight]);
-  // Keep the bubble fully on-screen (Codex MED): the bubble is anchored at the
-  // pin's page-local point + a downward transform, so a pin near the right/bottom
-  // edge would push the textarea/actions partly out of the viewport. Measure the
-  // rendered rect and nudge the inline left/top by the viewport-overflow DELTA
-  // (a pure translation, so it works in page-local coords). jsdom has no layout
-  // (rect all-zero) → the clamp is a no-op there.
-  useLayoutEffect(() => {
+  // Live viewport anchor: the pin's CURRENT screen point. `getScreenPoint` re-
+  // derives it from the live page card + scale on demand; falls back to the
+  // render-time `pos` snapshot when no deriver is passed (tests). Mirrored into
+  // a ref so the once-bound scroll/resize listeners below always read the latest
+  // deriver without re-subscribing (useLiveRef idiom).
+  const getPointRef = useLiveRef<() => ScreenRect | null>(getScreenPoint ?? (() => pos));
+
+  // Re-anchor the bubble from its LIVE screen point, then keep it fully on-screen
+  // (Codex MED). The bubble is `position: fixed`, so it needs re-anchoring on
+  // ANYTHING that moves the pin: open, zoom, a move/resize drag, OR a scroll —
+  // scroll fires no React re-render, so without this the popup floats detached
+  // once the canvas scrolls (fix request). Mirrors useSelection.ts's
+  // `repositionBox` for the sibling selection quick-box. The rendered rect
+  // already reflects the `transform` drag offset (paint-time, not layout), so
+  // the clamp nudges left/top by the viewport-overflow DELTA. jsdom has no
+  // layout (rect all-zero) → the clamp is a no-op, but the base left/top is set.
+  const reposition = useCallback(() => {
     const el = boxRef.current;
     if (!el) return;
-    el.style.left = `${pos.left}px`;
-    el.style.top = `${pos.top}px`;
+    const p = getPointRef.current() ?? pos;
+    el.style.left = `${p.left}px`;
+    el.style.top = `${p.top}px`;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return;
     const c = clampToViewport(r.left, r.top, r.width, r.height, window.innerWidth, window.innerHeight);
     const dx = c.x - r.left;
     const dy = c.y - r.top;
-    if (dx !== 0) el.style.left = `${pos.left + dx}px`;
-    if (dy !== 0) el.style.top = `${pos.top + dy}px`;
-  }, [body, pos.left, pos.top, manualWidth, manualHeight]);
+    if (dx !== 0) el.style.left = `${p.left + dx}px`;
+    if (dy !== 0) el.style.top = `${p.top + dy}px`;
+  }, [getPointRef, pos.left, pos.top]);
+
+  // Re-anchor on the render path: open, a zoom (scale change), the note growing,
+  // a resize, or a drag-offset change (all can move the pin or the box). On a
+  // SCALE change, defer one frame — the parent zoom hook re-centers the scroll
+  // container AFTER this child effect runs (React fires child effects before
+  // parent), so a synchronous reposition would read the pre-recenter scroll and
+  // oscillate (the same fix useSelection.ts applies to the selection box).
+  const prevScaleRef = useRef(scale);
+  useLayoutEffect(() => {
+    const scaleChanged = prevScaleRef.current !== scale;
+    prevScaleRef.current = scale;
+    if (scaleChanged) {
+      const raf = requestAnimationFrame(reposition);
+      return () => cancelAnimationFrame(raf);
+    }
+    reposition();
+  }, [reposition, body, manualWidth, manualHeight, dragOffset.x, dragOffset.y, scale]);
+
+  // Keep the bubble glued to the pin while the canvas scrolls or the window
+  // resizes (mirrors useSelection.ts / useCreateQuickBox — the sibling popups
+  // already do this; the bubble never got it). Capture-phase scroll so it fires
+  // for the inner scroll container, not only a bubbling document scroll.
+  useEffect(() => {
+    document.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      document.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [reposition]);
   return (
     <div
       ref={boxRef}
@@ -132,15 +229,32 @@ export default function CommentBubble({
         ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
       }}
       // Drag-to-reposition: any EMPTY space inside the bubble starts a drag —
-      // excluded by ANCESTRY (closest, not a strict target===boxRef check), so
-      // this covers the outer padding AND blank space inside child wrappers
-      // (e.g. the gap between the color swatches and the action buttons in
-      // .comment-bubble__actions) without hardcoding which wrapper div is
-      // "safe." Only the textarea and the swatch/convert/delete controls
-      // themselves are excluded, keeping their normal click/focus behavior.
+      // excluded by ANCESTRY (closest, not a strict target===boxRef check).
+      // Only the textarea and the convert/color/delete/resize controls (buttons
+      // in the top strip / the bottom-right handle) are excluded, keeping their
+      // normal click/focus behavior.
       onPointerDown={(e) => {
         if (e.button !== 0 || (e.target as HTMLElement).closest("textarea, button")) return;
-        boxDragRef.current = { startX: e.clientX, startY: e.clientY, originX: dragOffset.x, originY: dragOffset.y };
+        // Codex HIGH: blur the textarea BEFORE starting the drag. The textarea
+        // auto-focuses on open (below) and nothing else blurs it during a plain
+        // padding drag (unlike a button click, which natively steals focus) —
+        // while it's focused, `useTextEditSession`'s `onTextFocus` has zundo's
+        // temporal store PAUSED (a text-edit session groups keystrokes into one
+        // undo step). Left unblurred, the reposition commit at `onPointerUp`
+        // would land inside that paused window and get folded into the SAME
+        // undo step as any in-progress (or absent) text edit, instead of being
+        // its own independently-undoable step (AC #3, AR-7). Blurring first
+        // ends any active session (flushing it as its own step if it changed
+        // anything) so the reposition commits cleanly on its own afterward.
+        ref.current?.blur();
+        boxDragRef.current = {
+          pointerId: e.pointerId,
+          startX: e.clientX,
+          startY: e.clientY,
+          originX: dragOffset.x,
+          originY: dragOffset.y,
+          moved: false,
+        };
         try {
           boxRef.current?.setPointerCapture(e.pointerId);
         } catch {
@@ -150,14 +264,38 @@ export default function CommentBubble({
       }}
       onPointerMove={(e) => {
         const d = boxDragRef.current;
-        if (!d) return;
-        setDragOffset({ x: d.originX + (e.clientX - d.startX), y: d.originY + (e.clientY - d.startY) });
+        if (!d || e.pointerId !== d.pointerId) return;
+        if (!d.moved) {
+          const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
+          if (dist < BUBBLE_MOVE_SLOP) return; // still within slop: let a plain click fire on release
+          d.moved = true;
+        }
+        setDragDraft({ x: d.originX + (e.clientX - d.startX), y: d.originY + (e.clientY - d.startY) });
       }}
-      onPointerUp={() => {
+      onPointerUp={(e) => {
+        const d = boxDragRef.current;
+        if (!d || e.pointerId !== d.pointerId) return;
         boxDragRef.current = null;
+        // Commit on a real drag past the slop — a plain click on the bubble's
+        // empty padding never persists a position / never records an undo step
+        // (AC #5). Codex MED: recheck the final distance here too, not just
+        // `d.moved` — a release can land with NO intervening pointermove event
+        // (a very fast physical flick, or a down+up-only synthetic dispatch),
+        // which would otherwise discard a real drag as a click. Clear the draft
+        // either way: on a real commit the render falls through to the
+        // (about-to-update) committed offset; on a plain click it was never set.
+        const dx = e.clientX - d.startX;
+        const dy = e.clientY - d.startY;
+        if (d.moved || Math.hypot(dx, dy) >= BUBBLE_MOVE_SLOP) {
+          onReposition({ x: d.originX + dx, y: d.originY + dy });
+        }
+        setDragDraft(null);
       }}
-      onPointerCancel={() => {
+      onPointerCancel={(e) => {
+        const d = boxDragRef.current;
+        if (!d || e.pointerId !== d.pointerId) return;
         boxDragRef.current = null;
+        setDragDraft(null);
       }}
       // Esc/Delete act from ANY control in the bubble, not just the textarea
       // (Codex MED, extended for Delete): the swatch/delete buttons are exempt
@@ -184,8 +322,76 @@ export default function CommentBubble({
         }
       }}
     >
+      {/* Top control strip (design request): flat, borderless icon controls
+          that read as PART of the card — not floating badges whose own outline
+          overlapped the note. The color control sits at the LEFT and the
+          convert/delete group is pinned at the RIGHT (justify: space-between),
+          so expanding the color toggle grows the 5-swatch row RIGHTWARD into the
+          strip's empty middle and never covers the other options (fix request).
+          Absent in `compact` (box comment): that path owns recolor/delete via
+          the shared quick-box. */}
+      {!compact && (
+        <div className="comment-bubble__controls">
+          {colorOpen ? (
+            <ColorSwatchRow
+              value={anno.style.color}
+              // Picking a DIFFERENT color recolors; re-clicking the current
+              // (armed) color just dismisses — the expanded row has no separate
+              // toggle button to collapse it, so re-clicking the armed color is
+              // the no-change collapse path. Either way the row closes.
+              onPick={(color) => {
+                if (color !== anno.style.color) onRecolor(color);
+                setColorOpen(false);
+              }}
+              ariaLabel="Comment color"
+            />
+          ) : (
+            <button
+              type="button"
+              className="comment-bubble__action comment-bubble__action--toggle"
+              data-testid={`comment-color-toggle-${anno.id}`}
+              aria-label="Comment color"
+              aria-expanded={colorOpen}
+              title="Comment color"
+              onClick={() => setColorOpen(true)}
+            >
+              <span className="color-swatch__dot" style={{ backgroundColor: `var(--color-${anno.style.color})` }} />
+            </button>
+          )}
+          <div className="comment-bubble__controls-right">
+            {anno.anchor.kind === "text" && (
+              <button
+                type="button"
+                role="menuitem"
+                className="comment-bubble__action"
+                data-testid={`comment-convert-highlight-${anno.id}`}
+                aria-label="Turn into highlight"
+                title="Turn into highlight"
+                onClick={onConvertToHighlight}
+              >
+                <Highlighter aria-hidden />
+              </button>
+            )}
+            <button
+              type="button"
+              className="comment-bubble__action"
+              data-testid={`comment-delete-${anno.id}`}
+              aria-label="Delete"
+              title="Delete (Del)"
+              onClick={onDelete}
+            >
+              <Trash aria-hidden />
+            </button>
+          </div>
+        </div>
+      )}
       <textarea
         ref={ref}
+        // rows=1 (fix request): a bare <textarea> defaults to rows=2, which
+        // forced the empty/minimum box to two lines regardless of min-height.
+        // One row + the auto-grow effect makes the resting height a single line;
+        // it still grows to content as the user types.
+        rows={1}
         className={
           manualHeight !== null ? "comment-bubble__text comment-bubble__text--manual-size" : "comment-bubble__text"
         }
@@ -196,34 +402,6 @@ export default function CommentBubble({
         onFocus={onTextFocus}
         onBlur={onTextBlur}
       />
-      {!compact && (
-        <div className="comment-bubble__actions">
-          <ColorSwatchRow value={anno.style.color} onPick={onRecolor} ariaLabel="Comment color" />
-          {anno.anchor.kind === "text" && (
-            <button
-              type="button"
-              role="menuitem"
-              className="comment-bubble__action"
-              data-testid={`comment-convert-highlight-${anno.id}`}
-              aria-label="Turn into highlight"
-              title="Turn into highlight"
-              onClick={onConvertToHighlight}
-            >
-              <Highlighter aria-hidden />
-            </button>
-          )}
-          <button
-            type="button"
-            className="comment-bubble__action"
-            data-testid={`comment-delete-${anno.id}`}
-            aria-label="Delete"
-            title="Delete (Del)"
-            onClick={onDelete}
-          >
-            <Trash aria-hidden />
-          </button>
-        </div>
-      )}
       {/* Corner-handle resize (user feature request): reuses the on-page edit
           frame's `.edit-handle`/`.edit-handle--se` visual (ink-bordered nub,
           half outside the corner) for the SAME affordance language, but drives

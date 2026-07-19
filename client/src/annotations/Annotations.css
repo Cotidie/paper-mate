@@ -777,7 +777,10 @@
   position: fixed;
   display: flex;
   flex-direction: column;
-  gap: var(--space-xxs);
+  /* Gap between the top control strip and the textarea == the card's top
+     padding, so the icon row sits vertically CENTERED in the band between the
+     card's top border and the textarea (fix request: it hugged the textarea). */
+  gap: var(--space-sm);
   width: var(--comment-bubble-width);
   padding: var(--space-sm);
   background-color: var(--color-surface-card);
@@ -824,22 +827,36 @@
   overflow-y: auto;
 }
 
-/* The bubble's action row: the recolor swatches + convert/delete icon buttons. */
-.comment-bubble__actions {
+/* Top control strip (design request): the controls live in ONE flat row that
+   is part of the card (first child, above the textarea) — NOT floating badges
+   whose own pill outline overlapped the white note ("integrated seamlessly").
+   The color control is pinned LEFT and the convert/delete group is pinned RIGHT
+   (space-between), so expanding the color toggle grows the 5-swatch row
+   RIGHTWARD into the empty middle instead of covering the other options. */
+.comment-bubble__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xxs);
+}
+
+/* The right-pinned pair (convert, kind=text only, + delete): stays put and
+   visible as the swatch row grows toward it from the left. */
+.comment-bubble__controls-right {
   display: flex;
   align-items: center;
   gap: var(--space-xxs);
 }
 
-/* Shared icon-button chrome for the trailing actions (Turn into highlight,
-   Delete). The first one absorbs the row's free space so the pair (one or two
-   buttons, convert is gated to kind=text) hugs the right edge as a group. */
+/* Flat, borderless icon button — transparent, no outline of its own, only a
+   subtle hover fill — sized to the swatch cell so the whole strip reads as one
+   uniform row. */
 .comment-bubble__action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--quick-box-action-height);
-  height: var(--quick-box-action-height);
+  width: var(--color-swatch-size);
+  height: var(--color-swatch-size);
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -848,8 +865,10 @@
   cursor: pointer;
 }
 
-.comment-bubble__actions button.comment-bubble__action:first-of-type {
-  margin-left: auto;
+/* The collapsed color toggle wraps a round .color-swatch__dot, so its hover
+   fill is a pill (not a square) to hug the disc. */
+.comment-bubble__action--toggle {
+  border-radius: var(--radius-pill);
 }
 
 .comment-bubble__action:hover {

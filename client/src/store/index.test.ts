@@ -648,6 +648,64 @@ describe("resizeCollapsedMemo (resizable collapsed memo box WIDTH, Story 10.4)",
   });
 });
 
+describe("repositionCommentAnnotation (persist a moved comment box's position, Story 10.5)", () => {
+  const t = () => useAnnotationStore.temporal.getState();
+
+  it("sets style.bubble_offset_x/y and bumps updated_at", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(commentMark("c", "2026-07-19T00:00:01Z"));
+    useAnnotationStore.getState().repositionCommentAnnotation("c", { x: 40, y: -8 }, "2026-07-19T12:00:00Z");
+    const c = useAnnotationStore.getState().annotations.get("c")!;
+    expect(c.style.bubble_offset_x).toBe(40);
+    expect(c.style.bubble_offset_y).toBe(-8);
+    expect(c.updated_at).toBe("2026-07-19T12:00:00Z");
+  });
+
+  it("leaves bubble_width/height (an independent resize) untouched when only reposition fires, and vice versa", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(commentMark("c", "2026-07-19T00:00:01Z"));
+    useAnnotationStore.getState().resizeCommentAnnotation("c", { width: 300, height: 180 }, "2026-07-19T12:00:00Z");
+    useAnnotationStore.getState().repositionCommentAnnotation("c", { x: 40, y: -8 }, "2026-07-19T12:00:01Z");
+    const c = useAnnotationStore.getState().annotations.get("c")!;
+    expect(c.style.bubble_width).toBe(300);
+    expect(c.style.bubble_height).toBe(180);
+    expect(c.style.bubble_offset_x).toBe(40);
+    expect(c.style.bubble_offset_y).toBe(-8);
+  });
+
+  it("guards non-comment marks (a stale memo/highlight id is untouched) and records NO history step", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(memoMark("m", { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 }, "2026-07-19T00:00:01Z"));
+    t().clear();
+    const depth0 = t().pastStates.length;
+    useAnnotationStore.getState().repositionCommentAnnotation("m", { x: 40, y: -8 }, "2026-07-19T12:00:00Z");
+    const m = useAnnotationStore.getState().annotations.get("m")!;
+    expect(m.style.bubble_offset_x).toBeUndefined();
+    expect(m.updated_at).toBe("2026-07-19T00:00:01Z"); // not bumped
+    expect(t().pastStates.length).toBe(depth0); // guarded no-op: no spurious undo step
+  });
+
+  it("ignores an unknown id without throwing and records NO history step", () => {
+    t().clear();
+    const depth0 = t().pastStates.length;
+    useAnnotationStore.getState().repositionCommentAnnotation("missing", { x: 40, y: -8 }, "2026-07-19T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.size).toBe(0);
+    expect(t().pastStates.length).toBe(depth0);
+  });
+
+  it("is undoable via zundo in exactly ONE step (the normal command path, AR-7)", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(commentMark("c", "2026-07-19T00:00:01Z"));
+    t().clear();
+    const depth0 = t().pastStates.length;
+    useAnnotationStore.getState().repositionCommentAnnotation("c", { x: 40, y: -8 }, "2026-07-19T12:00:00Z");
+    expect(useAnnotationStore.getState().annotations.get("c")!.style.bubble_offset_x).toBe(40);
+    expect(t().pastStates.length).toBe(depth0 + 1); // exactly one history entry recorded
+    t().undo();
+    expect(useAnnotationStore.getState().annotations.get("c")!.style.bubble_offset_x).toBeUndefined();
+  });
+});
+
 describe("geometry edit — setAnnotationGeometry (move/resize command path, Story 3.1)", () => {
   const rect = { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 };
 
