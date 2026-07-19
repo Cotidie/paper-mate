@@ -369,18 +369,22 @@ export default function AnnotationInteraction({
   // Distinct from the chrome-only `compact` prop below: a text comment now
   // positions like a box comment but keeps its own full internal controls.
   const commentBesideAnchor = (a: Annotation): boolean => isBoxComment(a) || a.anchor.kind === "text";
-  // The selected comment's LIVE viewport anchor (the pin's screen point, shifted
-  // beside the highlight/selection). A FUNCTION, not a snapshot, so the
-  // bubble can re-derive it on scroll/resize/zoom (it is position: fixed) —
+  // A comment's LIVE viewport anchor point, already shifted BESIDE its anchor
+  // when applicable (Story 10.9: one helper for the selected bubble AND every
+  // hover preview — both applied `beside ? rightOf(raw) : raw` to
+  // `commentScreenPoint`). `null` when the page isn't mounted / nothing to point at.
+  const commentAnchorPoint = (a: Annotation): ScreenRect | null => {
+    const raw = commentScreenPoint(a);
+    if (!raw) return null;
+    return commentBesideAnchor(a) ? rightOf(raw) : raw;
+  };
+  // The selected comment's LIVE viewport anchor. A FUNCTION, not a snapshot, so
+  // the bubble can re-derive it on scroll/resize/zoom (it is position: fixed) —
   // `commentScreenPoint` reads the page card's live getBoundingClientRect +
   // scaleRef each call. `selectedCommentPoint` below is just the render-time
   // value (gates the bubble + seeds its first paint).
-  const getSelectedCommentPoint = (): ScreenRect | null => {
-    if (!selectedComment) return null;
-    const raw = commentScreenPoint(selectedComment);
-    if (!raw) return null;
-    return commentBesideAnchor(selectedComment) ? rightOf(raw) : raw;
-  };
+  const getSelectedCommentPoint = (): ScreenRect | null =>
+    selectedComment ? commentAnchorPoint(selectedComment) : null;
   const selectedCommentPoint = getSelectedCommentPoint();
 
   if (
@@ -646,10 +650,9 @@ export default function AnnotationInteraction({
           only currently-hovered marks would unmount it the instant hover ends,
           before that timer could run. */}
       {commentPreviewMarks.map((a) => {
-        const raw = commentScreenPoint(a);
-        if (!raw) return null;
+        const pos = commentAnchorPoint(a);
+        if (!pos) return null;
         const beside = commentBesideAnchor(a);
-        const pos = beside ? rightOf(raw) : raw;
         return (
           <CommentPreview
             key={a.id}

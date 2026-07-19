@@ -17,12 +17,8 @@ import type { Annotation } from "@/api/client";
 import type { ScreenRect } from "@/anchor";
 import { useLiveRef } from "@/hooks/useLiveRef";
 import ColorSwatchRow from "./ColorSwatchRow";
+import { committedBubbleOffset, bubbleTransform, manualBubbleSize, manualSizeStyle } from "./bubbleGeometry";
 import "./Annotations.css";
-
-/** Nudges the bubble below the pin (was a static CSS `transform`, DESIGN.md
- *  tokens unchanged) — now inline because the drag offset (below) shares the
- *  same `transform` property, and only one `transform` can win per element. */
-const PIN_OFFSET_TRANSFORM = "translateY(calc(var(--comment-pin-size) + var(--space-xxs)))";
 
 /** Smallest the bubble's corner handle may shrink it to (CSS px). Fix request:
  *  height floor 94 (border-box) = the card chrome (border 1x2 + padding 12x2 +
@@ -127,10 +123,7 @@ export default function CommentBubble({
   // (the LIVE in-progress preview) stays raw CSS px the whole drag (1:1 with the
   // cursor); only the COMMITTED, persisted value needs the scale conversion.
   const [dragDraft, setDragDraft] = useState<{ x: number; y: number } | null>(null);
-  const dragOffset = dragDraft ?? {
-    x: (anno.style.bubble_offset_x ?? 0) * scale,
-    y: (anno.style.bubble_offset_y ?? 0) * scale,
-  };
+  const dragOffset = dragDraft ?? committedBubbleOffset(anno, scale);
   const boxDragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -146,8 +139,9 @@ export default function CommentBubble({
   // comment never manually resized).
   const [resizeDraft, setResizeDraft] = useState<{ width: number; height: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
-  const manualWidth = resizeDraft?.width ?? anno.style.bubble_width ?? null;
-  const manualHeight = resizeDraft?.height ?? anno.style.bubble_height ?? null;
+  const committedSize = manualBubbleSize(anno);
+  const manualWidth = resizeDraft?.width ?? committedSize.width;
+  const manualHeight = resizeDraft?.height ?? committedSize.height;
   // Design request: the recolor row is collapsed by default behind a small
   // color-circle toggle in the top control strip; clicking it swaps the strip's
   // middle slot from that single dot to the full 5-swatch row, which grows
@@ -239,11 +233,8 @@ export default function CommentBubble({
       style={{
         left: pos.left,
         top: pos.top,
-        transform: besideAnchor
-          ? `translate(${dragOffset.x}px, ${dragOffset.y}px)`
-          : `${PIN_OFFSET_TRANSFORM} translate(${dragOffset.x}px, ${dragOffset.y}px)`,
-        ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),
-        ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
+        transform: bubbleTransform(dragOffset, besideAnchor),
+        ...manualSizeStyle({ width: manualWidth, height: manualHeight }),
       }}
       // Drag-to-reposition: any EMPTY space inside the bubble starts a drag —
       // excluded by ANCESTRY (closest, not a strict target===boxRef check).

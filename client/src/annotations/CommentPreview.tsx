@@ -20,16 +20,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Annotation } from "@/api/client";
 import type { ScreenRect } from "@/anchor";
+import { committedBubbleOffset, bubbleTransform, manualBubbleSize, manualSizeStyle } from "./bubbleGeometry";
 import "./Annotations.css";
 
 /** Grace window (ms) the preview stays open after the pointer leaves the pin,
  *  so it survives the gap to reach the box itself. Exported so tests assert
  *  against the real value instead of a duplicated magic number. */
 export const HOVER_CLOSE_DELAY_MS = 200;
-
-/** Mirrors CommentBubble's own pin-nudge transform: both float the SAME
- *  distance below the pin, off the same anchor point. */
-const PIN_OFFSET_TRANSFORM = "translateY(calc(var(--comment-pin-size) + var(--space-xxs)))";
 
 export default function CommentPreview({
   anno,
@@ -81,8 +78,7 @@ export default function CommentPreview({
   // effect below (Codex MED): it needs the pin-to-box DISTANCE to size the
   // grace window correctly for a comment moved far from its pin. Scaled up
   // from its scale-1.0-independent storage (fix request, see CommentBubble).
-  const offsetX = (anno.style.bubble_offset_x ?? 0) * scale;
-  const offsetY = (anno.style.bubble_offset_y ?? 0) * scale;
+  const { x: offsetX, y: offsetY } = committedBubbleOffset(anno, scale);
   const [visible, setVisible] = useState(hovered);
   // Fade-in on direct hover (fix request): the box opens at the pin's own idle
   // opacity (the SAME token .annotation-comment-pin uses when not hovered/
@@ -131,10 +127,9 @@ export default function CommentPreview({
 
   const boxRef = useRef<HTMLDivElement | null>(null);
   const body = anno.body ?? "";
-  // Mirrors CommentBubble's own manualWidth/manualHeight read (CommentBubble.tsx:73-74),
-  // minus the live resizeDraft — the preview has no resize handle of its own.
-  const manualWidth = anno.style.bubble_width ?? null;
-  const manualHeight = anno.style.bubble_height ?? null;
+  // Committed manual size (Story 10.9 shared `manualBubbleSize`), minus the live
+  // resizeDraft — the preview has no resize handle of its own.
+  const { width: manualWidth, height: manualHeight } = manualBubbleSize(anno);
   // Positions from the live anchor point (fix request: no viewport clamp,
   // mirrors CommentBubble — a note the user may be reading/editing is allowed
   // to overflow the viewport rather than jump to an unrelated spot).
@@ -155,11 +150,8 @@ export default function CommentPreview({
         left: pos.left,
         top: pos.top,
         opacity: pointerOverBox ? 1 : "var(--comment-pin-opacity)",
-        transform: compact
-          ? `translate(${offsetX}px, ${offsetY}px)`
-          : `${PIN_OFFSET_TRANSFORM} translate(${offsetX}px, ${offsetY}px)`,
-        ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),
-        ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
+        transform: bubbleTransform({ x: offsetX, y: offsetY }, compact),
+        ...manualSizeStyle({ width: manualWidth, height: manualHeight }),
       }}
       onPointerEnter={() => {
         setPointerOverBox(true);
