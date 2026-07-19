@@ -4,7 +4,7 @@ baseline_commit: c3e15cb4d2b306680bf88ce45f49d4249142dc5b
 
 # Story 10.8: Pen width, four levels including a thinner one
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -167,4 +167,5 @@ Sonnet 5 (bmad-dev-story).
 
 - 2026-07-19: Story created (bmad-create-story). Resolved the four epics.md open design calls: values `2/4/8/16` (prepend `2`, keep the 2× ladder); default STAYS medium (`8`, store untouched); token/key/label `--pen-stroke-fine`/`"fine"`/`"Fine"`; picker FIXED at four (AlphaRow four-cell precedent). Corrected the AC's token-location error: the fourth `--pen-stroke-*` is a component-dims token in `client/src/theme/components.css` (where the existing three live, `theme/`-exempt from `no-raw-values`), NOT `DESIGN.md`/generated `tokens.css`; `DESIGN.md` gets a prose-fidelity touch only. Flagged the `STEPS[1]` collapsed-fallback index-shift trap (must repoint to medium). Scoped as: one token, one `STEP` + fallback fix, two CSS rule pairs, two step-count test updates (3→4, mirroring `AlphaRow`), one DESIGN.md line, DPR>1 live smoke of render-crispness + four-cell fit on both picker surfaces. No store/anchor/render/contract change; version bumps to 0.5.38 at PR merge.
 - 2026-07-19: Implemented (bmad-dev-story). Tasks 1-7 complete. Live smoke (Task 6) verified all ACs at DPR 2 with no surprises (no bugs surfaced, unlike 10.7). Full suite green (1643 tests), typecheck clean. Version bump deferred to PR-merge time per CLAUDE.md versioning.
-- 2026-07-19: Senior Developer Review via Codex (`bmad-code-review`, `codex exec --sandbox read-only`). Verdict: 0 High, 0 Medium, 1 Low (stale "three width steps" doc comment). Patch applied. See "Review Findings" under Tasks/Subtasks. Story stays `review`; flips to `done` at PR-merge time per CLAUDE.md/AE3-1.
+- 2026-07-19: Senior Developer Review via Codex (`bmad-code-review`, `codex exec --sandbox read-only`). Verdict: 0 High, 0 Medium, 1 Low (stale "three width steps" doc comment). Patch applied. See "Review Findings" under Tasks/Subtasks.
+- 2026-07-19: Status flipped to `done`. Version bumped `0.5.37` → `0.5.38` (`server/pyproject.toml` + `server/uv.lock`, per CLAUDE.md versioning — PATCH+1 per story). Full backend suite green (324 tests, incl. `test_version.py` pyproject/uv.lock consistency check).
