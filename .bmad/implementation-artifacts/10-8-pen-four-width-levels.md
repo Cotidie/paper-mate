@@ -56,6 +56,10 @@ so that I can draw finer marks than the current thinnest stroke.
 
 - [x] **Task 7 — Version + docs.** Bump `server/pyproject.toml` `[project].version` `0.5.37` → `0.5.38` at PR-merge time (per CLAUDE.md versioning — once, when the story flips to `done`; NOT mid-implementation; keep `server/uv.lock` in step, `test_version.py` checks it). Pure client change: NO `/api` contract change, so `docs/API.md` needs NO edit. New token is component-dims in `components.css` (theme-exempt raw px). Only new UI string is the label "Fine" (plain word, no em-dash). No `render/` barrel change.
 
+### Review Findings
+
+- [x] [Review][Patch] Stale "three width steps (thin/medium/thick)" doc comment [client/src/annotations/StrokeWidthRow.tsx:4] — fixed: now reads "four width steps (fine/thin/medium/thick)".
+
 ## Dev Notes
 
 ### Resolved open design calls (from epics.md L2486)
@@ -163,3 +167,4 @@ Sonnet 5 (bmad-dev-story).
 
 - 2026-07-19: Story created (bmad-create-story). Resolved the four epics.md open design calls: values `2/4/8/16` (prepend `2`, keep the 2× ladder); default STAYS medium (`8`, store untouched); token/key/label `--pen-stroke-fine`/`"fine"`/`"Fine"`; picker FIXED at four (AlphaRow four-cell precedent). Corrected the AC's token-location error: the fourth `--pen-stroke-*` is a component-dims token in `client/src/theme/components.css` (where the existing three live, `theme/`-exempt from `no-raw-values`), NOT `DESIGN.md`/generated `tokens.css`; `DESIGN.md` gets a prose-fidelity touch only. Flagged the `STEPS[1]` collapsed-fallback index-shift trap (must repoint to medium). Scoped as: one token, one `STEP` + fallback fix, two CSS rule pairs, two step-count test updates (3→4, mirroring `AlphaRow`), one DESIGN.md line, DPR>1 live smoke of render-crispness + four-cell fit on both picker surfaces. No store/anchor/render/contract change; version bumps to 0.5.38 at PR merge.
 - 2026-07-19: Implemented (bmad-dev-story). Tasks 1-7 complete. Live smoke (Task 6) verified all ACs at DPR 2 with no surprises (no bugs surfaced, unlike 10.7). Full suite green (1643 tests), typecheck clean. Version bump deferred to PR-merge time per CLAUDE.md versioning.
+- 2026-07-19: Senior Developer Review via Codex (`bmad-code-review`, `codex exec --sandbox read-only`). Verdict: 0 High, 0 Medium, 1 Low (stale "three width steps" doc comment). Patch applied. See "Review Findings" under Tasks/Subtasks. Story stays `review`; flips to `done` at PR-merge time per CLAUDE.md/AE3-1.

@@ -1,8 +1,8 @@
 // StrokeWidthRow — the pen Thickness picker (UX-DR5/DR7, DESIGN.md#annotation-pen).
 // COLLAPSIBLE like SizeRow: an ICON-ONLY trigger (a horizontal ink weight-bar whose
 // thickness previews the current width — toolrail-glyph sized, no caret, no text)
-// that expands a small floating menu to the RIGHT of the three width steps
-// (thin/medium/thick) as round dots whose size previews the line weight; the applied
+// that expands a small floating menu to the RIGHT of the four width steps
+// (fine/thin/medium/thick) as round dots whose size previews the line weight; the applied
 // width shows the 2px ink armed ring. Keyboard-reachable (it lives inside the rail
 // flyout / quick-box `role="menu"`); the meaning lives in the aria-label / tooltip,
 // not visible text (the rail stays icon-only).
