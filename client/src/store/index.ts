@@ -371,6 +371,31 @@ function patchAnnotations(
   return next ?? annotations;
 }
 
+/**
+ * Single-id STYLE patch (per-instance popup/box geometry — a comment bubble's
+ * size/position, a collapsed memo's width — NOT group-shared geometry, unlike
+ * `patchAnnotations`' ids-batch): merge `patch` into annotation `id`'s style,
+ * bumping `updated_at`. `guard` narrows to the eligible type/kind; a failed
+ * guard OR an unknown id is a reference-preserving no-op (returns the SAME Map),
+ * so zundo's `a.annotations === b.annotations` equality records no history entry.
+ * The three callers (`resizeCommentAnnotation`, `resizeCollapsedMemo`,
+ * `repositionCommentAnnotation`) were byte-identical apart from this guard + the
+ * written fields (Story 10.9 refactor).
+ */
+function patchStyle(
+  annotations: Map<string, Annotation>,
+  id: string,
+  guard: (a: Annotation) => boolean,
+  patch: Partial<Annotation["style"]>,
+  now: string,
+): Map<string, Annotation> {
+  const a = annotations.get(id);
+  if (!a || !guard(a)) return annotations;
+  const next = new Map(annotations);
+  next.set(id, { ...a, style: { ...a.style, ...patch }, updated_at: now });
+  return next;
+}
+
 export const useAnnotationStore = create<AnnotationStore>()(
   temporal(
     (set, get) => ({
@@ -530,50 +555,40 @@ export const useAnnotationStore = create<AnnotationStore>()(
               : null,
           ),
         })),
+      // Three per-instance single-id style patches (Story 10.9: one `patchStyle`
+      // helper, guard + fields differ). The bubble/collapsed size is a per-
+      // instance popup geometry, not group-shared — mirrors retextAnnotation's
+      // single-id scope, not retextAnnotations' group batch.
       resizeCommentAnnotation: (id, size, now) =>
-        set((state) => {
-          // Single-id (not patchAnnotations' ids-batch): the bubble is a per-
-          // instance popup, not group-shared geometry, so each page's own
-          // comment resizes independently (mirrors retextAnnotation's single-id
-          // scope, not retextAnnotations' group batch).
-          const a = state.annotations.get(id);
-          if (!a || a.type !== "comment") return state;
-          const next = new Map(state.annotations);
-          next.set(id, {
-            ...a,
-            style: { ...a.style, bubble_width: size.width, bubble_height: size.height },
-            updated_at: now,
-          });
-          return { annotations: next };
-        }),
+        set((state) => ({
+          annotations: patchStyle(
+            state.annotations,
+            id,
+            (a) => a.type === "comment",
+            { bubble_width: size.width, bubble_height: size.height },
+            now,
+          ),
+        })),
       resizeCollapsedMemo: (id, width, now) =>
-        set((state) => {
-          // Single-id (not patchAnnotations' ids-batch), mirrors resizeCommentAnnotation:
-          // a per-instance collapsed size, not group-shared geometry.
-          const a = state.annotations.get(id);
-          if (!a || a.anchor.kind !== "rect" || a.type !== "memo") return state;
-          const next = new Map(state.annotations);
-          next.set(id, {
-            ...a,
-            style: { ...a.style, collapsed_width: width },
-            updated_at: now,
-          });
-          return { annotations: next };
-        }),
+        set((state) => ({
+          annotations: patchStyle(
+            state.annotations,
+            id,
+            (a) => a.anchor.kind === "rect" && a.type === "memo",
+            { collapsed_width: width },
+            now,
+          ),
+        })),
       repositionCommentAnnotation: (id, offset, now) =>
-        set((state) => {
-          // Single-id (not patchAnnotations' ids-batch), mirrors resizeCommentAnnotation
-          // exactly: the bubble is a per-instance popup, not group-shared geometry.
-          const a = state.annotations.get(id);
-          if (!a || a.type !== "comment") return state;
-          const next = new Map(state.annotations);
-          next.set(id, {
-            ...a,
-            style: { ...a.style, bubble_offset_x: offset.x, bubble_offset_y: offset.y },
-            updated_at: now,
-          });
-          return { annotations: next };
-        }),
+        set((state) => ({
+          annotations: patchStyle(
+            state.annotations,
+            id,
+            (a) => a.type === "comment",
+            { bubble_offset_x: offset.x, bubble_offset_y: offset.y },
+            now,
+          ),
+        })),
       setAnnotationGeometry: (id, anchor, now) =>
         set((state) => {
           const a = state.annotations.get(id);

@@ -28,7 +28,6 @@ import { useEffect, useRef, type RefObject } from "react";
 import {
   translateRect,
   translatePoints,
-  resizeRectCorner,
   scalePoints,
   pointsBounds,
   type PageCardRef,
@@ -36,6 +35,7 @@ import {
 } from "@/anchor";
 import { useAnnotationStore } from "@/store";
 import type { Annotation } from "@/api/client";
+import { moveMemoRect, resizeMemoRect, reseedMemoResizeRect } from "./memoBoxGeometry";
 
 /** A handle on the edit frame: the move grip or one of the four resize corners. */
 export type EditHandle = "move" | RectCorner;
@@ -43,15 +43,6 @@ export type EditHandle = "move" | RectCorner;
 /** Smallest scale factor a pen resize may collapse to, so an overshooting drag
  *  can't scale a stroke to a zero/negative (flipped) size. */
 const MIN_PEN_SCALE = 0.05;
-
-/** Memo minimum resize floor, scale-1.0 CSS px (Story 10.2): small enough to
- *  still hold a short word, tall enough for ~1 line of body-sm text plus the
- *  memo's padding. Converted to a normalized page fraction at resize time
- *  (`px / box.{width,height}`) so the floor is zoom-independent — a CSS-px
- *  floor would change the allowable min rect as the user zooms. Region rects
- *  pass no min (see `computeAnchor`) and keep no floor. */
-const MIN_MEMO_WIDTH_PX = 48;
-const MIN_MEMO_HEIGHT_PX = 32;
 
 /** Client-pixel distance from the pointerdown origin before a handle drag counts
  *  as "moved" (vs. a plain click). Mirrors the existing COMMENT_CLICK_SLOP
@@ -219,34 +210,22 @@ export function useEditGesture(opts: {
       const page = getPagesRef.current().find((p) => p.pageIndex === anno.anchor.page_index);
       if (!page) return;
       let startAnchor = anno.anchor;
-      // Memo-only, corner-resize only (Story 10.2 review fix): a memo's
-      // RENDERED height can differ from its stored anchor rect (auto-grown
-      // taller) — the box's TOP always matches the stored y0 (CSS `top` is set
-      // directly from it; only height is intrinsic/content-derived), so seed
-      // the resize baseline's y1 from the REAL rendered height. Without this, a
-      // corner-drag's delta lands on the stale stored height instead of where
-      // the user visually grabbed the handle. MOVE is unaffected (`translateRect`
-      // only shifts the existing rect; size is untouched). jsdom has no layout
-      // (the measured rect is zeroed), so this is a no-op there — LIVE-SMOKE only.
+      // Memo-only, corner-resize only (Story 10.2/10.4): re-seed the resize
+      // baseline from the box's REAL rendered size — a memo's rendered height (and,
+      // collapsed, width) can differ from its stored anchor rect, so a corner-drag
+      // delta must land on where the user visually grabbed the handle. jsdom has no
+      // layout (measured rect zeroed) → a no-op there. See `reseedMemoResizeRect`.
       if (anno.type === "memo" && handle !== "move" && startAnchor.kind === "rect") {
         const memoEl = handleEl.closest(".annotation-memo") as HTMLElement | null;
         const rendered = memoEl?.getBoundingClientRect();
-        const heightFrac = (rendered?.height ?? 0) / (page.box.height * scaleRef.current);
-        const r = startAnchor.rect;
-        const next = { ...r };
-        if (Number.isFinite(heightFrac) && heightFrac > 0) next.y1 = r.y0 + heightFrac;
-        // WIDTH is re-seeded ONLY for a COLLAPSED memo (Story 10.4): its
-        // rendered width may be driven by `style.collapsed_width` instead of
-        // the stored `anchor.rect`, so the resize baseline must track the
-        // VISIBLE collapsed box. An EXPANDED memo's width is ALWAYS exactly
-        // `anchor.rect`'s own width (auto-grow only ever affects height,
-        // Story 2.9) — re-seeding it from a DOM measurement would only risk
-        // sub-pixel drift on a path that needs no correction at all.
-        if (anno.style.collapsed) {
-          const widthFrac = (rendered?.width ?? 0) / (page.box.width * scaleRef.current);
-          if (Number.isFinite(widthFrac) && widthFrac > 0) next.x1 = r.x0 + widthFrac;
-        }
-        startAnchor = { ...startAnchor, rect: next };
+        const rect = reseedMemoResizeRect(
+          startAnchor.rect,
+          rendered,
+          page.box,
+          scaleRef.current,
+          anno.style.collapsed ?? false,
+        );
+        startAnchor = { ...startAnchor, rect };
       }
       const collapsedWidth =
         anno.type === "memo" && anno.style.collapsed && anno.style.collapsed_width != null
@@ -406,58 +385,14 @@ export function useEditGesture(opts: {
 function computeAnchor(d: DragState, dx: number, dy: number): Annotation["anchor"] | null {
   const a = d.startAnchor;
   if (a.kind === "rect") {
-    if (d.handle === "move") {
-      // Review fix (Story 10.4): `a.rect` is always the EXPANDED extent for a
-      // move (never re-seeded, so its width is what actually commits).
-      // `translateRect`'s own clamp only protects THAT rect's edges — if a
-      // collapsed memo's OWN persisted WIDTH is wider than its expanded
-      // default (it was resized wider while collapsed), clamping against only
-      // the expanded rect would let the visibly-wider collapsed box get
-      // dragged past the page edge. Clamp the X axis against whichever
-      // footprint (expanded or collapsed) is WIDER instead; height is
-      // unaffected (the collapsed height never varies, always one intrinsic
-      // line). A non-memo/expanded/legacy-collapsed mark has no
-      // `collapsedWidth` and this is a no-op, identical to `translateRect`.
-      if (d.collapsedWidth != null) {
-        const { x0, y0, x1, y1 } = a.rect;
-        const effX1 = Math.max(x1, x0 + d.collapsedWidth);
-        const cdx = Math.max(-x0, Math.min(1 - effX1, dx));
-        const cdy = Math.max(-y0, Math.min(1 - y1, dy));
-        return { ...a, rect: { x0: x0 + cdx, y0: y0 + cdy, x1: x1 + cdx, y1: y1 + cdy } };
-      }
-      return { ...a, rect: translateRect(a.rect, dx, dy) };
-    }
-    // Memo-only min floor (Story 10.2): normalized page fraction, so it stays
-    // the same real-world size at every zoom. Region/comment rects get no min.
-    const min =
-      d.type === "memo"
-        ? { w: MIN_MEMO_WIDTH_PX / d.box.width, h: MIN_MEMO_HEIGHT_PX / d.box.height }
-        : undefined;
-    // A collapsed memo's corner-resize (Story 10.4, user decision) only ever
-    // adjusts WIDTH — height is fixed at one intrinsic CSS line while
-    // collapsed, never tracked in normalized space. Keep the top-left FIXED
-    // and grow/shrink WIDTH ONLY from it (dy passed as 0 so `resizeRectCorner`'s
-    // height math is inert; its min-height floor is passed as 0 for the same
-    // reason, so it can't artificially bump the unused y1). Every corner
-    // re-anchors to the memo's stored top-left rather than letting nw/ne/sw
-    // move it. MOVE (handled above) is unaffected — position is shared across
-    // both states and moves only via the move grip.
-    if (d.collapsed && d.type === "memo") {
-      const next = resizeRectCorner(a.rect, d.handle, dx, 0, min && { w: min.w, h: 0 });
-      // Review fix: `next` is clamped to [0,1] relative to the MOVING corner
-      // (e.g. nw's own x0), not the FIXED top-left we re-anchor to below —
-      // reapplying its width onto `a.rect.x0` can overshoot past 1 (e.g.
-      // dragging nw far left grows `next`'s width up to the page edge from
-      // x=0, which added onto a much-larger `a.rect.x0` overflows). Clamp the
-      // reconstructed x1 to the page edge; x0 never moves so it stays valid,
-      // and width can only ever shrink here, never flip. y0/y1 pass through
-      // `a.rect` unchanged (irrelevant downstream: the renderer never applies
-      // an explicit height for a collapsed box).
-      const x1 = Math.min(1, a.rect.x0 + (next.x1 - next.x0));
-      return { ...a, rect: { x0: a.rect.x0, y0: a.rect.y0, x1, y1: a.rect.y1 } };
-    }
-    const next = resizeRectCorner(a.rect, d.handle, dx, dy, min);
-    return { ...a, rect: next };
+    // The memo box's move/resize rules (min floor, collapsed width-only, wider-
+    // footprint move clamp) live in `memoBoxGeometry`; a region rect passes
+    // `isMemo=false`/`collapsedWidth=null` and gets the plain translate/resize.
+    const rect =
+      d.handle === "move"
+        ? moveMemoRect(a.rect, dx, dy, d.collapsedWidth)
+        : resizeMemoRect(a.rect, d.handle, dx, dy, d.type === "memo", d.collapsed, d.box);
+    return { ...a, rect };
   }
   if (a.kind === "path") {
     if (d.handle === "move") return { ...a, points: translatePoints(a.points, dx, dy) };
