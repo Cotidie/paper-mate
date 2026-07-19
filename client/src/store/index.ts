@@ -558,37 +558,43 @@ export const useAnnotationStore = create<AnnotationStore>()(
       // Three per-instance single-id style patches (Story 10.9: one `patchStyle`
       // helper, guard + fields differ). The bubble/collapsed size is a per-
       // instance popup geometry, not group-shared — mirrors retextAnnotation's
-      // single-id scope, not retextAnnotations' group batch.
+      // single-id scope, not retextAnnotations' group batch. Each returns the SAME
+      // root `state` on a no-op (unchanged Map ref), not `{ annotations: sameMap }`
+      // — a new root object would make Zustand notify whole-store subscribers on a
+      // guarded/unknown-id no-op (the old inline bodies returned `state`).
       resizeCommentAnnotation: (id, size, now) =>
-        set((state) => ({
-          annotations: patchStyle(
+        set((state) => {
+          const annotations = patchStyle(
             state.annotations,
             id,
             (a) => a.type === "comment",
             { bubble_width: size.width, bubble_height: size.height },
             now,
-          ),
-        })),
+          );
+          return annotations === state.annotations ? state : { annotations };
+        }),
       resizeCollapsedMemo: (id, width, now) =>
-        set((state) => ({
-          annotations: patchStyle(
+        set((state) => {
+          const annotations = patchStyle(
             state.annotations,
             id,
             (a) => a.anchor.kind === "rect" && a.type === "memo",
             { collapsed_width: width },
             now,
-          ),
-        })),
+          );
+          return annotations === state.annotations ? state : { annotations };
+        }),
       repositionCommentAnnotation: (id, offset, now) =>
-        set((state) => ({
-          annotations: patchStyle(
+        set((state) => {
+          const annotations = patchStyle(
             state.annotations,
             id,
             (a) => a.type === "comment",
             { bubble_offset_x: offset.x, bubble_offset_y: offset.y },
             now,
-          ),
-        })),
+          );
+          return annotations === state.annotations ? state : { annotations };
+        }),
       setAnnotationGeometry: (id, anchor, now) =>
         set((state) => {
           const a = state.annotations.get(id);

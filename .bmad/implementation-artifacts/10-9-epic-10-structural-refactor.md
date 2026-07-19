@@ -54,7 +54,7 @@ This is the **terminal structural refactor** of Epic 10 (AE7-5), sequenced LAST 
 
 - [ ] **Version bump + sprint status** (AC: 6) — DEFERRED to PR merge (per AC-6 / 8.10 precedent): `0.5.38 → 0.5.39` in `server/pyproject.toml` + `uv.lock` synced; story + `sprint-status.yaml` → `done` at merge.
 
-- [ ] **Codex code review** — run `bmad-code-review` through Codex after dev-story (different model), read-only sandbox ([[codex-review-needs-readonly-sandbox]]); resolve High/Med before done.
+- [x] **Codex code review** — ran `bmad-code-review` through Codex (GPT-5-Codex) in read-only sandbox ([[codex-review-needs-readonly-sandbox]]). 1 Medium found + fixed (guarded no-ops no longer preserved the Zustand root-state reference), regression test added; all geometry/AD-9 candidates disproved against baseline. See the Senior Developer Review section.
 
 ## Dev Notes
 
@@ -208,7 +208,16 @@ Layer note (AD-9): the memo/bubble geometry leaves live in the `annotations/` la
 - `client/src/annotations/gestures/useEditGesture.ts` — `computeAnchor` rect branch → dispatch to `memoBoxGeometry`; `onDown` re-seed → `reseedMemoResizeRect`; removed the migrated MIN constants + `resizeRectCorner` import.
 - `client/src/annotations/AnnotationInteraction.tsx` — new `commentAnchorPoint` helper replacing the two `beside ? rightOf(raw) : raw` sites.
 - `.bmad/implementation-artifacts/10-9-epic-10-structural-refactor.md` — this story file (frontmatter `baseline_commit`, tasks, Dev Agent Record).
+- `client/src/store/index.test.ts` — new regression test: a guarded/unknown-id no-op preserves the root state reference for all three single-id patchers (Codex Medium fix).
 - `.bmad/implementation-artifacts/sprint-status.yaml` — status tracking (`ready-for-dev` → `in-progress` → `review`).
+
+## Senior Developer Review (AI) — Codex (GPT-5-Codex), 2026-07-19
+
+Read-only adversarial review of `7f8bfb2..HEAD`, judged against the pure-refactor / byte-identical-behavior bar. All three review layers converged on one finding; every geometry and AD-9 candidate was disproved against the baseline (bubble geometry, memo move/resize/reseed math, and `commentAnchorPoint` all match the baseline expressions and precedence; the memo normalized math was already in the gesture layer pre-refactor, so relocating it to a sibling leaf is not an AD-9 regression). No files modified during review.
+
+### Review Findings
+
+- [x] **[Review][Patch] Medium — Guarded style-patch actions were no longer true Zustand no-ops** [`client/src/store/index.ts`] — RESOLVED. The new `patchStyle` helper correctly returns the SAME `annotations` Map on a failed guard / unknown id (so zundo's `a.annotations === b.annotations` equality still suppresses history), BUT each caller wrapped it in a fresh `{ annotations: sameMap }` root object. Zustand's `setState` sees a non-identical root and notifies whole-store subscribers — whereas the pre-refactor inline bodies returned `state` (root identity preserved, no notification). Failure: `resizeCommentAnnotation("missing", …)` (or any guarded no-op) churns every store subscriber. Codex verified empirically (baseline 0 subscriber calls, refactored 1). **Fix:** each caller now returns `state` when `patchStyle(...) === state.annotations`, else `{ annotations }` — restoring the exact baseline root-identity no-op. Added a regression test asserting root-state identity across all three patchers on a guarded/unknown-id no-op. Store suite 100 green; full suite 1664 green; typecheck clean.
 
 ## Change Log
 
@@ -216,3 +225,4 @@ Layer note (AD-9): the memo/bubble geometry leaves live in the `annotations/` la
 |------|---------|-------------|--------|
 | 2026-07-19 | 0.1 | Story created (terminal Epic-10 refactor; primary targets: CommentBubble/CommentPreview near-twin, useEditGesture.computeAnchor memo branch, three single-id store style patchers) | Wonseok |
 | 2026-07-19 | 0.2 | Implemented: `bubbleGeometry.ts` + `memoBoxGeometry.ts` leaves, `patchStyle` store helper, `commentAnchorPoint` dedup. Full suite 1663 green, typecheck + build clean, net −64 source lines. Status → review. | Dev (Opus 4.8) |
+| 2026-07-19 | 0.3 | Codex review: fixed 1 Medium (guarded no-ops now preserve the Zustand root-state reference), added root-identity regression test. Full suite 1664 green. | Dev (Opus 4.8) |

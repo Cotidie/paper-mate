@@ -599,6 +599,24 @@ describe("resizeCommentAnnotation (comment bubble resize, user feature request)"
     useAnnotationStore.getState().resizeCommentAnnotation("missing", { width: 300, height: 180 }, "2026-07-03T12:00:00Z");
     expect(useAnnotationStore.getState().annotations.size).toBe(0);
   });
+
+  // Story 10.9 refactor guard: the shared `patchStyle` helper returns the SAME
+  // Map on a no-op, and each caller must return the SAME ROOT `state` (not
+  // `{ annotations: sameMap }`) — a new root object would make Zustand notify
+  // whole-store subscribers on a guarded/unknown-id no-op, which the old inline
+  // bodies did not. Covers all three single-id style patchers.
+  it("a guarded/unknown-id no-op preserves the root state reference (no subscriber churn) for all three patchers", () => {
+    const s = useAnnotationStore.getState();
+    s.addAnnotation(commentMark("c", "2026-07-19T00:00:01Z"));
+    s.addAnnotation(memoMark("m", { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.5 }, "2026-07-19T00:00:01Z"));
+    const before = useAnnotationStore.getState();
+    // resizeCommentAnnotation on a non-comment; resizeCollapsedMemo on a non-memo;
+    // repositionCommentAnnotation on an unknown id — each a guarded no-op.
+    useAnnotationStore.getState().resizeCommentAnnotation("m", { width: 300, height: 180 }, "2026-07-19T12:00:00Z");
+    useAnnotationStore.getState().resizeCollapsedMemo("c", 0.15, "2026-07-19T12:00:00Z");
+    useAnnotationStore.getState().repositionCommentAnnotation("missing", { x: 5, y: 5 }, "2026-07-19T12:00:00Z");
+    expect(useAnnotationStore.getState()).toBe(before); // root identity unchanged
+  });
 });
 
 describe("resizeCollapsedMemo (resizable collapsed memo box WIDTH, Story 10.4)", () => {
