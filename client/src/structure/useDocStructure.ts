@@ -29,6 +29,10 @@ export function useDocStructure(docId: string | null): DocStructureState {
       return;
     }
     let cancelled = false;
+    // Clear the previous doc's structure IMMEDIATELY on a doc switch, so B never
+    // renders A's elements during the in-flight fetch (they are page-anchored to
+    // a different document).
+    setStructure(EMPTY_STRUCTURE);
     setLoading(true);
     void (async () => {
       try {

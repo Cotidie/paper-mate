@@ -326,7 +326,17 @@ development_status:
   10-4-structure-backed-reading-helper: backlog              # FR-27 reframed; SUPERSEDES 12-3 (depends on 10-1)
   10-5-structure-backed-metadata: backlog                     # LFR-8 upgraded (depends on 10-1)
   10-6-structure-derived-digest: backlog                      # FR-37 (directional, Phase-3 groundwork; depends on 10-1)
-  10-7-epic-10-structural-refactor: backlog                   # terminal refactor (AE7-5)
+  # 2026-07-20 correct-course (sprint-change-proposal-2026-07-20-metadata-semantic-scholar-first.md):
+  # user decision to prioritize Semantic Scholar over Crossref for enrichment (S2 wins
+  # title/year/venue-full/venue-short/author-names; Crossref demoted to fallback +
+  # reserved for later AI features needing detailed authors + references). venue_short =
+  # shortest alternate_name. Motivated by Crossref's source-truncated title on DOI
+  # 10.14778/3514061.3514067. Independent of the structure layer (does NOT consume 10-1);
+  # resolves the Library-PRD open question (which enrich service + by what key). Inserted
+  # as 10-7 and the terminal refactor renumbered 10-7 -> 10-8 so the refactor stays LAST
+  # (AE7-5, number = exec order).
+  10-7-metadata-enrichment-semantic-scholar-first: ready-for-dev  # LFR-9 (S2-first enrich; independent of 10-1)
+  10-8-epic-10-structural-refactor: backlog                   # terminal refactor (AE7-5); runs LAST
   epic-10-retrospective: optional
 
   # Epic 11: Annotation blocks -- textbox, image & clipboard (post-v1, Phase-2).

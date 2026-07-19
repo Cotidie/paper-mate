@@ -47,7 +47,15 @@ def write_structure(doc_id: str, structure: DocStructure) -> None:
         "schema_version": STRUCTURE_SCHEMA_VERSION,
         "elements": [e.model_dump(mode="json") for e in structure.elements],
     }
-    atomic_write(doc_dir / "structure.json", json.dumps(payload, indent=2).encode("utf-8"))
+    # create_parents=False: if the doc dir was purged between the meta check
+    # above and this write, fail rather than recreate a structure-only dir that
+    # reconcile_library would later resurrect as an Uncategorized paper (mirrors
+    # meta_store/touch_last_opened's purge-race guard).
+    atomic_write(
+        doc_dir / "structure.json",
+        json.dumps(payload, indent=2).encode("utf-8"),
+        create_parents=False,
+    )
 
 
 def read_structure(doc_id: str) -> DocStructure:
@@ -76,12 +84,19 @@ def read_structure(doc_id: str) -> DocStructure:
         return DocStructure()  # imported but not yet analyzed -- empty, not an error
     try:
         payload = json.loads(structure_path.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
         raise CorruptStructureError(f"unreadable structure.json: {exc}") from exc
     version = payload.get("schema_version") if isinstance(payload, dict) else None
     if version != STRUCTURE_SCHEMA_VERSION:
         raise UnsupportedSchemaError(f"unknown structure schema_version: {version!r}")
+    # A well-formed file always carries an `elements` LIST. A missing/non-list
+    # `elements` is corrupt data (not an empty structure) -- reject it as 500
+    # rather than silently returning empty (the "no structure.json at all" case
+    # is the empty-not-error one, handled above).
+    raw_elements = payload.get("elements")
+    if not isinstance(raw_elements, list):
+        raise CorruptStructureError("structure.json 'elements' is missing or not a list")
     try:
-        return DocStructure.model_validate({"elements": payload.get("elements", [])})
+        return DocStructure.model_validate({"elements": raw_elements})
     except ValidationError as exc:
         raise CorruptStructureError(f"invalid structure.json shape: {exc}") from exc

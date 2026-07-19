@@ -20,7 +20,7 @@ dependencies = [
     # arXiv venue/year fallback (fix request): the maintained client library
     # (lukasschwab/arxiv.py) over hand-rolled Atom-XML parsing.
     "arxiv==4.0.0",
-    "opendataloader-pdf>=2.5.0",
+    "opendataloader-pdf==2.5.0",
 ]
 
 [dependency-groups]

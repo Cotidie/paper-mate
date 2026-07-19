@@ -38,13 +38,22 @@ const TYPE_COLOR: Record<StructureElement["type"], string> = {
 };
 
 // A tiny module-level cache so N live PageCards don't each fire a fetch for the
-// same doc's structure (dev-only; a plain per-doc promise memo).
+// same doc's structure (dev-only; a plain per-doc promise memo). An EMPTY or
+// FAILED result is NOT cached (the entry is evicted): a paper opened while its
+// background extraction is still running returns empty, and a later re-toggle /
+// re-mount must be able to re-fetch the settled structure rather than being
+// stuck on the transient empty (Codex review).
 const structureCache = new Map<string, Promise<DocStructure>>();
 
 function loadStructure(docId: string): Promise<DocStructure> {
   let pending = structureCache.get(docId);
   if (!pending) {
-    pending = getStructure(docId).catch(() => EMPTY_STRUCTURE);
+    pending = getStructure(docId)
+      .catch(() => EMPTY_STRUCTURE)
+      .then((s) => {
+        if (s.elements.length === 0) structureCache.delete(docId); // don't cache empty/failed
+        return s;
+      });
     structureCache.set(docId, pending);
   }
   return pending;

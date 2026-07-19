@@ -223,9 +223,13 @@ def extract_structure(pdf_bytes: bytes) -> DocStructure:
 
     The domain surface: delegates to the default adapter (opendataloader).
     **Total** -- any failure returns ``DocStructure()``, never raises -- so the
-    background import pipeline can call it without a guard of its own.
+    background import pipeline can call it without a guard of its own. Also
+    enforces the return CONTRACT: a swapped adapter that returns a non-
+    ``DocStructure`` (e.g. ``None``) is coerced to an empty structure rather than
+    leaking an off-contract value downstream.
     """
     try:
-        return _default_extractor.extract(pdf_bytes)
+        result = _default_extractor.extract(pdf_bytes)
     except Exception:
         return DocStructure()
+    return result if isinstance(result, DocStructure) else DocStructure()

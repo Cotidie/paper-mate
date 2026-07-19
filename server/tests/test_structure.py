@@ -141,6 +141,17 @@ def test_extract_structure_total_when_run_raises(monkeypatch):
     assert extract_structure(make_pdf_bytes()) == DocStructure()
 
 
+def test_extract_structure_coerces_off_contract_adapter_result(monkeypatch):
+    # A swapped adapter that returns a non-DocStructure (here None) without
+    # raising must be coerced to an empty structure, never leaked downstream.
+    class BadAdapter:
+        def extract(self, pdf_bytes):
+            return None
+
+    monkeypatch.setattr(structure_mod, "_default_extractor", BadAdapter())
+    assert extract_structure(make_pdf_bytes()) == DocStructure()
+
+
 def test_adapter_maps_when_run_returns_tree(monkeypatch):
     # Feed the adapter a captured raw tree via _run (no JVM) + a real 1-page PDF
     # so _page_dims resolves; assert it produces mapped elements.
@@ -205,6 +216,49 @@ def test_structure_store_rejects_bad_shape(data_root):
     path.write_text(json.dumps({"schema_version": 1, "elements": [{"nope": 1}]}))
     with pytest.raises(storage.CorruptStructureError):
         storage.read_structure(doc_id)
+
+
+def test_structure_store_rejects_missing_elements_key(data_root):
+    # A file with a valid schema_version but NO `elements` list is corrupt data,
+    # not an empty structure (only an absent structure.json is empty-not-error).
+    doc_id = _import(make_pdf_bytes())
+    path = data_root / "library" / doc_id / "structure.json"
+    path.write_text(json.dumps({"schema_version": 1}))
+    with pytest.raises(storage.CorruptStructureError):
+        storage.read_structure(doc_id)
+    path.write_text(json.dumps({"schema_version": 1, "elements": "notalist"}))
+    with pytest.raises(storage.CorruptStructureError):
+        storage.read_structure(doc_id)
+
+
+def test_structure_store_rejects_non_utf8(data_root):
+    doc_id = _import(make_pdf_bytes())
+    path = data_root / "library" / doc_id / "structure.json"
+    path.write_bytes(b"\xff\xfe\x00bad bytes")
+    with pytest.raises(storage.CorruptStructureError):
+        storage.read_structure(doc_id)
+
+
+def test_structure_store_write_does_not_recreate_purged_dir(data_root, monkeypatch):
+    # create_parents=False: a purge landing BETWEEN the meta-read gate and the
+    # write must make the write fail, not resurrect a structure-only doc dir
+    # (which reconcile_library would re-add as an Uncategorized paper). Simulate
+    # the race by letting the meta gate pass while the dir is already gone.
+    import shutil
+
+    from app.storage import meta_store, structure_store
+
+    doc_id = _import(make_pdf_bytes())
+    doc_dir = data_root / "library" / doc_id
+    meta = meta_store.read(doc_dir)
+    shutil.rmtree(doc_dir)  # the "purge" between gate and write
+    monkeypatch.setattr(structure_store.meta_store, "read", lambda _dir: meta)  # gate passes
+    # atomic_write(create_parents=False) on a missing dir wraps the OSError as
+    # StorageError (the caller's { detail } mapping catches it) and does NOT
+    # recreate the dir.
+    with pytest.raises(storage.StorageError):
+        storage.write_structure(doc_id, DocStructure())
+    assert not doc_dir.exists()  # NOT recreated
 
 
 # --- route ------------------------------------------------------------------

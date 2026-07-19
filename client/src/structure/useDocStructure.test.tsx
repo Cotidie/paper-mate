@@ -59,4 +59,31 @@ describe("useDocStructure", () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.structure).toEqual({ elements: [] });
   });
+
+  it("clears the previous doc's structure immediately on a doc switch", async () => {
+    // A resolves to a non-empty structure; switching to B (fetch still pending)
+    // must NOT keep showing A's elements while B loads.
+    mockGet.mockResolvedValueOnce(sample);
+    const { result, rerender } = renderHook(({ id }) => useDocStructure(id), {
+      initialProps: { id: "doc-a" as string | null },
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.structure).toEqual(sample); // A loaded
+
+    let releaseB!: (s: DocStructure) => void;
+    mockGet.mockReturnValueOnce(new Promise<DocStructure>((r) => (releaseB = r)));
+    await act(async () => {
+      rerender({ id: "doc-b" });
+    });
+    // B's fetch is in flight: A's structure is gone (empty), not stale.
+    expect(result.current.structure).toEqual({ elements: [] });
+    // settle B to avoid a dangling promise.
+    await act(async () => {
+      releaseB({ elements: [] });
+      await Promise.resolve();
+    });
+  });
 });

@@ -152,9 +152,36 @@ So that a later AI feature can be given accurate paper context by default.
 
 > **Out of scope:** ALL Phase-3 AI/agent work (Q&A, vendor switching, click-to-chat); token-budgeting/chunking the digest for a model. **Open design calls for create-story:** where the digest lives (server field vs client derivation); whether it ships at all this epic or waits for Phase-3; format (markdown vs structured sections).
 
-## Story 10.7: Epic 10 structural refactor (terminal)
+## Story 10.7: Prioritize Semantic Scholar over Crossref for metadata enrichment
 
-> Terminal structural-refactor pass (AE7-5), same footing as Stories 5.0/5.3/5.4/6.8/8.10/9.9. Sequenced LAST so its scope reflects everything Stories 10.1-11.6 touched: the `domain/structure.py` extraction seam + adapter, the `structure/` client service + its consumers (TOC, index, reading-helper, metadata), and any coordinate-mapping helper. No new FR, no behavior/contract change.
+> Added 2026-07-20 via correct-course (`sprint-change-proposal-2026-07-20-metadata-semantic-scholar-first.md`). A live diagnostic on DOI `10.14778/3514061.3514067` (TranAD) found Crossref registers a **source-truncated** title (`TranAD`) that our DOI-first `enrich()` takes verbatim (no plausibility gate on the DOI path), overwriting the correct local title `TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data`. Field-by-field, **Semantic Scholar** is the better source for title, year, venue (full + short), and author display names; **Crossref** is better for full-given author names + reference graphs, so it is **demoted to fallback and reserved for later AI features** (paper digest, citation-aware chat). This **resolves the Library-PRD open question** (which external metadata service, and by what key). New reader/library **LFR-9** (reframed: S2-primary, Crossref-fallback). An enrich-source change behind the existing `enrich(meta) -> meta | "skipped"` seam (AD-L2); **independent of the structure layer** (does NOT consume Story 10-1). Interacts with Story 10-5 on the title field (10-5 improves the LOCAL title candidate; this improves the EXTERNAL correction + guards against a bad overwrite) — sequence deliberately.
+
+As a reader,
+I want metadata enriched from Semantic Scholar first, with Crossref as the fallback,
+So that my library rows show the correct full title and a clean venue instead of the truncated or worse values Crossref sometimes registers.
+
+**Acceptance Criteria:**
+
+**Given** a paper with a resolvable DOI (or arXiv id, or a confident title match)
+**Then** Semantic Scholar is the **primary** source for `title`, `year`, `venue`, `venue_short`, and author display names (`authors_list`), replacing the Crossref-first order; the truncated-title DOI `10.14778/3514061.3514067` resolves to the FULL title (LFR-9)
+
+**Given** Semantic Scholar skips (offline, non-200, rate-limited, or no match)
+**Then** Crossref fills the same fields as the fallback (its existing cascade), and if Crossref also skips the local `extract()` values survive; `crossref.py` stays in the codebase as the fallback + the reserved detailed-author/reference source for future AI features (LFR-9, AD-L2)
+
+**Given** Semantic Scholar's `publicationVenue.alternate_names`
+**Then** `venue_short` is the **shortest** entry (ties -> first), not the acronym-shape-only scan of Story 8.5 (which returns nothing for multi-word venues like VLDB)
+
+**Given** any failure at any hop (S2 or Crossref: offline, timeout, 429 rate-limit, malformed)
+**Then** enrichment degrades to `"skipped"` and the paper still settles (`ready | enrich-skipped | parse-failed`), never raises, never blocks the add; a 429 is a normal skip, not an error notice (NFR-1/NFR-3)
+
+**Given** whichever source wins
+**Then** a strictly-shorter title that is a prefix/substring of a better one never overwrites it (a targeted guard that kills the truncation class regardless of source), and the change is additive behind the existing seam: no new `DocMeta`/`CollectionRow` field, no `schema_version` bump, no route change, new-imports-only
+
+> **Out of scope:** backfill of already-imported papers; a heavy retry/queue for S2 rate limits (a 429 is just a skip this story); consuming Crossref's detailed authors/references (reserved for a future AI-features story). **Open design calls for create-story:** the S2 lookup-key order (DOI -> arXiv id -> title-search) and the title-search plausibility gate; whether `journal.name` beats the shortest `alternate_names` for `venue_short`; whether to read an optional `S2_API_KEY` env for a higher rate limit.
+
+## Story 10.8: Epic 10 structural refactor (terminal)
+
+> Terminal structural-refactor pass (AE7-5), same footing as Stories 5.0/5.3/5.4/6.8/8.10/9.9. Sequenced LAST so its scope reflects everything Stories 10.1-10.7 touched: the `domain/structure.py` extraction seam + adapter, the `structure/` client service + its consumers (TOC, index, reading-helper, metadata), the enrich-source cascade (10.7), and any coordinate-mapping helper. No new FR, no behavior/contract change.
 
 As a developer-user,
 I want the structure-layer code unified behind cohesive modules with reduced conditional sprawl,
@@ -162,13 +189,13 @@ So that Phase-3 builds on clean boundaries instead of accreting patches onto the
 
 **Acceptance Criteria:**
 
-**Given** every file Stories 10.1-11.6 touched (finalize the list once they land)
+**Given** every file Stories 10.1-10.7 touched (finalize the list once they land)
 **Then** each is audited for the same smells 5.3/6.8/8.10/9.9 targeted (god-objects/god-functions, near-duplicate conditional branches that should be one descriptor/registry, coordinate math outside the anchor boundary AD-9), and recorded decomposed-or-left-clean with rationale
 
-**Given** the extraction adapter + the client `structure/` service + its consumers
-**Then** their shared concerns (marker→element resolution, element-type dispatch, points→normalized mapping) are unified behind cohesive units rather than parallel per-consumer conditionals
+**Given** the extraction adapter + the client `structure/` service + its consumers + the enricher cascade
+**Then** their shared concerns (marker→element resolution, element-type dispatch, points→normalized mapping, enricher-source fallback) are unified behind cohesive units rather than parallel per-consumer conditionals
 
 **Given** this is a pure refactor thread
 **Then** it changes NO behavior and NO contract: every existing test still passes unmodified in intent; no structure-contract / storage / API change; lands in its own PR(s)
 
-> **Out of scope:** any new capability; touching modules Epic 10 did not touch; the deferred OCR/hybrid path. **Open design calls for create-story:** the exact module boundaries; final scope depends on which of 10.1-11.6 shipped.
+> **Out of scope:** any new capability; touching modules Epic 10 did not touch; the deferred OCR/hybrid path. **Open design calls for create-story:** the exact module boundaries; final scope depends on which of 10.1-10.7 shipped.
