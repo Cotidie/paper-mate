@@ -10,7 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import { denormalizeRect, denormalizePoint, type PageCardRef } from "@/anchor";
 import { useAnnotationStore, MEMO_SIZES, type MemoSize } from "@/store";
 import type { Annotation } from "@/api/client";
-import { clampToViewport, QUICK_BOX_GAP } from "@/annotations/position";
+import { clampToViewport, placeBesideSelection, QUICK_BOX_GAP, type SelectionRect } from "@/annotations/position";
 import { quickBoxSpec, usesLeftVerticalQuickBox, hasOwnTextEntry, type QuickBoxSpec } from "@/annotations/marks";
 import { isExempt } from "./shared";
 import { isEditableTarget } from "@/lib/domFocus";
@@ -40,8 +40,8 @@ export interface SelectionApi {
   showSelectionBox: boolean;
   /** Ref for the selection quick-box element (focus + outside-click + clamp). */
   selectionBoxRef: RefObject<HTMLDivElement | null>;
-  /** The box's anchor point (viewport px), re-derived so it tracks zoom. */
-  selectionPoint: () => { x: number; y: number };
+  /** The selected mark's viewport BOUNDS, re-derived so it tracks zoom. */
+  selectionBounds: () => SelectionRect;
   /** The size step the memo size picker shows armed (the memo's OWN size). */
   selectedMemoSize: () => MemoSize;
   recolorSelected: (color: string) => void;
@@ -303,16 +303,18 @@ export function useSelection(opts: {
       (selectedAnno.anchor.kind === "path" && selectedAnno.anchor.points.length > 0) ||
       selectedAnno.anchor.kind === "rect");
 
-  // Project the selected mark to the box-anchor viewport point, re-derived from the
-  // anchor service so it tracks zoom (clamped in layout). Anchored just BELOW the
-  // mark (left-aligned to its start) so the floating box never covers it. Reads
-  // `effectiveAnchor` (not `selectedAnno.anchor` directly) so a move/resize drag
-  // — live preview OR just-committed — is reflected immediately (bug fix above).
-  // `useCallback` (not a plain function): `repositionBox` below is ALSO a
-  // `useCallback` that calls this one, memoized separately on `isVerticalQuickBox`
-  // — if this were a plain function (redefined fresh every render, the old
-  // shape), `repositionBox` would close over whichever `selectionPoint` existed
-  // the last time `isVerticalQuickBox` actually changed, not the latest one, since
+  // Project the selected mark to its box-anchor viewport BOUNDS (Story 10.6:
+  // `repositionBox` now needs the full rect, not just a point, to feed
+  // `placeBesideSelection`'s right/flip-left decision for text marks), re-
+  // derived from the anchor service so it tracks zoom (clamped in layout).
+  // Reads `effectiveAnchor` (not `selectedAnno.anchor` directly) so a
+  // move/resize drag — live preview OR just-committed — is reflected
+  // immediately (bug fix above). `useCallback` (not a plain function):
+  // `repositionBox` below is ALSO a `useCallback` that calls this one,
+  // memoized separately on `isVerticalQuickBox` — if this were a plain
+  // function (redefined fresh every render, the old shape), `repositionBox`
+  // would close over whichever `selectionBounds` existed the last time
+  // `isVerticalQuickBox` actually changed, not the latest one, since
   // `useCallback` discards a new closure whenever its deps compare equal. That
   // stale closure kept its `effectiveAnchor` frozen from an EARLIER selection
   // (or from mount, `null`), so re-anchoring on scroll (or even the plain
@@ -321,42 +323,59 @@ export function useSelection(opts: {
   // Bank jump to a highlight on another page landed the box at the stale
   // point, clamped to the viewport's top-left corner (bug fix). Depend on
   // every value actually read inside.
-  const selectionPoint = useCallback((): { x: number; y: number } => {
-    if (!selectedAnno || !effectiveAnchor) return { x: 0, y: 0 };
+  const selectionBounds = useCallback((): SelectionRect => {
+    const zero: SelectionRect = { left: 0, top: 0, right: 0, bottom: 0 };
+    if (!selectedAnno || !effectiveAnchor) return zero;
     const page = getPagesRef.current().find((p) => p.pageIndex === effectiveAnchor.page_index);
-    if (!page) return { x: 0, y: 0 };
+    if (!page) return zero;
     const cardRect = page.cardEl.getBoundingClientRect();
     const s = scaleRef.current;
     if (effectiveAnchor.kind === "text" && effectiveAnchor.rects.length > 0) {
       const rects = effectiveAnchor.rects;
       const first = denormalizeRect(rects[0], page.box, s);
+      let right = first.left + first.width;
       let bottom = first.top + first.height;
       for (const r of rects) {
         const p = denormalizeRect(r, page.box, s);
+        right = Math.max(right, p.left + p.width);
         bottom = Math.max(bottom, p.top + p.height);
       }
-      return { x: cardRect.left + first.left, y: cardRect.top + bottom + QUICK_BOX_GAP };
+      return {
+        left: cardRect.left + first.left,
+        top: cardRect.top + first.top,
+        right: cardRect.left + right,
+        bottom: cardRect.top + bottom,
+      };
     }
     if (effectiveAnchor.kind === "path" && effectiveAnchor.points.length > 0) {
       let left = Infinity;
+      let top = Infinity;
+      let right = -Infinity;
       let bottom = -Infinity;
       for (const pt of effectiveAnchor.points) {
         const d = denormalizePoint(pt, page.box, s);
         left = Math.min(left, d.x);
+        top = Math.min(top, d.y);
+        right = Math.max(right, d.x);
         bottom = Math.max(bottom, d.y);
       }
-      return { x: cardRect.left + left, y: cardRect.top + bottom + QUICK_BOX_GAP };
+      return {
+        left: cardRect.left + left,
+        top: cardRect.top + top,
+        right: cardRect.left + right,
+        bottom: cardRect.top + bottom,
+      };
     }
     if (effectiveAnchor.kind === "rect") {
-      // A memo: anchor to the box's top-LEFT corner, top-aligned (user fix request
-      // — anchoring BELOW the box, like the other kinds, covered the
-      // .memo-collapse-toggle straddling the box's bottom-center edge). The
-      // leftward shift by the quick-box's own (now vertical) width happens in the
-      // layout effect below, once it's measured.
       const r = denormalizeRect(effectiveAnchor.rect, page.box, s);
-      return { x: cardRect.left + r.left, y: cardRect.top + r.top };
+      return {
+        left: cardRect.left + r.left,
+        top: cardRect.top + r.top,
+        right: cardRect.left + r.left + r.width,
+        bottom: cardRect.top + r.top + r.height,
+      };
     }
-    return { x: 0, y: 0 };
+    return zero;
   }, [selectedAnno, effectiveAnchor, getPagesRef, scaleRef]);
 
   // The size step the memo size picker shows ARMED: the SELECTED memo's OWN size
@@ -381,16 +400,24 @@ export function useSelection(opts: {
   const repositionBox = useCallback(() => {
     const el = selectionBoxRef.current;
     if (!el) return;
-    const { x, y } = selectionPoint();
+    const b = selectionBounds();
     const rect = el.getBoundingClientRect();
-    // A memo or a box comment's quick-box sits to the LEFT of the mark, so shift
-    // by the box's own (measured) width + gap; every other kind anchors below and
-    // needs no shift.
-    const shiftedX = isVerticalQuickBox ? x - rect.width - QUICK_BOX_GAP : x;
-    const c = clampToViewport(shiftedX, y, rect.width, rect.height, window.innerWidth, window.innerHeight);
+    let c: { x: number; y: number };
+    if (isVerticalQuickBox) {
+      // Memo, box comment, or box highlight: LEFT shift by the box's own
+      // (measured) width + gap — unchanged from before Story 10.6.
+      c = clampToViewport(b.left - rect.width - QUICK_BOX_GAP, b.top, rect.width, rect.height, window.innerWidth, window.innerHeight);
+    } else if (effectiveAnchor?.kind === "text") {
+      // A selected text mark (highlight/underline): beside the selection —
+      // right by default, flip-left/below on overflow (Story 10.6, AC #1/#2).
+      c = placeBesideSelection(b, rect.width, rect.height, window.innerWidth, window.innerHeight);
+    } else {
+      // Pen (path): BELOW anchor — unchanged from before Story 10.6.
+      c = clampToViewport(b.left, b.bottom + QUICK_BOX_GAP, rect.width, rect.height, window.innerWidth, window.innerHeight);
+    }
     el.style.left = `${c.x}px`;
     el.style.top = `${c.y}px`;
-  }, [isVerticalQuickBox, selectionPoint]);
+  }, [isVerticalQuickBox, effectiveAnchor, selectionBounds]);
 
   // Tracks the scale this effect last ran at, so it can tell "the scale just
   // changed" apart from "opened/selection changed at the same scale" (fix
@@ -470,7 +497,7 @@ export function useSelection(opts: {
     selectedSpec,
     showSelectionBox,
     selectionBoxRef,
-    selectionPoint,
+    selectionBounds,
     selectedMemoSize,
     recolorSelected,
     restrokeSelected,

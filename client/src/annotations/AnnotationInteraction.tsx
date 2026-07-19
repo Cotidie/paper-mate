@@ -20,6 +20,7 @@
 // NOT on `.pdf-canvas`. Layering (AD-9): this lives in annotations/, consuming
 // anchor/ + store/ only; render/ stays annotation-free (geometry via `getPages`).
 
+import { useLayoutEffect } from "react";
 import { Highlighter, TextUnderline, ChatCircle, TextT, Trash } from "@phosphor-icons/react";
 import type { PageCardRef, ScreenRect } from "@/anchor";
 import { denormalizeRect } from "@/anchor";
@@ -41,7 +42,7 @@ import { useLiveRef } from "@/hooks/useLiveRef";
 import { useTextEditSession } from "./useTextEditSession";
 import { inActiveGroup, commentGroupIds } from "./markGeometry";
 import { isBoxComment, usesLeftVerticalQuickBox } from "./marks";
-import { rightOf } from "./position";
+import { rightOf, placeBesideSelection, clampToViewport } from "./position";
 import ColorSwatchRow from "./ColorSwatchRow";
 import StrokeWidthRow from "./StrokeWidthRow";
 import AlphaRow from "./AlphaRow";
@@ -210,6 +211,31 @@ export default function AnnotationInteraction({
     rectReaderRef,
     boxActive: boxMode != null,
   });
+  // The CREATE quick-box's SOLE position writer (Story 10.6): declarative
+  // left/top from raw geometry + this effect both writing would fight on
+  // re-render (see the identical comment on the selection box below) — text
+  // drag → beside the selection (right, flip-left, or below, always
+  // viewport-clamped); empty click → the click point, clamped. Keyed on
+  // `pendingGeometry` so it re-runs on the existing scroll/resize/zoom
+  // recompute (AC #7); `useLayoutEffect` runs before paint, so there is no
+  // (0,0) flash on first open.
+  useLayoutEffect(() => {
+    const el = quickBoxRef.current;
+    if (!el || !pendingGeometry) return;
+    const rect = el.getBoundingClientRect();
+    const { x, y } = pendingGeometry.selRect
+      ? placeBesideSelection(pendingGeometry.selRect, rect.width, rect.height, window.innerWidth, window.innerHeight)
+      : clampToViewport(
+          pendingGeometry.boxAt!.x,
+          pendingGeometry.boxAt!.y,
+          rect.width,
+          rect.height,
+          window.innerWidth,
+          window.innerHeight,
+        );
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+  }, [pendingGeometry]);
   // True while a gesture OTHER than a plain text drag owns the pointer — Pen,
   // Memo, a box mode, or the multi-select marquee — each with its OWN gesture
   // path that never reads the text selection. Named separately from the
@@ -302,7 +328,7 @@ export default function AnnotationInteraction({
   // A comment's live VIEWPORT position: denormalize its anchor against its own
   // page's box + scale (card-local px), then add that page card's LIVE
   // `getBoundingClientRect()` offset — the same two-step `useSelection.ts`'s
-  // `selectionPoint()` uses for the generic quick-box above. `null` when the
+  // `selectionBounds()` uses for the generic quick-box above. `null` when the
   // page isn't mounted, or a text anchor has no rects (nothing to point at).
   const commentScreenPoint = (a: Annotation): ScreenRect | null => {
     const liveAnchor = commentDragAnchor(a);
@@ -311,7 +337,18 @@ export default function AnnotationInteraction({
     let local: ScreenRect | null = null;
     if (liveAnchor.kind === "text") {
       if (liveAnchor.rects.length === 0) return null;
-      local = denormalizeRect(liveAnchor.rects[0], page.box, scaleRef.current);
+      // Bounds across ALL rects (fix request: mirrors useSelection.ts's
+      // selectionBounds), not just the first — a multi-line text comment must
+      // shift beside its WIDEST line, not whichever line happens to be first.
+      const first = denormalizeRect(liveAnchor.rects[0], page.box, scaleRef.current);
+      let right = first.left + first.width;
+      let bottom = first.top + first.height;
+      for (const r of liveAnchor.rects) {
+        const d = denormalizeRect(r, page.box, scaleRef.current);
+        right = Math.max(right, d.left + d.width);
+        bottom = Math.max(bottom, d.top + d.height);
+      }
+      local = { left: first.left, top: first.top, width: right - first.left, height: bottom - first.top };
     } else if (liveAnchor.kind === "rect") {
       local = denormalizeRect(liveAnchor.rect, page.box, scaleRef.current);
     }
@@ -325,8 +362,15 @@ export default function AnnotationInteraction({
     };
   };
   const selectedCommentCompact = selectedComment ? isBoxComment(selectedComment) : false;
+  // Whether a comment's bubble/preview floats BESIDE its anchor (rightOf: a
+  // real region OR a text-drag comment, fix request) instead of NUDGED BELOW
+  // its pin (a degenerate click-placed pin, kind=rect with no area — no
+  // selection to sit beside, so it keeps the pre-existing below-pin nudge).
+  // Distinct from the chrome-only `compact` prop below: a text comment now
+  // positions like a box comment but keeps its own full internal controls.
+  const commentBesideAnchor = (a: Annotation): boolean => isBoxComment(a) || a.anchor.kind === "text";
   // The selected comment's LIVE viewport anchor (the pin's screen point, shifted
-  // beside the highlight for a box comment). A FUNCTION, not a snapshot, so the
+  // beside the highlight/selection). A FUNCTION, not a snapshot, so the
   // bubble can re-derive it on scroll/resize/zoom (it is position: fixed) —
   // `commentScreenPoint` reads the page card's live getBoundingClientRect +
   // scaleRef each call. `selectedCommentPoint` below is just the render-time
@@ -335,7 +379,7 @@ export default function AnnotationInteraction({
     if (!selectedComment) return null;
     const raw = commentScreenPoint(selectedComment);
     if (!raw) return null;
-    return selectedCommentCompact ? rightOf(raw) : raw;
+    return commentBesideAnchor(selectedComment) ? rightOf(raw) : raw;
   };
   const selectedCommentPoint = getSelectedCommentPoint();
 
@@ -416,13 +460,15 @@ export default function AnnotationInteraction({
         // only). Click on empty page → Comment+Memo (icon only). Machine, shell,
         // and focus-in/return plumbing unchanged; position/clamp/dismiss-on-
         // scroll replaced by the live-tracking geometry above (Story 4.x fix).
+        // No left/top style here (Story 10.6, same double-write hazard as the
+        // selection box below): the imperative layout effect above is the SOLE
+        // writer of this element's position.
         <div
           ref={quickBoxRef}
           className="quick-box"
           role="menu"
           aria-label="Annotation tools"
           data-testid="quick-box"
-          style={{ left: pendingGeometry?.boxAt.x ?? pending.at.x, top: pendingGeometry?.boxAt.y ?? pending.at.y }}
         >
           {pending.selection.length > 0 ? (
             // Text drag: Highlight / Underline / Comment
@@ -495,7 +541,7 @@ export default function AnnotationInteraction({
           imperative `repositionBox` effect in useSelection.ts is the SOLE writer
           of this element's position (shift + viewport clamp, glued on scroll/
           resize/zoom via a ref, bypassing React reconciliation). If this JSX
-          ALSO set left/top from the raw, un-shifted/un-clamped `selectionPoint()`,
+          ALSO set left/top from the raw, un-placed `selectionBounds()`,
           every re-render (a scale change causes one) would reset the DOM back to
           that raw value, fighting the imperative fix and reading as the box
           jumping between two different positions. */}
@@ -567,6 +613,7 @@ export default function AnnotationInteraction({
           getScreenPoint={getSelectedCommentPoint}
           scale={scale}
           compact={selectedCommentCompact}
+          besideAnchor={commentBesideAnchor(selectedComment)}
           onRetext={(_id, body) =>
             // Group-aware (Codex HIGH): a two-page comment is grouped siblings;
             // write the same body to ALL of them so reopening the other page's
@@ -601,14 +648,15 @@ export default function AnnotationInteraction({
       {commentPreviewMarks.map((a) => {
         const raw = commentScreenPoint(a);
         if (!raw) return null;
-        const compact = isBoxComment(a);
-        const pos = compact ? rightOf(raw) : raw;
+        const beside = commentBesideAnchor(a);
+        const pos = beside ? rightOf(raw) : raw;
         return (
           <CommentPreview
             key={a.id}
             anno={a}
             pos={pos}
-            compact={compact}
+            scale={scale}
+            compact={beside}
             hovered={inActiveGroup(a, hoveredId, annotations)}
             onRetext={(_id, body) =>
               // Group-aware, same as the full bubble's retext (see above).

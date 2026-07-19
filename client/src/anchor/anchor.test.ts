@@ -500,43 +500,43 @@ describe("rectsIntersect (box-select marquee hit-test, user feature request)", (
 describe("pendingSelectionGeometry (CREATE quick-box tracking, Story 4.x — selection survives zoom/scroll)", () => {
   const boxOf = (pageIndex: number): PageBox | null => (pageIndex === 0 || pageIndex === 1 ? box : null);
 
-  it("denormalizes a single-page selection and anchors below its bottom-most rect", () => {
+  it("denormalizes a single-page selection and anchors to its bounds (no gap: Story 10.6 moved the gap into placeBesideSelection)", () => {
     const selection: PageSelection[] = [
       { page_index: 0, text: "line one", rects: [{ x0: 0, y0: 0, x1: 0.5, y1: 0.1 }] },
     ];
-    const geom = pendingSelectionGeometry(selection, boxOf, 1, 6);
+    const geom = pendingSelectionGeometry(selection, boxOf, 1);
     expect(geom).not.toBeNull();
     expect(geom!.pages).toEqual([{ pageIndex: 0, rects: [{ left: 0, top: 0, width: 300, height: 80 }] }]);
-    // bottom = top(0) + height(80) = 80; +gap(6).
-    expect(geom!.anchor).toEqual({ pageIndex: 0, point: { x: 0, y: 86 } });
+    expect(geom!.anchor).toEqual({ pageIndex: 0, rect: { left: 0, top: 0, right: 300, bottom: 80 } });
   });
 
-  it("anchors below the LOWEST of multiple rects on the first page, left-aligned to the first rect", () => {
+  it("anchors to the MAX right / LOWEST bottom of multiple rects on the first page, left/top from the first rect", () => {
     const selection: PageSelection[] = [
       {
         page_index: 0,
         text: "two lines",
         rects: [
-          { x0: 0.1, y0: 0, x1: 0.5, y1: 0.05 }, // top..40
-          { x0: 0, y0: 0.1, x1: 0.4, y1: 0.2 }, // 80..160 (the lower one)
+          { x0: 0.1, y0: 0, x1: 0.5, y1: 0.05 }, // left 60, right 300, bottom 40
+          { x0: 0, y0: 0.1, x1: 0.4, y1: 0.2 }, // left 0, right 240, bottom 160 (the lower one)
         ],
       },
     ];
-    const geom = pendingSelectionGeometry(selection, boxOf, 1, 10);
-    // Anchored x = the FIRST rect's left (60), y = the lowest bottom (160) + gap.
-    expect(geom!.anchor).toEqual({ pageIndex: 0, point: { x: 60, y: 170 } });
+    const geom = pendingSelectionGeometry(selection, boxOf, 1);
+    // left/top from the FIRST rect (60, 0); right/bottom are the MAX across both rects.
+    expect(geom!.anchor).toEqual({ pageIndex: 0, rect: { left: 60, top: 0, right: 300, bottom: 160 } });
   });
 
   it("re-derives at double the pixels when scale doubles (scale-independent stored rects, live at any zoom)", () => {
     const selection: PageSelection[] = [
       { page_index: 0, text: "x", rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }] },
     ];
-    const at1 = pendingSelectionGeometry(selection, boxOf, 1, 6)!;
-    const at2 = pendingSelectionGeometry(selection, boxOf, 2, 6)!;
+    const at1 = pendingSelectionGeometry(selection, boxOf, 1)!;
+    const at2 = pendingSelectionGeometry(selection, boxOf, 2)!;
     expect(at2.pages[0].rects[0].left).toBeCloseTo(at1.pages[0].rects[0].left * 2);
     expect(at2.pages[0].rects[0].width).toBeCloseTo(at1.pages[0].rects[0].width * 2);
-    // The gap itself is a fixed viewport constant, not scaled.
-    expect(at2.anchor.point.y).toBeCloseTo(at1.anchor.point.y * 2 - 6);
+    // No gap term in the anchor rect any more, so every edge doubles cleanly.
+    expect(at2.anchor.rect.right).toBeCloseTo(at1.anchor.rect.right * 2);
+    expect(at2.anchor.rect.bottom).toBeCloseTo(at1.anchor.rect.bottom * 2);
   });
 
   it("anchors a multi-page selection to its FIRST page only (mirrors selecting created[0].id for a persisted mark)", () => {
@@ -544,18 +544,18 @@ describe("pendingSelectionGeometry (CREATE quick-box tracking, Story 4.x — sel
       { page_index: 0, text: "page 1 half", rects: [{ x0: 0, y0: 0.9, x1: 0.3, y1: 1 }] },
       { page_index: 1, text: "page 2 half", rects: [{ x0: 0, y0: 0, x1: 0.3, y1: 0.1 }] },
     ];
-    const geom = pendingSelectionGeometry(selection, boxOf, 1, 6);
+    const geom = pendingSelectionGeometry(selection, boxOf, 1);
     expect(geom!.anchor.pageIndex).toBe(0);
     expect(geom!.pages.map((p) => p.pageIndex)).toEqual([0, 1]);
   });
 
   it("returns null for an empty selection (the click-to-place case has no rects to derive from)", () => {
-    expect(pendingSelectionGeometry([], boxOf, 1, 6)).toBeNull();
+    expect(pendingSelectionGeometry([], boxOf, 1)).toBeNull();
   });
 
   it("returns null when the first page's box is unavailable (not currently mounted)", () => {
     const selection: PageSelection[] = [{ page_index: 9, text: "x", rects: [{ x0: 0, y0: 0, x1: 0.1, y1: 0.1 }] }];
-    expect(pendingSelectionGeometry(selection, boxOf, 1, 6)).toBeNull();
+    expect(pendingSelectionGeometry(selection, boxOf, 1)).toBeNull();
   });
 
   it("skips (does not throw for) a later page whose box is unavailable, keeping the pages it CAN resolve", () => {
@@ -563,7 +563,7 @@ describe("pendingSelectionGeometry (CREATE quick-box tracking, Story 4.x — sel
       { page_index: 0, text: "ok", rects: [{ x0: 0, y0: 0, x1: 0.1, y1: 0.1 }] },
       { page_index: 9, text: "missing", rects: [{ x0: 0, y0: 0, x1: 0.1, y1: 0.1 }] },
     ];
-    const geom = pendingSelectionGeometry(selection, boxOf, 1, 6);
+    const geom = pendingSelectionGeometry(selection, boxOf, 1);
     expect(geom!.pages).toEqual([
       { pageIndex: 0, rects: [{ left: 0, top: 0, width: 60, height: 80 }] },
       { pageIndex: 9, rects: [] },

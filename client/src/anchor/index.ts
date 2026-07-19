@@ -392,18 +392,20 @@ export interface PageCardRef {
 
 /** CARD-LOCAL geometry for the CREATE quick-box while a text-drag selection is
  *  pending (not yet a persisted `Annotation`): one preview rect per selected
- *  line per page, plus where the popup anchors. The caller adds each page's
- *  LIVE `getBoundingClientRect()` viewport offset to get final screen
- *  positions (untestable in jsdom — that step is live-smoke covered, not
- *  unit-tested; this function is the DOM-free part). */
+ *  line per page, plus the selection bounds the popup anchors beside. The
+ *  caller adds each page's LIVE `getBoundingClientRect()` viewport offset to
+ *  get final screen positions (untestable in jsdom — that step is live-smoke
+ *  covered, not unit-tested; this function is the DOM-free part). */
 export interface PendingSelectionGeometry {
   /** Per-selection-page CARD-LOCAL preview rects, in selection order. */
   pages: { pageIndex: number; rects: ScreenRect[] }[];
-  /** The popup's CARD-LOCAL anchor point (below the FIRST page's rects — a
-   *  multi-page selection's popup always tracks its first page, mirroring
+  /** The popup's CARD-LOCAL anchor BOUNDS (the FIRST page's selection rects —
+   *  a multi-page selection's popup always tracks its first page, mirroring
    *  `createTextTool`'s `select(created[0].id)` for a persisted mark) + which
-   *  page it's relative to. */
-  anchor: { pageIndex: number; point: { x: number; y: number } };
+   *  page it's relative to. `right`/`bottom` are the MAX right/bottom edge
+   *  across the first page's rects, so a multi-line selection's widest/lowest
+   *  line is fully cleared. */
+  anchor: { pageIndex: number; rect: { left: number; top: number; right: number; bottom: number } };
 }
 
 /**
@@ -425,7 +427,6 @@ export function pendingSelectionGeometry(
   selection: PageSelection[],
   boxOf: (pageIndex: number) => PageBox | null,
   scale: number,
-  gap: number,
 ): PendingSelectionGeometry | null {
   if (selection.length === 0) return null;
   const pages = selection.map((ps) => {
@@ -436,11 +437,18 @@ export function pendingSelectionGeometry(
   const firstPage = pages[0];
   if (firstPage.rects.length === 0) return null;
   const first = firstPage.rects[0];
+  let right = first.left + first.width;
   let bottom = first.top + first.height;
-  for (const r of firstPage.rects) bottom = Math.max(bottom, r.top + r.height);
+  for (const r of firstPage.rects) {
+    right = Math.max(right, r.left + r.width);
+    bottom = Math.max(bottom, r.top + r.height);
+  }
   return {
     pages,
-    anchor: { pageIndex: firstPage.pageIndex, point: { x: first.left, y: bottom + gap } },
+    anchor: {
+      pageIndex: firstPage.pageIndex,
+      rect: { left: first.left, top: first.top, right, bottom },
+    },
   };
 }
 

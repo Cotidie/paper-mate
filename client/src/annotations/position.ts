@@ -47,3 +47,37 @@ export function clampToViewport(
 export function rightOf(rect: ScreenRect, gap: number = QUICK_BOX_GAP): ScreenRect {
   return { left: rect.left + rect.width + gap, top: rect.top, width: rect.width, height: rect.height };
 }
+
+/** Viewport-px bounds of a selection or selected mark (`position: fixed` coordinate space). */
+export interface SelectionRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * Decide where a `boxW × boxH` quick-box should sit beside a selection: prefer
+ * the RIGHT of `sel` (top-aligned to `sel.top`); if that would overflow the
+ * viewport, flip to the LEFT (mirrored, still top-aligned); if that also
+ * overflows, fall back BELOW `sel` (pre-10.6 anchor). A final `clampToViewport`
+ * always runs so the box is fully on-screen regardless of which candidate won.
+ */
+export function placeBesideSelection(
+  sel: SelectionRect,
+  boxW: number,
+  boxH: number,
+  vw: number,
+  vh: number,
+  gap: number = QUICK_BOX_GAP,
+  margin = 8,
+): Point {
+  const right = { x: sel.right + gap, y: sel.top };
+  if (right.x + boxW <= vw - margin) return clampToViewport(right.x, right.y, boxW, boxH, vw, vh, margin);
+
+  const left = { x: sel.left - gap - boxW, y: sel.top };
+  if (left.x >= margin) return clampToViewport(left.x, left.y, boxW, boxH, vw, vh, margin);
+
+  const below = { x: sel.left, y: sel.bottom + gap };
+  return clampToViewport(below.x, below.y, boxW, boxH, vw, vh, margin);
+}

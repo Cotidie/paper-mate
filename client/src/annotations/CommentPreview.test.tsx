@@ -119,6 +119,23 @@ describe("CommentPreview mirrors the persisted bubble position (Story 10.5)", ()
     expect(box.style.transform).toBe(`translateY(calc(var(--comment-pin-size) + var(--space-xxs))) translate(0px, 0px)`);
   });
 
+  it("a persisted offset rescales with the CURRENT zoom (fix request, mirrors CommentBubble: the offset is stored scale-1.0-independent)", () => {
+    const anno = { ...comment("p31b"), style: { ...comment("p31b").style, bubble_offset_x: 40, bubble_offset_y: -8 } };
+    render(
+      <CommentPreview
+        anno={anno}
+        pos={pos}
+        hovered={true}
+        onRetext={noop}
+        onHoverEnter={noop}
+        onHoverLeave={noop}
+        scale={2}
+      />,
+    );
+    const box = screen.getByTestId("comment-preview-p31b");
+    expect(box.style.transform).toContain("translate(80px, -16px)");
+  });
+
   it("a moved COMPACT comment's preview applies the offset translate (no PIN_OFFSET_TRANSFORM prefix)", () => {
     const anno = { ...comment("p32"), style: { ...comment("p32").style, bubble_offset_x: 15, bubble_offset_y: 25 } };
     render(

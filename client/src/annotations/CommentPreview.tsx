@@ -4,9 +4,9 @@
 // `CommentBubble` instead (recolor/convert/delete) — the split is deliberate:
 // hover is for reading + quick text edits, click-to-select is for restyling.
 // Anchored at the pin's screen point exactly like `CommentBubble` (the SAME
-// pin-nudge transform + viewport clamp), but stripped down: no drag, no color
-// row, no convert/delete, no autofocus-on-open — hovering must never steal
-// focus or block the pointer from moving on.
+// pin-nudge transform, no viewport clamp), but stripped down: no drag, no
+// color row, no convert/delete, no autofocus-on-open — hovering must never
+// steal focus or block the pointer from moving on.
 //
 // Hover-intent: `hovered` flips instantly (pin pointerenter/leave, group-aware
 // via AnnotationLayer's `markState`), but closing on the FIRST flip-false would
@@ -20,7 +20,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Annotation } from "@/api/client";
 import type { ScreenRect } from "@/anchor";
-import { clampToViewport } from "./position";
 import "./Annotations.css";
 
 /** Grace window (ms) the preview stays open after the pointer leaves the pin,
@@ -42,6 +41,7 @@ export default function CommentPreview({
   onTextFocus,
   onTextBlur,
   onSelect,
+  scale = 1,
   compact = false,
 }: {
   anno: Annotation;
@@ -63,6 +63,11 @@ export default function CommentPreview({
    *  delete/resize), matching this component's own doc comment: hover is for
    *  reading + quick edits, click-to-select is for restyling. */
   onSelect?: (id: string) => void;
+  /** Current zoom scale (fix request: `bubble_offset_x/y` is persisted
+   *  scale-1.0-independent, mirrors `CommentBubble`'s own `* scale` read — see
+   *  its comment). Not itself position-critical for a static (non-dragging)
+   *  preview, but needed to rescale the persisted offset correctly. */
+  scale?: number;
   /** True for a BOX comment (fix request): the caller has already positioned
    *  `pos` beside the highlight, so no pin-offset shift is applied here. This
    *  component never had color/delete chrome, so `compact` only affects
@@ -74,9 +79,10 @@ export default function CommentPreview({
   // would visibly snap back to the stale pin-relative spot while the real
   // (selected) bubble shows the moved position. Declared before the close-timer
   // effect below (Codex MED): it needs the pin-to-box DISTANCE to size the
-  // grace window correctly for a comment moved far from its pin.
-  const offsetX = anno.style.bubble_offset_x ?? 0;
-  const offsetY = anno.style.bubble_offset_y ?? 0;
+  // grace window correctly for a comment moved far from its pin. Scaled up
+  // from its scale-1.0-independent storage (fix request, see CommentBubble).
+  const offsetX = (anno.style.bubble_offset_x ?? 0) * scale;
+  const offsetY = (anno.style.bubble_offset_y ?? 0) * scale;
   const [visible, setVisible] = useState(hovered);
   // Fade-in on direct hover (fix request): the box opens at the pin's own idle
   // opacity (the SAME token .annotation-comment-pin uses when not hovered/
@@ -113,9 +119,8 @@ export default function CommentPreview({
     // elapses, closing the preview before it's ever reached. Scale the delay
     // by the actual pin-to-box distance, floored at the base delay so a
     // never-moved (or barely-moved) comment is completely unaffected. The
-    // 2 px/ms assumption is a generous, unhurried pointer speed — the box is
-    // also clamped to stay on-screen (`clampToViewport`), so this is bounded
-    // by at most one viewport diagonal, not unbounded.
+    // 2 px/ms assumption is a generous, unhurried pointer speed for a drag
+    // offset, which in practice stays within a viewport or two.
     const dist = Math.hypot(offsetX, offsetY);
     const closeDelay = Math.max(HOVER_CLOSE_DELAY_MS, dist / 2);
     closeTimer.current = setTimeout(() => setVisible(false), closeDelay);
@@ -130,21 +135,14 @@ export default function CommentPreview({
   // minus the live resizeDraft — the preview has no resize handle of its own.
   const manualWidth = anno.style.bubble_width ?? null;
   const manualHeight = anno.style.bubble_height ?? null;
-  // Auto-position clamp: the same treatment as CommentBubble (nudged back
-  // on-screen near a viewport edge). jsdom has no layout (rect all-zero) → a
-  // no-op there, matching CommentBubble's own guard.
+  // Positions from the live anchor point (fix request: no viewport clamp,
+  // mirrors CommentBubble — a note the user may be reading/editing is allowed
+  // to overflow the viewport rather than jump to an unrelated spot).
   useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el || !visible) return;
     el.style.left = `${pos.left}px`;
     el.style.top = `${pos.top}px`;
-    const r = el.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) return;
-    const c = clampToViewport(r.left, r.top, r.width, r.height, window.innerWidth, window.innerHeight);
-    const dx = c.x - r.left;
-    const dy = c.y - r.top;
-    if (dx !== 0) el.style.left = `${pos.left + dx}px`;
-    if (dy !== 0) el.style.top = `${pos.top + dy}px`;
   }, [visible, body, pos.left, pos.top, manualWidth, manualHeight, offsetX, offsetY]);
 
   if (!visible) return null;
