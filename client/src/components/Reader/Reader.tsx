@@ -18,6 +18,8 @@ import type { PageCardRef } from "@/anchor";
 import { useZoomControl } from "@/reader/useZoomControl";
 import { usePanControl } from "@/reader/usePanControl";
 import { usePageNav } from "@/reader/usePageNav";
+import { useRememberedView } from "@/reader/useRememberedView";
+import { useLastViewStore } from "@/reader/lastView";
 import PageCard from "@/reader/PageCard";
 import "./Reader.css";
 
@@ -112,11 +114,26 @@ export default function Reader({
     panArmed,
     phase,
   });
-  const { scrollToPage, jumpToAnnotation, handleKeyDown } = usePageNav({
+  const { scrollToPage, jumpToAnnotation, restoreView, handleKeyDown } = usePageNav({
     scrollRef,
     cards,
     pageCount: doc.page_count,
     currentPage,
+  });
+
+  // Remember/restore the last-view position (Story 10.7, FR-33): reads the
+  // remembered position once at open, restores before capture is enabled
+  // (AC #5), and debounce-captures the live scroll position thereafter.
+  // Reader-internal — not exposed on `ReaderHandle` (not top-bar chrome).
+  useRememberedView({
+    scrollRef,
+    cards,
+    currentPage,
+    pageCount: doc.page_count,
+    docId: doc.doc_id,
+    active: phase === "ready",
+    scale,
+    restoreView,
   });
 
   // Expose zoom + ToC jump + Bank jump to the top-bar chrome owned by App.
@@ -147,10 +164,23 @@ export default function Reader({
           if (cancelled) return;
           nextBoxes.push(getPageBox(page));
         }
-        // Fit-to-width once, from the live canvas width and the widest page.
+        // Fit-to-width once, from the live canvas width and the widest page —
+        // UNLESS a remembered zoom exists for this doc (Story 10.7 follow-up),
+        // in which case restore that instead. Read directly here (not via
+        // useRememberedView) so the correct scale is set BEFORE this same
+        // batched update flips `phase` to "ready": cards then mount at their
+        // FINAL restored geometry from the first paint (matching the existing
+        // reserve-geometry invariant), so useRememberedView's page/frac scroll
+        // restore — which runs after, keyed off `phase === "ready"` — measures
+        // correct `offsetTop`/`clientHeight` in one shot, no flash-then-rescale.
+        const remembered = useLastViewStore.getState().positions[doc.doc_id]?.scale;
+        const initialScale =
+          typeof remembered === "number" && Number.isFinite(remembered) && remembered > 0
+            ? remembered
+            : computeFitScale(nextBoxes);
         setPdf(loaded);
         setBoxes(nextBoxes);
-        setScale(computeFitScale(nextBoxes));
+        setScale(initialScale);
         setPhase("ready");
       } catch {
         if (!cancelled) setPhase("error");
