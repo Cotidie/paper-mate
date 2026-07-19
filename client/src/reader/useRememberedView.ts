@@ -18,9 +18,16 @@ export function useRememberedView(opts: {
   pageCount: number;
   docId: string;
   active: boolean;
+  /** Live zoom scale (`useZoomControl`'s `scale`), captured alongside
+   *  page/frac so a reopen can restore the exact zoom, not just fit-to-width
+   *  (the initial-scale side of the restore is Reader's own concern — it
+   *  reads the remembered scale directly in its load effect, before this
+   *  hook's layout-effect restore ever runs, so cards lay out at the right
+   *  size from the first paint). */
+  scale: number;
   restoreView: (pageNumber: number, frac: number) => void;
 }): void {
-  const { scrollRef, cards, currentPage, docId, active, restoreView } = opts;
+  const { scrollRef, cards, currentPage, docId, active, scale, restoreView } = opts;
 
   // Read-once ref (NOT a live subscription): a capture write can never
   // mutate the value restore is about to consume (AC #5).
@@ -36,6 +43,13 @@ export function useRememberedView(opts: {
   useEffect(() => {
     currentPageRef.current = currentPage;
   }, [currentPage]);
+  // Same mirroring trick for `scale`: zoom changes are infrequent (unlike
+  // scroll), but keeping the capture effect's dependency list free of it
+  // avoids tearing down/reattaching the scroll listener on every zoom step.
+  const scaleRef = useRef(scale);
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
 
   // Reset on doc switch: re-arm restore + re-read the remembered position for
   // the new doc, so switching papers without unmounting still restores.
@@ -74,7 +88,7 @@ export function useRememberedView(opts: {
       const card = cards.current.get(page);
       if (!card) return;
       const frac = viewOffsetFraction(container.scrollTop, card.offsetTop, card.clientHeight);
-      useLastViewStore.getState().remember(docId, { page, frac });
+      useLastViewStore.getState().remember(docId, { page, frac, scale: scaleRef.current });
     };
 
     const onScroll = () => {

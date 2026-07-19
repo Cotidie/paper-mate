@@ -28,6 +28,7 @@ function makeOpts(overrides: Partial<Opts> = {}): Opts {
     pageCount: 10,
     docId: "doc-1",
     active: false,
+    scale: 1.5,
     restoreView: vi.fn(),
     ...overrides,
   };
@@ -74,18 +75,30 @@ describe("useRememberedView restore ordering (AC #2/#3/#5)", () => {
   });
 
   it("captures after restore, on scroll + debounce (assert call shape, jsdom has no layout so pixels are untestable)", () => {
-    const opts = makeOpts({ active: true, currentPage: 1, docId: "doc-1" });
+    const opts = makeOpts({ active: true, currentPage: 1, docId: "doc-1", scale: 1.5 });
     renderHook((o: Opts) => useRememberedView(o), { initialProps: opts });
     opts.scrollRef.current!.dispatchEvent(new Event("scroll"));
     vi.advanceTimersByTime(400);
-    expect(useLastViewStore.getState().positions["doc-1"]).toEqual({ page: 1, frac: 0 });
+    expect(useLastViewStore.getState().positions["doc-1"]).toEqual({ page: 1, frac: 0, scale: 1.5 });
   });
 
   it("flushes a final synchronous capture on unmount (Back to Library / switch documents, AC #1)", () => {
-    const opts = makeOpts({ active: true, docId: "doc-1" });
+    const opts = makeOpts({ active: true, docId: "doc-1", scale: 1.5 });
     const { unmount } = renderHook((o: Opts) => useRememberedView(o), { initialProps: opts });
     unmount();
-    expect(useLastViewStore.getState().positions["doc-1"]).toEqual({ page: 1, frac: 0 });
+    expect(useLastViewStore.getState().positions["doc-1"]).toEqual({ page: 1, frac: 0, scale: 1.5 });
+  });
+
+  it("captures the LATEST scale (mirrored via a ref, not a scroll-listener dependency) without re-attaching the scroll listener", () => {
+    const opts = makeOpts({ active: true, docId: "doc-1", scale: 1 });
+    const { rerender } = renderHook((o: Opts) => useRememberedView(o), { initialProps: opts });
+    // Zoom changes: scale updates on a re-render, no doc/active change — the
+    // capture effect must NOT tear down/reattach (that would itself flush a
+    // stale-scale capture on the old listener's cleanup).
+    rerender({ ...opts, scale: 2 });
+    opts.scrollRef.current!.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(400);
+    expect(useLastViewStore.getState().positions["doc-1"]).toEqual({ page: 1, frac: 0, scale: 2 });
   });
 
   it("re-arms restore on a doc switch without unmounting (active stays true)", () => {

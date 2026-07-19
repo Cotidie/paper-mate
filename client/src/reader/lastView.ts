@@ -9,11 +9,18 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 /** `page` is 1-based; `frac` is a `[0,1]` fraction of the page's rendered
- *  height. No scale/zoom field — the reader always applies its own current
- *  fit/zoom scale on open (AC #6). */
+ *  height. `scale` (optional) is the raw pixel scale factor the reader was
+ *  zoomed to when captured (the same value `useZoomControl`'s `scale` state
+ *  holds, not a rounded percent) — when present, reopening restores this
+ *  exact zoom instead of recomputing fit-to-width; when absent (an entry
+ *  captured before this field existed, or a corrupt/dropped value), the
+ *  reader falls back to fit-to-width as before. `page`/`frac` stay the
+ *  scale-independent landing mechanism regardless — `scale` is purely a
+ *  "restore my last zoom too" nicety layered on top. */
 export interface LastView {
   page: number;
   frac: number;
+  scale?: number;
 }
 
 function clamp01(value: number): number {
@@ -36,7 +43,13 @@ export function reconcile(positions: unknown): Record<string, LastView> {
     const { page, frac } = value as { page?: unknown; frac?: unknown };
     if (typeof page !== "number" || !Number.isFinite(page) || !Number.isInteger(page) || page < 1) continue;
     if (typeof frac !== "number" || !Number.isFinite(frac)) continue;
-    out[docId] = { page, frac: clamp01(frac) };
+    // `scale` degrades independently of page/frac (same discipline as every
+    // other field here): an out-of-range/corrupt scale is simply dropped
+    // (the entry survives without it, falling back to fit-to-width on
+    // restore) rather than invalidating the whole entry.
+    const { scale } = value as { scale?: unknown };
+    const validScale = typeof scale === "number" && Number.isFinite(scale) && scale > 0;
+    out[docId] = { page, frac: clamp01(frac), ...(validScale ? { scale } : {}) };
   }
   return out;
 }

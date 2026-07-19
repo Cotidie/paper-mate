@@ -65,6 +65,33 @@ describe("reconcile (AC #3)", () => {
       "doc-1": { page: 9999, frac: 0.5 },
     });
   });
+
+  it("keeps a valid scale alongside page/frac", () => {
+    expect(reconcile({ "doc-1": { page: 3, frac: 0.5, scale: 1.75 } })).toEqual({
+      "doc-1": { page: 3, frac: 0.5, scale: 1.75 },
+    });
+  });
+
+  it("drops scale independently (page/frac survive) when scale is <= 0, non-finite, or non-numeric", () => {
+    expect(reconcile({ "doc-1": { page: 3, frac: 0.5, scale: 0 } })).toEqual({
+      "doc-1": { page: 3, frac: 0.5 },
+    });
+    expect(reconcile({ "doc-1": { page: 3, frac: 0.5, scale: -2 } })).toEqual({
+      "doc-1": { page: 3, frac: 0.5 },
+    });
+    expect(reconcile({ "doc-1": { page: 3, frac: 0.5, scale: NaN } })).toEqual({
+      "doc-1": { page: 3, frac: 0.5 },
+    });
+    expect(reconcile({ "doc-1": { page: 3, frac: 0.5, scale: "1.5" } })).toEqual({
+      "doc-1": { page: 3, frac: 0.5 },
+    });
+  });
+
+  it("an entry with no scale field stays valid (backward-compatible with pre-scale entries)", () => {
+    expect(reconcile({ "doc-1": { page: 3, frac: 0.5 } })).toEqual({
+      "doc-1": { page: 3, frac: 0.5 },
+    });
+  });
 });
 
 describe("viewOffsetFraction (AC #1)", () => {
