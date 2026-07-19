@@ -6,7 +6,7 @@
 // then debounce-captures the live scroll position and flushes on unmount /
 // doc switch.
 
-import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { useLastViewStore, viewOffsetFraction, type LastView } from "./lastView";
 
 const CAPTURE_DEBOUNCE_MS = 400;
@@ -29,16 +29,34 @@ export function useRememberedView(opts: {
 }): void {
   const { scrollRef, cards, currentPage, docId, active, scale, restoreView } = opts;
 
-  // Read-once ref (NOT a live subscription): a capture write can never
-  // mutate the value restore is about to consume (AC #5).
+  // The docId a REMEMBERED position was last read for + the value itself.
+  // Refreshed at RENDER time on a docId change — safe because ONLY the
+  // restore effect ever reads `pendingRef` (no cross-effect race like the
+  // one below).
+  const pendingDocRef = useRef(docId);
   const pendingRef = useRef<LastView | undefined>(useLastViewStore.getState().positions[docId]);
-  const restoredDocRef = useRef(docId);
-  const restoredRef = useRef(false);
-  // Mirrors `currentPage` into a ref so the capture effect (below) can read
-  // the LIVE page-in-view without depending on it — depending on it would
-  // tear down and re-attach the scroll listener on every page crossing
-  // (a synchronous flush-capture each time), putting real work back on the
-  // scroll hot path (NFR-2). The effect mounts once per doc-open instead.
+  if (pendingDocRef.current !== docId) {
+    pendingDocRef.current = docId;
+    pendingRef.current = useLastViewStore.getState().positions[docId];
+  }
+
+  // Which docId has actually been restored — written ONLY inside the
+  // restore effect's COMMIT-phase setup below, NEVER at render time. This
+  // is load-bearing, not stylistic (Codex review MEDIUM finding, Story
+  // 10.7): a render-time reset (the story's original design) mutates this
+  // SHARED ref for the INCOMING doc before the OUTGOING doc's flush — a
+  // layout-effect CLEANUP — gets a chance to read it, since render always
+  // precedes commit. Keeping the write inside the setup means: on a doc
+  // switch, ALL changed-effect cleanups in a commit run before ANY new
+  // setups (verified empirically against this React version), so the
+  // outgoing flush always sees the outgoing doc's own still-true history,
+  // and the incoming doc's restore (which flips this ref) only runs after.
+  const restoredDocRef = useRef<string | null>(null);
+
+  // Mirrors `currentPage` into a ref so capture() can read the LIVE
+  // page-in-view without the debounce effect depending on it — depending on
+  // it would tear down/reattach the scroll listener on every page crossing,
+  // putting real work back on the scroll hot path (NFR-2).
   const currentPageRef = useRef(currentPage);
   useEffect(() => {
     currentPageRef.current = currentPage;
@@ -51,48 +69,44 @@ export function useRememberedView(opts: {
     scaleRef.current = scale;
   }, [scale]);
 
-  // Reset on doc switch: re-arm restore + re-read the remembered position for
-  // the new doc, so switching papers without unmounting still restores.
-  if (restoredDocRef.current !== docId) {
-    restoredDocRef.current = docId;
-    restoredRef.current = false;
-    pendingRef.current = useLastViewStore.getState().positions[docId];
-  }
-
   // Restore, before paint (useLayoutEffect so page 1 never visibly flashes,
   // AC #4). Runs once per doc open; every page card is already registered by
-  // the time this parent layout effect runs (child ref callbacks commit
-  // before parent layout effects).
+  // the time this parent layout effect runs (PageCard's own registration is
+  // itself a layout effect — child layout-effect SETUPS run before the
+  // parent's, mirroring mount order).
   useLayoutEffect(() => {
-    if (!active || restoredRef.current) return;
-    restoredRef.current = true;
+    if (!active || restoredDocRef.current === docId) return;
+    restoredDocRef.current = docId;
     const pos = pendingRef.current;
     if (pos) restoreView(pos.page, pos.frac);
-    // `docId` is read only to re-run this effect on a doc switch that
-    // doesn't unmount the hook (the render-phase reset above just cleared
-    // `restoredRef`) — restore itself always targets `pendingRef.current`.
   }, [active, docId, restoreView]);
 
-  // Capture: debounced scroll listener, enabled only AFTER restore has run
-  // (AC #5). Flushes synchronously on cleanup (unmount / doc switch / active
-  // flips false) so Back-to-Library / switching documents always persists
-  // the exact last spot, even inside the debounce window.
+  // The capture computation, shared by the debounced scroll path AND the
+  // unmount/doc-switch flush below — memoized so both call sites always use
+  // the SAME function identity for a given docId (the flush layout effect
+  // keys its re-arm off this identity). Reads `restoredDocRef.current`
+  // FRESH on every call (not a value snapshotted at some earlier time) —
+  // see the ref's own comment for why this is safe across a doc switch.
+  const capture = useCallback(() => {
+    if (restoredDocRef.current !== docId) return;
+    const container = scrollRef.current;
+    const page = currentPageRef.current;
+    const card = cards.current.get(page);
+    if (!container || !card) return;
+    const frac = viewOffsetFraction(container.scrollTop, card.offsetTop, card.clientHeight);
+    useLastViewStore.getState().remember(docId, { page, frac, scale: scaleRef.current });
+  }, [scrollRef, cards, docId]);
+
+  // Debounced scroll capture: passive listener, cheap clearTimeout/setTimeout
+  // on the scroll hot path (NFR-2, unchanged mechanic) — the real compute
+  // (capture()) runs once scrolling settles.
   useEffect(() => {
     const container = scrollRef.current;
     if (!active || !container) return;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const capture = () => {
-      const page = currentPageRef.current;
-      const card = cards.current.get(page);
-      if (!card) return;
-      const frac = viewOffsetFraction(container.scrollTop, card.offsetTop, card.clientHeight);
-      useLastViewStore.getState().remember(docId, { page, frac, scale: scaleRef.current });
-    };
-
     const onScroll = () => {
-      if (!restoredRef.current) return;
+      if (restoredDocRef.current !== docId) return;
       clearTimeout(timer);
       timer = setTimeout(capture, CAPTURE_DEBOUNCE_MS);
     };
@@ -101,7 +115,25 @@ export function useRememberedView(opts: {
     return () => {
       container.removeEventListener("scroll", onScroll);
       clearTimeout(timer);
-      if (restoredRef.current) capture();
     };
-  }, [active, docId, scrollRef, cards]);
+  }, [active, docId, scrollRef, capture]);
+
+  // Flush on unmount / doc-switch (AC #1 "Back to Library" / "switch
+  // documents"). A LAYOUT effect, not passive — this is load-bearing, not
+  // stylistic (Codex review HIGH finding, Story 10.7). `PageCard`'s own card
+  // registration is a layout effect too (deregisters on unmount); passive
+  // effect cleanups across a WHOLE commit run strictly after ALL layout
+  // effect cleanups, so a passive-effect flush here would run AFTER every
+  // card had already been deregistered — `cards.current.get(page)` would
+  // always miss, silently losing the last position on Back-to-Library if the
+  // click landed inside the 400ms debounce window. Layout-effect cleanups
+  // additionally run PARENT-before-CHILD on unmount and, on a same-component
+  // re-render, ALL changed cleanups run before ANY new setups — both
+  // verified empirically against this React version, not assumed — so this
+  // flush is guaranteed to see live card geometry on unmount, and (combined
+  // with `restoredDocRef`'s commit-phase-only write above) is guaranteed to
+  // run BEFORE the incoming doc's restore effect scrolls the shared
+  // container, so the outgoing doc's position can't be corrupted with the
+  // incoming doc's geometry (Codex review MEDIUM finding).
+  useLayoutEffect(() => capture, [capture]);
 }
