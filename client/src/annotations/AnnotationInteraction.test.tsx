@@ -1916,6 +1916,8 @@ describe("AnnotationInteraction box comment popup layout (fix request)", () => {
     await screen.findByTestId("comment-bubble-c21");
     expect(screen.queryByTestId("selection-quick-box")).toBeNull();
     expect(screen.getByTestId("comment-delete-c21")).toBeTruthy();
+    // Fix request: a pin has nothing to tint, so its bubble never shows a color toggle.
+    expect(screen.queryByTestId("comment-color-toggle-c21")).toBeNull();
   });
 
   it("a text-drag comment is UNCHANGED: self-contained bubble, no shared quick-box", async () => {
@@ -2068,7 +2070,9 @@ describe("AnnotationInteraction comment overlay — bubble + hover preview (Stor
   });
 
   it("the bubble's color toggle expands the swatch row; picking a swatch recolors, sets the comment default, and collapses (design request)", () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("c40", "", "annotation-default"));
+    // A text-kind comment: a plain click-placed PIN (rectComment) no longer
+    // shows the color toggle at all (fix request, nothing to tint).
+    useAnnotationStore.getState().addAnnotation(textComment("c40", "", "annotation-default"));
     setup();
     act(() => useAnnotationStore.getState().select("c40"));
     expect(screen.queryByTestId("color-swatch-annotation-green")).toBeNull();

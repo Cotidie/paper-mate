@@ -41,6 +41,7 @@ export default function CommentPreview({
   onTextFocus,
   onTextBlur,
   onSelect,
+  scale = 1,
   compact = false,
 }: {
   anno: Annotation;
@@ -62,6 +63,11 @@ export default function CommentPreview({
    *  delete/resize), matching this component's own doc comment: hover is for
    *  reading + quick edits, click-to-select is for restyling. */
   onSelect?: (id: string) => void;
+  /** Current zoom scale (fix request: `bubble_offset_x/y` is persisted
+   *  scale-1.0-independent, mirrors `CommentBubble`'s own `* scale` read — see
+   *  its comment). Not itself position-critical for a static (non-dragging)
+   *  preview, but needed to rescale the persisted offset correctly. */
+  scale?: number;
   /** True for a BOX comment (fix request): the caller has already positioned
    *  `pos` beside the highlight, so no pin-offset shift is applied here. This
    *  component never had color/delete chrome, so `compact` only affects
@@ -73,9 +79,10 @@ export default function CommentPreview({
   // would visibly snap back to the stale pin-relative spot while the real
   // (selected) bubble shows the moved position. Declared before the close-timer
   // effect below (Codex MED): it needs the pin-to-box DISTANCE to size the
-  // grace window correctly for a comment moved far from its pin.
-  const offsetX = anno.style.bubble_offset_x ?? 0;
-  const offsetY = anno.style.bubble_offset_y ?? 0;
+  // grace window correctly for a comment moved far from its pin. Scaled up
+  // from its scale-1.0-independent storage (fix request, see CommentBubble).
+  const offsetX = (anno.style.bubble_offset_x ?? 0) * scale;
+  const offsetY = (anno.style.bubble_offset_y ?? 0) * scale;
   const [visible, setVisible] = useState(hovered);
   // Fade-in on direct hover (fix request): the box opens at the pin's own idle
   // opacity (the SAME token .annotation-comment-pin uses when not hovered/

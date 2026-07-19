@@ -115,8 +115,22 @@ export default function CommentBubble({
   // still show the reverted position immediately, not just on the next
   // reopen — a plain `useState` initializer only reads the prop once at mount
   // and would otherwise go stale the instant a drag ever ran.
+  //
+  // Fix request (root cause of "doesn't survive zoom"): `bubble_offset_x/y` is
+  // persisted SCALE-1.0-independent (mirrors `normalizeRect`/`denormalizeRect`'s
+  // own divide/multiply-by-scale idiom, AD-4 — every OTHER piece of anchor
+  // geometry in this app is scale-independent at rest), so `* scale` here
+  // rescales it to the CURRENT zoom's CSS px. Without this, a manually-dragged
+  // bubble's gap from its anchor stayed a FIXED pixel amount regardless of
+  // zoom, while the anchor itself (correctly) shrank/grew with the page —
+  // reading as the bubble drifting away from/into its own selection. `dragDraft`
+  // (the LIVE in-progress preview) stays raw CSS px the whole drag (1:1 with the
+  // cursor); only the COMMITTED, persisted value needs the scale conversion.
   const [dragDraft, setDragDraft] = useState<{ x: number; y: number } | null>(null);
-  const dragOffset = dragDraft ?? { x: anno.style.bubble_offset_x ?? 0, y: anno.style.bubble_offset_y ?? 0 };
+  const dragOffset = dragDraft ?? {
+    x: (anno.style.bubble_offset_x ?? 0) * scale,
+    y: (anno.style.bubble_offset_y ?? 0) * scale,
+  };
   const boxDragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -290,7 +304,10 @@ export default function CommentBubble({
         const dx = e.clientX - d.startX;
         const dy = e.clientY - d.startY;
         if (d.moved || Math.hypot(dx, dy) >= BUBBLE_MOVE_SLOP) {
-          onReposition({ x: d.originX + dx, y: d.originY + dy });
+          // Persist SCALE-1.0-independent (divide out the current zoom, mirrors
+          // the `* scale` read above) so the stored offset means "this many px
+          // at 100%," not "this many px at whatever zoom I happened to drag at."
+          onReposition({ x: (d.originX + dx) / scale, y: (d.originY + dy) / scale });
         }
         setDragDraft(null);
       }}
@@ -332,35 +349,41 @@ export default function CommentBubble({
           so expanding the color toggle grows the 5-swatch row RIGHTWARD into the
           strip's empty middle and never covers the other options (fix request).
           Absent in `compact` (box comment): that path owns recolor/delete via
-          the shared quick-box. */}
+          the shared quick-box. The color control itself is ALSO absent for a
+          plain click-placed pin comment (fix request: a pin has no colored
+          region/text to tint, so recoloring it has no visible effect worth a
+          control) — `anno.anchor.kind === "rect"` here is guaranteed to mean a
+          degenerate pin, never a real box comment (that path is `compact` and
+          never reaches this branch). */}
       {!compact && (
         <div className="comment-bubble__controls">
-          {colorOpen ? (
-            <ColorSwatchRow
-              value={anno.style.color}
-              // Picking a DIFFERENT color recolors; re-clicking the current
-              // (armed) color just dismisses — the expanded row has no separate
-              // toggle button to collapse it, so re-clicking the armed color is
-              // the no-change collapse path. Either way the row closes.
-              onPick={(color) => {
-                if (color !== anno.style.color) onRecolor(color);
-                setColorOpen(false);
-              }}
-              ariaLabel="Comment color"
-            />
-          ) : (
-            <button
-              type="button"
-              className="comment-bubble__action comment-bubble__action--toggle"
-              data-testid={`comment-color-toggle-${anno.id}`}
-              aria-label="Comment color"
-              aria-expanded={colorOpen}
-              title="Comment color"
-              onClick={() => setColorOpen(true)}
-            >
-              <span className="color-swatch__dot" style={{ backgroundColor: `var(--color-${anno.style.color})` }} />
-            </button>
-          )}
+          {anno.anchor.kind !== "rect" &&
+            (colorOpen ? (
+              <ColorSwatchRow
+                value={anno.style.color}
+                // Picking a DIFFERENT color recolors; re-clicking the current
+                // (armed) color just dismisses — the expanded row has no separate
+                // toggle button to collapse it, so re-clicking the armed color is
+                // the no-change collapse path. Either way the row closes.
+                onPick={(color) => {
+                  if (color !== anno.style.color) onRecolor(color);
+                  setColorOpen(false);
+                }}
+                ariaLabel="Comment color"
+              />
+            ) : (
+              <button
+                type="button"
+                className="comment-bubble__action comment-bubble__action--toggle"
+                data-testid={`comment-color-toggle-${anno.id}`}
+                aria-label="Comment color"
+                aria-expanded={colorOpen}
+                title="Comment color"
+                onClick={() => setColorOpen(true)}
+              >
+                <span className="color-swatch__dot" style={{ backgroundColor: `var(--color-${anno.style.color})` }} />
+              </button>
+            ))}
           <div className="comment-bubble__controls-right">
             {anno.anchor.kind === "text" && (
               <button

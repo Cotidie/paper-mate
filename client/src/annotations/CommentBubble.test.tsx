@@ -18,6 +18,13 @@ function comment(id: string, body = ""): Annotation {
   };
 }
 
+/** A `kind=text` (drag-selected) comment, unlike `comment()`'s degenerate
+ *  click-placed pin (`kind=rect`, zero-area) — the color toggle is only
+ *  present for this kind (fix request: a pin has nothing to tint). */
+function textComment(id: string, body = ""): Annotation {
+  return { ...comment(id, body), anchor: { kind: "text", page_index: 0, rects: [{ x0: 0.1, y0: 0.1, x1: 0.5, y1: 0.2 }], text: "x" } };
+}
+
 const pos: ScreenRect = { left: 100, top: 100, width: 0, height: 0 };
 function noop() {}
 
@@ -35,6 +42,7 @@ function renderBubble(
     onRecolor: (color: string) => void;
     onTextBlur: () => void;
     anno: Annotation;
+    scale: number;
   }> = {},
 ) {
   return render(
@@ -49,6 +57,7 @@ function renderBubble(
       onResize={overrides.onResize ?? noop}
       onReposition={overrides.onReposition ?? noop}
       onTextBlur={overrides.onTextBlur ?? noop}
+      scale={overrides.scale}
     />,
   );
 }
@@ -189,6 +198,12 @@ describe("CommentBubble drag (movable comment box)", () => {
     renderBubble("c14", { anno });
     expect(screen.getByTestId("comment-bubble-c14").style.transform).toBe(`${PIN_OFFSET_TRANSFORM} translate(40px, -8px)`);
   });
+
+  it("a persisted offset rescales with the CURRENT zoom (fix request: the offset is stored scale-1.0-independent, mirrors normalizeRect/denormalizeRect) — was a fixed px amount regardless of zoom, reading as detached from its anchor", () => {
+    const anno = { ...comment("c14b"), style: { ...comment("c14b").style, bubble_offset_x: 40, bubble_offset_y: -8 } };
+    renderBubble("c14b", { anno, scale: 2 });
+    expect(screen.getByTestId("comment-bubble-c14b").style.transform).toBe(`${PIN_OFFSET_TRANSFORM} translate(80px, -16px)`);
+  });
 });
 
 describe("CommentBubble reposition commit (persisted position, Story 10.5)", () => {
@@ -200,6 +215,17 @@ describe("CommentBubble reposition commit (persisted position, Story 10.5)", () 
     fireEvent.pointerMove(bubble, { clientX: 230, clientY: 215 });
     fireEvent.pointerUp(bubble, { clientX: 230, clientY: 215 });
     expect(onReposition).toHaveBeenCalledTimes(1);
+    expect(onReposition).toHaveBeenCalledWith({ x: 30, y: 15 });
+  });
+
+  it("commits the offset DIVIDED by the current zoom (fix request: persists scale-1.0-independent px, not raw viewport px)", () => {
+    const onReposition = vi.fn();
+    renderBubble("c15b", { onReposition, scale: 2 });
+    const bubble = screen.getByTestId("comment-bubble-c15b");
+    fireEvent.pointerDown(bubble, { clientX: 200, clientY: 200, button: 0 });
+    fireEvent.pointerMove(bubble, { clientX: 260, clientY: 230 });
+    fireEvent.pointerUp(bubble, { clientX: 260, clientY: 230 });
+    // Dragged 60/30 raw px at scale=2 -> persisted as 30/15 (scale-1.0-equivalent).
     expect(onReposition).toHaveBeenCalledWith({ x: 30, y: 15 });
   });
 
@@ -375,13 +401,13 @@ describe("CommentBubble compact mode (box comment popup layout, fix request)", (
 
 describe("CommentBubble collapsible color toggle (design request)", () => {
   it("starts collapsed: the color toggle shows but the swatch row does not", () => {
-    renderBubble("c30");
+    renderBubble("c30", { anno: textComment("c30") });
     expect(screen.getByTestId("comment-color-toggle-c30")).toBeTruthy();
     expect(screen.queryByTestId("color-swatch-annotation-default")).toBeNull();
   });
 
   it("clicking the color toggle expands the full swatch row", () => {
-    renderBubble("c31");
+    renderBubble("c31", { anno: textComment("c31") });
     fireEvent.click(screen.getByTestId("comment-color-toggle-c31"));
     expect(screen.getByTestId("color-swatch-annotation-default")).toBeTruthy();
     expect(screen.getByTestId("color-swatch-annotation-blue")).toBeTruthy();
@@ -389,7 +415,7 @@ describe("CommentBubble collapsible color toggle (design request)", () => {
 
   it("picking a swatch calls onRecolor and collapses the row again", () => {
     const onRecolor = vi.fn();
-    renderBubble("c32", { onRecolor });
+    renderBubble("c32", { onRecolor, anno: textComment("c32") });
     fireEvent.click(screen.getByTestId("comment-color-toggle-c32"));
     fireEvent.click(screen.getByTestId("color-swatch-annotation-green"));
     expect(onRecolor).toHaveBeenCalledWith("annotation-green");
@@ -398,7 +424,7 @@ describe("CommentBubble collapsible color toggle (design request)", () => {
 
   it("re-clicking the current (armed) color collapses the row without recoloring", () => {
     const onRecolor = vi.fn();
-    renderBubble("c33", { onRecolor });
+    renderBubble("c33", { onRecolor, anno: textComment("c33") });
     fireEvent.click(screen.getByTestId("comment-color-toggle-c33"));
     expect(screen.getByTestId("color-swatch-annotation-default")).toBeTruthy();
     // The expanded row has no separate toggle button; re-clicking the armed
@@ -406,6 +432,14 @@ describe("CommentBubble collapsible color toggle (design request)", () => {
     fireEvent.click(screen.getByTestId("color-swatch-annotation-default"));
     expect(screen.queryByTestId("color-swatch-annotation-default")).toBeNull();
     expect(onRecolor).not.toHaveBeenCalled();
+  });
+
+  it("fix request: a plain click-placed PIN comment (kind=rect, degenerate) never shows the color toggle — nothing to tint", () => {
+    renderBubble("c30b");
+    expect(screen.queryByTestId("comment-color-toggle-c30b")).toBeNull();
+    // Convert (text-only) is also absent, but delete stays.
+    expect(screen.queryByTestId("comment-convert-highlight-c30b")).toBeNull();
+    expect(screen.getByTestId("comment-delete-c30b")).toBeTruthy();
   });
 
   it("keeps convert + delete visible while the swatch row is expanded (fix request: color is at the LEFT, row grows rightward into the middle, not over them)", () => {

@@ -655,6 +655,7 @@ export default function AnnotationInteraction({
             key={a.id}
             anno={a}
             pos={pos}
+            scale={scale}
             compact={beside}
             hovered={inActiveGroup(a, hoveredId, annotations)}
             onRetext={(_id, body) =>
