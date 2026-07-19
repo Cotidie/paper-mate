@@ -4,7 +4,7 @@ baseline_commit: eb95016349a6ef41d51b9758e91748ffbdc8da06
 
 # Story 10.5: Persist a moved comment box's position
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
