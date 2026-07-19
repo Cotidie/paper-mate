@@ -186,8 +186,16 @@
      fill's own opacity) since the two are tuned independently. */
   --comment-pin-size: 28px;
   --comment-pin-opacity: 0.6;
-  --comment-bubble-width: 220px;
-  --comment-bubble-text-min-height: 48px;
+  /* Fix request: 196px (was 220 → 180 → 196). The recolor swatch row is
+     collapsed behind a color toggle at the LEFT of the flat top control strip;
+     expanding it grows the 5 swatches rightward into the strip's empty middle
+     while convert (kind=text) + delete stay visible at the right, so the box
+     must hold swatches(5) + convert + delete at once — 180 was ~8px short. */
+  --comment-bubble-width: 196px;
+  /* Fix request: 36px = a SINGLE body-sm line (14px x 1.5 leading = 21) + the
+     textarea's 6px padding x2 + 1px border x2 = 35, +1 slack. Was 48 (~1.6
+     lines); the box + resize floor now shrink to one line. */
+  --comment-bubble-text-min-height: 36px;
 
   /* edit frame (Story 3.1): the move grip + corner resize handles shown on a
      selected pen/memo/region mark. A small square nub; the grip reuses it. */

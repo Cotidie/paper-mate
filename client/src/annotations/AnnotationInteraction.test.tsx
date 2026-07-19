@@ -2010,21 +2010,30 @@ describe("AnnotationInteraction comment overlay — bubble + hover preview (Stor
     expect(body.value).toBe("a note");
   });
 
-  it("typing in the bubble writes body through retextAnnotations; recolor + delete fire", () => {
+  it("typing in the bubble writes body through retextAnnotations; delete fires", () => {
     useAnnotationStore.getState().addAnnotation(rectComment("c4", "", "annotation-default"));
     setup();
     act(() => useAnnotationStore.getState().select("c4"));
     fireEvent.change(screen.getByTestId("comment-body-c4"), { target: { value: "typed" } });
     expect(useAnnotationStore.getState().annotations.get("c4")!.body).toBe("typed");
-    // Recolor tints the comment (fill + pin) AND sets the default (last-choice-wins).
-    fireEvent.click(screen.getByTestId("color-swatch-annotation-green"));
-    expect(useAnnotationStore.getState().annotations.get("c4")!.style.color).toBe("annotation-green");
-    // Comment recolor sets ONLY the comment tool's default (per-tool split).
-    expect(useAnnotationStore.getState().activeColors.comment).toBe("annotation-green");
-    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-default");
     // Delete removes the comment.
     fireEvent.click(screen.getByTestId("comment-delete-c4"));
     expect(useAnnotationStore.getState().annotations.has("c4")).toBe(false);
+  });
+
+  it("the bubble's color toggle expands the swatch row; picking a swatch recolors, sets the comment default, and collapses (design request)", () => {
+    useAnnotationStore.getState().addAnnotation(rectComment("c40", "", "annotation-default"));
+    setup();
+    act(() => useAnnotationStore.getState().select("c40"));
+    expect(screen.queryByTestId("color-swatch-annotation-green")).toBeNull();
+    fireEvent.click(screen.getByTestId("comment-color-toggle-c40"));
+    fireEvent.click(screen.getByTestId("color-swatch-annotation-green"));
+    expect(useAnnotationStore.getState().annotations.get("c40")!.style.color).toBe("annotation-green");
+    // Comment recolor sets ONLY the comment tool's default (per-tool split).
+    expect(useAnnotationStore.getState().activeColors.comment).toBe("annotation-green");
+    expect(useAnnotationStore.getState().activeColors.highlight).toBe("annotation-default");
+    // Auto-collapses back after picking.
+    expect(screen.queryByTestId("color-swatch-annotation-green")).toBeNull();
   });
 
   it("the open bubble live-tracks an in-flight drag preview of its rect-kind pin (Story 3.1)", () => {
@@ -2068,21 +2077,14 @@ describe("AnnotationInteraction comment overlay — bubble + hover preview (Stor
     expect(useAnnotationStore.getState().annotations.get("c2")!.body).toBe("shared");
   });
 
-  it("the bubble's swatch row is labelled 'Comment color' (Codex LOW)", () => {
-    useAnnotationStore.getState().addAnnotation(rectComment("c7"));
-    const { container } = setup();
-    act(() => useAnnotationStore.getState().select("c7"));
-    const row = container.querySelector('.comment-bubble [role="group"]');
-    expect(row!.getAttribute("aria-label")).toBe("Comment color");
-  });
-
-  it("Esc on the bubble container (e.g. a focused swatch) dismisses the comment (Codex MED)", () => {
+  it("Esc on the bubble container (e.g. a focused button) dismisses the comment (Codex MED)", () => {
     useAnnotationStore.getState().addAnnotation(rectComment("c8", "note"));
     setup();
     act(() => useAnnotationStore.getState().select("c8"));
-    // Esc raised from a swatch button inside the bubble (not the textarea) clears.
-    const swatch = screen.getByTestId("color-swatch-annotation-green");
-    fireEvent.keyDown(swatch, { key: "Escape" });
+    // Esc raised from the delete button inside the bubble (not the textarea) clears
+    // without deleting — the button never fires its own click/onDelete here.
+    const deleteButton = screen.getByTestId("comment-delete-c8");
+    fireEvent.keyDown(deleteButton, { key: "Escape" });
     expect(useAnnotationStore.getState().selectedId).toBeNull();
     // The (non-empty) comment survives (Decision 5 keeps it either way).
     expect(useAnnotationStore.getState().annotations.has("c8")).toBe(true);

@@ -204,6 +204,58 @@ def test_style_collapsed_width_rejects_non_positive() -> None:
         Style(color="x", collapsed_width=-0.1)
 
 
+def test_style_bubble_offset_null_by_default() -> None:
+    """Story 10.5: bubble_offset_x/y default to None (backward-compatible, AD-8)."""
+    s = Style(color="annotation-default")
+    assert s.bubble_offset_x is None
+    assert s.bubble_offset_y is None
+
+
+def test_style_bubble_offset_round_trips_through_serialization() -> None:
+    """Story 10.5: bubble_offset_x/y survive a real dump -> re-validate round
+    trip (not just constructor field access), confirming they are actually
+    wire-serialized. Negative values (dragged left/up of the pin) are valid --
+    unlike collapsed_width, there is no positive-only constraint."""
+    s = Style(color="annotation-default", bubble_offset_x=-12.5, bubble_offset_y=30.0)
+    reloaded = Style.model_validate(s.model_dump())
+    assert reloaded.bubble_offset_x == pytest.approx(-12.5)
+    assert reloaded.bubble_offset_y == pytest.approx(30.0)
+
+
+def test_comment_annotation_with_bubble_offset_round_trips_through_serialization() -> None:
+    """Story 10.5: a comment Annotation with bubble_offset_x/y survives a real
+    JSON dump -> re-validate round trip (the actual persistence path)."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "comment",
+            "style": {"color": "annotation-default", "bubble_offset_x": 40.0, "bubble_offset_y": -8.0},
+            "body": "a note",
+            "anchor": {"kind": "text", "page_index": 0, "rects": [{"x0": 0, "y0": 0, "x1": 0.1, "y1": 0.1}], "text": "hi"},
+        }
+    )
+    reloaded = Annotation.model_validate_json(ann.model_dump_json())
+    assert isinstance(reloaded.anchor, TextAnchor)
+    assert reloaded.style.bubble_offset_x == pytest.approx(40.0)
+    assert reloaded.style.bubble_offset_y == pytest.approx(-8.0)
+
+
+def test_comment_annotation_no_bubble_offset_backward_compatible() -> None:
+    """AD-8: a pre-10.5 comment mark (no bubble_offset_x/y fields) parses fine,
+    falls back to None (the legacy pin-relative default position)."""
+    ann = Annotation.model_validate(
+        {
+            **BASE,
+            "type": "comment",
+            "style": {"color": "annotation-default"},
+            "body": "a note",
+            "anchor": {"kind": "text", "page_index": 0, "rects": [{"x0": 0, "y0": 0, "x1": 0.1, "y1": 0.1}], "text": "hi"},
+        }
+    )
+    assert ann.style.bubble_offset_x is None
+    assert ann.style.bubble_offset_y is None
+
+
 def test_annotation_surfaced_in_openapi_via_annotations_route() -> None:
     """AD-3: the real PUT + GET /annotations routes emit the Annotation schema
     (Story 3.4 PUT, Story 3.5 GET); the manual injection is gone."""

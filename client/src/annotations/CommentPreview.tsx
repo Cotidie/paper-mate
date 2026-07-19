@@ -69,6 +69,14 @@ export default function CommentPreview({
    *  positioning (unlike `CommentBubble`'s `compact`). */
   compact?: boolean;
 }) {
+  // Mirrors CommentBubble's persisted drag offset (Story 10.5): a static read,
+  // no drag of its own — without this, a moved comment's hover-glance preview
+  // would visibly snap back to the stale pin-relative spot while the real
+  // (selected) bubble shows the moved position. Declared before the close-timer
+  // effect below (Codex MED): it needs the pin-to-box DISTANCE to size the
+  // grace window correctly for a comment moved far from its pin.
+  const offsetX = anno.style.bubble_offset_x ?? 0;
+  const offsetY = anno.style.bubble_offset_y ?? 0;
   const [visible, setVisible] = useState(hovered);
   // Fade-in on direct hover (fix request): the box opens at the pin's own idle
   // opacity (the SAME token .annotation-comment-pin uses when not hovered/
@@ -98,11 +106,23 @@ export default function CommentPreview({
       setVisible(false);
       return;
     }
-    closeTimer.current = setTimeout(() => setVisible(false), HOVER_CLOSE_DELAY_MS);
+    // Codex MED: `HOVER_CLOSE_DELAY_MS` alone assumes a SHORT pin-to-box gap
+    // (true when the box always sat just below the pin) — now that Story 10.5
+    // lets the box persist anywhere the user dragged it, a large offset can
+    // leave a gap the pointer physically can't cross before the fixed window
+    // elapses, closing the preview before it's ever reached. Scale the delay
+    // by the actual pin-to-box distance, floored at the base delay so a
+    // never-moved (or barely-moved) comment is completely unaffected. The
+    // 2 px/ms assumption is a generous, unhurried pointer speed — the box is
+    // also clamped to stay on-screen (`clampToViewport`), so this is bounded
+    // by at most one viewport diagonal, not unbounded.
+    const dist = Math.hypot(offsetX, offsetY);
+    const closeDelay = Math.max(HOVER_CLOSE_DELAY_MS, dist / 2);
+    closeTimer.current = setTimeout(() => setVisible(false), closeDelay);
     return () => {
       if (closeTimer.current) clearTimeout(closeTimer.current);
     };
-  }, [hovered]);
+  }, [hovered, offsetX, offsetY]);
 
   const boxRef = useRef<HTMLDivElement | null>(null);
   const body = anno.body ?? "";
@@ -125,7 +145,7 @@ export default function CommentPreview({
     const dy = c.y - r.top;
     if (dx !== 0) el.style.left = `${pos.left + dx}px`;
     if (dy !== 0) el.style.top = `${pos.top + dy}px`;
-  }, [visible, body, pos.left, pos.top, manualWidth, manualHeight]);
+  }, [visible, body, pos.left, pos.top, manualWidth, manualHeight, offsetX, offsetY]);
 
   if (!visible) return null;
   return (
@@ -137,7 +157,9 @@ export default function CommentPreview({
         left: pos.left,
         top: pos.top,
         opacity: pointerOverBox ? 1 : "var(--comment-pin-opacity)",
-        ...(compact ? {} : { transform: PIN_OFFSET_TRANSFORM }),
+        transform: compact
+          ? `translate(${offsetX}px, ${offsetY}px)`
+          : `${PIN_OFFSET_TRANSFORM} translate(${offsetX}px, ${offsetY}px)`,
         ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),
         ...(manualHeight !== null ? { height: `${manualHeight}px` } : {}),
       }}
