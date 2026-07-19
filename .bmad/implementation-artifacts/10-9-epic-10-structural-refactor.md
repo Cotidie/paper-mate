@@ -4,7 +4,7 @@ baseline_commit: 7f8bfb283b5a1706a949de7e48f8f8429a5d1dc5
 
 # Story 10.9: Epic 10 structural refactor (terminal)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -52,7 +52,7 @@ This is the **terminal structural refactor** of Epic 10 (AE7-5), sequenced LAST 
 
 - [x] **Live-smoke** (AC: 5) — brought up OWN servers (uvicorn :8137 + vite :5273 on my tree); the library + reader render correctly (13 pages) and the app boots on my working tree. FULL VISUAL DPR>1 matrix NOT achieved: the claude-in-chrome screenshot channel timed out (recurring AE7-2/AE6-2), and blind coordinate-driving of the annotation gestures without visual feedback did not land. Behavior is byte-identical by construction (verbatim expression moves) and both extracted leaves have direct unit tests reproducing the original math; **recommend a human visual DPR>1 pass of the geometry matrix** (carries AE7-4). No stray annotations were persisted to the doc (verified via the annotations endpoint + doc dir).
 
-- [ ] **Version bump + sprint status** (AC: 6) — DEFERRED to PR merge (per AC-6 / 8.10 precedent): `0.5.38 → 0.5.39` in `server/pyproject.toml` + `uv.lock` synced; story + `sprint-status.yaml` → `done` at merge.
+- [x] **Version bump + sprint status** (AC: 6) — this is the LAST story of Epic 10, so its close takes the epic MINOR bump (user decision 2026-07-20): `0.5.38 → 0.6.0` in `server/pyproject.toml` + `uv.lock` synced (`test_version` green), PATCH reset to 0; story + `epic-10` + `sprint-status.yaml` → `done`.
 
 - [x] **Codex code review** — ran `bmad-code-review` through Codex (GPT-5-Codex) in read-only sandbox ([[codex-review-needs-readonly-sandbox]]). 1 Medium found + fixed (guarded no-ops no longer preserved the Zustand root-state reference), regression test added; all geometry/AD-9 candidates disproved against baseline. See the Senior Developer Review section.
 
@@ -226,3 +226,4 @@ Read-only adversarial review of `7f8bfb2..HEAD`, judged against the pure-refacto
 | 2026-07-19 | 0.1 | Story created (terminal Epic-10 refactor; primary targets: CommentBubble/CommentPreview near-twin, useEditGesture.computeAnchor memo branch, three single-id store style patchers) | Wonseok |
 | 2026-07-19 | 0.2 | Implemented: `bubbleGeometry.ts` + `memoBoxGeometry.ts` leaves, `patchStyle` store helper, `commentAnchorPoint` dedup. Full suite 1663 green, typecheck + build clean, net −64 source lines. Status → review. | Dev (Opus 4.8) |
 | 2026-07-19 | 0.3 | Codex review: fixed 1 Medium (guarded no-ops now preserve the Zustand root-state reference), added root-identity regression test. Full suite 1664 green. | Dev (Opus 4.8) |
+| 2026-07-20 | 1.0 | Marked done + Epic 10 close: version `0.5.38 → 0.6.0` (epic MINOR bump per user decision, PATCH reset; `server/pyproject.toml` + `uv.lock`, `test_version` green), story + `epic-10` + sprint-status → done. | Wonseok |
