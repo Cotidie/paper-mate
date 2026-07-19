@@ -26,7 +26,7 @@ import { useAnnotationStore } from "@/store";
 import { newId } from "@/lib/uuid";
 import { isEditableTarget } from "@/lib/domFocus";
 import { buildAnnotations, buildMemoAnnotation, buildCommentPin } from "@/annotations/create";
-import { clampToViewport } from "@/annotations/position";
+import type { SelectionRect } from "@/annotations/position";
 import { initialOverlayState, overlayReducer, type AnnotationTool, type OverlayState } from "@/annotations/machine";
 import { isExempt, type ActiveDefaults } from "./shared";
 
@@ -34,16 +34,14 @@ import { isExempt, type ActiveDefaults } from "./shared";
  *  release to still count as a CLICK (drops a pin). Beyond this it was a drag. */
 const COMMENT_CLICK_SLOP = 5;
 
-/** Vertical gap (viewport px) between the pending selection and its floating
- *  quick-box, below it — mirrors `useSelection.ts`'s `QUICK_BOX_GAP` (the same
- *  value, for the post-creation selected-mark box) so both quick-boxes sit the
- *  same distance from their run. */
-const PENDING_BOX_GAP = 6;
-
 /** The CREATE quick-box's live viewport geometry, re-derived (not frozen) so it
- *  survives zoom/scroll — see `computePendingGeometry` below. */
+ *  survives zoom/scroll — see `computePendingGeometry` below. Exactly one of
+ *  `selRect`/`boxAt` is set: a text drag exposes its selection BOUNDS
+ *  (`selRect`, placed via `placeBesideSelection`); an empty click exposes a
+ *  single point (`boxAt`, placed via `clampToViewport`). */
 export interface PendingViewportGeometry {
-  boxAt: { x: number; y: number };
+  selRect: SelectionRect | null;
+  boxAt: { x: number; y: number } | null;
   previewRects: { left: number; top: number; width: number; height: number }[];
 }
 
@@ -140,7 +138,6 @@ export function useCreateQuickBox(opts: {
         state.selection,
         (pageIndex) => cardOf(pageIndex)?.box ?? null,
         scaleRef.current,
-        PENDING_BOX_GAP,
       );
       if (!geom) return null;
       // Clip each row to the reader's visible viewport: the preview is
@@ -157,11 +154,15 @@ export function useCreateQuickBox(opts: {
       const anchorCard = cardOf(geom.anchor.pageIndex);
       if (!anchorCard) return null;
       const anchorRect = anchorCard.cardEl.getBoundingClientRect();
+      const { rect } = geom.anchor;
       return {
-        boxAt: {
-          x: anchorRect.left + geom.anchor.point.x,
-          y: anchorRect.top + geom.anchor.point.y,
+        selRect: {
+          left: anchorRect.left + rect.left,
+          top: anchorRect.top + rect.top,
+          right: anchorRect.left + rect.right,
+          bottom: anchorRect.top + rect.bottom,
         },
+        boxAt: null,
         previewRects,
       };
     }
@@ -173,6 +174,7 @@ export function useCreateQuickBox(opts: {
     if (!card) return null;
     const cardRect = card.cardEl.getBoundingClientRect();
     return {
+      selRect: null,
       boxAt: {
         x: cardRect.left + clickAnchor.fracX * cardRect.width,
         y: cardRect.top + clickAnchor.fracY * cardRect.height,
@@ -498,25 +500,6 @@ export function useCreateQuickBox(opts: {
       window.removeEventListener("resize", reposition);
     };
   }, [pending, scale, computePendingGeometry]);
-
-  // Clamp the popup's re-derived position to stay on-screen (AC-4) and set it
-  // imperatively (like `useSelection.ts`'s `selectionPoint()`), avoiding a
-  // React re-render per scroll-driven reposition.
-  useLayoutEffect(() => {
-    const el = quickBoxRef.current;
-    if (!el || !pendingGeometry) return;
-    const rect = el.getBoundingClientRect();
-    const { x, y } = clampToViewport(
-      pendingGeometry.boxAt.x,
-      pendingGeometry.boxAt.y,
-      rect.width,
-      rect.height,
-      window.innerWidth,
-      window.innerHeight,
-    );
-    el.style.left = `${x}px`;
-    el.style.top = `${y}px`;
-  }, [pendingGeometry]);
 
   const commitTool = useCallback(
     (tool: "highlight" | "underline" | "comment" | "memo") => {

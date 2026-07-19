@@ -1930,6 +1930,52 @@ describe("AnnotationInteraction box comment popup layout (fix request)", () => {
     expect(screen.getByTestId("comment-delete-c22")).toBeTruthy();
   });
 
+  it("a selected text-drag comment now positions BESIDE the selection, right-shifted with no pin-offset nudge (fix request)", async () => {
+    const textComment: Annotation = { ...textMark("c22b"), type: "comment", body: "" };
+    useAnnotationStore.getState().addAnnotation(textComment);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("c22b"));
+
+    const bubble = await screen.findByTestId("comment-bubble-c22b");
+    // textMark's single rect: x0=0.1,y0=0.1,x1=0.5,y1=0.2 → left=60,top=80,right=300 (box 600x800).
+    // Shifted right of the selection's right edge (QUICK_BOX_GAP=6), top-aligned — NOT the old raw pin point.
+    expect(bubble.style.left).toBe("306px");
+    expect(bubble.style.top).toBe("80px");
+    expect(bubble.style.transform).toBe("translate(0px, 0px)");
+  });
+
+  it("a multi-line text-drag comment shifts beside its WIDEST rect, not just the first (fix request)", async () => {
+    const textComment: Annotation = {
+      id: "c22c",
+      doc_id: "doc-1",
+      type: "comment",
+      group_id: null,
+      anchor: {
+        kind: "text",
+        page_index: 0,
+        rects: [
+          { x0: 0.1, y0: 0, x1: 0.5, y1: 0.05 }, // left 60, top 0, right 300, bottom 40
+          { x0: 0, y0: 0.1, x1: 0.4, y1: 0.2 }, // left 0, top 80, right 240, bottom 160 (widest/lowest)
+        ],
+        text: "x",
+      },
+      style: { color: "annotation-default", stroke_width: null, alpha: null },
+      body: "",
+      created_at: "2026-06-29T00:00:01+00:00",
+      updated_at: "2026-06-29T00:00:01+00:00",
+    };
+    useAnnotationStore.getState().addAnnotation(textComment);
+    const pages = [fakeCard(0, 0)];
+    render(<AnnotationInteraction docId="doc-1" getPages={() => pages} scale={1} enabled rectReader={reader} />);
+    act(() => useAnnotationStore.getState().select("c22c"));
+
+    const bubble = await screen.findByTestId("comment-bubble-c22c");
+    // MAX right across both rects (300) + gap, left/top from the FIRST rect (60, 0).
+    expect(bubble.style.left).toBe("306px");
+    expect(bubble.style.top).toBe("0px");
+  });
+
   it("hovering a NON-selected box comment shows the preview positioned beside it", async () => {
     useAnnotationStore.getState().addAnnotation(boxCommentMark("c23", "note"));
     const pages = [fakeCard(0, 0)];

@@ -3,8 +3,10 @@
 // AnnotationLayer (Story 5.0). A `<textarea>` bound to `body` + a flat top
 // control strip (design request): a collapsible color toggle that expands LEFT
 // into the 5-swatch row, delete, and convert-to-highlight (kind=text only).
-// Anchored at the pin's
-// screen point (`pos`); CSS nudges it below the pin. Mounts only while the
+// Anchored at the pin's screen point (`pos`); `besideAnchor` (a real region
+// OR a text-drag comment, fix request) skips the pin-nudge and instead relies
+// on the caller having already shifted `pos` beside the anchor — only a
+// degenerate click-placed pin still nudges below. Mounts only while the
 // comment is selected → mount = open, unmount = close: it focuses its textarea
 // on open (AC2) and RETURNS focus to the prior element on close (the unmount
 // cleanup). Owns its ref + the auto-grow layout effect (like `MemoBox`).
@@ -15,7 +17,6 @@ import type { Annotation } from "@/api/client";
 import type { ScreenRect } from "@/anchor";
 import { useLiveRef } from "@/hooks/useLiveRef";
 import ColorSwatchRow from "./ColorSwatchRow";
-import { clampToViewport } from "./position";
 import "./Annotations.css";
 
 /** Nudges the bubble below the pin (was a static CSS `transform`, DESIGN.md
@@ -54,6 +55,7 @@ export default function CommentBubble({
   getScreenPoint,
   scale = 1,
   compact = false,
+  besideAnchor = false,
 }: {
   anno: Annotation;
   pos: ScreenRect;
@@ -92,6 +94,13 @@ export default function CommentBubble({
    *  shift needed here) and owns recolor/delete via the shared quick-box, so
    *  this renders only the textarea + resize handle, no internal chrome. */
   compact?: boolean;
+  /** True whenever the caller has positioned `pos` BESIDE the anchor (a box
+   *  comment OR, fix request, a text-drag comment) rather than AT the pin's
+   *  own point — skips the below-pin nudge transform. Distinct from `compact`:
+   *  a text comment now positions like a box comment but keeps its own full
+   *  internal chrome (color/convert/delete), so this can be true while
+   *  `compact` is false. */
+  besideAnchor?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -161,28 +170,22 @@ export default function CommentBubble({
   // deriver without re-subscribing (useLiveRef idiom).
   const getPointRef = useLiveRef<() => ScreenRect | null>(getScreenPoint ?? (() => pos));
 
-  // Re-anchor the bubble from its LIVE screen point, then keep it fully on-screen
-  // (Codex MED). The bubble is `position: fixed`, so it needs re-anchoring on
-  // ANYTHING that moves the pin: open, zoom, a move/resize drag, OR a scroll —
-  // scroll fires no React re-render, so without this the popup floats detached
-  // once the canvas scrolls (fix request). Mirrors useSelection.ts's
-  // `repositionBox` for the sibling selection quick-box. The rendered rect
-  // already reflects the `transform` drag offset (paint-time, not layout), so
-  // the clamp nudges left/top by the viewport-overflow DELTA. jsdom has no
-  // layout (rect all-zero) → the clamp is a no-op, but the base left/top is set.
+  // Re-anchor the bubble from its LIVE screen point. The bubble is `position:
+  // fixed`, so it needs re-anchoring on ANYTHING that moves the pin: open,
+  // zoom, a move/resize drag, OR a scroll — scroll fires no React re-render,
+  // so without this the popup floats detached once the canvas scrolls (fix
+  // request). Mirrors useSelection.ts's `repositionBox` for the sibling
+  // selection quick-box, MINUS its viewport clamp (fix request): unlike the
+  // icon-only quick-box, this is a note the user is actively reading/typing —
+  // pinning it fully on-screen fought a selection near the edge (Codex MED's
+  // original clamp), so it is now allowed to overflow the viewport rather than
+  // jump to an unrelated spot.
   const reposition = useCallback(() => {
     const el = boxRef.current;
     if (!el) return;
     const p = getPointRef.current() ?? pos;
     el.style.left = `${p.left}px`;
     el.style.top = `${p.top}px`;
-    const r = el.getBoundingClientRect();
-    if (r.width === 0 && r.height === 0) return;
-    const c = clampToViewport(r.left, r.top, r.width, r.height, window.innerWidth, window.innerHeight);
-    const dx = c.x - r.left;
-    const dy = c.y - r.top;
-    if (dx !== 0) el.style.left = `${p.left + dx}px`;
-    if (dy !== 0) el.style.top = `${p.top + dy}px`;
   }, [getPointRef, pos.left, pos.top]);
 
   // Re-anchor on the render path: open, a zoom (scale change), the note growing,
@@ -222,7 +225,7 @@ export default function CommentBubble({
       style={{
         left: pos.left,
         top: pos.top,
-        transform: compact
+        transform: besideAnchor
           ? `translate(${dragOffset.x}px, ${dragOffset.y}px)`
           : `${PIN_OFFSET_TRANSFORM} translate(${dragOffset.x}px, ${dragOffset.y}px)`,
         ...(manualWidth !== null ? { width: `${manualWidth}px` } : {}),

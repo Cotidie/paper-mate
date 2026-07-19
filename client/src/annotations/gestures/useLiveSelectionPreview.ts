@@ -170,7 +170,7 @@ export function useLiveSelectionPreview(opts: {
   if (!liveSelection || liveSelection.rangeCount === 0 || liveSelection.isCollapsed) return [];
   const cardOf = (pageIndex: number): PageCardRef | null =>
     getPagesRef.current().find((p) => p.pageIndex === pageIndex) ?? null;
-  const geom = pendingSelectionGeometry(snapshot, (pageIndex) => cardOf(pageIndex)?.box ?? null, scaleRef.current, 0);
+  const geom = pendingSelectionGeometry(snapshot, (pageIndex) => cardOf(pageIndex)?.box ?? null, scaleRef.current);
   if (!geom) return [];
   const readerViewport = document.querySelector(".pdf-canvas")?.getBoundingClientRect() ?? null;
   return viewportRectsFromPages(

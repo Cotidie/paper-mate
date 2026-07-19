@@ -340,7 +340,7 @@ describe("CommentBubble compact mode (box comment popup layout, fix request)", (
     expect(screen.getByTestId("comment-bubble-resize-c10")).toBeTruthy();
   });
 
-  it("renders at pos.left/pos.top with NO pin-offset transform when compact", () => {
+  it("renders at pos.left/pos.top with NO pin-offset transform when besideAnchor (always true alongside compact in production)", () => {
     renderBubble("c11");
     const nonCompact = screen.getByTestId("comment-bubble-c11");
     expect(nonCompact.style.transform).toContain("translateY(calc(var(--comment-pin-size)");
@@ -358,6 +358,7 @@ describe("CommentBubble compact mode (box comment popup layout, fix request)", (
         onResize={noop}
         onReposition={noop}
         compact
+        besideAnchor
       />,
     );
     const bubble = screen.getByTestId("comment-bubble-c12");
