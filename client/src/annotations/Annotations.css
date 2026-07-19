@@ -356,6 +356,10 @@
   border-radius: var(--radius-pill);
 }
 
+.pen-thickness-icon--fine {
+  height: var(--pen-stroke-fine);
+}
+
 .pen-thickness-icon--thin {
   height: var(--pen-stroke-thin);
 }
@@ -435,6 +439,11 @@
 
 /* Dot diameter previews the stroke weight; sizes come from the --pen-stroke-*
    token layer (no raw px in the component, Codex MED). */
+.stroke-width-step__dot--fine {
+  width: var(--pen-stroke-fine);
+  height: var(--pen-stroke-fine);
+}
+
 .stroke-width-step__dot--thin {
   width: var(--pen-stroke-thin);
   height: var(--pen-stroke-thin);
