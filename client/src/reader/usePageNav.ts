@@ -9,6 +9,12 @@ import { pageNavTarget } from "@/render";
 export interface PageNavApi {
   scrollToPage: (pageNumber: number) => void;
   jumpToAnnotation: (pageIndex: number, topFraction: number) => void;
+  /** Restores a remembered last-view position (Story 10.7): clamps
+   *  `pageNumber` into range and scrolls INSTANTLY to `frac * clientHeight`
+   *  within that page's card — the same fraction species as
+   *  `jumpToAnnotation`'s `topFraction` but with no `JUMP_MARGIN_FRACTION`
+   *  inset (restore wants the exact remembered spot). */
+  restoreView: (pageNumber: number, frac: number) => void;
   handleKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
 }
 
@@ -86,6 +92,19 @@ export function usePageNav(opts: {
     [pageCount, cards, scrollRef, scrollCardIntoView],
   );
 
+  // Restore a remembered last-view position (Story 10.7, AC #2/#4): clamp the
+  // target page (a persisted entry can point past the doc's current
+  // `page_count`, AC #3), find its card, scroll instantly to
+  // `frac * clientHeight` within it — no margin, unlike `jumpToAnnotation`.
+  const restoreView = useCallback(
+    (pageNumber: number, frac: number) => {
+      const target = Math.min(pageCount, Math.max(1, pageNumber));
+      const card = cards.current.get(target);
+      if (card) scrollCardIntoView(card, frac * card.clientHeight, false);
+    },
+    [pageCount, cards, scrollCardIntoView],
+  );
+
   // PgUp/PgDn (and Ctrl+Down/Ctrl+Up aliases): move one page. Scroll the target
   // card's top to the canvas top and suppress the browser's native page-scroll
   // so it never double-scrolls (AC-3). (Zoom keys are handled document-level in
@@ -103,5 +122,5 @@ export function usePageNav(opts: {
     scrollToPage(pageNavTarget(currentPage, delta, pageCount));
   }
 
-  return { scrollToPage, jumpToAnnotation, handleKeyDown };
+  return { scrollToPage, jumpToAnnotation, restoreView, handleKeyDown };
 }

@@ -48,8 +48,16 @@ export default function PageCard({
   const renderedScaleRef = useRef(0);
 
   // Register this card's node so the Reader can track the page in view and
-  // resolve PgUp/PgDn scroll targets; deregister on unmount.
-  useEffect(() => {
+  // resolve PgUp/PgDn scroll targets; deregister on unmount. A LAYOUT effect
+  // (not passive): Story 10.7's restore runs in the PARENT's own layout
+  // effect at initial mount, before any passive effect has fired — a passive
+  // registration effect would still leave `cards` empty at that point (child
+  // passive effects run after ALL layout effects in the tree, parent
+  // included, not before). Layout effects run children-before-parent, so a
+  // layout-effect registration here guarantees the registry is populated by
+  // the time an ancestor's own layout effect reads it. No DOM read/write here
+  // (just a Map mutation), so promoting it off the passive phase is free.
+  useLayoutEffect(() => {
     register(pageNumber, cardRef.current);
     return () => register(pageNumber, null);
   }, [pageNumber, register]);

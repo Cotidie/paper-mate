@@ -18,6 +18,7 @@ import type { PageCardRef } from "@/anchor";
 import { useZoomControl } from "@/reader/useZoomControl";
 import { usePanControl } from "@/reader/usePanControl";
 import { usePageNav } from "@/reader/usePageNav";
+import { useRememberedView } from "@/reader/useRememberedView";
 import PageCard from "@/reader/PageCard";
 import "./Reader.css";
 
@@ -112,11 +113,25 @@ export default function Reader({
     panArmed,
     phase,
   });
-  const { scrollToPage, jumpToAnnotation, handleKeyDown } = usePageNav({
+  const { scrollToPage, jumpToAnnotation, restoreView, handleKeyDown } = usePageNav({
     scrollRef,
     cards,
     pageCount: doc.page_count,
     currentPage,
+  });
+
+  // Remember/restore the last-view position (Story 10.7, FR-33): reads the
+  // remembered position once at open, restores before capture is enabled
+  // (AC #5), and debounce-captures the live scroll position thereafter.
+  // Reader-internal — not exposed on `ReaderHandle` (not top-bar chrome).
+  useRememberedView({
+    scrollRef,
+    cards,
+    currentPage,
+    pageCount: doc.page_count,
+    docId: doc.doc_id,
+    active: phase === "ready",
+    restoreView,
   });
 
   // Expose zoom + ToC jump + Bank jump to the top-bar chrome owned by App.
