@@ -4,7 +4,7 @@ baseline_commit: 47502f075e86dda69711a952d3e0e1259460ebf6
 
 # Story 10.6: Quick-box pops to the right of the selection
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
