@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-20 (dev-story 10-1-structure-extraction-enabler: in-progress→review; spike passed, layer built, DPR>1 + in-container smoke green)"
+last_updated: "2026-07-20 (10-1-structure-extraction-enabler DONE, v0.6.1; Codex review resolved. Correct-course: added 10-7 metadata-S2-first, refactor -> 10-8)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -320,7 +320,7 @@ development_status:
   # A structure-extraction enabler + the consumers it unlocks (synthesized ToC, figures/tables
   # index, structure-backed reading-helper, structure-backed metadata) + terminal refactor.
   epic-10: in-progress
-  10-1-structure-extraction-enabler: review                  # FR-34 (SPIKE-FIRST: binding + DPR>1 coordinate gate)
+  10-1-structure-extraction-enabler: done                    # FR-34 (SPIKE-FIRST: binding + DPR>1 coordinate gate)
   10-2-section-navigation-toc: backlog                        # FR-35 (upgrades FR-3; depends on 10-1)
   10-3-figures-tables-index: backlog                          # FR-36 (depends on 10-1)
   10-4-structure-backed-reading-helper: backlog              # FR-27 reframed; SUPERSEDES 12-3 (depends on 10-1)

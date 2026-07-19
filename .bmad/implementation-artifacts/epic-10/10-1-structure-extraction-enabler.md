@@ -4,7 +4,7 @@ baseline_commit: c574f7ccee7d22c0582fb6b4841f7da64a213a63
 
 # Story 10.1: Structure-extraction enabler (SPIKE-FIRST)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
