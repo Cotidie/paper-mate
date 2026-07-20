@@ -24,6 +24,7 @@ function row(overrides: Partial<CollectionRow>): CollectionRow {
     order: 0,
     venue: "Old Venue",
     year: 2017,
+    structure_status: "ready",
     ...overrides,
   };
 }
@@ -45,6 +46,7 @@ function fakeDoc(overrides: Partial<Doc>): Doc {
     file_type: "pdf",
     status: "ready",
     schema_version: 1,
+    structure_status: "ready",
     ...overrides,
   };
 }

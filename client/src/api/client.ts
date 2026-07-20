@@ -7,6 +7,8 @@ import type { components } from "./schema";
 export type HealthStatus = components["schemas"]["HealthStatus"];
 export type Doc = components["schemas"]["Doc"];
 export type DocPatch = components["schemas"]["DocPatch"];
+/** The per-paper document-structure state (the status dot): absent | analyzing | ready. */
+export type StructureStatus = Doc["structure_status"];
 
 // Collection index (AD-L1, Story 6.2).
 export type CollectionRow = components["schemas"]["CollectionRow"];

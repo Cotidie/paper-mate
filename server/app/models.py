@@ -24,6 +24,17 @@ from app.authors import join_authors, split_authors
 #: the two can never drift.
 DocStatus = Literal["extracting", "ready", "enrich-skipped", "parse-failed"]
 
+#: The document-structure (opendataloader-pdf) analysis state, shown by the
+#: per-paper status dot (Library + Reader): ``absent`` = never analyzed / no
+#: ``structure.json`` (grey), ``analyzing`` = the extraction pass is running
+#: right now for this doc (amber, pulsing), ``ready`` = analyzed, structure
+#: exists (green). A DERIVED, response-only signal computed at read from the
+#: in-flight marker (``storage.is_structure_analyzing``) + ``structure.json``
+#: existence (``storage.structure_exists``), NOT a persisted field — it never
+#: touches ``meta.json``/``library.json`` (no ``schema_version`` bump), so
+#: structure stays a per-doc artifact (AD-L8).
+StructureStatus = Literal["absent", "analyzing", "ready"]
+
 
 class HealthStatus(BaseModel):
     """Liveness response for ``GET /api/health``. Also carries the app version
@@ -137,6 +148,13 @@ class Doc(DocMeta):
     """API representation of an imported document = ``doc_id`` + its metadata."""
 
     doc_id: str
+    # Additive, derived, response-only (structure status dot): "absent" (no
+    # structure yet), "analyzing" (opendataloader running now), or "ready"
+    # (analyzed). Computed at the route from the in-flight marker + structure.json
+    # existence, never persisted (not on DocMeta), so no schema_version bump.
+    # Default "absent" so a bare construction (no route derivation) reads as the
+    # neutral "no structure" state.
+    structure_status: StructureStatus = "absent"
 
 
 class DocPatch(BaseModel):
@@ -289,6 +307,11 @@ class CollectionRow(BaseModel):
     # reconcile_library backfills it.
     venue_short: str | None = None
     year: int | None = None
+    # Additive, derived, response-only (structure status dot): set at the
+    # `GET /api/library` route from the in-flight marker + structure.json
+    # existence, NOT cached in library.json — structure is a per-doc artifact
+    # kept out of the shared index (AD-L8, LNFR-4). Default "absent" (neutral).
+    structure_status: StructureStatus = "absent"
 
 
 class Library(BaseModel):

@@ -46,6 +46,7 @@ function fakeDoc(doc_id: string, filename: string, title: string | null = null):
     file_type: "pdf",
     status: "ready",
     schema_version: 1,
+    structure_status: "ready",
   };
 }
 
@@ -63,6 +64,7 @@ function rowFromDoc(doc: api.Doc, order: number): api.CollectionRow {
     starred: false,
     order,
     filename: doc.filename,
+    structure_status: doc.structure_status,
   };
 }
 
@@ -97,6 +99,7 @@ const fakeRow: api.CollectionRow = {
   trashed: false,
   starred: false,
   order: 0,
+  structure_status: "ready",
 };
 
 /** Render LibraryPage at `/` inside a data router; a stub `/reader/:docId`
@@ -430,8 +433,9 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
     filename: string,
     status: api.Doc["status"],
     title: string | null = null,
+    structure_status: api.Doc["structure_status"] = "ready",
   ): api.Doc {
-    return { ...fakeDoc(doc_id, filename, title), status };
+    return { ...fakeDoc(doc_id, filename, title), status, structure_status };
   }
 
   function libRow(
@@ -439,6 +443,7 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
     status: api.CollectionRow["status"],
     title: string | null,
     filename: string,
+    structure_status: api.CollectionRow["structure_status"] = "ready",
   ): api.CollectionRow {
     return {
       doc_id,
@@ -453,6 +458,7 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
       starred: false,
       order: 0,
       filename,
+      structure_status,
     };
   }
 
@@ -494,6 +500,53 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
     expect(screen.getByText("Enrichment skipped.")).toBeTruthy();
 
     // Polling has stopped: no further getLibrary calls however long we wait.
+    const settledCalls = vi.mocked(api.getLibrary).mock.calls.length;
+    await act(async () => void (await vi.advanceTimersByTimeAsync(6000)));
+    expect(vi.mocked(api.getLibrary).mock.calls.length).toBe(settledCalls);
+
+    vi.useRealTimers();
+  });
+
+  it("keeps polling past metadata-settled while structure is still analyzing, then stops when it turns ready", async () => {
+    vi.useFakeTimers();
+    const id = "z".repeat(64);
+    let call = 0;
+    vi.spyOn(api, "getLibrary").mockImplementation(async () => {
+      call++;
+      if (call <= 1) return { papers: [], folders: [] }; // mount
+      // Metadata already settled (ready) but structure is still analyzing:
+      // the poll must NOT stop here even though no row is `extracting`.
+      if (call <= 3)
+        return { papers: [libRow(id, "ready", "Analyzing Paper", "A.pdf", "analyzing")], folders: [] };
+      // Structure done -> settled, poll stops.
+      return { papers: [libRow(id, "ready", "Analyzing Paper", "A.pdf", "ready")], folders: [] };
+    });
+    // The upload itself resolves ready-but-analyzing (fresh import: no
+    // structure.json yet), so the post-batch reconcile starts the poll.
+    vi.spyOn(api, "uploadDoc").mockResolvedValue(
+      docStatus(id, "A.pdf", "ready", "Analyzing Paper", "analyzing"),
+    );
+
+    renderLibrary();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0))); // mount fetch
+
+    fireEvent.change(screen.getByTestId("library-add-input"), {
+      target: { files: [pdfFile("A.pdf")] },
+    });
+    // Upload + reconcile (call 2, ready+analyzing): the dot is amber and the
+    // poll is running despite the row no longer being `extracting`.
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("analyzing");
+
+    // Poll tick 1 (call 3, still analyzing): dot stays amber, poll still alive.
+    await act(async () => void (await vi.advanceTimersByTimeAsync(1200)));
+    expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("analyzing");
+
+    // Poll tick 2 (call 4, structure ready): dot turns green.
+    await act(async () => void (await vi.advanceTimersByTimeAsync(1200)));
+    expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("ready");
+
+    // Polling has stopped now that structure settled.
     const settledCalls = vi.mocked(api.getLibrary).mock.calls.length;
     await act(async () => void (await vi.advanceTimersByTimeAsync(6000)));
     expect(vi.mocked(api.getLibrary).mock.calls.length).toBe(settledCalls);
@@ -786,6 +839,7 @@ describe("Folder filter + move (Story 7.2)", () => {
       trashed: false,
       starred: false,
       order: 0,
+      structure_status: "ready",
       ...overrides,
     };
   }
@@ -1199,6 +1253,7 @@ describe("Display, Sort controls (Story 7.4)", () => {
       trashed: false,
       starred: false,
       order: 0,
+      structure_status: "ready",
       ...overrides,
     };
   }
@@ -1379,6 +1434,7 @@ describe("Trash (Story 7.5)", () => {
       trashed: false,
       starred: false,
       order: 0,
+      structure_status: "ready",
       ...overrides,
     };
   }
@@ -1552,6 +1608,7 @@ describe("Trash (Story 7.5)", () => {
       file_type: "pdf",
       status: "ready",
       schema_version: 1,
+      structure_status: "ready",
     });
     renderLibrary();
     await waitFor(() => expect(screen.getByText("Trash")).toBeTruthy());
@@ -1578,6 +1635,7 @@ describe("Recent (Story 7.7)", () => {
       trashed: false,
       starred: false,
       order: 0,
+      structure_status: "ready",
       ...overrides,
     };
   }
@@ -1779,6 +1837,7 @@ describe("Star (Story 7.8)", () => {
       trashed: false,
       starred: false,
       order: 0,
+      structure_status: "ready",
       ...overrides,
     };
   }

@@ -15,6 +15,15 @@ function anyExtracting(lib: Library): boolean {
   return lib.papers.some((p) => p.status === "extracting");
 }
 
+/** A row is still analyzing iff its document-structure pass (opendataloader)
+ *  hasn't produced `structure.json` yet. This runs AFTER metadata settles, so
+ *  it keeps the poll alive past `extracting` until the analyzing indicator can
+ *  clear (else polling would stop before structure finishes and the dots would
+ *  freeze until a manual refresh). */
+function anyAnalyzingStructure(lib: Library): boolean {
+  return lib.papers.some((p) => p.structure_status === "analyzing");
+}
+
 type ToastVariant = "error" | "info";
 
 interface UseCollectionOptions {
@@ -138,7 +147,7 @@ export function useCollection({ onToast }: UseCollectionOptions) {
 
   const settlePoll = useSettlePolling<Library>({
     fetch: getLibrary,
-    isSettled: (lib) => !anyExtracting(lib),
+    isSettled: (lib) => !anyExtracting(lib) && !anyAnalyzingStructure(lib),
     onResult: applyLibrary,
     onSettled: settleNotices,
     // Capped without settling (a stuck row): still resolve the batch notice
@@ -162,7 +171,7 @@ export function useCollection({ onToast }: UseCollectionOptions) {
           setLibrary(lib);
           setLoadFailed(false);
           resolvedDocIds.forEach((id) => noticeBatchIdsRef.current.add(id));
-          if (anyExtracting(lib)) {
+          if (anyExtracting(lib) || anyAnalyzingStructure(lib)) {
             settlePoll.start();
           } else {
             settleNotices(lib);

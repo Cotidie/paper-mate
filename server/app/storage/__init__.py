@@ -73,7 +73,14 @@ from app.storage.meta_store import META_SCHEMA_VERSION
 from app.storage.structure_store import (
     STRUCTURE_SCHEMA_VERSION,
     read_structure,
+    structure_exists,
     write_structure,
+)
+from app.storage.structure_progress import (
+    clear_structure_analyzing,
+    is_structure_analyzing,
+    mark_structure_analyzing,
+    structure_status_for,
 )
 
 __all__ = [
@@ -117,4 +124,10 @@ __all__ = [
     # Structure store (AD-L8).
     "write_structure",
     "read_structure",
+    "structure_exists",
+    # Structure-analysis state for the status dot (in-flight marker + existence).
+    "mark_structure_analyzing",
+    "clear_structure_analyzing",
+    "is_structure_analyzing",
+    "structure_status_for",
 ]

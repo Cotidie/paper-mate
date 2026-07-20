@@ -56,9 +56,30 @@ async def get_library() -> Library:
     An absent ``library.json`` is an empty collection, not an error. A
     corrupt on-disk index surfaces as the single ``{ "detail" }`` envelope
     (AR-11), mirroring ``get_annotations``.
+
+    ``structure_status`` (the per-paper status dot) is derived HERE, at the
+    route: ``analyzing`` from the in-memory in-flight set (extraction running
+    NOW), else ``ready``/``absent`` from ``structure.json`` existence. A paper
+    shows ``analyzing`` ONLY while its import-time task is actually running in
+    this process, never merely because it lacks ``structure.json`` (a
+    pre-structure-layer paper is ``absent``, grey, not spinning). Kept out of
+    ``read_library``/``library.json`` on purpose: the index projection stays a
+    straight ``library.json`` read with no ``meta.json`` fan-out (LNFR-4); a set
+    check + one stat per row is far cheaper than that parse.
     """
     with storage_errors("Could not read library"):
-        return storage.read_library()
+        library = storage.read_library()
+    papers = [
+        row.model_copy(
+            update={
+                "structure_status": storage.structure_status_for(
+                    row.doc_id, storage.structure_exists(row.doc_id)
+                )
+            }
+        )
+        for row in library.papers
+    ]
+    return library.model_copy(update={"papers": papers})
 
 
 @router.post(

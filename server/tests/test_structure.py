@@ -187,6 +187,35 @@ def test_structure_store_missing_returns_empty(data_root):
     assert storage.read_structure(doc_id) == DocStructure()
 
 
+def test_structure_status_for_is_three_state():
+    # Not analyzed, no structure.json -> absent (grey). The fix for the "dot
+    # spins on pre-existing papers" bug: absence is NOT analyzing.
+    assert storage.is_structure_analyzing("doc-x") is False
+    assert storage.structure_status_for("doc-x", structure_exists=False) == "absent"
+    # Analyzed (structure.json exists), not in flight -> ready (green).
+    assert storage.structure_status_for("doc-x", structure_exists=True) == "ready"
+    # In flight -> analyzing (amber), regardless of file existence (takes
+    # precedence).
+    storage.mark_structure_analyzing("doc-x")
+    assert storage.structure_status_for("doc-x", structure_exists=False) == "analyzing"
+    assert storage.structure_status_for("doc-x", structure_exists=True) == "analyzing"
+    storage.clear_structure_analyzing("doc-x")
+    assert storage.structure_status_for("doc-x", structure_exists=False) == "absent"
+
+
+def test_structure_exists_reflects_the_file(data_root):
+    doc_id = _import(make_pdf_bytes())
+    assert storage.structure_exists(doc_id) is False
+    storage.write_structure(doc_id, DocStructure())
+    assert storage.structure_exists(doc_id) is True
+
+
+def test_clear_structure_analyzing_is_a_noop_when_unmarked():
+    # Never marked (e.g. a re-import that skipped extraction): clearing is safe.
+    storage.clear_structure_analyzing("never-marked")
+    assert storage.structure_status_for("never-marked", structure_exists=False) == "absent"
+
+
 def test_structure_store_unknown_id_not_found(data_root):
     with pytest.raises(storage.DocumentNotFoundError):
         storage.read_structure("deadbeef")
@@ -303,6 +332,55 @@ def test_get_structure_500_on_corrupt(data_root):
     resp = client.get(f"/api/docs/{doc_id}/structure")
     assert resp.status_code == 500
     assert "detail" in resp.json()
+
+
+# --- structure_status on Doc / library (the "analyzing" indicator) ----------
+
+
+def test_get_doc_structure_status_is_three_state(data_root):
+    # `_import` lands the doc WITHOUT queuing extraction and with no
+    # structure.json -> "absent" (grey), NOT analyzing (the bug fix: an
+    # already-imported paper never spins).
+    doc_id = _import(make_pdf_bytes())
+    assert client.get(f"/api/docs/{doc_id}").json()["structure_status"] == "absent"
+    # Mark it in-flight -> analyzing.
+    storage.mark_structure_analyzing(doc_id)
+    assert client.get(f"/api/docs/{doc_id}").json()["structure_status"] == "analyzing"
+    # Finish: clear the marker + write structure.json -> ready.
+    storage.clear_structure_analyzing(doc_id)
+    storage.write_structure(doc_id, DocStructure())
+    assert client.get(f"/api/docs/{doc_id}").json()["structure_status"] == "ready"
+
+
+def test_get_library_reports_structure_status_per_row(data_root):
+    analyzing = _import(make_pdf_bytes(title="Analyzing"))
+    ready = _import(make_pdf_bytes(title="Ready"))
+    absent = _import(make_pdf_bytes(title="Absent"))
+    storage.mark_structure_analyzing(analyzing)  # running now
+    storage.write_structure(ready, DocStructure())  # analyzed
+    # `absent` gets neither -> grey.
+
+    rows = {r["doc_id"]: r for r in client.get("/api/library").json()["papers"]}
+    assert rows[analyzing]["structure_status"] == "analyzing"
+    assert rows[ready]["structure_status"] == "ready"
+    assert rows[absent]["structure_status"] == "absent"
+
+
+def test_upload_marks_analyzing_then_settles_ready(data_root):
+    # A real POST reports "analyzing" immediately (marked synchronously before
+    # the response); the TestClient then runs the background task synchronously,
+    # which clears the marker AND writes structure.json -> a follow-up GET is
+    # "ready".
+    raw = make_pdf_bytes()
+    up = client.post("/api/docs", files={"file": ("s.pdf", raw, "application/pdf")})
+    assert up.status_code == 200
+    doc_id = up.json()["doc_id"]
+    # The upload response is built before the background task runs, so it caught
+    # the analyzing mark.
+    assert up.json()["structure_status"] == "analyzing"
+    # The background task (structure extraction) already ran, wrote an (empty,
+    # via the stub) structure.json, and cleared the mark -> ready.
+    assert client.get(f"/api/docs/{doc_id}").json()["structure_status"] == "ready"
 
 
 # --- run_extraction isolation ----------------------------------------------

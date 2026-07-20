@@ -33,6 +33,7 @@ function row(overrides: Partial<CollectionRow>): CollectionRow {
     trashed: false,
     starred: false,
     order: 0,
+    structure_status: "ready",
     ...overrides,
   };
 }

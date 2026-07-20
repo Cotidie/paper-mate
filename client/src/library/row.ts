@@ -98,5 +98,9 @@ export function docToRow(doc: Doc, papers: CollectionRow[]): CollectionRow {
     venue: doc.venue ?? null,
     venue_short: doc.venue_short ?? null,
     year: doc.year ?? null,
+    // Carry the upload's structure phase into the optimistic row so a freshly
+    // imported paper shows the analyzing indicator (and keeps the settle poll
+    // alive) before the first GET /api/library refresh lands the real value.
+    structure_status: doc.structure_status,
   };
 }

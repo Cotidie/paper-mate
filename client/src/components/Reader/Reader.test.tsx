@@ -51,6 +51,7 @@ const doc: Doc = {
   file_type: "pdf",
   status: "ready",
   schema_version: 1,
+  structure_status: "ready",
 };
 
 describe("Reader", () => {

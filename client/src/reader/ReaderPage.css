@@ -45,6 +45,12 @@
   white-space: nowrap;
 }
 
+/* The structure-state dot trails the filename; never shrink it (the filename
+   truncates first) so the dot stays intact beside a long name. */
+.top-bar__structure-dot {
+  flex: 0 0 auto;
+}
+
 /* actions cluster: pinned to the right of its grid column. */
 .top-bar__actions {
   justify-self: end;

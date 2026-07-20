@@ -36,6 +36,17 @@ def _stub_enrich(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _reset_structure_analyzing():
+    """The structure "analyzing" in-flight set is process-global; clear it
+    around every test so a mark leaked by one test can't bleed into the next."""
+    from app.storage import structure_progress
+
+    structure_progress._analyzing.clear()
+    yield
+    structure_progress._analyzing.clear()
+
+
+@pytest.fixture(autouse=True)
 def _stub_structure(monkeypatch):
     """Keep the JVM out of the general suite (Story 10.1).
 

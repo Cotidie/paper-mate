@@ -10,6 +10,7 @@ from app.main import app
 from app.models import (
     Annotation,
     CollectionRow,
+    Doc,
     DocIdSet,
     DocMeta,
     DocPatch,
@@ -299,6 +300,26 @@ def test_doc_meta_round_trips_new_fields() -> None:
     assert meta.authors == "A. Author"
     assert meta.file_type == "note"
     assert meta.status == "extracting"
+
+
+def test_structure_status_defaults_absent_and_round_trips() -> None:
+    """Additive, response-only structure_status: defaults to the neutral
+    "absent" (a bare construction reads as no-structure) and round-trips an
+    explicit value on both Doc and CollectionRow."""
+    doc = Doc(doc_id="d", filename="f.pdf", page_count=1, added="t", last_opened="t")
+    assert doc.structure_status == "absent"
+    for value in ("analyzing", "ready"):
+        d = Doc(
+            doc_id="d", filename="f.pdf", page_count=1, added="t", last_opened="t",
+            structure_status=value,
+        )
+        assert d.structure_status == value
+
+    row = CollectionRow(
+        doc_id="d", title=None, authors=None, added="t", file_type="pdf",
+        status="ready", folder_id=None, trashed=False, order=0,
+    )
+    assert row.structure_status == "absent"
 
 
 def test_doc_meta_defaults_doi_venue_year_when_missing() -> None:

@@ -79,6 +79,7 @@ def _run_structure(doc_id: str, pdf_bytes: bytes) -> None:
     table already settled, and NEVER raise out of the background task. A doc
     purged mid-flight is a best-effort no-op.
     """
+    storage.mark_structure_analyzing(doc_id)
     try:
         structure = domain.extract_structure(pdf_bytes)
         storage.write_structure(doc_id, structure)
@@ -86,3 +87,9 @@ def _run_structure(doc_id: str, pdf_bytes: bytes) -> None:
         pass  # purged mid-flight — best-effort no-op
     except Exception:
         pass  # structure is best-effort; never poison the settled metadata row
+    finally:
+        # Clear the in-flight marker either way (success OR failure), so the
+        # "analyzing" indicator stops. A paper that never entered this task
+        # (an already-imported one) was never marked, so it never shows the
+        # indicator -- the fix for the "spins on existing papers" bug.
+        storage.clear_structure_analyzing(doc_id)

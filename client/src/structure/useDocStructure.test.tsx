@@ -60,6 +60,25 @@ describe("useDocStructure", () => {
     expect(result.current.structure).toEqual({ elements: [] });
   });
 
+  it("refetch() re-fetches the SAME doc without blanking the held structure", async () => {
+    // First fetch returns empty (opened mid-analysis); refetch after analysis
+    // lands the populated structure. The held value must go empty -> populated,
+    // never flicker back to empty in between (the ToC must not blank).
+    mockGet.mockResolvedValueOnce({ elements: [] });
+    const { result } = await mountAndFlush("doc-a");
+    expect(result.current.structure).toEqual({ elements: [] });
+
+    mockGet.mockResolvedValueOnce(sample);
+    await act(async () => {
+      result.current.refetch();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.structure).toEqual(sample);
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(mockGet).toHaveBeenLastCalledWith("doc-a");
+  });
+
   it("clears the previous doc's structure immediately on a doc switch", async () => {
     // A resolves to a non-empty structure; switching to B (fetch still pending)
     // must NOT keep showing A's elements while B loads.

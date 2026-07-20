@@ -1,0 +1,40 @@
+/* structure-status-dot: a small persistent circle showing a paper's document
+   structure state. Tokens only (CLAUDE.md design rule). Color is chosen by the
+   `data-status` attribute so the component stays a plain, prop-driven span. */
+
+.structure-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--structure-dot-size);
+  height: var(--structure-dot-size);
+  border-radius: var(--radius-pill);
+  vertical-align: middle;
+  /* absent is the default color; the other states override below. */
+  background: var(--color-muted);
+}
+
+.structure-dot[data-status="ready"] {
+  background: var(--color-semantic-success);
+}
+
+.structure-dot[data-status="analyzing"] {
+  background: var(--color-accent-warning);
+}
+
+/* The amber "analyzing" dot pulses, but only when the viewer allows motion
+   (mirrors SaveIndicator's motion gate); otherwise it holds a steady amber. */
+@media (prefers-reduced-motion: no-preference) {
+  .structure-dot[data-status="analyzing"] {
+    animation: structure-dot-pulse 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes structure-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}

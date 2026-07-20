@@ -50,8 +50,21 @@ async def upload_doc(background_tasks: BackgroundTasks, file: UploadFile = File(
         # still answer with the single { detail } envelope, never a bare 500.
         raise HTTPException(status_code=500, detail="Could not store document") from exc
     if meta.status == "extracting":
+        # Mark analyzing SYNCHRONOUSLY here (before the response), not inside the
+        # background task, so the immediate upload response already reports
+        # "analyzing" and the optimistic Library row (docToRow) shows the
+        # indicator without a flicker. `_run_structure` clears it when the pass
+        # finishes. A re-import of an already-settled doc (status != extracting)
+        # is never marked -> reports "ready".
+        storage.mark_structure_analyzing(doc_id)
         background_tasks.add_task(run_extraction, doc_id, raw)
-    return Doc(doc_id=doc_id, **meta.model_dump())
+    return Doc(
+        doc_id=doc_id,
+        structure_status=storage.structure_status_for(
+            doc_id, storage.structure_exists(doc_id)
+        ),
+        **meta.model_dump(),
+    )
 
 
 @router.get(
@@ -70,7 +83,13 @@ async def get_doc(doc_id: str) -> Doc:
     """
     with storage_errors("Could not read document"):
         meta = storage.read_meta(doc_id)
-    return Doc(doc_id=doc_id, **meta.model_dump())
+    return Doc(
+        doc_id=doc_id,
+        structure_status=storage.structure_status_for(
+            doc_id, storage.structure_exists(doc_id)
+        ),
+        **meta.model_dump(),
+    )
 
 
 @router.patch(

@@ -19,10 +19,17 @@ import { useDocStructure } from "@/structure/useDocStructure";
 import { flashRegionAt } from "@/reader/regionFlash";
 import { useAutosave } from "@/hooks/useAutosave";
 import SaveIndicator from "@/components/SaveIndicator/SaveIndicator";
+import StructureStatusDot from "@/components/StructureStatusDot/StructureStatusDot";
 import { matchAction } from "@/settings/keymap";
 import { useSettingsStore } from "@/settings/store";
 import SettingsModal from "@/settings/SettingsModal";
 import { isEditableTarget } from "@/lib/domFocus";
+
+/** Structure-analysis poll cadence (top-bar "analyzing" indicator): matches the
+ *  Library's settle poll (1.2s, capped) so a paper opened mid-analysis clears
+ *  its indicator + refills its ToC without hammering the backend. */
+const STRUCTURE_POLL_INTERVAL_MS = 1200;
+const STRUCTURE_POLL_MAX = 60;
 
 /**
  * Reader route (`/reader/:docId`, Story 6.1). Loads its document from the URL
@@ -122,7 +129,8 @@ export default function ReaderPage() {
   // fallback (embedded outline wins when present, FR-35). Fetched independently
   // of `toc` (the embedded outline); `resolveToc` below decides which source
   // the panel actually shows.
-  const { structure, loading: structureLoading } = useDocStructure(docId ?? null);
+  const { structure, loading: structureLoading, refetch: refetchStructure } =
+    useDocStructure(docId ?? null);
   // The panel's actual entries: `null` while EITHER source could still resolve
   // to a non-empty embedded outline (so a synthesized ToC never flashes then
   // gets replaced) — `toc` itself loading, or `toc` empty but the structure
@@ -197,6 +205,39 @@ export default function ReaderPage() {
       live = false;
     };
   }, [docId, navigate]);
+
+  // Structure-analysis poll (the top-bar "analyzing" indicator). A paper opened
+  // right after import can still be running its opendataloader structure pass;
+  // `getDoc` reports `structure_status: "analyzing"` until `structure.json`
+  // lands. Poll the doc while analyzing so (a) the indicator clears on its own
+  // and (b) the ToC/consumers refill the moment analysis finishes (else a
+  // paper opened mid-analysis keeps the empty structure it first fetched until
+  // a reload). Depends on the STRING status, not the `doc` object, so a poll
+  // that returns an unchanged `analyzing` status doesn't restart the timer.
+  const structureStatus = doc?.structure_status;
+  useEffect(() => {
+    if (!docId || structureStatus !== "analyzing") return;
+    let polls = 0;
+    const id = setInterval(() => {
+      if (polls++ >= STRUCTURE_POLL_MAX) {
+        clearInterval(id);
+        return;
+      }
+      getDoc(docId)
+        .then((fresh) => {
+          // Ignore a late poll for a doc we've since navigated away from.
+          setDoc((prev) => (prev && prev.doc_id === fresh.doc_id ? fresh : prev));
+          if (fresh.structure_status === "ready") {
+            clearInterval(id);
+            refetchStructure(); // refill the ToC now that structure.json exists
+          }
+        })
+        .catch(() => {
+          // Transient; keep polling until it resolves or the cap is hit.
+        });
+    }, STRUCTURE_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [docId, structureStatus, refetchStructure]);
 
   // Document-level tool keys (UX-DR15), unified onto the keymap (Story 5.1,
   // AC-1): ONE effect resolves the pressed key/chord to an action via
@@ -350,6 +391,10 @@ export default function ReaderPage() {
             <ArrowLeft aria-hidden />
           </button>
           <span className="top-bar__title">{doc.filename}</span>
+          {/* Persistent structure-state dot trailing the filename: grey (absent)
+              -> amber pulsing (analyzing) -> green (analyzed). The poll above
+              flips it to green and refills the ToC when analysis lands. */}
+          <StructureStatusDot status={doc.structure_status} className="top-bar__structure-dot" />
           <SaveIndicator status={saveStatus.status} />
         </div>
         {/* Centered page nav (grid middle column). Prev/next drive the Reader's

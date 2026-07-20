@@ -100,3 +100,21 @@ def read_structure(doc_id: str) -> DocStructure:
         return DocStructure.model_validate({"elements": raw_elements})
     except ValidationError as exc:
         raise CorruptStructureError(f"invalid structure.json shape: {exc}") from exc
+
+
+def structure_exists(doc_id: str) -> bool:
+    """Whether ``structure.json`` has been written for ``doc_id`` yet.
+
+    A single ``stat`` — "opendataloader has finished and produced a result for
+    this paper" (the green vs grey signal on the status dot). Distinct from
+    ``read_structure``, which returns an empty ``DocStructure`` for both an
+    absent file AND an analyzed-but-empty one; the dot needs the file-presence
+    fact. Cheap (no JSON parse) so it can be called per row at
+    ``GET /api/library`` without a ``meta.json`` fan-out (LNFR-4). An
+    unresolvable doc_id → ``False``.
+    """
+    try:
+        doc_dir = paths.doc_dir(doc_id)
+    except StorageError:
+        return False
+    return (doc_dir / "structure.json").is_file()

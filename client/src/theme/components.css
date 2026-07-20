@@ -90,6 +90,11 @@
      annotation-*--flash modifiers in Annotations.css consume this. */
   --bank-flash-ring-width: 3px;
 
+  /* structure-status-dot (the per-paper structure state dot, Library + Reader):
+     a small persistent circle (grey absent / amber analyzing / green ready).
+     Sized to sit unobtrusively at the start of a title / trailing a filename. */
+  --structure-dot-size: 7px;
+
   /* settings-modal (Story 5.1; DESIGN.md components.settings-modal). A
      centered dialog over a full-viewport scrim (`{colors.scrim}`), not an
      edge-docked panel like toc/bank, so it has no `-offset` var. */
