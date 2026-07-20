@@ -26,7 +26,10 @@ export default function TocPanel({
   /** The resolved outline, or `null` while it is still loading (so a pending
    *  outline shows a loading note, not the no-outline empty state). */
   entries: TocEntry[] | null;
-  onJump: (pageNumber: number) => void;
+  /** Passes the whole entry (Story 10.2): a synthesized entry carries a
+   *  region (`rect`) for a region jump; an embedded-outline entry has none
+   *  and jumps to the page only. The caller branches on `entry.rect`. */
+  onJump: (entry: TocEntry) => void;
   onClose: () => void;
 }) {
   // Esc closes (UX-DR17). Listener mounted only while open.
@@ -76,7 +79,7 @@ export default function TocPanel({
                 // Indent nested sections by depth. calc keeps the raw px in the
                 // token layer (no-raw-values): the literal here is just a count.
                 style={{ paddingInlineStart: `calc(var(--toc-indent-step) * ${entry.depth + 1})` }}
-                onClick={() => onJump(entry.pageNumber)}
+                onClick={() => onJump(entry)}
               >
                 {entry.title}
               </button>

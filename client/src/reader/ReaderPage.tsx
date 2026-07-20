@@ -14,6 +14,9 @@ import type { BankItem } from "@/lib/bank";
 import Toast from "@/components/Toast/Toast";
 import { getDoc, getAnnotations, markDocOpened, fetchHealth, type Doc } from "@/api/client";
 import { pageNavTarget, type TocEntry } from "@/render";
+import { resolveToc } from "@/structure";
+import { useDocStructure } from "@/structure/useDocStructure";
+import { flashRegionAt } from "@/reader/regionFlash";
 import { useAutosave } from "@/hooks/useAutosave";
 import SaveIndicator from "@/components/SaveIndicator/SaveIndicator";
 import { matchAction } from "@/settings/keymap";
@@ -115,6 +118,19 @@ export default function ReaderPage() {
   // React state (see the header note).
   const [tocOpen, setTocOpen] = useState(false);
   const [toc, setToc] = useState<TocEntry[] | null>(null);
+  // Story 10.2: the structure layer's headings feed the synthesized-ToC
+  // fallback (embedded outline wins when present, FR-35). Fetched independently
+  // of `toc` (the embedded outline); `resolveToc` below decides which source
+  // the panel actually shows.
+  const { structure, loading: structureLoading } = useDocStructure(docId ?? null);
+  // The panel's actual entries: `null` while EITHER source could still resolve
+  // to a non-empty embedded outline (so a synthesized ToC never flashes then
+  // gets replaced) — `toc` itself loading, or `toc` empty but the structure
+  // fetch still in flight. Once both have settled, `resolveToc` picks embedded
+  // (if non-empty) else the synthesized fallback (may be `[]`, the existing
+  // empty state).
+  const tocEntries: TocEntry[] | null =
+    toc === null || (toc.length === 0 && structureLoading) ? null : resolveToc(toc, structure);
   // Annotation Bank panel (Story 3.6): open/closed only — its row list is
   // store-owned and read directly by BankPanel (unlike ToC's App-owned outline).
   const [bankOpen, setBankOpen] = useState(false);
@@ -469,9 +485,19 @@ export default function ReaderPage() {
         />
         <TocPanel
           open={tocOpen}
-          entries={toc}
-          onJump={(p) => {
-            readerRef.current?.jumpToPage(p);
+          entries={tocEntries}
+          onJump={(entry) => {
+            // A synthesized entry (Story 10.2) carries a region: land on the
+            // exact heading and flash it, the same jump+flash mechanic the
+            // Annotation Bank uses. An embedded-outline entry has no region
+            // (Story 1.9, unchanged) and keeps the plain page-top jump.
+            if (entry.rect) {
+              const pageIndex = entry.pageNumber - 1;
+              readerRef.current?.jumpToAnnotation(pageIndex, entry.rect.y0);
+              flashRegionAt(pageIndex, entry.rect);
+            } else {
+              readerRef.current?.jumpToPage(entry.pageNumber);
+            }
             setTocOpen(false);
           }}
           onClose={() => setTocOpen(false)}

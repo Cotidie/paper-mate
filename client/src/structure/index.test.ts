@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import type { DocStructure, StructureElement } from "@/api/client";
+import type { TocEntry } from "@/render";
 import { denormalizeRect } from "@/anchor";
 import {
   captions,
@@ -9,6 +10,8 @@ import {
   elementsOnPage,
   figures,
   headings,
+  resolveToc,
+  synthesizeToc,
   tables,
 } from "@/structure";
 
@@ -91,5 +94,109 @@ describe("denormalizeElement", () => {
     expect(denormalizeElement(element, box, scale)).toEqual(
       denormalizeRect(element.rect, box, scale),
     );
+  });
+});
+
+describe("synthesizeToc", () => {
+  it("maps headings to TocEntry (title, 1-based page, depth-from-level, region)", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0.1, y0: 0.05, x1: 0.9, y1: 0.1 }, {
+          heading_level: 1,
+          text: "1 Intro",
+        }),
+        el("2", "heading", 1, { x0: 0.1, y0: 0.02, x1: 0.9, y1: 0.06 }, {
+          heading_level: 2,
+          text: "1.1 Background",
+        }),
+      ],
+    };
+    expect(synthesizeToc(s)).toEqual([
+      { title: "1 Intro", pageNumber: 1, depth: 0, rect: s.elements[0].rect },
+      { title: "1.1 Background", pageNumber: 2, depth: 1, rect: s.elements[1].rect },
+    ]);
+  });
+
+  it("preserves reading order (array order)", () => {
+    const s: DocStructure = {
+      elements: [
+        el("a", "heading", 2, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, { heading_level: 1, text: "C" }),
+        el("b", "heading", 0, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, { heading_level: 1, text: "A" }),
+        el("c", "heading", 1, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, { heading_level: 1, text: "B" }),
+      ],
+    };
+    expect(synthesizeToc(s).map((e) => e.title)).toEqual(["C", "A", "B"]);
+  });
+
+  it("excludes non-heading elements", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, { heading_level: 1, text: "H" }),
+        el("2", "paragraph", 0, { x0: 0, y0: 0.1, x1: 1, y1: 0.2 }, { text: "P" }),
+        el("3", "figure", 0, { x0: 0, y0: 0.2, x1: 1, y1: 0.3 }, { text: "F" }),
+      ],
+    };
+    expect(synthesizeToc(s).map((e) => e.title)).toEqual(["H"]);
+  });
+
+  it("skips a blank/whitespace-only heading title", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, { heading_level: 1, text: "  " }),
+        el("2", "heading", 0, { x0: 0, y0: 0.1, x1: 1, y1: 0.2 }, {
+          heading_level: 1,
+          text: "Real",
+        }),
+      ],
+    };
+    expect(synthesizeToc(s).map((e) => e.title)).toEqual(["Real"]);
+  });
+
+  it("defaults depth to 0 when heading_level is null or absent", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, {
+          heading_level: null,
+          text: "No level",
+        }),
+      ],
+    };
+    expect(synthesizeToc(s)[0].depth).toBe(0);
+  });
+
+  it("clamps a deep heading_level so the indent never runs unbounded", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, {
+          heading_level: 99,
+          text: "Deep",
+        }),
+      ],
+    };
+    expect(synthesizeToc(s)[0].depth).toBe(5);
+  });
+});
+
+describe("resolveToc", () => {
+  const synthesized: DocStructure = {
+    elements: [
+      el("1", "heading", 0, { x0: 0.1, y0: 0.05, x1: 0.9, y1: 0.1 }, {
+        heading_level: 1,
+        text: "Synth",
+      }),
+    ],
+  };
+  const embedded: TocEntry[] = [{ title: "Embedded", pageNumber: 1, depth: 0 }];
+
+  it("prefers a non-empty embedded outline over the synthesized fallback", () => {
+    expect(resolveToc(embedded, synthesized)).toBe(embedded);
+  });
+
+  it("falls back to the synthesized ToC when the embedded outline is empty", () => {
+    expect(resolveToc([], synthesized).map((e) => e.title)).toEqual(["Synth"]);
+  });
+
+  it("returns [] when both sources are empty", () => {
+    expect(resolveToc([], { elements: [] })).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { renderPage, type PageBox, type PageRender } from "@/render";
 import { AnnotationLayer } from "@/annotations";
 import StructureDebugLayer from "@/structure/StructureDebugLayer";
+import RegionFlashLayer from "@/reader/RegionFlashLayer";
 import "@/components/Reader/Reader.css";
 
 /**
@@ -166,6 +167,10 @@ export default function PageCard({
       {/* Dev-only structure-placement overlay (Story 10.1), renders nothing
           unless ?debugStructure=1; same per-page box+scale contract. */}
       <StructureDebugLayer docId={docId} pageIndex={pageNumber - 1} box={box} scale={scale} />
+      {/* Transient region flash (Story 10.2): a ToC/index jump target briefly
+          pulses on landing; renders nothing when no region is flashed on this
+          page. Same per-page box+scale contract. */}
+      <RegionFlashLayer pageIndex={pageNumber - 1} box={box} scale={scale} />
     </div>
   );
 }

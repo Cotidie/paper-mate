@@ -1,0 +1,22 @@
+/* Region flash (Story 10.2): a structure-layer jump target (a synthesized ToC
+   heading, later a Figures/Tables entry, Story 10.3) briefly pulses, the
+   non-annotation generalization of the Bank jump's `--flash` ring
+   (Annotations.css `bank-flash`). box-shadow only, so it never affects layout
+   (NFR-1) and layers cleanly over the page content. Reuses the same ring-width
+   and ink tokens as the annotation flash — one visual language for "you just
+   jumped here" across the reader. */
+.region-flash {
+  box-shadow: 0 0 0 var(--bank-flash-ring-width) var(--color-ink);
+  animation: region-flash-pulse 0.4s ease-out;
+  border-radius: var(--radius-xs);
+}
+
+@keyframes region-flash-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 var(--bank-flash-ring-width) var(--color-ink);
+  }
+  50% {
+    box-shadow: 0 0 0 calc(var(--bank-flash-ring-width) * 2) var(--color-ink);
+  }
+}

@@ -14,6 +14,7 @@
 
 import type { DocStructure, StructureElement } from "@/api/client";
 import { type PageBox, type ScreenRect, denormalizeRect } from "@/anchor";
+import type { TocEntry } from "@/render";
 
 /** The empty structure (an unanalyzed / non-PDF doc, or a thin extraction). */
 export const EMPTY_STRUCTURE: DocStructure = { elements: [] };
@@ -79,4 +80,49 @@ export function denormalizeElement(
   scale: number,
 ): ScreenRect {
   return denormalizeRect(element.rect, box, scale);
+}
+
+/**
+ * `heading_level` (1 = top) -> the panel's 0-based `depth`. A missing/thin
+ * level defaults to depth 0 (top); depth is capped so a noisy deep level can
+ * never push the panel's indent off its fixed width.
+ */
+const MAX_TOC_DEPTH = 5;
+function clampDepth(level: number | null | undefined): number {
+  return Math.max(0, Math.min((level ?? 1) - 1, MAX_TOC_DEPTH));
+}
+
+/**
+ * Synthesize a Table-of-Contents from the structure layer's heading elements
+ * (Story 10.2, FR-35) — the fallback source for the common case where the PDF
+ * has no embedded outline (`render/getOutline` returns `[]`). Reading order is
+ * already the array order (Story 10.1's adapter walks opendataloader's tree
+ * pre-order), so no extra sort. Each entry carries its heading's normalized
+ * `rect` (already server-flipped, AD-4) so a synthesized jump can land on the
+ * exact region, not just the page top — unlike an embedded-outline entry.
+ */
+export function synthesizeToc(structure: DocStructure): TocEntry[] {
+  const out: TocEntry[] = [];
+  for (const element of headings(structure)) {
+    const title = element.text.trim();
+    if (!title) continue; // a blank heading element never produces a dead row
+    out.push({
+      title,
+      pageNumber: element.page_index + 1, // 0-based -> the TocEntry convention
+      depth: clampDepth(element.heading_level),
+      rect: element.rect,
+    });
+  }
+  return out;
+}
+
+/**
+ * Decide which ToC source renders: the embedded PDF outline when present
+ * (author-curated, keeps every Story 1.9 paper unchanged) else the synthesized
+ * fallback from detected headings (Story 10.2, the common outline-less case).
+ * Exactly one source ever renders — never a merge — so the two can never
+ * double-render (epic Story 10.2 AC #2).
+ */
+export function resolveToc(embedded: TocEntry[], structure: DocStructure): TocEntry[] {
+  return embedded.length > 0 ? embedded : synthesizeToc(structure);
 }
