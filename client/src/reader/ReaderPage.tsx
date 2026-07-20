@@ -138,7 +138,9 @@ export default function ReaderPage() {
   // (if non-empty) else the synthesized fallback (may be `[]`, the existing
   // empty state).
   const tocEntries: TocEntry[] | null =
-    toc === null || (toc.length === 0 && structureLoading) ? null : resolveToc(toc, structure);
+    toc === null || (toc.length === 0 && structureLoading)
+      ? null
+      : resolveToc(toc, structure, doc?.title);
   // Annotation Bank panel (Story 3.6): open/closed only — its row list is
   // store-owned and read directly by BankPanel (unlike ToC's App-owned outline).
   const [bankOpen, setBankOpen] = useState(false);

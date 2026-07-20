@@ -166,6 +166,48 @@ describe("synthesizeToc", () => {
     expect(synthesizeToc(s).map((e) => e.title)).toEqual(["H"]);
   });
 
+  it("excludes the paper title (a page-1 heading matching the metadata title)", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0.1, y0: 0.05, x1: 0.9, y1: 0.12 }, {
+          heading_level: 1,
+          // the heading text often carries a line break the flat title lacks
+          text: "TranAD: Deep Transformer Networks for Anomaly Detection in\nMultivariate Time Series Data",
+        }),
+        el("2", "heading", 0, { x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.24 }, {
+          heading_level: 2,
+          text: "1 Introduction",
+        }),
+      ],
+    };
+    const titles = synthesizeToc(
+      s,
+      "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data",
+    ).map((e) => e.title);
+    expect(titles).toEqual(["1 Introduction"]);
+  });
+
+  it("keeps the first heading when no metadata title is given (drops nothing)", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, { heading_level: 1, text: "Some Title" }),
+        el("2", "heading", 0, { x0: 0, y0: 0.2, x1: 1, y1: 0.3 }, { heading_level: 2, text: "1 Intro" }),
+      ],
+    };
+    expect(synthesizeToc(s, null).map((e) => e.title)).toEqual(["Some Title", "1 Intro"]);
+    expect(synthesizeToc(s).map((e) => e.title)).toEqual(["Some Title", "1 Intro"]);
+  });
+
+  it("does not drop a later-page heading that coincidentally matches the title", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 1, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, { heading_level: 2, text: "Results" }),
+      ],
+    };
+    // page_index 1 (not the title page) -> never treated as the paper title.
+    expect(synthesizeToc(s, "Results").map((e) => e.title)).toEqual(["Results"]);
+  });
+
   it("skips a blank/whitespace-only heading title", () => {
     const s: DocStructure = {
       elements: [

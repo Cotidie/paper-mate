@@ -103,6 +103,34 @@ function clampDepth(level: number | null | undefined): number {
  */
 const FIGURE_TABLE_CAPTION = /^(figure|table)\s+\d+\b/i;
 
+/** Case/whitespace-insensitive text key (collapses the line breaks a heading
+ *  element's text often carries vs the flat metadata title). */
+function normalizeText(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Whether a first-page heading IS the paper's own title (which is a `heading`
+ * element in the structure but not a navigable section — user fix request). We
+ * match against the document's extracted metadata `title` rather than a heading
+ * level, because opendataloader's title heading-level is inconsistent across
+ * papers (level 1 on some, level 2 on others, with a junk arXiv stamp taking
+ * level 1 elsewhere). Restricted to page 1 (`page_index === 0`, where the title
+ * sits) and to a strong match (equality or a prefix, to tolerate a truncated
+ * metadata title or the heading's own line breaks) so a real section can never
+ * be dropped. A null/blank metadata title drops nothing.
+ */
+function isPaperTitleHeading(
+  element: StructureElement,
+  docTitle: string | null | undefined,
+): boolean {
+  if (element.page_index !== 0 || !docTitle) return false;
+  const h = normalizeText(element.text);
+  const t = normalizeText(docTitle);
+  if (!t || h.length < 6) return false;
+  return h === t || h.startsWith(t) || t.startsWith(h);
+}
+
 /**
  * Synthesize a Table-of-Contents from the structure layer's heading elements
  * (Story 10.2, FR-35) — the fallback source for the common case where the PDF
@@ -111,13 +139,21 @@ const FIGURE_TABLE_CAPTION = /^(figure|table)\s+\d+\b/i;
  * pre-order), so no extra sort. Each entry carries its heading's normalized
  * `rect` (already server-flipped, AD-4) so a synthesized jump can land on the
  * exact region, not just the page top — unlike an embedded-outline entry.
+ *
+ * `docTitle` (the paper's extracted metadata title, when known) is excluded
+ * from the ToC: the title is a `heading` element but not a section to navigate
+ * to (user fix request).
  */
-export function synthesizeToc(structure: DocStructure): TocEntry[] {
+export function synthesizeToc(
+  structure: DocStructure,
+  docTitle?: string | null,
+): TocEntry[] {
   const out: TocEntry[] = [];
   for (const element of headings(structure)) {
     const title = element.text.trim();
     if (!title) continue; // a blank heading element never produces a dead row
     if (FIGURE_TABLE_CAPTION.test(title)) continue; // a caption, not a section
+    if (isPaperTitleHeading(element, docTitle)) continue; // the paper title, not a section
     out.push({
       title,
       pageNumber: element.page_index + 1, // 0-based -> the TocEntry convention
@@ -135,6 +171,10 @@ export function synthesizeToc(structure: DocStructure): TocEntry[] {
  * Exactly one source ever renders — never a merge — so the two can never
  * double-render (epic Story 10.2 AC #2).
  */
-export function resolveToc(embedded: TocEntry[], structure: DocStructure): TocEntry[] {
-  return embedded.length > 0 ? embedded : synthesizeToc(structure);
+export function resolveToc(
+  embedded: TocEntry[],
+  structure: DocStructure,
+  docTitle?: string | null,
+): TocEntry[] {
+  return embedded.length > 0 ? embedded : synthesizeToc(structure, docTitle);
 }
