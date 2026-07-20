@@ -1,4 +1,4 @@
-# Story 10.7: Prioritize Semantic Scholar over Crossref for metadata enrichment
+# Story 10.8: Prioritize Semantic Scholar over Crossref for metadata enrichment
 
 Status: ready-for-dev
 
@@ -69,9 +69,9 @@ The live evidence (saved JSON in `docs/`) shows S2 wins title + year + venue(sho
 
 Use the **shortest** `publicationVenue.alternate_names` entry, not the acronym-shape scan the current Story 8.5 `SemanticScholarEnricher` does (`_ACRONYM_NAME` = `^[A-Z][A-Z0-9]{1,11}$`), which returns `None` for VLDB (its alternates are all multi-word). Shortest gives `Proc VLDB Endow`; for a venue whose alternates include a bare acronym (ACL), shortest still lands on the acronym. Open call: prefer `journal.name` (`Proc. VLDB Endow.`) when it is shorter/cleaner than the shortest alternate? The user's instruction is "shortest alternate name" -> implement that as the rule; note `journal.name` as a candidate refinement.
 
-### Interaction with Story 10.5 (structure-backed metadata) — sequence deliberately
+### Interaction with Story 10.6 (structure-backed metadata) — sequence deliberately
 
-Story 10.5 makes the LOCAL title prefer opendataloader's heading-1 (still fed to enrich). This story (10.7) changes the ENRICH source order. They both touch title resolution: 10.5 improves the local candidate, 10.7 improves the external correction + guards against a bad overwrite. If 10.7 ships first, 10.5 layers cleanly on top (better local candidate + the truncation guard already in place). Flag at dev time so the two don't fight over the title field.
+Story 10.6 makes the LOCAL title prefer opendataloader's heading-1 (still fed to enrich). This story (10.8) changes the ENRICH source order. They both touch title resolution: 10.6 improves the local candidate, 10.8 improves the external correction + guards against a bad overwrite. If 10.8 ships first, 10.6 layers cleanly on top (better local candidate + the truncation guard already in place). Flag at dev time so the two don't fight over the title field.
 
 ### Totality is non-negotiable (mirrors the existing enrichers)
 

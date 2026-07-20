@@ -1,6 +1,6 @@
 # Epic 10: Document structure layer (opendataloader-pdf integration) (post-v1, Phase-2 enabler)
 
-> Added 2026-07-20 via correct-course (`sprint-change-proposal-2026-07-20-opendataloader-structure-layer.md`). User decision to adopt **opendataloader-pdf** (Apache-2.0) as Paper Mate's document-structure engine and heavily replace custom PDF-interpretation logic with the building blocks it provides. The tool emits, per element, `{type, page number, bounding box [left,bottom,right,top] in PDF points, heading level, font, content}` for headings (leveled), paragraphs, tables, lists, images, captions, formulas, plus reading order and header/footer/watermark filtering, and those boxes map 1:1 onto our `RectAnchor` (AD-4: normalize by page dims, flip Y). One server-side extraction pass at import yields a **document-structure layer** (a per-doc `structure.json` + a `DocStructure` contract + a client `structure/` service) that TOC, a Figures/Tables index, the reading-helper previews, and metadata all consume as thin readers, replacing four hand-rolled detectors. Architecture: **AD-13** (main spine, the structure layer) + **AD-L8** (library spine, structure extraction = the domain layer's second tenant). It runs INSIDE the container (Java core + `opendataloader-pdf` Python binding + a JRE; the PDF is already in `/data`), so unlike the Phase-3 host agent CLIs it does not hit the dockerization boundary. Deterministic + offline for born-digital PDFs (local mode); OCR/hybrid mode (Docling + a vision model) is out of scope. Story **10-1 is the SPIKE-FIRST enabler** and a hard prerequisite for 10-2..10-6; Story **10-4 supersedes Story 12.3** (FR-27 delivered on the structure layer). Story 10-7 is the terminal structural-refactor pass (AE7-5). New FRs (proposed, finalize in a reader-PRD addendum): FR-34 (structure), FR-35 (section nav), FR-36 (figures/tables index), FR-37 (digest, directional); FR-27 reframed; LFR-8 upgraded.
+> Added 2026-07-20 via correct-course (`sprint-change-proposal-2026-07-20-opendataloader-structure-layer.md`). User decision to adopt **opendataloader-pdf** (Apache-2.0) as Paper Mate's document-structure engine and heavily replace custom PDF-interpretation logic with the building blocks it provides. The tool emits, per element, `{type, page number, bounding box [left,bottom,right,top] in PDF points, heading level, font, content}` for headings (leveled), paragraphs, tables, lists, images, captions, formulas, plus reading order and header/footer/watermark filtering, and those boxes map 1:1 onto our `RectAnchor` (AD-4: normalize by page dims, flip Y). One server-side extraction pass at import yields a **document-structure layer** (a per-doc `structure.json` + a `DocStructure` contract + a client `structure/` service) that TOC, a Figures/Tables index, the reading-helper previews, and metadata all consume as thin readers, replacing four hand-rolled detectors. Architecture: **AD-13** (main spine, the structure layer) + **AD-L8** (library spine, structure extraction = the domain layer's second tenant). It runs INSIDE the container (Java core + `opendataloader-pdf` Python binding + a JRE; the PDF is already in `/data`), so unlike the Phase-3 host agent CLIs it does not hit the dockerization boundary. Deterministic + offline for born-digital PDFs in **local mode**; **hybrid mode** (Docling + a vision model) is adopted in Story **10-3** for higher fidelity (runtime-switchable back to local); OCR/scanned mode stays out of scope. Story **10-1 is the SPIKE-FIRST enabler** and a hard prerequisite for 10-2..10-8; Story **10-5 supersedes Story 12.3** (FR-27 delivered on the structure layer). Story 10-9 is the terminal structural-refactor pass (AE7-5). New FRs (proposed, finalize in a reader-PRD addendum): FR-34 (structure), FR-35 (section nav), FR-36 (figures/tables index), FR-37 (digest, directional); FR-27 reframed; LFR-8 upgraded.
 
 ## Story 10.1: Structure-extraction enabler (SPIKE-FIRST)
 
@@ -28,7 +28,7 @@ So that the reader can become section-aware (Figures, Tables, Headings, Paragrap
 **Given** the coordinate mapping
 **Then** it is live-smoked at DPR>1 on a multi-column paper: the derived element rects align to the real headings/figures/tables/paragraphs across pages and across zoom, not only in a unit test ([[verify-on-hidpi-and-real-host]])
 
-> **Out of scope:** OCR / scanned PDFs (opendataloader hybrid mode, Docling + vision model); any user-facing consumer (TOC/index/preview/metadata are 10-2..10-5); re-analysis on annotation edits (structure is import-time, immutable). **Open design calls for create-story:** JRE bundling strategy (base image with JRE vs a multi-stage add); the exact `StructureElement.type` enum (map opendataloader types to our vocabulary); whether page dimensions come from the JSON or PyMuPDF; sync-at-import vs a separate `analyzing` status distinct from `extracting`; version-pinning opendataloader.
+> **Out of scope:** OCR / scanned PDFs (opendataloader hybrid mode, Docling + vision model); any user-facing consumer (TOC/index/preview/metadata are 10-2, 10-4..10-7); re-analysis on annotation edits (structure is import-time, immutable). **Open design calls for create-story:** JRE bundling strategy (base image with JRE vs a multi-stage add); the exact `StructureElement.type` enum (map opendataloader types to our vocabulary); whether page dimensions come from the JSON or PyMuPDF; sync-at-import vs a separate `analyzing` status distinct from `extracting`; version-pinning opendataloader.
 
 ## Story 10.2: Section navigation, synthesized Table of Contents
 
@@ -55,133 +55,9 @@ So that I can jump to any section even when the PDF has no embedded outline.
 
 > **Out of scope:** editing/reordering the synthesized TOC; numbering sections. **Open design calls for create-story:** embedded-vs-synthesized precedence (or a merge); how deep the hierarchy nests; whether Story 1.9's outline code stays as a fallback or is retired.
 
-## Story 10.3: Figures & Tables index
+## Story 10.3: Migrate structure extraction to opendataloader hybrid mode (runtime-switchable)
 
-> Surfaces opendataloader's detected figure and table regions as a navigable index (a visual TOC), the first user-facing payoff of section-awareness beyond headings, and the groundwork for Phase-3 "select a Figure/Table to chat about" (the region is already known, no box-drawing). New reader **FR-36**. Consumes the Story 10-1 structure layer (figures, tables, captions). Depends on 10-1.
-
-As a reader,
-I want an index of the paper's figures and tables,
-So that I can jump straight to any figure or table and see where they are.
-
-**Acceptance Criteria:**
-
-**Given** an analyzed paper
-**When** I open the Figures & Tables index
-**Then** it lists each detected figure and table (label from its caption where available, e.g. "Figure 3", "Table 1"), grouped/ordered by reading order, each jumping to its region (FR-36, AD-4)
-
-**Given** a figure/table entry
-**When** I select it
-**Then** the reader scrolls to and briefly indicates its region (the Story 3.6 flash idiom), anchored at correct coordinates across zoom (NFR-3)
-
-**Given** a paper with no detected figures/tables
-**Then** the index shows a calm empty state, never a broken panel (FR-36)
-
-**Given** the index is live-smoked at DPR>1 on a multi-column paper
-**Then** entries map to the correct on-page figures/tables
-
-> **Out of scope:** extracting figure/table CONTENT (image crop, table cells as data, a later story); click-to-chat (Phase 3). **Open design calls for create-story:** where the index lives (its own panel/lens vs a section of the ToC); caption-label parsing ("Figure N" from the caption element); dedupe of a figure and its caption element.
-
-## Story 10.4: Inline reading-helper previews via structure lookup (supersedes Story 12.3)
-
-> Delivers FR-27 (inline preview of a clicked Figure/Table mention, footnote, or citation marker) on the Story 10-1 structure layer, superseding Story 12.3, whose "regex over text-layer spans + geometry" approach is dropped in favor of a lookup against typed, box-anchored elements. Figure/Table first (cleanest: a "Figure N" mention resolves to the figure/caption element whose caption starts "Figure N"), then footnote / `[n]`. **FR-27** (reframed). Depends on 10-1 (and benefits from 10-3's caption-label parsing).
-
-As a reader,
-I want to preview a figure, table, footnote, or reference without leaving my reading position,
-So that I can check supporting information without losing my place.
-
-**Acceptance Criteria:**
-
-**Given** a `Figure N`/`Table N` mention, a footnote marker, or a citation marker (`[n]`) in the text
-**When** I click it
-**Then** a floating preview of the target region opens in place (the figure/table region, the footnote text, or the reference entry), resolved by looking the marker up against the structure layer's typed elements, without scrolling me away or reflowing the page (FR-27, FR-34, NFR-1)
-
-**Given** the preview
-**Then** it is dismissable (`Esc`/outside-click), keyboard-reachable, and stays anchored at correct coordinates across zoom (FR-27, NFR-3, UX-DR17), reusing the fixed-overlay re-anchor idiom ([[fixed-overlay-live-reanchor]])
-
-**Given** a marker whose target cannot be resolved (thin/absent structure)
-**Then** it degrades gracefully (no preview / a muted "couldn't locate" affordance), never a broken or mis-placed popup (FR-27)
-
-**Given** the resolver
-**Then** it is validated against 2-3 real papers (multi-column, numbered-and-named references) and live-smoked at DPR>1
-
-> **Out of scope:** click-to-chat / AI targeting (Phase 3); synthesizing a reference list when the PDF has none; OCR. **Open design calls for create-story:** which marker classes ship first; marker detection (text-layer span scan for `Figure N`/`[n]` vs opendataloader-provided links); how footnote markers map to footnote elements; the preview UI (reuse the comment-preview surface vs a new one).
-
-## Story 10.5: Structure-backed metadata extraction
-
-> Routes `extract()` (Story 6.5) through the structure layer, title from heading-level-1 / reading order instead of the PyMuPDF largest-font heuristic, keeping the current heuristic as the graceful fallback when structure is thin. The `bytes -> ExtractedMeta` seam is already documented "GROBID-swappable"; this is the swap-in. Upgrades **LFR-8**. Consumes the Story 10-1 structure layer. Depends on 10-1.
-
-As a reader,
-I want paper titles and authors detected more reliably,
-So that my library rows are correct more often, on more papers.
-
-**Acceptance Criteria:**
-
-**Given** an analyzed paper
-**When** the extraction pipeline runs
-**Then** the title is taken from the structure layer (heading-level-1 in reading order at the top of page 1) when available, falling back to the existing PyMuPDF font heuristic + XMP + `/Info` when structure is thin/absent (LFR-8, AD-L2/AD-L8)
-
-**Given** the DOI/arXiv capture
-**Then** it is unchanged (regex over `/Info` + XMP + first-page text), now fed opendataloader's clean reading-order text; the Crossref/arXiv enrich hop (`enrich()`) is untouched (LFR-8)
-
-**Given** the change
-**Then** it is a pure quality upgrade behind the existing `extract() -> ExtractedMeta` contract: the extraction status lifecycle (`extracting → ready | enrich-skipped | parse-failed`), the storage projection, and `meta.json`/`CollectionRow` shapes are unchanged (AD-L2, AD-L4)
-
-**Given** a corpus of real papers
-**Then** the new path is spot-checked to not REGRESS titles the heuristic already gets right (a guarded swap, not a blind replace)
-
-> **Out of scope:** author-list extraction from structure (authors still come from `/Info`/XMP + Crossref); re-running extraction on already-imported papers (create-story: backfill vs new-imports-only). **Open design calls for create-story:** the exact title-selection rule from structure; the fallback trigger (empty structure vs low confidence); whether the two sources are merged or strictly preferred.
-
-## Story 10.6: Structure-derived paper digest (Phase-3 groundwork, directional)
-
-> Directional Phase-3 groundwork: turn the structure layer's reading-order, header/footer-stripped, sectioned text into a clean "paper digest", the context payload the Phase-3 AI companion auto-injects (the north star). No AI feature is built here; this only produces + exposes the digest so Phase-3 consumes a ready artifact. New reader **FR-37** (directional). Consumes the Story 10-1 structure layer. Depends on 10-1. May be deferred if Phase-3 timing slips.
-
-As a reader (and the future AI companion),
-I want the paper's text available as a clean, reading-order, sectioned digest,
-So that a later AI feature can be given accurate paper context by default.
-
-**Acceptance Criteria:**
-
-**Given** an analyzed paper
-**Then** a digest is derivable from the structure layer: reading-order body text with headings as section boundaries, header/footer/watermark furniture removed, figures/tables represented by their captions (FR-37, FR-34)
-
-**Given** the digest
-**Then** it is exposed in a form Phase-3 can consume (create-story: a field on the structure response, a separate `GET .../digest`, or an in-memory client derivation) without committing any agent-execution decision (the Phase-3 host-CLI boundary stays deferred, AD-9)
-
-**Given** a paper with thin structure
-**Then** the digest degrades gracefully (raw reading-order text) rather than failing
-
-> **Out of scope:** ALL Phase-3 AI/agent work (Q&A, vendor switching, click-to-chat); token-budgeting/chunking the digest for a model. **Open design calls for create-story:** where the digest lives (server field vs client derivation); whether it ships at all this epic or waits for Phase-3; format (markdown vs structured sections).
-
-## Story 10.7: Prioritize Semantic Scholar over Crossref for metadata enrichment
-
-> Added 2026-07-20 via correct-course (`sprint-change-proposal-2026-07-20-metadata-semantic-scholar-first.md`). A live diagnostic on DOI `10.14778/3514061.3514067` (TranAD) found Crossref registers a **source-truncated** title (`TranAD`) that our DOI-first `enrich()` takes verbatim (no plausibility gate on the DOI path), overwriting the correct local title `TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data`. Field-by-field, **Semantic Scholar** is the better source for title, year, venue (full + short), and author display names; **Crossref** is better for full-given author names + reference graphs, so it is **demoted to fallback and reserved for later AI features** (paper digest, citation-aware chat). This **resolves the Library-PRD open question** (which external metadata service, and by what key). New reader/library **LFR-9** (reframed: S2-primary, Crossref-fallback). An enrich-source change behind the existing `enrich(meta) -> meta | "skipped"` seam (AD-L2); **independent of the structure layer** (does NOT consume Story 10-1). Interacts with Story 10-5 on the title field (10-5 improves the LOCAL title candidate; this improves the EXTERNAL correction + guards against a bad overwrite) — sequence deliberately.
-
-As a reader,
-I want metadata enriched from Semantic Scholar first, with Crossref as the fallback,
-So that my library rows show the correct full title and a clean venue instead of the truncated or worse values Crossref sometimes registers.
-
-**Acceptance Criteria:**
-
-**Given** a paper with a resolvable DOI (or arXiv id, or a confident title match)
-**Then** Semantic Scholar is the **primary** source for `title`, `year`, `venue`, `venue_short`, and author display names (`authors_list`), replacing the Crossref-first order; the truncated-title DOI `10.14778/3514061.3514067` resolves to the FULL title (LFR-9)
-
-**Given** Semantic Scholar skips (offline, non-200, rate-limited, or no match)
-**Then** Crossref fills the same fields as the fallback (its existing cascade), and if Crossref also skips the local `extract()` values survive; `crossref.py` stays in the codebase as the fallback + the reserved detailed-author/reference source for future AI features (LFR-9, AD-L2)
-
-**Given** Semantic Scholar's `publicationVenue.alternate_names`
-**Then** `venue_short` is the **shortest** entry (ties -> first), not the acronym-shape-only scan of Story 8.5 (which returns nothing for multi-word venues like VLDB)
-
-**Given** any failure at any hop (S2 or Crossref: offline, timeout, 429 rate-limit, malformed)
-**Then** enrichment degrades to `"skipped"` and the paper still settles (`ready | enrich-skipped | parse-failed`), never raises, never blocks the add; a 429 is a normal skip, not an error notice (NFR-1/NFR-3)
-
-**Given** whichever source wins
-**Then** a strictly-shorter title that is a prefix/substring of a better one never overwrites it (a targeted guard that kills the truncation class regardless of source), and the change is additive behind the existing seam: no new `DocMeta`/`CollectionRow` field, no `schema_version` bump, no route change, new-imports-only
-
-> **Out of scope:** backfill of already-imported papers; a heavy retry/queue for S2 rate limits (a 429 is just a skip this story); consuming Crossref's detailed authors/references (reserved for a future AI-features story). **Open design calls for create-story:** the S2 lookup-key order (DOI -> arXiv id -> title-search) and the title-search plausibility gate; whether `journal.name` beats the shortest `alternate_names` for `venue_short`; whether to read an optional `S2_API_KEY` env for a higher rate limit.
-
-## Story 10.8: Migrate structure extraction to opendataloader hybrid mode (runtime-switchable)
-
-> Added 2026-07-21 via correct-course (`sprint-change-proposal-2026-07-21-structure-hybrid-mode.md`). Story 10.1 shipped opendataloader's **local/fast** mode (deterministic + offline, born-digital PDFs) and deferred the **hybrid** mode (Docling + a vision model). A live diagnostic on the TranAD paper (`fixtures/sample-pdfs/adtran.pdf`, no embedded outline) showed local mode's heading-detection gaps: `3 METHODOLOGY` extracted but mis-tagged `paragraph`, `3.1 Problem Formulation` / `3.2 Data Preprocessing` not extracted at all — so the synthesized ToC (10.2) drops real sections. User decision (2026-07-21): **migrate to hybrid mode for better structure fidelity, and keep the mode runtime-switchable so falling back to local (non-hybrid) is trivial at any time.** Consumes/produces the Story 10.1 layer unchanged (same `DocStructure` contract, same `[left,bottom,right,top]`-points → normalized-`Rect` mapping); this changes only the extractor's *mode*, behind the existing `extract_structure` port. Amends **AD-13** (un-defers hybrid; the deterministic + offline guarantee becomes MODE-dependent, see below). No new FR — a quality/fidelity upgrade to **FR-34** (structure) that flows into every consumer (10.2 ToC, 10.3 index, 10.4 reading-helper, 10.5 metadata, 10.6 digest). Depends on 10.1. **SPIKE-FIRST**, mirroring 10.1: hybrid mode adds heavy deps and relaxes two AD-13 invariants, so prove it in-container before committing.
+> Added 2026-07-21 via correct-course (`sprint-change-proposal-2026-07-21-structure-hybrid-mode.md`); **prioritized to 10.3** (was 10.8) via correct-course 2026-07-21 (`sprint-change-proposal-2026-07-21-prioritize-hybrid-mode.md`) so the fidelity upgrade lands BEFORE the remaining consumers (Figures/Tables index, reading-helper, metadata, digest) are built — they then read the higher-fidelity structure from the start instead of local mode then a re-validate after a later hybrid swap. Story 10.1 shipped opendataloader's **local/fast** mode (deterministic + offline, born-digital PDFs) and deferred the **hybrid** mode (Docling + a vision model). A live diagnostic on the TranAD paper (`fixtures/sample-pdfs/adtran.pdf`, no embedded outline) showed local mode's heading-detection gaps: `3 METHODOLOGY` extracted but mis-tagged `paragraph`, `3.1 Problem Formulation` / `3.2 Data Preprocessing` not extracted at all — so the synthesized ToC (10.2) drops real sections. User decision (2026-07-21): **migrate to hybrid mode for better structure fidelity, and keep the mode runtime-switchable so falling back to local (non-hybrid) is trivial at any time.** Consumes/produces the Story 10.1 layer unchanged (same `DocStructure` contract, same `[left,bottom,right,top]`-points → normalized-`Rect` mapping); this changes only the extractor's *mode*, behind the existing `extract_structure` port. Amends **AD-13** (un-defers hybrid; the deterministic + offline guarantee becomes MODE-dependent, see below). No new FR — a quality/fidelity upgrade to **FR-34** (structure) that flows into every consumer (10.2 ToC, 10.4 Figures/Tables index, 10.5 reading-helper, 10.6 metadata, 10.7 digest). Depends on 10.1. **SPIKE-FIRST**, mirroring 10.1: hybrid mode adds heavy deps and relaxes two AD-13 invariants, so prove it in-container before committing.
 
 As a reader,
 I want the document structure extracted with higher fidelity (fewer missed/mis-tagged headings, tables, and figures),
@@ -207,9 +83,133 @@ So that the ToC, Figures/Tables index, reading-helper, and metadata are more com
 
 > **Out of scope:** re-analyzing already-imported papers (new-imports-only; a backfill/re-extract pass is its own story); changing any consumer (ToC/index/reading-helper/metadata read the same contract); a per-doc or per-request mode override (ONE global switch this story). **Open design calls for create-story:** the exact config mechanism + name + default (hybrid vs local); the JRE/Docling/vision-model bundling strategy for the image (and its size budget); whether hybrid needs a build-time model fetch vs a bundled weight; the timeout/resource guard for the heavier pass; whether to expose the active mode via `GET /api/health` for observability.
 
+## Story 10.4: Figures & Tables index
+
+> Surfaces opendataloader's detected figure and table regions as a navigable index (a visual TOC), the first user-facing payoff of section-awareness beyond headings, and the groundwork for Phase-3 "select a Figure/Table to chat about" (the region is already known, no box-drawing). New reader **FR-36**. Consumes the Story 10-1 structure layer (figures, tables, captions). Depends on 10-1.
+
+As a reader,
+I want an index of the paper's figures and tables,
+So that I can jump straight to any figure or table and see where they are.
+
+**Acceptance Criteria:**
+
+**Given** an analyzed paper
+**When** I open the Figures & Tables index
+**Then** it lists each detected figure and table (label from its caption where available, e.g. "Figure 3", "Table 1"), grouped/ordered by reading order, each jumping to its region (FR-36, AD-4)
+
+**Given** a figure/table entry
+**When** I select it
+**Then** the reader scrolls to and briefly indicates its region (the Story 3.6 flash idiom), anchored at correct coordinates across zoom (NFR-3)
+
+**Given** a paper with no detected figures/tables
+**Then** the index shows a calm empty state, never a broken panel (FR-36)
+
+**Given** the index is live-smoked at DPR>1 on a multi-column paper
+**Then** entries map to the correct on-page figures/tables
+
+> **Out of scope:** extracting figure/table CONTENT (image crop, table cells as data, a later story); click-to-chat (Phase 3). **Open design calls for create-story:** where the index lives (its own panel/lens vs a section of the ToC); caption-label parsing ("Figure N" from the caption element); dedupe of a figure and its caption element.
+
+## Story 10.5: Inline reading-helper previews via structure lookup (supersedes Story 12.3)
+
+> Delivers FR-27 (inline preview of a clicked Figure/Table mention, footnote, or citation marker) on the Story 10-1 structure layer, superseding Story 12.3, whose "regex over text-layer spans + geometry" approach is dropped in favor of a lookup against typed, box-anchored elements. Figure/Table first (cleanest: a "Figure N" mention resolves to the figure/caption element whose caption starts "Figure N"), then footnote / `[n]`. **FR-27** (reframed). Depends on 10-1 (and benefits from 10-4's caption-label parsing).
+
+As a reader,
+I want to preview a figure, table, footnote, or reference without leaving my reading position,
+So that I can check supporting information without losing my place.
+
+**Acceptance Criteria:**
+
+**Given** a `Figure N`/`Table N` mention, a footnote marker, or a citation marker (`[n]`) in the text
+**When** I click it
+**Then** a floating preview of the target region opens in place (the figure/table region, the footnote text, or the reference entry), resolved by looking the marker up against the structure layer's typed elements, without scrolling me away or reflowing the page (FR-27, FR-34, NFR-1)
+
+**Given** the preview
+**Then** it is dismissable (`Esc`/outside-click), keyboard-reachable, and stays anchored at correct coordinates across zoom (FR-27, NFR-3, UX-DR17), reusing the fixed-overlay re-anchor idiom ([[fixed-overlay-live-reanchor]])
+
+**Given** a marker whose target cannot be resolved (thin/absent structure)
+**Then** it degrades gracefully (no preview / a muted "couldn't locate" affordance), never a broken or mis-placed popup (FR-27)
+
+**Given** the resolver
+**Then** it is validated against 2-3 real papers (multi-column, numbered-and-named references) and live-smoked at DPR>1
+
+> **Out of scope:** click-to-chat / AI targeting (Phase 3); synthesizing a reference list when the PDF has none; OCR. **Open design calls for create-story:** which marker classes ship first; marker detection (text-layer span scan for `Figure N`/`[n]` vs opendataloader-provided links); how footnote markers map to footnote elements; the preview UI (reuse the comment-preview surface vs a new one).
+
+## Story 10.6: Structure-backed metadata extraction
+
+> Routes `extract()` (Story 6.5) through the structure layer, title from heading-level-1 / reading order instead of the PyMuPDF largest-font heuristic, keeping the current heuristic as the graceful fallback when structure is thin. The `bytes -> ExtractedMeta` seam is already documented "GROBID-swappable"; this is the swap-in. Upgrades **LFR-8**. Consumes the Story 10-1 structure layer. Depends on 10-1.
+
+As a reader,
+I want paper titles and authors detected more reliably,
+So that my library rows are correct more often, on more papers.
+
+**Acceptance Criteria:**
+
+**Given** an analyzed paper
+**When** the extraction pipeline runs
+**Then** the title is taken from the structure layer (heading-level-1 in reading order at the top of page 1) when available, falling back to the existing PyMuPDF font heuristic + XMP + `/Info` when structure is thin/absent (LFR-8, AD-L2/AD-L8)
+
+**Given** the DOI/arXiv capture
+**Then** it is unchanged (regex over `/Info` + XMP + first-page text), now fed opendataloader's clean reading-order text; the Crossref/arXiv enrich hop (`enrich()`) is untouched (LFR-8)
+
+**Given** the change
+**Then** it is a pure quality upgrade behind the existing `extract() -> ExtractedMeta` contract: the extraction status lifecycle (`extracting → ready | enrich-skipped | parse-failed`), the storage projection, and `meta.json`/`CollectionRow` shapes are unchanged (AD-L2, AD-L4)
+
+**Given** a corpus of real papers
+**Then** the new path is spot-checked to not REGRESS titles the heuristic already gets right (a guarded swap, not a blind replace)
+
+> **Out of scope:** author-list extraction from structure (authors still come from `/Info`/XMP + Crossref); re-running extraction on already-imported papers (create-story: backfill vs new-imports-only). **Open design calls for create-story:** the exact title-selection rule from structure; the fallback trigger (empty structure vs low confidence); whether the two sources are merged or strictly preferred.
+
+## Story 10.7: Structure-derived paper digest (Phase-3 groundwork, directional)
+
+> Directional Phase-3 groundwork: turn the structure layer's reading-order, header/footer-stripped, sectioned text into a clean "paper digest", the context payload the Phase-3 AI companion auto-injects (the north star). No AI feature is built here; this only produces + exposes the digest so Phase-3 consumes a ready artifact. New reader **FR-37** (directional). Consumes the Story 10-1 structure layer. Depends on 10-1. May be deferred if Phase-3 timing slips.
+
+As a reader (and the future AI companion),
+I want the paper's text available as a clean, reading-order, sectioned digest,
+So that a later AI feature can be given accurate paper context by default.
+
+**Acceptance Criteria:**
+
+**Given** an analyzed paper
+**Then** a digest is derivable from the structure layer: reading-order body text with headings as section boundaries, header/footer/watermark furniture removed, figures/tables represented by their captions (FR-37, FR-34)
+
+**Given** the digest
+**Then** it is exposed in a form Phase-3 can consume (create-story: a field on the structure response, a separate `GET .../digest`, or an in-memory client derivation) without committing any agent-execution decision (the Phase-3 host-CLI boundary stays deferred, AD-9)
+
+**Given** a paper with thin structure
+**Then** the digest degrades gracefully (raw reading-order text) rather than failing
+
+> **Out of scope:** ALL Phase-3 AI/agent work (Q&A, vendor switching, click-to-chat); token-budgeting/chunking the digest for a model. **Open design calls for create-story:** where the digest lives (server field vs client derivation); whether it ships at all this epic or waits for Phase-3; format (markdown vs structured sections).
+
+## Story 10.8: Prioritize Semantic Scholar over Crossref for metadata enrichment
+
+> Added 2026-07-20 via correct-course (`sprint-change-proposal-2026-07-20-metadata-semantic-scholar-first.md`). A live diagnostic on DOI `10.14778/3514061.3514067` (TranAD) found Crossref registers a **source-truncated** title (`TranAD`) that our DOI-first `enrich()` takes verbatim (no plausibility gate on the DOI path), overwriting the correct local title `TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data`. Field-by-field, **Semantic Scholar** is the better source for title, year, venue (full + short), and author display names; **Crossref** is better for full-given author names + reference graphs, so it is **demoted to fallback and reserved for later AI features** (paper digest, citation-aware chat). This **resolves the Library-PRD open question** (which external metadata service, and by what key). New reader/library **LFR-9** (reframed: S2-primary, Crossref-fallback). An enrich-source change behind the existing `enrich(meta) -> meta | "skipped"` seam (AD-L2); **independent of the structure layer** (does NOT consume Story 10-1). Interacts with Story 10-6 on the title field (10-6 improves the LOCAL title candidate; this improves the EXTERNAL correction + guards against a bad overwrite) — sequence deliberately.
+
+As a reader,
+I want metadata enriched from Semantic Scholar first, with Crossref as the fallback,
+So that my library rows show the correct full title and a clean venue instead of the truncated or worse values Crossref sometimes registers.
+
+**Acceptance Criteria:**
+
+**Given** a paper with a resolvable DOI (or arXiv id, or a confident title match)
+**Then** Semantic Scholar is the **primary** source for `title`, `year`, `venue`, `venue_short`, and author display names (`authors_list`), replacing the Crossref-first order; the truncated-title DOI `10.14778/3514061.3514067` resolves to the FULL title (LFR-9)
+
+**Given** Semantic Scholar skips (offline, non-200, rate-limited, or no match)
+**Then** Crossref fills the same fields as the fallback (its existing cascade), and if Crossref also skips the local `extract()` values survive; `crossref.py` stays in the codebase as the fallback + the reserved detailed-author/reference source for future AI features (LFR-9, AD-L2)
+
+**Given** Semantic Scholar's `publicationVenue.alternate_names`
+**Then** `venue_short` is the **shortest** entry (ties -> first), not the acronym-shape-only scan of Story 8.5 (which returns nothing for multi-word venues like VLDB)
+
+**Given** any failure at any hop (S2 or Crossref: offline, timeout, 429 rate-limit, malformed)
+**Then** enrichment degrades to `"skipped"` and the paper still settles (`ready | enrich-skipped | parse-failed`), never raises, never blocks the add; a 429 is a normal skip, not an error notice (NFR-1/NFR-3)
+
+**Given** whichever source wins
+**Then** a strictly-shorter title that is a prefix/substring of a better one never overwrites it (a targeted guard that kills the truncation class regardless of source), and the change is additive behind the existing seam: no new `DocMeta`/`CollectionRow` field, no `schema_version` bump, no route change, new-imports-only
+
+> **Out of scope:** backfill of already-imported papers; a heavy retry/queue for S2 rate limits (a 429 is just a skip this story); consuming Crossref's detailed authors/references (reserved for a future AI-features story). **Open design calls for create-story:** the S2 lookup-key order (DOI -> arXiv id -> title-search) and the title-search plausibility gate; whether `journal.name` beats the shortest `alternate_names` for `venue_short`; whether to read an optional `S2_API_KEY` env for a higher rate limit.
+
 ## Story 10.9: Epic 10 structural refactor (terminal)
 
-> Terminal structural-refactor pass (AE7-5), same footing as Stories 5.0/5.3/5.4/6.8/8.10/9.9. Sequenced LAST so its scope reflects everything Stories 10.1-10.8 touched: the `domain/structure.py` extraction seam + adapter (now incl. the local/hybrid mode switch, Story 10.8), the `structure/` client service + its consumers (TOC, index, reading-helper, metadata), the enrich-source cascade (10.7), the structure-status derivation (marker + existence), and any coordinate-mapping helper. No new FR, no behavior/contract change.
+> Terminal structural-refactor pass (AE7-5), same footing as Stories 5.0/5.3/5.4/6.8/8.10/9.9. Sequenced LAST so its scope reflects everything Stories 10.1-10.8 touched: the `domain/structure.py` extraction seam + adapter (now incl. the local/hybrid mode switch, Story 10.3), the `structure/` client service + its consumers (TOC, index, reading-helper, metadata), the enrich-source cascade (10.8), the structure-status derivation (marker + existence), and any coordinate-mapping helper. No new FR, no behavior/contract change.
 
 As a developer-user,
 I want the structure-layer code unified behind cohesive modules with reduced conditional sprawl,

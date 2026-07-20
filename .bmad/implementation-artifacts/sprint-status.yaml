@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-21 (correct-course: added 10-8 hybrid-mode-switchable, refactor renumbered 10-8 -> 10-9)"
+last_updated: "2026-07-21 (correct-course: prioritized hybrid-mode to 10-3; 10-3..10-6 shifted +1, S2-enrich 10-7 -> 10-8, refactor stays 10-9)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -321,11 +321,18 @@ development_status:
   # index, structure-backed reading-helper, structure-backed metadata) + terminal refactor.
   epic-10: in-progress
   10-1-structure-extraction-enabler: done                    # FR-34 (SPIKE-FIRST: binding + DPR>1 coordinate gate)
-  10-2-section-navigation-toc: review                          # FR-35 (upgrades FR-3; depends on 10-1)
-  10-3-figures-tables-index: backlog                          # FR-36 (depends on 10-1)
-  10-4-structure-backed-reading-helper: backlog              # FR-27 reframed; SUPERSEDES 12-3 (depends on 10-1)
-  10-5-structure-backed-metadata: backlog                     # LFR-8 upgraded (depends on 10-1)
-  10-6-structure-derived-digest: backlog                      # FR-37 (directional, Phase-3 groundwork; depends on 10-1)
+  10-2-section-navigation-toc: done                            # FR-35 (upgrades FR-3; depends on 10-1); v0.6.2
+  # 2026-07-21 correct-course (sprint-change-proposal-2026-07-21-prioritize-hybrid-mode.md):
+  # user decision to PRIORITIZE the hybrid-mode migration to 10-3 (was 10-8) so the
+  # fidelity upgrade lands BEFORE the remaining consumers (index/reading-helper/metadata/
+  # digest) are built. The five backlog stories shift down by one; the S2-enrich story
+  # (ready-for-dev) is renumbered 10-7 -> 10-8 (file renamed); the terminal refactor
+  # stays 10-9 (AE7-5, number = exec order). All are un-started backlog except S2.
+  10-3-hybrid-mode-switchable: backlog                        # FR-34 fidelity upgrade (SPIKE-FIRST; depends on 10-1)
+  10-4-figures-tables-index: backlog                          # FR-36 (depends on 10-1)
+  10-5-structure-backed-reading-helper: backlog              # FR-27 reframed; SUPERSEDES 12-3 (depends on 10-1)
+  10-6-structure-backed-metadata: backlog                     # LFR-8 upgraded (depends on 10-1)
+  10-7-structure-derived-digest: backlog                      # FR-37 (directional, Phase-3 groundwork; depends on 10-1)
   # 2026-07-20 correct-course (sprint-change-proposal-2026-07-20-metadata-semantic-scholar-first.md):
   # user decision to prioritize Semantic Scholar over Crossref for enrichment (S2 wins
   # title/year/venue-full/venue-short/author-names; Crossref demoted to fallback +
@@ -335,16 +342,10 @@ development_status:
   # resolves the Library-PRD open question (which enrich service + by what key). Inserted
   # as 10-7 and the terminal refactor renumbered 10-7 -> 10-8 so the refactor stays LAST
   # (AE7-5, number = exec order).
-  10-7-metadata-enrichment-semantic-scholar-first: ready-for-dev  # LFR-9 (S2-first enrich; independent of 10-1)
-  # 2026-07-21 correct-course (sprint-change-proposal-2026-07-21-structure-hybrid-mode.md):
-  # user decision to migrate structure extraction to opendataloader's HYBRID mode
-  # (Docling + a vision model) for better heading/structure fidelity, kept runtime-
-  # SWITCHABLE back to local/non-hybrid via one config env. Motivated by local mode's
-  # gaps on the TranAD paper (3 Methodology mis-tagged paragraph; 3.1/3.2 not extracted).
-  # SPIKE-FIRST (heavy deps + relaxes AD-13 deterministic/offline -> mode-dependent).
-  # Quality upgrade to FR-34, contract unchanged. Inserted as 10-8; terminal refactor
-  # renumbered 10-8 -> 10-9 so the refactor stays LAST (AE7-5, number = exec order).
-  10-8-hybrid-mode-switchable: backlog                        # FR-34 fidelity upgrade (SPIKE-FIRST; depends on 10-1)
+  # Renumbered 10-7 -> 10-8 by the 2026-07-21 prioritize-hybrid correct-course (story
+  # file renamed to 10-8-metadata-enrichment-semantic-scholar-first.md). Still ready-for-dev,
+  # still independent of the structure layer -- pickable anytime; the number is just exec order.
+  10-8-metadata-enrichment-semantic-scholar-first: ready-for-dev  # LFR-9 (S2-first enrich; independent of 10-1)
   10-9-epic-10-structural-refactor: backlog                   # terminal refactor (AE7-5); runs LAST
   epic-10-retrospective: optional
 
