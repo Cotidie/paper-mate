@@ -117,6 +117,33 @@ describe("synthesizeToc", () => {
     ]);
   });
 
+  it("excludes a figure/table caption mis-tagged as a heading (opendataloader quirk)", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, {
+          heading_level: 2,
+          text: "3.3 Transformer Model",
+        }),
+        el("2", "heading", 0, { x0: 0, y0: 0.2, x1: 1, y1: 0.3 }, {
+          heading_level: 4,
+          text: "Figure 1: The TranAD Model.",
+        }),
+        el("3", "heading", 1, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, {
+          heading_level: 4,
+          text: "Table 4: Diagnosis Performance.",
+        }),
+        el("4", "heading", 1, { x0: 0, y0: 0.2, x1: 1, y1: 0.3 }, {
+          heading_level: 2,
+          text: "4 Experiments",
+        }),
+      ],
+    };
+    expect(synthesizeToc(s).map((e) => e.title)).toEqual([
+      "3.3 Transformer Model",
+      "4 Experiments",
+    ]);
+  });
+
   it("preserves reading order (array order)", () => {
     const s: DocStructure = {
       elements: [

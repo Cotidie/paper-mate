@@ -93,6 +93,17 @@ function clampDepth(level: number | null | undefined): number {
 }
 
 /**
+ * Matches a figure/table caption label ("Figure 1: ...", "Table 4. ...").
+ * opendataloader sometimes mis-tags a caption as `type: "heading"` (observed
+ * on real papers: `heading_level` 4, text starting with the caption label)
+ * instead of `type: "caption"` — a caption is never a section to navigate to,
+ * so `synthesizeToc` excludes anything matching this shape regardless of the
+ * type the layer assigned it (user fix request, live-smoke finding on the
+ * TranAD paper).
+ */
+const FIGURE_TABLE_CAPTION = /^(figure|table)\s+\d+\b/i;
+
+/**
  * Synthesize a Table-of-Contents from the structure layer's heading elements
  * (Story 10.2, FR-35) — the fallback source for the common case where the PDF
  * has no embedded outline (`render/getOutline` returns `[]`). Reading order is
@@ -106,6 +117,7 @@ export function synthesizeToc(structure: DocStructure): TocEntry[] {
   for (const element of headings(structure)) {
     const title = element.text.trim();
     if (!title) continue; // a blank heading element never produces a dead row
+    if (FIGURE_TABLE_CAPTION.test(title)) continue; // a caption, not a section
     out.push({
       title,
       pageNumber: element.page_index + 1, // 0-based -> the TocEntry convention
