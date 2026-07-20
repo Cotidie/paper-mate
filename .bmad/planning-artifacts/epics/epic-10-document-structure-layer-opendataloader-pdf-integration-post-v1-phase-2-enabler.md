@@ -179,9 +179,37 @@ So that my library rows show the correct full title and a clean venue instead of
 
 > **Out of scope:** backfill of already-imported papers; a heavy retry/queue for S2 rate limits (a 429 is just a skip this story); consuming Crossref's detailed authors/references (reserved for a future AI-features story). **Open design calls for create-story:** the S2 lookup-key order (DOI -> arXiv id -> title-search) and the title-search plausibility gate; whether `journal.name` beats the shortest `alternate_names` for `venue_short`; whether to read an optional `S2_API_KEY` env for a higher rate limit.
 
-## Story 10.8: Epic 10 structural refactor (terminal)
+## Story 10.8: Migrate structure extraction to opendataloader hybrid mode (runtime-switchable)
 
-> Terminal structural-refactor pass (AE7-5), same footing as Stories 5.0/5.3/5.4/6.8/8.10/9.9. Sequenced LAST so its scope reflects everything Stories 10.1-10.7 touched: the `domain/structure.py` extraction seam + adapter, the `structure/` client service + its consumers (TOC, index, reading-helper, metadata), the enrich-source cascade (10.7), and any coordinate-mapping helper. No new FR, no behavior/contract change.
+> Added 2026-07-21 via correct-course (`sprint-change-proposal-2026-07-21-structure-hybrid-mode.md`). Story 10.1 shipped opendataloader's **local/fast** mode (deterministic + offline, born-digital PDFs) and deferred the **hybrid** mode (Docling + a vision model). A live diagnostic on the TranAD paper (`fixtures/sample-pdfs/adtran.pdf`, no embedded outline) showed local mode's heading-detection gaps: `3 METHODOLOGY` extracted but mis-tagged `paragraph`, `3.1 Problem Formulation` / `3.2 Data Preprocessing` not extracted at all — so the synthesized ToC (10.2) drops real sections. User decision (2026-07-21): **migrate to hybrid mode for better structure fidelity, and keep the mode runtime-switchable so falling back to local (non-hybrid) is trivial at any time.** Consumes/produces the Story 10.1 layer unchanged (same `DocStructure` contract, same `[left,bottom,right,top]`-points → normalized-`Rect` mapping); this changes only the extractor's *mode*, behind the existing `extract_structure` port. Amends **AD-13** (un-defers hybrid; the deterministic + offline guarantee becomes MODE-dependent, see below). No new FR — a quality/fidelity upgrade to **FR-34** (structure) that flows into every consumer (10.2 ToC, 10.3 index, 10.4 reading-helper, 10.5 metadata, 10.6 digest). Depends on 10.1. **SPIKE-FIRST**, mirroring 10.1: hybrid mode adds heavy deps and relaxes two AD-13 invariants, so prove it in-container before committing.
+
+As a reader,
+I want the document structure extracted with higher fidelity (fewer missed/mis-tagged headings, tables, and figures),
+So that the ToC, Figures/Tables index, reading-helper, and metadata are more complete and accurate, especially on papers with no embedded outline.
+
+**Acceptance Criteria:**
+
+**Given** the story **(SPIKE-FIRST gate; a negative outcome is a complete + acceptable result)**
+**Then** it STARTS with a spike before any migration is committed: confirm opendataloader's **hybrid** mode (Docling + a vision model) runs **inside the container image**, and characterize its cost/behavior against local mode on 2-3 real papers (incl. the TranAD case): (a) that `3 METHODOLOGY` / `3.1` / `3.2` and similar are now recovered as headings; (b) the added image size + dependency footprint (Docling + the vision model weights); (c) whether the mode needs network / a model download at build or run (the offline question); (d) whether it is deterministic run-to-run (a vision model may not be); (e) that the hybrid JSON output shape (bbox `[left,bottom,right,top]` points, 1-indexed page, our `type` vocabulary) is **identical** to local mode, so `domain/structure.py`'s points→normalized `Rect` mapping and type-map need NO change (if it differs, that delta is the finding). If hybrid cannot run in-image, or breaks the coordinate mapping, STOP and write it up ([[verify-on-hidpi-and-real-host]]).
+
+**Given** the mode is proven
+**When** structure extraction runs at import (AD-L4)
+**Then** the `OpenDataLoaderExtractor` adapter selects local vs hybrid from a **single runtime config switch** (e.g. `PAPER_MATE_STRUCTURE_MODE=hybrid|local`, read once; create-story fixes the exact name/mechanism), **defaulting to hybrid** (the migration), with **local reachable by flipping one env value** — no code change, no rebuild-for-flip beyond whatever deps the image already carries. The `extract_structure` port + the `DocStructure` contract + the persisted `structure.json` shape are **unchanged** (AD-13/AD-3): a consumer cannot tell which mode produced a structure.
+
+**Given** either mode
+**Then** extraction stays **total + non-blocking** exactly as Story 10.1 (a hybrid failure — model load error, timeout, OOM — yields an empty `DocStructure`, never crashes the import, never blocks the paper reaching a settled status), and the structure-status dot's `analyzing`→`ready` lifecycle is unchanged.
+
+**Given** AD-13's "deterministic + offline for born-digital PDFs" invariant
+**Then** the change **surfaces, not hides,** how hybrid relaxes it: if hybrid is non-deterministic or needs network/model weights, that is documented as a MODE property, and **local mode remains the deterministic + offline fallback** reachable via the switch (so the offline/local-first promise, NFR-1, is still satisfiable by config). The default (hybrid vs local) is the user's call, recorded in create-story.
+
+**Given** the migration is live-smoked
+**Then** on the TranAD paper the synthesized ToC (Story 10.2) now includes the sections local mode dropped (`3 Methodology`, `3.1`, `3.2`), verified at DPR>1 that the recovered headings still land on the real on-page elements (the coordinate mapping still holds under hybrid output).
+
+> **Out of scope:** re-analyzing already-imported papers (new-imports-only; a backfill/re-extract pass is its own story); changing any consumer (ToC/index/reading-helper/metadata read the same contract); a per-doc or per-request mode override (ONE global switch this story). **Open design calls for create-story:** the exact config mechanism + name + default (hybrid vs local); the JRE/Docling/vision-model bundling strategy for the image (and its size budget); whether hybrid needs a build-time model fetch vs a bundled weight; the timeout/resource guard for the heavier pass; whether to expose the active mode via `GET /api/health` for observability.
+
+## Story 10.9: Epic 10 structural refactor (terminal)
+
+> Terminal structural-refactor pass (AE7-5), same footing as Stories 5.0/5.3/5.4/6.8/8.10/9.9. Sequenced LAST so its scope reflects everything Stories 10.1-10.8 touched: the `domain/structure.py` extraction seam + adapter (now incl. the local/hybrid mode switch, Story 10.8), the `structure/` client service + its consumers (TOC, index, reading-helper, metadata), the enrich-source cascade (10.7), the structure-status derivation (marker + existence), and any coordinate-mapping helper. No new FR, no behavior/contract change.
 
 As a developer-user,
 I want the structure-layer code unified behind cohesive modules with reduced conditional sprawl,
@@ -189,13 +217,13 @@ So that Phase-3 builds on clean boundaries instead of accreting patches onto the
 
 **Acceptance Criteria:**
 
-**Given** every file Stories 10.1-10.7 touched (finalize the list once they land)
+**Given** every file Stories 10.1-10.8 touched (finalize the list once they land)
 **Then** each is audited for the same smells 5.3/6.8/8.10/9.9 targeted (god-objects/god-functions, near-duplicate conditional branches that should be one descriptor/registry, coordinate math outside the anchor boundary AD-9), and recorded decomposed-or-left-clean with rationale
 
-**Given** the extraction adapter + the client `structure/` service + its consumers + the enricher cascade
-**Then** their shared concerns (marker→element resolution, element-type dispatch, points→normalized mapping, enricher-source fallback) are unified behind cohesive units rather than parallel per-consumer conditionals
+**Given** the extraction adapter (+ its local/hybrid mode switch) + the client `structure/` service + its consumers + the enricher cascade
+**Then** their shared concerns (marker→element resolution, element-type dispatch, points→normalized mapping, enricher-source fallback, extraction-mode selection) are unified behind cohesive units rather than parallel per-consumer conditionals
 
 **Given** this is a pure refactor thread
 **Then** it changes NO behavior and NO contract: every existing test still passes unmodified in intent; no structure-contract / storage / API change; lands in its own PR(s)
 
-> **Out of scope:** any new capability; touching modules Epic 10 did not touch; the deferred OCR/hybrid path. **Open design calls for create-story:** the exact module boundaries; final scope depends on which of 10.1-10.7 shipped.
+> **Out of scope:** any new capability; touching modules Epic 10 did not touch. **Open design calls for create-story:** the exact module boundaries; final scope depends on which of 10.1-10.8 shipped.
