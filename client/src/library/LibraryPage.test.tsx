@@ -554,6 +554,38 @@ describe("Metadata extraction settle-polling (Story 6.5)", () => {
     vi.useRealTimers();
   });
 
+  it("starts polling on the INITIAL load when a row is already analyzing (no upload needed)", async () => {
+    // Codex review M5: opening/refreshing the Library while a paper (imported
+    // elsewhere) is still analyzing must start the poll from the mount fetch,
+    // not only after an upload batch — else the amber dot freezes until reload.
+    vi.useFakeTimers();
+    const id = "w".repeat(64);
+    let call = 0;
+    vi.spyOn(api, "getLibrary").mockImplementation(async () => {
+      call++;
+      // Mount fetch (call 1) already shows an analyzing row; the first poll
+      // tick (call 2) flips to ready.
+      if (call <= 1)
+        return { papers: [libRow(id, "ready", "Analyzing Paper", "W.pdf", "analyzing")], folders: [] };
+      return { papers: [libRow(id, "ready", "Analyzing Paper", "W.pdf", "ready")], folders: [] };
+    });
+
+    renderLibrary();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0))); // mount fetch
+    expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("analyzing");
+
+    // The poll (started from the mount fetch, no upload) flips it green.
+    await act(async () => void (await vi.advanceTimersByTimeAsync(1200)));
+    expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("ready");
+
+    // Polling stops once settled.
+    const settledCalls = vi.mocked(api.getLibrary).mock.calls.length;
+    await act(async () => void (await vi.advanceTimersByTimeAsync(6000)));
+    expect(vi.mocked(api.getLibrary).mock.calls.length).toBe(settledCalls);
+
+    vi.useRealTimers();
+  });
+
   it("does not poll when the batch settles with no extracting rows (6.4 ready path unchanged)", async () => {
     // uploadDoc resolves to a `ready` doc and the reconcile shows no extracting
     // row, so the poll loop is never entered.

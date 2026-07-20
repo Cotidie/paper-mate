@@ -93,15 +93,19 @@ function clampDepth(level: number | null | undefined): number {
 }
 
 /**
- * Matches a figure/table caption label ("Figure 1: ...", "Table 4. ...").
- * opendataloader sometimes mis-tags a caption as `type: "heading"` (observed
- * on real papers: `heading_level` 4, text starting with the caption label)
- * instead of `type: "caption"` — a caption is never a section to navigate to,
- * so `synthesizeToc` excludes anything matching this shape regardless of the
- * type the layer assigned it (user fix request, live-smoke finding on the
- * TranAD paper).
+ * Matches a figure/table caption label. opendataloader sometimes mis-tags a
+ * caption as `type: "heading"` (observed: text starting with the caption
+ * label) instead of `type: "caption"` — a caption is never a section to
+ * navigate to, so `synthesizeToc` excludes anything matching this shape
+ * regardless of the type the layer assigned it (user fix request, live-smoke
+ * finding on the TranAD paper). The label vocabulary covers the common
+ * academic forms (Codex review L4): `Figure`/`Fig`/`Fig.`, `Table`/`Tab`/`Tab.`
+ * then a number that may be supplementary (`S1`), sub-lettered (`1a`), roman
+ * (`IV`), or appendix-style (`A.1`/`A1`). A genuine section is numbered
+ * `"3 Methodology"` (a bare number), never `"Figure N"`/`"Table N"`, so this is
+ * not at risk of dropping a real heading.
  */
-const FIGURE_TABLE_CAPTION = /^(figure|table)\s+\d+\b/i;
+const FIGURE_TABLE_CAPTION = /^(figure|fig|table|tab)\.?\s+(s?\d+[a-z]?|[ivx]+|[a-z]\.?\d+)\b/i;
 
 /** Case/whitespace-insensitive text key (collapses the line breaks a heading
  *  element's text often carries vs the flat metadata title). */
@@ -120,6 +124,13 @@ function normalizeText(s: string): string {
  * metadata title or the heading's own line breaks) so a real section can never
  * be dropped. A null/blank metadata title drops nothing.
  */
+/** A prefix match is only trusted when the shorter (overlapping) string is this
+ *  long — a real paper title is long+distinctive, so this keeps a truncated
+ *  metadata title matching its heading while refusing to let a SHORT title
+ *  (e.g. `"Results"`) swallow a real section (`"Results and Discussion"`),
+ *  which bare `startsWith` would (Codex review L5). */
+const TITLE_PREFIX_MIN = 15;
+
 function isPaperTitleHeading(
   element: StructureElement,
   docTitle: string | null | undefined,
@@ -128,7 +139,11 @@ function isPaperTitleHeading(
   const h = normalizeText(element.text);
   const t = normalizeText(docTitle);
   if (!t || h.length < 6) return false;
-  return h === t || h.startsWith(t) || t.startsWith(h);
+  if (h === t) return true; // exact match is always the title
+  // A prefix either way (truncated metadata title, or the heading carrying an
+  // extra line) counts ONLY when the overlap is substantial.
+  const prefix = h.startsWith(t) || t.startsWith(h);
+  return prefix && Math.min(h.length, t.length) >= TITLE_PREFIX_MIN;
 }
 
 /**

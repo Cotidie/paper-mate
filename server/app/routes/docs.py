@@ -26,6 +26,7 @@ from app import storage
 from app.models import Annotation, Doc, DocPatch, DocStructure, Library
 from app.routes._errors import error_response, storage_errors
 from app.routes.extraction import run_extraction
+from app.routes.structure_status import decorate_doc, decorate_library
 
 router = APIRouter(tags=["docs"])
 
@@ -49,22 +50,19 @@ async def upload_doc(background_tasks: BackgroundTasks, file: UploadFile = File(
         # Any other storage failure (corrupt/unknown-version metadata, I/O):
         # still answer with the single { detail } envelope, never a bare 500.
         raise HTTPException(status_code=500, detail="Could not store document") from exc
-    if meta.status == "extracting":
-        # Mark analyzing SYNCHRONOUSLY here (before the response), not inside the
-        # background task, so the immediate upload response already reports
-        # "analyzing" and the optimistic Library row (docToRow) shows the
-        # indicator without a flicker. `_run_structure` clears it when the pass
-        # finishes. A re-import of an already-settled doc (status != extracting)
-        # is never marked -> reports "ready".
+    # Mark analyzing SYNCHRONOUSLY here (before the response), not inside the
+    # background task, so the immediate upload response already reports
+    # "analyzing" and the optimistic Library row (docToRow) shows the indicator
+    # without a flicker. Guard on the marker so a duplicate concurrent import of
+    # identical bytes (same doc_id) while the first is still `extracting` does
+    # NOT schedule a second task / double-mark (which the first finisher would
+    # then clear early). `_run_structure` clears the marker when the pass ends.
+    # A re-import of an already-settled doc (status != extracting) is never
+    # marked -> reports "ready"/"absent" by existence.
+    if meta.status == "extracting" and not storage.is_structure_analyzing(doc_id):
         storage.mark_structure_analyzing(doc_id)
         background_tasks.add_task(run_extraction, doc_id, raw)
-    return Doc(
-        doc_id=doc_id,
-        structure_status=storage.structure_status_for(
-            doc_id, storage.structure_exists(doc_id)
-        ),
-        **meta.model_dump(),
-    )
+    return decorate_doc(Doc(doc_id=doc_id, **meta.model_dump()))
 
 
 @router.get(
@@ -83,13 +81,7 @@ async def get_doc(doc_id: str) -> Doc:
     """
     with storage_errors("Could not read document"):
         meta = storage.read_meta(doc_id)
-    return Doc(
-        doc_id=doc_id,
-        structure_status=storage.structure_status_for(
-            doc_id, storage.structure_exists(doc_id)
-        ),
-        **meta.model_dump(),
-    )
+    return decorate_doc(Doc(doc_id=doc_id, **meta.model_dump()))
 
 
 @router.patch(
@@ -125,7 +117,7 @@ async def patch_doc(doc_id: str, patch: DocPatch) -> Doc:
         updates["authors_list"] = [a.strip() for a in updates["authors_list"] if a.strip()]
     with storage_errors("Could not update document"):
         meta = storage.update_doc_meta(doc_id, updates)
-    return Doc(doc_id=doc_id, **meta.model_dump())
+    return decorate_doc(Doc(doc_id=doc_id, **meta.model_dump()))
 
 
 @router.delete(
@@ -143,7 +135,7 @@ async def purge_doc(doc_id: str) -> Library:
     or already-purged id -> 404 ``"Document not found"``. Returns the whole
     updated ``Library`` in one round-trip."""
     with storage_errors("Could not purge document"):
-        return storage.purge_document(doc_id)
+        return decorate_library(storage.purge_document(doc_id))
 
 
 @router.post(
@@ -165,7 +157,7 @@ async def mark_doc_opened(doc_id: str) -> Doc:
     """
     with storage_errors("Could not update document"):
         meta = storage.touch_last_opened(doc_id)
-    return Doc(doc_id=doc_id, **meta.model_dump())
+    return decorate_doc(Doc(doc_id=doc_id, **meta.model_dump()))
 
 
 @router.get(

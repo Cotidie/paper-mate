@@ -191,16 +191,19 @@ def test_structure_status_for_is_three_state():
     # Not analyzed, no structure.json -> absent (grey). The fix for the "dot
     # spins on pre-existing papers" bug: absence is NOT analyzing.
     assert storage.is_structure_analyzing("doc-x") is False
-    assert storage.structure_status_for("doc-x", structure_exists=False) == "absent"
+    assert storage.structure_status_for("doc-x", lambda: False) == "absent"
     # Analyzed (structure.json exists), not in flight -> ready (green).
-    assert storage.structure_status_for("doc-x", structure_exists=True) == "ready"
+    assert storage.structure_status_for("doc-x", lambda: True) == "ready"
     # In flight -> analyzing (amber), regardless of file existence (takes
-    # precedence).
+    # precedence). The existence predicate is NOT even evaluated when analyzing.
     storage.mark_structure_analyzing("doc-x")
-    assert storage.structure_status_for("doc-x", structure_exists=False) == "analyzing"
-    assert storage.structure_status_for("doc-x", structure_exists=True) == "analyzing"
+    assert storage.structure_status_for("doc-x", _boom) == "analyzing"
     storage.clear_structure_analyzing("doc-x")
-    assert storage.structure_status_for("doc-x", structure_exists=False) == "absent"
+    assert storage.structure_status_for("doc-x", lambda: False) == "absent"
+
+
+def _boom() -> bool:
+    raise AssertionError("existence predicate must not be evaluated while analyzing")
 
 
 def test_structure_exists_reflects_the_file(data_root):
@@ -213,7 +216,7 @@ def test_structure_exists_reflects_the_file(data_root):
 def test_clear_structure_analyzing_is_a_noop_when_unmarked():
     # Never marked (e.g. a re-import that skipped extraction): clearing is safe.
     storage.clear_structure_analyzing("never-marked")
-    assert storage.structure_status_for("never-marked", structure_exists=False) == "absent"
+    assert storage.structure_status_for("never-marked", lambda: False) == "absent"
 
 
 def test_structure_store_unknown_id_not_found(data_root):
@@ -364,6 +367,35 @@ def test_get_library_reports_structure_status_per_row(data_root):
     assert rows[analyzing]["structure_status"] == "analyzing"
     assert rows[ready]["structure_status"] == "ready"
     assert rows[absent]["structure_status"] == "absent"
+
+
+def test_mutation_responses_keep_structure_status(data_root):
+    # A ready (analyzed) paper: every route that returns Doc/Library must keep
+    # its derived structure_status, not fall back to the "absent" default (else
+    # the client's green dot would flip grey after a star/move/patch/open).
+    doc_id = _import(make_pdf_bytes(title="Analyzed"))
+    storage.write_structure(doc_id, DocStructure())  # -> "ready"
+
+    def status_in_library() -> str:
+        rows = {r["doc_id"]: r for r in client.get("/api/library").json()["papers"]}
+        return rows[doc_id]["structure_status"]
+
+    # Star (a Library-returning set op).
+    star = client.post("/api/library/star", json={"doc_ids": [doc_id]})
+    assert {r["doc_id"]: r for r in star.json()["papers"]}[doc_id]["structure_status"] == "ready"
+    # Move to Uncategorized (Library-returning).
+    mv = client.post("/api/library/move", json={"doc_ids": [doc_id], "folder_id": None})
+    assert {r["doc_id"]: r for r in mv.json()["papers"]}[doc_id]["structure_status"] == "ready"
+    # Open (Doc-returning).
+    op = client.post(f"/api/docs/{doc_id}/open")
+    assert op.json()["structure_status"] == "ready"
+    # Patch (Doc-returning).
+    pt = client.patch(f"/api/docs/{doc_id}", json={"title": "Renamed"})
+    assert pt.json()["structure_status"] == "ready"
+    # Trash (Library-returning) still keeps it ready.
+    assert status_in_library() == "ready"
+    client.post("/api/library/trash", json={"doc_ids": [doc_id]})
+    assert status_in_library() == "ready"
 
 
 def test_upload_marks_analyzing_then_settles_ready(data_root):

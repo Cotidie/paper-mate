@@ -1034,4 +1034,39 @@ describe("structure-status dot (top bar)", () => {
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
     expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("ready");
   });
+
+  it("refetches structure ONCE when opened already-ready with an empty structure (mid-analysis race)", async () => {
+    // The initial getStructure fetched empty (analysis was still running), then
+    // getDoc returned "ready" (analysis finished before it resolved) — so the
+    // poll never runs. The reader must refetch once to refill the ToC.
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc); // structure_status: "ready"
+    const structureSpy = vi
+      .spyOn(api, "getStructure")
+      .mockResolvedValueOnce({ elements: [] }) // initial: empty (raced)
+      .mockResolvedValue({
+        elements: [
+          { id: "1", type: "heading", page_index: 0, rect: { x0: 0, y0: 0, x1: 1, y1: 0.1 }, text: "Intro", heading_level: 1 },
+        ],
+      }); // the one-shot refill
+    renderReaderAt(fakeDoc.doc_id);
+    // The one-shot refill fires: getStructure called twice, structure populated.
+    await waitFor(() => expect(structureSpy.mock.calls.length).toBe(2));
+    // It does NOT loop: give it room and confirm no third call.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(structureSpy.mock.calls.length).toBe(2);
+  });
+
+  it("does not refetch when opened already-ready with a non-empty structure", async () => {
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    const structureSpy = vi.spyOn(api, "getStructure").mockResolvedValue({
+      elements: [
+        { id: "1", type: "heading", page_index: 0, rect: { x0: 0, y0: 0, x1: 1, y1: 0.1 }, text: "Intro", heading_level: 1 },
+      ],
+    });
+    renderReaderAt(fakeDoc.doc_id);
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 50));
+    // Only the initial fetch — no wasteful refill when structure is already there.
+    expect(structureSpy.mock.calls.length).toBe(1);
+  });
 });

@@ -131,14 +131,21 @@ export default function ReaderPage() {
   // the panel actually shows.
   const { structure, loading: structureLoading, refetch: refetchStructure } =
     useDocStructure(docId ?? null);
-  // The panel's actual entries: `null` while EITHER source could still resolve
-  // to a non-empty embedded outline (so a synthesized ToC never flashes then
-  // gets replaced) — `toc` itself loading, or `toc` empty but the structure
-  // fetch still in flight. Once both have settled, `resolveToc` picks embedded
-  // (if non-empty) else the synthesized fallback (may be `[]`, the existing
-  // empty state).
+  // The doc_id whose ToC we've already refilled once after it settled to
+  // "ready" (a one-shot guard so a genuinely-empty structure never loops a
+  // refetch, and a cross-doc late response can't retrigger it). Compared to the
+  // current docId, so a new doc is naturally eligible again.
+  const structureRefilledRef = useRef<string | null>(null);
+  // The panel's actual entries: `null` (the loading state) only while a source
+  // could still resolve AND nothing is renderable yet — `toc` itself loading,
+  // or `toc` empty with the structure fetch in flight and NO held structure to
+  // show. A same-doc refetch (the post-analysis ToC refill) keeps the held
+  // structure, so we must NOT blank a populated ToC back to "loading" just
+  // because `structureLoading` is briefly true again. Once settled, `resolveToc`
+  // picks embedded (if non-empty) else the synthesized fallback (may be `[]`,
+  // the existing empty state).
   const tocEntries: TocEntry[] | null =
-    toc === null || (toc.length === 0 && structureLoading)
+    toc === null || (toc.length === 0 && structureLoading && structure.elements.length === 0)
       ? null
       : resolveToc(toc, structure, doc?.title);
   // Annotation Bank panel (Story 3.6): open/closed only — its row list is
@@ -190,6 +197,10 @@ export default function ReaderPage() {
     if (!docId) return;
     let live = true;
     setDoc(null);
+    // Reset the embedded outline on a direct `:docId` change (Codex review):
+    // doc A's non-empty outline must not stay authoritative until B's Reader
+    // reports its own — else A's ToC briefly renders for B. `null` = loading.
+    setToc(null);
     (async () => {
       try {
         const [meta, restored] = await Promise.all([getDoc(docId), getAnnotations(docId)]);
@@ -212,34 +223,61 @@ export default function ReaderPage() {
   // right after import can still be running its opendataloader structure pass;
   // `getDoc` reports `structure_status: "analyzing"` until `structure.json`
   // lands. Poll the doc while analyzing so (a) the indicator clears on its own
-  // and (b) the ToC/consumers refill the moment analysis finishes (else a
-  // paper opened mid-analysis keeps the empty structure it first fetched until
-  // a reload). Depends on the STRING status, not the `doc` object, so a poll
-  // that returns an unchanged `analyzing` status doesn't restart the timer.
+  // and (b) the ToC/consumers refill the moment analysis finishes.
+  //
+  // SINGLE-FLIGHT + generation-guarded (Codex review): a self-scheduling
+  // `setTimeout` that AWAITS each `getDoc` before scheduling the next, so two
+  // requests never overlap and an older `analyzing` response can't land after a
+  // newer `ready` and regress the dot. The `cancelled` flag (set on cleanup,
+  // i.e. a docId/status change or unmount) makes any in-flight response a no-op,
+  // so a late response for a doc we've switched away from never calls `setDoc`
+  // or `refetchStructure`. Depends on the STRING status, so a poll returning an
+  // unchanged `analyzing` doesn't restart the loop.
   const structureStatus = doc?.structure_status;
   useEffect(() => {
     if (!docId || structureStatus !== "analyzing") return;
+    let cancelled = false;
     let polls = 0;
-    const id = setInterval(() => {
-      if (polls++ >= STRUCTURE_POLL_MAX) {
-        clearInterval(id);
-        return;
-      }
-      getDoc(docId)
-        .then((fresh) => {
-          // Ignore a late poll for a doc we've since navigated away from.
-          setDoc((prev) => (prev && prev.doc_id === fresh.doc_id ? fresh : prev));
-          if (fresh.structure_status === "ready") {
-            clearInterval(id);
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      try {
+        const fresh = await getDoc(docId);
+        if (cancelled) return; // switched docs / unmounted mid-request
+        setDoc((prev) => (prev && prev.doc_id === fresh.doc_id ? fresh : prev));
+        if (fresh.structure_status === "ready") {
+          if (structureRefilledRef.current !== docId) {
+            structureRefilledRef.current = docId;
             refetchStructure(); // refill the ToC now that structure.json exists
           }
-        })
-        .catch(() => {
-          // Transient; keep polling until it resolves or the cap is hit.
-        });
-    }, STRUCTURE_POLL_INTERVAL_MS);
-    return () => clearInterval(id);
+          return; // settled -> stop polling
+        }
+      } catch {
+        // Transient; keep polling until it resolves or the cap is hit.
+      }
+      if (!cancelled && polls++ < STRUCTURE_POLL_MAX) {
+        timer = setTimeout(tick, STRUCTURE_POLL_INTERVAL_MS);
+      }
+    };
+    timer = setTimeout(tick, STRUCTURE_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [docId, structureStatus, refetchStructure]);
+
+  // Initial-ready refill (Codex review M3): a paper can be opened just AFTER its
+  // analysis finished — `useDocStructure` may have fetched an empty structure
+  // while the pass was still running, then `getDoc` returns "ready", so the poll
+  // above never runs and the ToC would stay empty until a reload. When the doc
+  // is settled "ready" but the held structure is empty, refetch it ONCE (the
+  // ref guards against a genuinely-empty paper looping).
+  useEffect(() => {
+    if (!docId || structureStatus !== "ready" || structureLoading) return;
+    if (structure.elements.length > 0) return; // already have it
+    if (structureRefilledRef.current === docId) return; // one-shot per doc
+    structureRefilledRef.current = docId;
+    refetchStructure();
+  }, [docId, structureStatus, structureLoading, structure.elements.length, refetchStructure]);
 
   // Document-level tool keys (UX-DR15), unified onto the keymap (Story 5.1,
   // AC-1): ONE effect resolves the pressed key/chord to an action via

@@ -144,6 +144,38 @@ describe("synthesizeToc", () => {
     ]);
   });
 
+  it("excludes broadened caption forms (Fig., S1, 1a, roman, A.1) but keeps real headings", () => {
+    const cap = (id: string, text: string) =>
+      el(id, "heading", 0, { x0: 0, y0: 0, x1: 1, y1: 0.1 }, { heading_level: 3, text });
+    const s: DocStructure = {
+      elements: [
+        cap("1", "Fig. 2: Architecture"),
+        cap("2", "Figure S1: Supplementary"),
+        cap("3", "Figure 1a Detail"),
+        cap("4", "Table IV Results"),
+        cap("5", "Table A.1: Hyperparameters"),
+        el("6", "heading", 0, { x0: 0, y0: 0.5, x1: 1, y1: 0.6 }, {
+          heading_level: 2,
+          text: "3 Methodology", // a real numbered section, NOT a caption
+        }),
+      ],
+    };
+    expect(synthesizeToc(s).map((e) => e.title)).toEqual(["3 Methodology"]);
+  });
+
+  it("does not drop a short-title paper's real first-page section (prefix guard)", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0, y0: 0.3, x1: 1, y1: 0.4 }, {
+          heading_level: 1,
+          text: "Results and Discussion",
+        }),
+      ],
+    };
+    // A too-short metadata title must not swallow a real section via startsWith.
+    expect(synthesizeToc(s, "Results").map((e) => e.title)).toEqual(["Results and Discussion"]);
+  });
+
   it("preserves reading order (array order)", () => {
     const s: DocStructure = {
       elements: [

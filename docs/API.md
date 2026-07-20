@@ -102,9 +102,11 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
 > `structure.json` existence. `"analyzing"` while opendataloader-pdf's
 > extraction is actually running for this paper in the process (an in-memory
 > marker set at import, cleared when the pass finishes) — takes precedence;
-> else `"ready"` when `structure.json` exists (analyzed); else `"absent"` (no
-> structure: a paper imported before the structure layer, a failed extraction,
-> or a non-PDF). It powers the per-paper status dot (grey absent / amber
+> else `"ready"` when `structure.json` exists — meaning the extraction
+> **attempt completed** and wrote a result, which (extraction being total) may
+> be an EMPTY structure on a thin/failed pass; else `"absent"` (no
+> `structure.json` at all: a paper imported before the structure layer, a
+> non-PDF, or a pass that never wrote a file). It powers the per-paper status dot (grey absent / amber
 > analyzing / green ready) in the Library + Reader. Crucially "analyzing" is NOT
 > merely "structure.json absent" — a pre-layer paper has no `structure.json` yet
 > nothing runs against it, so it is `"absent"` (grey), never a perpetual spin.

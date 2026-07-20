@@ -17,6 +17,7 @@ no boot cleanup.
 """
 
 import threading
+from typing import Callable
 
 # Guarded by `_lock`: the doc_ids whose import-time structure extraction is in
 # flight in THIS process. Add/discard/membership are each cheap; the lock keeps
@@ -44,7 +45,7 @@ def is_structure_analyzing(doc_id: str) -> bool:
         return doc_id in _analyzing
 
 
-def structure_status_for(doc_id: str, structure_exists: bool) -> str:
+def structure_status_for(doc_id: str, structure_exists: Callable[[], bool]) -> str:
     """Derive the response-only 3-state ``StructureStatus`` for the status dot:
 
     - ``"analyzing"`` while this doc's import-time extraction is in flight
@@ -52,13 +53,18 @@ def structure_status_for(doc_id: str, structure_exists: bool) -> str:
       always reads as working.
     - else ``"ready"`` when its ``structure.json`` exists (green): analyzed.
     - else ``"absent"`` (grey): never analyzed / no structure (a pre-layer
-      paper, a failed extraction, or a non-PDF).
+      paper, a non-PDF, or a doc whose extraction never wrote a file).
 
-    Pure given the two inputs (the caller pairs it with
-    ``structure_store.structure_exists``), so this module needs no import of the
-    storage disk layer and stays cycle-free. Returns the ``StructureStatus``
-    literal as a plain ``str``; the route annotates the field.
+    ``structure_exists`` is a **lazy** predicate (a zero-arg callable, e.g.
+    ``lambda: storage.structure_exists(doc_id)``). Order matters: the marker is
+    read FIRST and the file is stat'd only if not analyzing. Because
+    ``_run_structure`` writes ``structure.json`` BEFORE clearing the marker,
+    reading marker-then-existence closes the TOCTOU window that an
+    existence-then-marker read left open (which could momentarily report
+    ``"absent"`` right as a successful analysis settled — a terminal wrong state
+    for a client that stops polling on non-``analyzing``). Pure given the
+    predicate, so this module needs no import of the storage disk layer.
     """
     if is_structure_analyzing(doc_id):
         return "analyzing"
-    return "ready" if structure_exists else "absent"
+    return "ready" if structure_exists() else "absent"

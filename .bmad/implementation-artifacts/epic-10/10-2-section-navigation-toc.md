@@ -154,6 +154,22 @@ Out of scope (epic-stated): editing/reordering the synthesized ToC; numbering se
 
 Sonnet 5 (claude-sonnet-5).
 
+### Review Findings (Codex bmad-code-review, cross-model, read-only sandbox)
+
+Codex reviewed `17f6eb6..HEAD` (the 10.2 ToC + the follow-on structure-status-dot feature + the caption/title fixes) and returned **0 High, 7 Medium, 6 Low**. All 13 resolved (2026-07-21):
+
+- **[Med 1] Mutation responses dropped `structure_status`** (move/trash/star/patch/open/purge/folder-delete returned models defaulting to `"absent"`, flipping a green/amber dot grey). **Fixed:** a single `routes/structure_status.py` (`decorate_doc`/`decorate_library`) applied to EVERY `Doc`/`Library`-returning route. Test `test_mutation_responses_keep_structure_status`; live-smoked (star/move/open/patch/library all keep `ready`).
+- **[Med 2] TOCTOU could report `"absent"` right as analysis settled.** **Fixed:** `structure_status_for(doc_id, exists)` now takes a LAZY existence predicate and checks the marker FIRST; since `_run_structure` writes then clears, marker-then-existence closes the window. Test asserts the predicate isn't even evaluated while analyzing.
+- **[Med 3] Opened-already-ready-with-empty-structure race left an empty ToC.** **Fixed:** a one-shot initial-ready refill effect (`structureRefilledRef`) refetches structure when the doc is settled `ready` but held structure is empty. Tests for both the refill and the no-loop/no-wasteful-refetch cases.
+- **[Med 4] Reader poll was not single-flight.** **Fixed:** self-scheduling awaited `setTimeout` with a `cancelled` generation guard; a late/stale response can't regress the dot or refetch a switched-away doc.
+- **[Med 5] Library poll didn't start on initial load.** **Fixed:** the mount fetch starts the settle poll when a row is extracting/analyzing (idempotent). Test `starts polling on the INITIAL load…`.
+- **[Med 6] Duplicate concurrent import cleared the marker early.** **Fixed:** `upload_doc` marks + schedules only when not already analyzing.
+- **[Med 7] Far-page flash could expire off-screen.** **Fixed:** `RegionFlashLayer` pulses when its page scrolls INTO VIEW (IntersectionObserver, jsdom-fallback to immediate); `flashRegionAt` holds a longer fallback lifetime for the never-arrives case.
+- **[Low 1]** Reset embedded `toc` to `null` on docId change. **[Low 2]** `tocEntries` no longer blanks a populated ToC during a same-doc refetch. **[Low 4]** Broadened the caption regex (`Fig.`/`S1`/`1a`/roman/`A.1`). **[Low 5]** Tightened the title-prefix match (min-overlap 15 chars, so a short title like `"Results"` can't drop `"Results and Discussion"`). **[Low 6]** Corrected `docs/API.md` (`"ready"` = the extraction attempt completed, incl. an empty result). **[Low 3]** (polling cap can leave amber stale on a >72s analysis) — acknowledged, left as-is: a bounded rapid poll is the deliberate tradeoff; a focus/visibility re-check is a future nicety, not a correctness bug.
+- Codex verified WITHOUT findings: coordinate conversion (`rect.y0` + shared `denormalizeRect`), `resolveToc` never merges sources, marker ops lock-protected + `finally`-cleared, pre-structure imports correctly `"absent"`, generated client types match the contract.
+
+Re-verified after fixes: backend **363**, frontend **1723**, typecheck clean.
+
 ### Debug Log References
 
 - **Design deviation from Task 2's literal text (recorded, not hidden):** Task 2 specified adding `topFraction?: number` to `TocEntry`; Task 5 then separately called for a `rect?: Rect` field to drive the flash and offered "keep it to a single region field" as the recommended resolution. Implementation took the single-field path directly: `TocEntry` gained only `rect?: Rect` (never `topFraction`), and the jump site reads `entry.rect.y0` in place of a `topFraction`. This satisfies both tasks' intent (region jump + flash from one field) without carrying two redundant region encodings.

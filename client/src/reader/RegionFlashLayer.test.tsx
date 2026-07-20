@@ -18,10 +18,13 @@ describe("RegionFlashLayer", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders the flash box when the store's region matches this page", () => {
+  it("renders the flash box (active, via the no-IntersectionObserver fallback) when the region matches this page", () => {
     useRegionFlashStore.getState().flash({ pageIndex: 0, rect });
     render(<RegionFlashLayer pageIndex={0} box={BOX} scale={1} />);
-    expect(screen.getByTestId("region-flash")).toBeTruthy();
+    const el = screen.getByTestId("region-flash");
+    expect(el).toBeTruthy();
+    // jsdom has no IntersectionObserver, so the layer shows immediately.
+    expect(el.classList.contains("region-flash--active")).toBe(true);
   });
 
   it("renders nothing when the flashed region is on a DIFFERENT page", () => {

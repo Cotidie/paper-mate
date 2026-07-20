@@ -70,7 +70,17 @@ export function useCollection({ onToast }: UseCollectionOptions) {
     const seq = ++fetchSeqRef.current;
     getLibrary()
       .then((lib) => {
-        if (!cancelled && seq === fetchSeqRef.current) setLibrary(lib);
+        if (cancelled || seq !== fetchSeqRef.current) return;
+        setLibrary(lib);
+        // Opened/refreshed onto a library where a row is still extracting or
+        // analyzing (e.g. an import from another tab, or the app reopened
+        // mid-analysis): start the settle poll now, not only after an upload
+        // batch — else the amber dot / Extracting chip would freeze until the
+        // next action or reload (Codex review M5). `settlePoll.start()` is
+        // idempotent (a second start while polling is a no-op), and this
+        // callback runs post-render so the later `const settlePoll` is
+        // initialized by the time it fires.
+        if (anyExtracting(lib) || anyAnalyzingStructure(lib)) settlePoll.start();
       })
       .catch(() => {
         if (!cancelled) {
@@ -86,6 +96,7 @@ export function useCollection({ onToast }: UseCollectionOptions) {
     };
     // `onToast` is stable (the page memoizes it), so this stays a mount-only
     // fetch rather than re-fetching the whole library on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onToast]);
 
   const handleResolved = useCallback(

@@ -5,10 +5,17 @@
    (NFR-1) and layers cleanly over the page content. Reuses the same ring-width
    and ink tokens as the annotation flash — one visual language for "you just
    jumped here" across the reader. */
+/* Base: positioned only, no ink — invisible until the region's page scrolls
+   into view (the box exists so the IntersectionObserver has something to watch,
+   but must not flash off-screen). */
 .region-flash {
+  border-radius: var(--radius-xs);
+}
+
+/* Active: the page is on screen, so pulse. */
+.region-flash--active {
   box-shadow: 0 0 0 var(--bank-flash-ring-width) var(--color-ink);
   animation: region-flash-pulse 0.4s ease-out;
-  border-radius: var(--radius-xs);
 }
 
 @keyframes region-flash-pulse {
