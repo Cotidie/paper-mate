@@ -55,6 +55,10 @@ beforeEach(() => {
   // open-a-doc test never hits the real fetch; individual tests override to
   // assert the call + its best-effort (swallowed-rejection) behavior.
   vi.spyOn(api, "markDocOpened").mockResolvedValue(fakeDoc);
+  // Story 10.2: the reader hydrates the structure layer (ToC) via getStructure.
+  // Default to an empty structure so tests never hit the real fetch; the
+  // analyzing-poll test overrides it to assert the refill on analyze->ready.
+  vi.spyOn(api, "getStructure").mockResolvedValue({ elements: [] });
   // Story 5.1: the settings store's `persist` middleware writes localStorage,
   // which leaks across tests (Gotcha #1, story Dev Notes). Reset both so a
   // rebind in one test can't poison the next.
@@ -78,6 +82,7 @@ const fakeDoc: api.Doc = {
   file_type: "pdf",
   status: "ready",
   schema_version: 1,
+  structure_status: "ready",
 };
 
 /**
@@ -971,5 +976,97 @@ describe("autosave save-failure toast (Story 3.4, AC-5)", () => {
     expect(screen.getByTestId("toast").textContent).not.toContain("—");
     // The change stays in the working copy (not rolled back on failure).
     expect(useAnnotationStore.getState().annotations.has("a1")).toBe(true);
+  });
+});
+
+describe("structure-status dot (top bar)", () => {
+  it("shows the amber dot for a doc opened mid-analysis, then turns it green and refills the ToC when analysis lands", async () => {
+    // Opened while structure is still running: getDoc first reports analyzing,
+    // and getStructure is empty; the poll then sees ready and refetches.
+    const analyzingDoc: api.Doc = { ...fakeDoc, structure_status: "analyzing" };
+    const readyDoc: api.Doc = { ...fakeDoc, structure_status: "ready" };
+    const getDocSpy = vi
+      .spyOn(api, "getDoc")
+      .mockResolvedValueOnce(analyzingDoc) // initial load
+      .mockResolvedValue(readyDoc); // poll ticks
+    const structureSpy = vi
+      .spyOn(api, "getStructure")
+      .mockResolvedValueOnce({ elements: [] }) // opened mid-analysis: empty
+      .mockResolvedValue({
+        elements: [
+          { id: "1", type: "heading", page_index: 0, rect: { x0: 0, y0: 0, x1: 1, y1: 0.1 }, text: "Intro", heading_level: 1 },
+        ],
+      }); // refetch after analysis lands
+
+    vi.useFakeTimers();
+    try {
+      renderReaderAt(fakeDoc.doc_id);
+      // Flush the open promises (getDoc + getAnnotations + the first structure
+      // fetch) so the reader mounts showing the amber (analyzing) dot.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("analyzing");
+
+      // Poll tick: getDoc now returns ready -> dot turns green + structure refetch.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("ready");
+      // The poll refetched the doc AND the structure was re-fetched (ToC refill).
+      expect(getDocSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(structureSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+      // Polling has stopped now that structure settled: no more getDoc calls.
+      const settledDocCalls = getDocSpy.mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000);
+      });
+      expect(getDocSpy.mock.calls.length).toBe(settledDocCalls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows a green dot for an already-analyzed doc (structure_status ready)", async () => {
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc); // structure_status: "ready"
+    renderReaderAt(fakeDoc.doc_id);
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+    expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("ready");
+  });
+
+  it("refetches structure ONCE when opened already-ready with an empty structure (mid-analysis race)", async () => {
+    // The initial getStructure fetched empty (analysis was still running), then
+    // getDoc returned "ready" (analysis finished before it resolved) — so the
+    // poll never runs. The reader must refetch once to refill the ToC.
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc); // structure_status: "ready"
+    const structureSpy = vi
+      .spyOn(api, "getStructure")
+      .mockResolvedValueOnce({ elements: [] }) // initial: empty (raced)
+      .mockResolvedValue({
+        elements: [
+          { id: "1", type: "heading", page_index: 0, rect: { x0: 0, y0: 0, x1: 1, y1: 0.1 }, text: "Intro", heading_level: 1 },
+        ],
+      }); // the one-shot refill
+    renderReaderAt(fakeDoc.doc_id);
+    // The one-shot refill fires: getStructure called twice, structure populated.
+    await waitFor(() => expect(structureSpy.mock.calls.length).toBe(2));
+    // It does NOT loop: give it room and confirm no third call.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(structureSpy.mock.calls.length).toBe(2);
+  });
+
+  it("does not refetch when opened already-ready with a non-empty structure", async () => {
+    vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
+    const structureSpy = vi.spyOn(api, "getStructure").mockResolvedValue({
+      elements: [
+        { id: "1", type: "heading", page_index: 0, rect: { x0: 0, y0: 0, x1: 1, y1: 0.1 }, text: "Intro", heading_level: 1 },
+      ],
+    });
+    renderReaderAt(fakeDoc.doc_id);
+    await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 50));
+    // Only the initial fetch — no wasteful refill when structure is already there.
+    expect(structureSpy.mock.calls.length).toBe(1);
   });
 });

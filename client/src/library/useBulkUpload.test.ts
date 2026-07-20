@@ -22,6 +22,7 @@ const fakeDoc = (doc_id: string, filename: string): api.Doc => ({
   file_type: "pdf",
   status: "ready",
   schema_version: 1,
+  structure_status: "ready",
 });
 
 describe("useBulkUpload", () => {

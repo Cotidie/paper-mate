@@ -274,6 +274,13 @@
   white-space: nowrap;
 }
 
+/* The persistent structure-state dot is the first in-flow item of the title
+   row (flex, with the row's `gap`), so every title aligns after it and the text
+   truncates first (`flex: 0 0 auto` on the dot itself). */
+.collection-table__structure-dot {
+  flex: 0 0 auto;
+}
+
 /* The filled-star marker (Story 7.8 AC-2): holds its own space so the title
    text shrinks/ellipsizes first and the star is never clipped. Display
    marker only (aria-label, not a button) - toggling is the toolbar Star

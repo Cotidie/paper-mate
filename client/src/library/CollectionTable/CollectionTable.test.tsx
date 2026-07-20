@@ -30,6 +30,7 @@ const rows: CollectionRow[] = [
     trashed: false,
     starred: false,
     order: 0,
+    structure_status: "ready",
   },
   {
     doc_id: "b".repeat(64),
@@ -43,6 +44,7 @@ const rows: CollectionRow[] = [
     trashed: false,
     starred: false,
     order: 1,
+    structure_status: "ready",
     filename: "no-title-paper.pdf",
   },
   {
@@ -57,6 +59,7 @@ const rows: CollectionRow[] = [
     trashed: false,
     starred: false,
     order: 2,
+    structure_status: "ready",
     filename: null,
   },
 ];
@@ -210,6 +213,7 @@ describe("CollectionTable status visuals (Story 6.5)", () => {
       starred: false,
       order: 0,
       filename: "a-title.pdf",
+      structure_status: "ready",
       ...overrides,
     };
   }
@@ -250,6 +254,35 @@ describe("CollectionTable status visuals (Story 6.5)", () => {
     expect(screen.getByText("a-title")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(onOpenRow).toHaveBeenCalledWith("s".repeat(64));
+  });
+
+  it("always shows a structure-state dot in the title, colored by structure_status", () => {
+    const { rerender } = render(
+      <CollectionTable
+        rows={[rowWith("ready", { structure_status: "analyzing" })]}
+        onOpenRow={noop}
+        onEditField={noop}
+      />,
+    );
+    expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("analyzing");
+
+    rerender(
+      <CollectionTable
+        rows={[rowWith("ready", { structure_status: "ready" })]}
+        onOpenRow={noop}
+        onEditField={noop}
+      />,
+    );
+    expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("ready");
+
+    rerender(
+      <CollectionTable
+        rows={[rowWith("ready", { structure_status: "absent" })]}
+        onOpenRow={noop}
+        onEditField={noop}
+      />,
+    );
+    expect(screen.getByTestId("structure-status-dot").getAttribute("data-status")).toBe("absent");
   });
 });
 
@@ -397,6 +430,7 @@ describe("CollectionTable inline edit (Story 6.6, arm-gated)", () => {
         trashed: false,
         starred: false,
         order: 0,
+        structure_status: "ready",
       };
     }
     render(
@@ -1590,6 +1624,7 @@ describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", 
     trashed: false,
     starred: false,
     order: 0,
+    structure_status: "ready",
   };
   const uncategorized: CollectionRow = {
     doc_id: "u".repeat(64),
@@ -1603,6 +1638,7 @@ describe("CollectionTable Location column (post-review scope, Story 7.7 AC-8)", 
     trashed: false,
     starred: false,
     order: 1,
+    structure_status: "ready",
   };
   const folders = [{ id: "folder-a", name: "Folder A", parent_id: null }];
 
@@ -1651,6 +1687,7 @@ describe("CollectionTable star marker (Story 7.8, AC-2)", () => {
     trashed: false,
     starred: true,
     order: 0,
+    structure_status: "ready",
   };
   const unstarred: CollectionRow = {
     doc_id: "u".repeat(64),
@@ -1664,6 +1701,7 @@ describe("CollectionTable star marker (Story 7.8, AC-2)", () => {
     trashed: false,
     starred: false,
     order: 1,
+    structure_status: "ready",
   };
 
   it("renders the star marker for a starred row", () => {
@@ -1696,6 +1734,7 @@ describe("CollectionTable Venue/Year/DOI columns (Story 7.9)", () => {
     venue: "Journal of Foo",
     venue_short: "JoF",
     year: 2017,
+    structure_status: "ready",
   };
   const withoutMeta: CollectionRow = {
     doc_id: "n".repeat(64),
@@ -1712,6 +1751,7 @@ describe("CollectionTable Venue/Year/DOI columns (Story 7.9)", () => {
     doi: null,
     venue: null,
     year: null,
+    structure_status: "ready",
   };
 
   it("renders venue, year, and a DOI link for a row with metadata", () => {
@@ -1798,6 +1838,7 @@ describe("CollectionTable Venue (Short)/Venue (Full) columns (Story 8.5)", () =>
     order: 0,
     venue: "Proceedings of the 2025 CHI Conference",
     venue_short: "CHI",
+    structure_status: "ready",
   };
   const withoutShortVenue: CollectionRow = {
     doc_id: "t".repeat(64),
@@ -1813,6 +1854,7 @@ describe("CollectionTable Venue (Short)/Venue (Full) columns (Story 8.5)", () =>
     order: 1,
     venue: "Journal of Bar",
     venue_short: null,
+    structure_status: "ready",
   };
 
   it("renders the short venue and exposes the full venue via title on hover/focus", () => {
@@ -1868,6 +1910,7 @@ describe("CollectionTable inline edit Venue/Year (Story 7.9 fix request)", () =>
     venue: "Journal of Foo",
     venue_short: "JoF",
     year: 2017,
+    structure_status: "ready",
   };
 
   it("click on an armed row's Venue cell enters edit seeded with the current text", () => {

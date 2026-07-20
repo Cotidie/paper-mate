@@ -20,6 +20,7 @@ from fastapi import APIRouter
 from app import storage
 from app.models import DocIdSet, Folder, FolderCreate, FolderRename, Library, MoveRequest
 from app.routes._errors import error_response, storage_errors
+from app.routes.structure_status import decorate_library
 
 router = APIRouter(tags=["library"])
 
@@ -40,9 +41,11 @@ def _set_op(mutate: Callable[[list[str]], Library], doc_ids: list[str]) -> Libra
     """Run one set-based org mutator under the shared collection error map.
 
     The four flag-flip routes differ only in which ``storage.<verb>_papers`` they
-    call; the try/except-to-envelope body (AR-11) is one shape, so it lives here."""
+    call; the try/except-to-envelope body (AR-11) is one shape, so it lives here.
+    Every set op returns the whole ``Library``, so it decorates the derived
+    ``structure_status`` here too (else a star/trash/… would flip the dot grey)."""
     with storage_errors("Could not update the collection"):
-        return mutate(doc_ids)
+        return decorate_library(mutate(doc_ids))
 
 
 @router.get(
@@ -56,9 +59,20 @@ async def get_library() -> Library:
     An absent ``library.json`` is an empty collection, not an error. A
     corrupt on-disk index surfaces as the single ``{ "detail" }`` envelope
     (AR-11), mirroring ``get_annotations``.
+
+    ``structure_status`` (the per-paper status dot) is derived HERE, at the
+    route (``decorate_library``): ``analyzing`` from the in-memory in-flight set
+    (extraction running NOW), else ``ready``/``absent`` from ``structure.json``
+    existence. A paper shows ``analyzing`` ONLY while its import-time task is
+    actually running in this process, never merely because it lacks
+    ``structure.json`` (a pre-structure-layer paper is ``absent``, grey, not
+    spinning). Kept out of ``read_library``/``library.json`` on purpose: the
+    index projection stays a straight ``library.json`` read with no ``meta.json``
+    fan-out (LNFR-4); a set check + one stat per row is far cheaper than that
+    parse.
     """
     with storage_errors("Could not read library"):
-        return storage.read_library()
+        return decorate_library(storage.read_library())
 
 
 @router.post(
@@ -116,7 +130,7 @@ async def delete_folder(folder_id: str) -> Library:
     with storage_errors(
         "Could not update folders", not_found=storage.FolderNotFoundError, not_found_detail=_FOLDER_NOT_FOUND
     ):
-        return storage.delete_folder(folder_id)
+        return decorate_library(storage.delete_folder(folder_id))
 
 
 @router.post(
@@ -139,7 +153,7 @@ async def move_papers(body: MoveRequest) -> Library:
         "Could not update the collection",
         extra_not_found=[(storage.FolderNotFoundError, _FOLDER_NOT_FOUND)],
     ):
-        return storage.move_papers(body.doc_ids, body.folder_id)
+        return decorate_library(storage.move_papers(body.doc_ids, body.folder_id))
 
 
 @router.post("/library/trash", response_model=Library, responses=_SET_OP_RESPONSES)

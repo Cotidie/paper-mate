@@ -3,6 +3,7 @@ import { Folder as FolderIcon, Star } from "@phosphor-icons/react";
 import type { CollectionRow } from "@/api/client";
 import { formatAdded, seedFieldValue, statusLabel, type EditableField } from "@/library/row";
 import type { ColumnKey } from "@/library/tableView";
+import StructureStatusDot from "@/components/StructureStatusDot/StructureStatusDot";
 import EditableCell from "./EditableCell";
 import TagCell from "./TagCell";
 
@@ -70,6 +71,11 @@ function renderTitleCell({
       onCancel={onCancel}
     >
       <div className="collection-table__title-row">
+        {/* Persistent structure-state dot at the start of the title: grey
+            (absent) -> amber pulsing (analyzing now) -> green (analyzed). Always
+            present, so it reads as a status column and the title's left edge is
+            consistently aligned across rows. */}
+        <StructureStatusDot status={row.structure_status} className="collection-table__structure-dot" />
         <span className="collection-table__title-text">
           {displayTitle ?? <span className="collection-table__untitled">Untitled</span>}
         </span>

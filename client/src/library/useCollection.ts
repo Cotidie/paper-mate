@@ -15,6 +15,15 @@ function anyExtracting(lib: Library): boolean {
   return lib.papers.some((p) => p.status === "extracting");
 }
 
+/** A row is still analyzing iff its document-structure pass (opendataloader)
+ *  hasn't produced `structure.json` yet. This runs AFTER metadata settles, so
+ *  it keeps the poll alive past `extracting` until the analyzing indicator can
+ *  clear (else polling would stop before structure finishes and the dots would
+ *  freeze until a manual refresh). */
+function anyAnalyzingStructure(lib: Library): boolean {
+  return lib.papers.some((p) => p.structure_status === "analyzing");
+}
+
 type ToastVariant = "error" | "info";
 
 interface UseCollectionOptions {
@@ -61,7 +70,17 @@ export function useCollection({ onToast }: UseCollectionOptions) {
     const seq = ++fetchSeqRef.current;
     getLibrary()
       .then((lib) => {
-        if (!cancelled && seq === fetchSeqRef.current) setLibrary(lib);
+        if (cancelled || seq !== fetchSeqRef.current) return;
+        setLibrary(lib);
+        // Opened/refreshed onto a library where a row is still extracting or
+        // analyzing (e.g. an import from another tab, or the app reopened
+        // mid-analysis): start the settle poll now, not only after an upload
+        // batch — else the amber dot / Extracting chip would freeze until the
+        // next action or reload (Codex review M5). `settlePoll.start()` is
+        // idempotent (a second start while polling is a no-op), and this
+        // callback runs post-render so the later `const settlePoll` is
+        // initialized by the time it fires.
+        if (anyExtracting(lib) || anyAnalyzingStructure(lib)) settlePoll.start();
       })
       .catch(() => {
         if (!cancelled) {
@@ -77,6 +96,7 @@ export function useCollection({ onToast }: UseCollectionOptions) {
     };
     // `onToast` is stable (the page memoizes it), so this stays a mount-only
     // fetch rather than re-fetching the whole library on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onToast]);
 
   const handleResolved = useCallback(
@@ -138,7 +158,7 @@ export function useCollection({ onToast }: UseCollectionOptions) {
 
   const settlePoll = useSettlePolling<Library>({
     fetch: getLibrary,
-    isSettled: (lib) => !anyExtracting(lib),
+    isSettled: (lib) => !anyExtracting(lib) && !anyAnalyzingStructure(lib),
     onResult: applyLibrary,
     onSettled: settleNotices,
     // Capped without settling (a stuck row): still resolve the batch notice
@@ -162,7 +182,7 @@ export function useCollection({ onToast }: UseCollectionOptions) {
           setLibrary(lib);
           setLoadFailed(false);
           resolvedDocIds.forEach((id) => noticeBatchIdsRef.current.add(id));
-          if (anyExtracting(lib)) {
+          if (anyExtracting(lib) || anyAnalyzingStructure(lib)) {
             settlePoll.start();
           } else {
             settleNotices(lib);

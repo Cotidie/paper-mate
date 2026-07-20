@@ -6,7 +6,7 @@
 // yet (10-2..10-6 are the consumers). A fetch failure degrades to the empty
 // structure — the layer is best-effort end to end (AD-13), never a reader error.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { type DocStructure, getStructure } from "@/api/client";
 import { EMPTY_STRUCTURE } from "@/structure";
@@ -14,25 +14,37 @@ import { EMPTY_STRUCTURE } from "@/structure";
 export interface DocStructureState {
   structure: DocStructure;
   loading: boolean;
+  /** Re-fetch the CURRENT doc's structure without blanking what's shown. The
+   *  reader calls this once a paper opened mid-analysis finishes analyzing
+   *  (structure_status flips analyzing -> ready), so the ToC/consumers refill
+   *  from the now-written `structure.json` instead of the empty they first
+   *  fetched. A no-op while no doc is open. */
+  refetch: () => void;
 }
 
-/** Fetch + hold `docId`'s structure. Re-fetches when `docId` changes; a null
- *  `docId` (no open doc) holds the empty structure without a request. */
+/** Fetch + hold `docId`'s structure. Re-fetches when `docId` changes or
+ *  `refetch()` is called; a null `docId` (no open doc) holds the empty
+ *  structure without a request. */
 export function useDocStructure(docId: string | null): DocStructureState {
   const [structure, setStructure] = useState<DocStructure>(EMPTY_STRUCTURE);
   const [loading, setLoading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const refetch = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Clear the previous doc's structure IMMEDIATELY on a doc switch, so B never
+  // renders A's elements during the in-flight fetch (they are page-anchored to
+  // a different document). Kept SEPARATE from the fetch effect so a `refetch()`
+  // of the SAME doc (reloadKey bump) does NOT blank the ToC mid-poll.
+  useEffect(() => {
+    setStructure(EMPTY_STRUCTURE);
+  }, [docId]);
 
   useEffect(() => {
     if (!docId) {
-      setStructure(EMPTY_STRUCTURE);
       setLoading(false);
       return;
     }
     let cancelled = false;
-    // Clear the previous doc's structure IMMEDIATELY on a doc switch, so B never
-    // renders A's elements during the in-flight fetch (they are page-anchored to
-    // a different document).
-    setStructure(EMPTY_STRUCTURE);
     setLoading(true);
     void (async () => {
       try {
@@ -48,7 +60,7 @@ export function useDocStructure(docId: string | null): DocStructureState {
     return () => {
       cancelled = true;
     };
-  }, [docId]);
+  }, [docId, reloadKey]);
 
-  return { structure, loading };
+  return { structure, loading, refetch };
 }

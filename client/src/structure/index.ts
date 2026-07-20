@@ -14,6 +14,7 @@
 
 import type { DocStructure, StructureElement } from "@/api/client";
 import { type PageBox, type ScreenRect, denormalizeRect } from "@/anchor";
+import type { TocEntry } from "@/render";
 
 /** The empty structure (an unanalyzed / non-PDF doc, or a thin extraction). */
 export const EMPTY_STRUCTURE: DocStructure = { elements: [] };
@@ -79,4 +80,116 @@ export function denormalizeElement(
   scale: number,
 ): ScreenRect {
   return denormalizeRect(element.rect, box, scale);
+}
+
+/**
+ * `heading_level` (1 = top) -> the panel's 0-based `depth`. A missing/thin
+ * level defaults to depth 0 (top); depth is capped so a noisy deep level can
+ * never push the panel's indent off its fixed width.
+ */
+const MAX_TOC_DEPTH = 5;
+function clampDepth(level: number | null | undefined): number {
+  return Math.max(0, Math.min((level ?? 1) - 1, MAX_TOC_DEPTH));
+}
+
+/**
+ * Matches a figure/table caption label. opendataloader sometimes mis-tags a
+ * caption as `type: "heading"` (observed: text starting with the caption
+ * label) instead of `type: "caption"` — a caption is never a section to
+ * navigate to, so `synthesizeToc` excludes anything matching this shape
+ * regardless of the type the layer assigned it (user fix request, live-smoke
+ * finding on the TranAD paper). The label vocabulary covers the common
+ * academic forms (Codex review L4): `Figure`/`Fig`/`Fig.`, `Table`/`Tab`/`Tab.`
+ * then a number that may be supplementary (`S1`), sub-lettered (`1a`), roman
+ * (`IV`), or appendix-style (`A.1`/`A1`). A genuine section is numbered
+ * `"3 Methodology"` (a bare number), never `"Figure N"`/`"Table N"`, so this is
+ * not at risk of dropping a real heading.
+ */
+const FIGURE_TABLE_CAPTION = /^(figure|fig|table|tab)\.?\s+(s?\d+[a-z]?|[ivx]+|[a-z]\.?\d+)\b/i;
+
+/** Case/whitespace-insensitive text key (collapses the line breaks a heading
+ *  element's text often carries vs the flat metadata title). */
+function normalizeText(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Whether a first-page heading IS the paper's own title (which is a `heading`
+ * element in the structure but not a navigable section — user fix request). We
+ * match against the document's extracted metadata `title` rather than a heading
+ * level, because opendataloader's title heading-level is inconsistent across
+ * papers (level 1 on some, level 2 on others, with a junk arXiv stamp taking
+ * level 1 elsewhere). Restricted to page 1 (`page_index === 0`, where the title
+ * sits) and to a strong match (equality or a prefix, to tolerate a truncated
+ * metadata title or the heading's own line breaks) so a real section can never
+ * be dropped. A null/blank metadata title drops nothing.
+ */
+/** A prefix match is only trusted when the shorter (overlapping) string is this
+ *  long — a real paper title is long+distinctive, so this keeps a truncated
+ *  metadata title matching its heading while refusing to let a SHORT title
+ *  (e.g. `"Results"`) swallow a real section (`"Results and Discussion"`),
+ *  which bare `startsWith` would (Codex review L5). */
+const TITLE_PREFIX_MIN = 15;
+
+function isPaperTitleHeading(
+  element: StructureElement,
+  docTitle: string | null | undefined,
+): boolean {
+  if (element.page_index !== 0 || !docTitle) return false;
+  const h = normalizeText(element.text);
+  const t = normalizeText(docTitle);
+  if (!t || h.length < 6) return false;
+  if (h === t) return true; // exact match is always the title
+  // A prefix either way (truncated metadata title, or the heading carrying an
+  // extra line) counts ONLY when the overlap is substantial.
+  const prefix = h.startsWith(t) || t.startsWith(h);
+  return prefix && Math.min(h.length, t.length) >= TITLE_PREFIX_MIN;
+}
+
+/**
+ * Synthesize a Table-of-Contents from the structure layer's heading elements
+ * (Story 10.2, FR-35) — the fallback source for the common case where the PDF
+ * has no embedded outline (`render/getOutline` returns `[]`). Reading order is
+ * already the array order (Story 10.1's adapter walks opendataloader's tree
+ * pre-order), so no extra sort. Each entry carries its heading's normalized
+ * `rect` (already server-flipped, AD-4) so a synthesized jump can land on the
+ * exact region, not just the page top — unlike an embedded-outline entry.
+ *
+ * `docTitle` (the paper's extracted metadata title, when known) is excluded
+ * from the ToC: the title is a `heading` element but not a section to navigate
+ * to (user fix request).
+ */
+export function synthesizeToc(
+  structure: DocStructure,
+  docTitle?: string | null,
+): TocEntry[] {
+  const out: TocEntry[] = [];
+  for (const element of headings(structure)) {
+    const title = element.text.trim();
+    if (!title) continue; // a blank heading element never produces a dead row
+    if (FIGURE_TABLE_CAPTION.test(title)) continue; // a caption, not a section
+    if (isPaperTitleHeading(element, docTitle)) continue; // the paper title, not a section
+    out.push({
+      title,
+      pageNumber: element.page_index + 1, // 0-based -> the TocEntry convention
+      depth: clampDepth(element.heading_level),
+      rect: element.rect,
+    });
+  }
+  return out;
+}
+
+/**
+ * Decide which ToC source renders: the embedded PDF outline when present
+ * (author-curated, keeps every Story 1.9 paper unchanged) else the synthesized
+ * fallback from detected headings (Story 10.2, the common outline-less case).
+ * Exactly one source ever renders — never a merge — so the two can never
+ * double-render (epic Story 10.2 AC #2).
+ */
+export function resolveToc(
+  embedded: TocEntry[],
+  structure: DocStructure,
+  docTitle?: string | null,
+): TocEntry[] {
+  return embedded.length > 0 ? embedded : synthesizeToc(structure, docTitle);
 }

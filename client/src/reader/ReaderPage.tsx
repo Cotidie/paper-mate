@@ -14,12 +14,22 @@ import type { BankItem } from "@/lib/bank";
 import Toast from "@/components/Toast/Toast";
 import { getDoc, getAnnotations, markDocOpened, fetchHealth, type Doc } from "@/api/client";
 import { pageNavTarget, type TocEntry } from "@/render";
+import { resolveToc } from "@/structure";
+import { useDocStructure } from "@/structure/useDocStructure";
+import { flashRegionAt } from "@/reader/regionFlash";
 import { useAutosave } from "@/hooks/useAutosave";
 import SaveIndicator from "@/components/SaveIndicator/SaveIndicator";
+import StructureStatusDot from "@/components/StructureStatusDot/StructureStatusDot";
 import { matchAction } from "@/settings/keymap";
 import { useSettingsStore } from "@/settings/store";
 import SettingsModal from "@/settings/SettingsModal";
 import { isEditableTarget } from "@/lib/domFocus";
+
+/** Structure-analysis poll cadence (top-bar "analyzing" indicator): matches the
+ *  Library's settle poll (1.2s, capped) so a paper opened mid-analysis clears
+ *  its indicator + refills its ToC without hammering the backend. */
+const STRUCTURE_POLL_INTERVAL_MS = 1200;
+const STRUCTURE_POLL_MAX = 60;
 
 /**
  * Reader route (`/reader/:docId`, Story 6.1). Loads its document from the URL
@@ -115,6 +125,29 @@ export default function ReaderPage() {
   // React state (see the header note).
   const [tocOpen, setTocOpen] = useState(false);
   const [toc, setToc] = useState<TocEntry[] | null>(null);
+  // Story 10.2: the structure layer's headings feed the synthesized-ToC
+  // fallback (embedded outline wins when present, FR-35). Fetched independently
+  // of `toc` (the embedded outline); `resolveToc` below decides which source
+  // the panel actually shows.
+  const { structure, loading: structureLoading, refetch: refetchStructure } =
+    useDocStructure(docId ?? null);
+  // The doc_id whose ToC we've already refilled once after it settled to
+  // "ready" (a one-shot guard so a genuinely-empty structure never loops a
+  // refetch, and a cross-doc late response can't retrigger it). Compared to the
+  // current docId, so a new doc is naturally eligible again.
+  const structureRefilledRef = useRef<string | null>(null);
+  // The panel's actual entries: `null` (the loading state) only while a source
+  // could still resolve AND nothing is renderable yet — `toc` itself loading,
+  // or `toc` empty with the structure fetch in flight and NO held structure to
+  // show. A same-doc refetch (the post-analysis ToC refill) keeps the held
+  // structure, so we must NOT blank a populated ToC back to "loading" just
+  // because `structureLoading` is briefly true again. Once settled, `resolveToc`
+  // picks embedded (if non-empty) else the synthesized fallback (may be `[]`,
+  // the existing empty state).
+  const tocEntries: TocEntry[] | null =
+    toc === null || (toc.length === 0 && structureLoading && structure.elements.length === 0)
+      ? null
+      : resolveToc(toc, structure, doc?.title);
   // Annotation Bank panel (Story 3.6): open/closed only — its row list is
   // store-owned and read directly by BankPanel (unlike ToC's App-owned outline).
   const [bankOpen, setBankOpen] = useState(false);
@@ -164,6 +197,10 @@ export default function ReaderPage() {
     if (!docId) return;
     let live = true;
     setDoc(null);
+    // Reset the embedded outline on a direct `:docId` change (Codex review):
+    // doc A's non-empty outline must not stay authoritative until B's Reader
+    // reports its own — else A's ToC briefly renders for B. `null` = loading.
+    setToc(null);
     (async () => {
       try {
         const [meta, restored] = await Promise.all([getDoc(docId), getAnnotations(docId)]);
@@ -181,6 +218,66 @@ export default function ReaderPage() {
       live = false;
     };
   }, [docId, navigate]);
+
+  // Structure-analysis poll (the top-bar "analyzing" indicator). A paper opened
+  // right after import can still be running its opendataloader structure pass;
+  // `getDoc` reports `structure_status: "analyzing"` until `structure.json`
+  // lands. Poll the doc while analyzing so (a) the indicator clears on its own
+  // and (b) the ToC/consumers refill the moment analysis finishes.
+  //
+  // SINGLE-FLIGHT + generation-guarded (Codex review): a self-scheduling
+  // `setTimeout` that AWAITS each `getDoc` before scheduling the next, so two
+  // requests never overlap and an older `analyzing` response can't land after a
+  // newer `ready` and regress the dot. The `cancelled` flag (set on cleanup,
+  // i.e. a docId/status change or unmount) makes any in-flight response a no-op,
+  // so a late response for a doc we've switched away from never calls `setDoc`
+  // or `refetchStructure`. Depends on the STRING status, so a poll returning an
+  // unchanged `analyzing` doesn't restart the loop.
+  const structureStatus = doc?.structure_status;
+  useEffect(() => {
+    if (!docId || structureStatus !== "analyzing") return;
+    let cancelled = false;
+    let polls = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      try {
+        const fresh = await getDoc(docId);
+        if (cancelled) return; // switched docs / unmounted mid-request
+        setDoc((prev) => (prev && prev.doc_id === fresh.doc_id ? fresh : prev));
+        if (fresh.structure_status === "ready") {
+          if (structureRefilledRef.current !== docId) {
+            structureRefilledRef.current = docId;
+            refetchStructure(); // refill the ToC now that structure.json exists
+          }
+          return; // settled -> stop polling
+        }
+      } catch {
+        // Transient; keep polling until it resolves or the cap is hit.
+      }
+      if (!cancelled && polls++ < STRUCTURE_POLL_MAX) {
+        timer = setTimeout(tick, STRUCTURE_POLL_INTERVAL_MS);
+      }
+    };
+    timer = setTimeout(tick, STRUCTURE_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [docId, structureStatus, refetchStructure]);
+
+  // Initial-ready refill (Codex review M3): a paper can be opened just AFTER its
+  // analysis finished — `useDocStructure` may have fetched an empty structure
+  // while the pass was still running, then `getDoc` returns "ready", so the poll
+  // above never runs and the ToC would stay empty until a reload. When the doc
+  // is settled "ready" but the held structure is empty, refetch it ONCE (the
+  // ref guards against a genuinely-empty paper looping).
+  useEffect(() => {
+    if (!docId || structureStatus !== "ready" || structureLoading) return;
+    if (structure.elements.length > 0) return; // already have it
+    if (structureRefilledRef.current === docId) return; // one-shot per doc
+    structureRefilledRef.current = docId;
+    refetchStructure();
+  }, [docId, structureStatus, structureLoading, structure.elements.length, refetchStructure]);
 
   // Document-level tool keys (UX-DR15), unified onto the keymap (Story 5.1,
   // AC-1): ONE effect resolves the pressed key/chord to an action via
@@ -334,6 +431,10 @@ export default function ReaderPage() {
             <ArrowLeft aria-hidden />
           </button>
           <span className="top-bar__title">{doc.filename}</span>
+          {/* Persistent structure-state dot trailing the filename: grey (absent)
+              -> amber pulsing (analyzing) -> green (analyzed). The poll above
+              flips it to green and refills the ToC when analysis lands. */}
+          <StructureStatusDot status={doc.structure_status} className="top-bar__structure-dot" />
           <SaveIndicator status={saveStatus.status} />
         </div>
         {/* Centered page nav (grid middle column). Prev/next drive the Reader's
@@ -469,9 +570,19 @@ export default function ReaderPage() {
         />
         <TocPanel
           open={tocOpen}
-          entries={toc}
-          onJump={(p) => {
-            readerRef.current?.jumpToPage(p);
+          entries={tocEntries}
+          onJump={(entry) => {
+            // A synthesized entry (Story 10.2) carries a region: land on the
+            // exact heading and flash it, the same jump+flash mechanic the
+            // Annotation Bank uses. An embedded-outline entry has no region
+            // (Story 1.9, unchanged) and keeps the plain page-top jump.
+            if (entry.rect) {
+              const pageIndex = entry.pageNumber - 1;
+              readerRef.current?.jumpToAnnotation(pageIndex, entry.rect.y0);
+              flashRegionAt(pageIndex, entry.rect);
+            } else {
+              readerRef.current?.jumpToPage(entry.pageNumber);
+            }
             setTocOpen(false);
           }}
           onClose={() => setTocOpen(false)}

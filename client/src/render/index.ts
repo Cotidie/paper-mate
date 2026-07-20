@@ -20,7 +20,7 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 // from the package so we never hand-author .textLayer px/colors in src/.
 import "pdfjs-dist/web/pdf_viewer.css";
 
-import { docFileUrl } from "@/api/client";
+import { docFileUrl, type Rect } from "@/api/client";
 // The single home for pdf.js asset URLs (decoders/cmaps/iccs/standard fonts).
 import { PDFJS_ASSET_CONFIG } from "./config";
 // Selection/copy fidelity over the live text layer (Story 4.1); not
@@ -68,12 +68,19 @@ export function destroyDocument(pdf: PDFDocumentProxy): Promise<void> {
  * One flattened Table-of-Contents row, resolved to a 1-based page. `depth`
  * (0-based) drives the panel's indentation; only entries that resolve to a page
  * are included (url-only / broken bookmarks are dropped). ToC is a viewport
- * concern (FR-3 lives in render/) — no anchor/normalize math (AD-9).
+ * concern (FR-3 lives in render/) — no anchor/normalize math here (AD-9); `rect`
+ * is carried opaquely (already normalized by the server, Story 10.1) for a
+ * synthesized entry's region jump + flash, never computed in this module.
+ *
+ * `rect` is undefined for an embedded-outline entry (`getOutline`, page-level
+ * jump only) and set for a synthesized-from-headings entry (Story 10.2), so the
+ * panel/jump logic can branch on ONE field instead of two.
  */
 export interface TocEntry {
   title: string;
   pageNumber: number;
   depth: number;
+  rect?: Rect;
 }
 
 /** A pdf.js explicit destination: `[pageRef, {name}, ...args]`. The first

@@ -22,6 +22,7 @@ function row(overrides: Partial<CollectionRow>): CollectionRow {
     trashed: false,
     starred: false,
     order: 0,
+    structure_status: "ready",
     ...overrides,
   };
 }
@@ -43,6 +44,7 @@ function fakeDoc(overrides: Partial<Doc>): Doc {
     file_type: "pdf",
     status: "ready",
     schema_version: 1,
+    structure_status: "ready",
     ...overrides,
   };
 }

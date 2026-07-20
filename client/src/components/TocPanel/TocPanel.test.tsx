@@ -29,7 +29,7 @@ describe("TocPanel", () => {
     const onJump = vi.fn();
     render(<TocPanel open entries={entries} onJump={onJump} onClose={vi.fn()} />);
     fireEvent.click(screen.getByText("2 Methods"));
-    expect(onJump).toHaveBeenCalledWith(5);
+    expect(onJump).toHaveBeenCalledWith(entries[2]);
   });
 
   it("shows a loading note (not the empty state) while the outline is null", () => {

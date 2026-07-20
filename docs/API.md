@@ -66,7 +66,8 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
     "venue": null,                // string | null; Crossref-sourced, filled on settle
     "venue_short": null,          // string | null; Crossref-sourced (short-container-title, year-stripped event.acronym, or a trailing "(ACRONYM)" on container-title), else Semantic Scholar's publicationVenue.alternate_names[0] by DOI, null when none apply; read-only
     "year": null,                 // int | null; Crossref-sourced, filled on settle
-    "schema_version": 1
+    "schema_version": 1,
+    "structure_status": "analyzing" // "absent" | "analyzing" | "ready"; derived, response-only (the status dot): absent = no structure yet, analyzing = extraction running now, ready = analyzed
   }
   ```
 - **400** → `{ "detail": "Could not read PDF file" }` — corrupt, empty, or non-PDF bytes. Nothing is written.
@@ -94,6 +95,24 @@ than creating a duplicate row or a second `library/{doc_id}/` dir.
 > decision 2026-07-12: no full-venue fallback).
 > This import also indexes the paper into `library.json` (see `GET
 > /api/library` below) as Uncategorized, untrashed, at the next order.
+>
+> `structure_status` is additive (no `schema_version` bump) and **derived,
+> response-only** (never persisted, not on `meta.json`/`library.json`, not in
+> `DocPatch`): the route computes it from an in-memory in-flight marker plus
+> `structure.json` existence. `"analyzing"` while opendataloader-pdf's
+> extraction is actually running for this paper in the process (an in-memory
+> marker set at import, cleared when the pass finishes) — takes precedence;
+> else `"ready"` when `structure.json` exists — meaning the extraction
+> **attempt completed** and wrote a result, which (extraction being total) may
+> be an EMPTY structure on a thin/failed pass; else `"absent"` (no
+> `structure.json` at all: a paper imported before the structure layer, a
+> non-PDF, or a pass that never wrote a file). It powers the per-paper status dot (grey absent / amber
+> analyzing / green ready) in the Library + Reader. Crucially "analyzing" is NOT
+> merely "structure.json absent" — a pre-layer paper has no `structure.json` yet
+> nothing runs against it, so it is `"absent"` (grey), never a perpetual spin.
+> The marker is in-memory, so a server restart mid-analysis clears it (the
+> background task did not survive either). Defaults to `"absent"` for a client
+> tolerating an older response without the field.
 
 ### `GET /api/docs/{doc_id}` — get a document's own metadata
 
@@ -280,7 +299,8 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
         "doi": null,
         "venue": null,
         "venue_short": null,
-        "year": null
+        "year": null,
+        "structure_status": "ready"  // "absent" | "analyzing" | "ready"; derived per row (in-flight marker + structure.json existence), NOT cached in library.json
       }
     ],
     "folders": []
@@ -323,7 +343,13 @@ created; a paper is Uncategorized (`folder_id: null`) until assigned to one
 > only (no `journal_ref` — the arXiv fallback's own venue is the literal
 > `"arXiv"`), `venue_short` is set to `"arXiv"` too, matching `venue`, rather
 > than staying blank or querying Semantic Scholar by arXiv's self-assigned
-> DOI (user fix request).
+> DOI (user fix request). `structure_status` is additive and **derived per
+> row at this route** (an in-flight-marker check + one `structure.json` stat per
+> paper), NOT a cached `library.json`/`meta.json` field: it deliberately stays
+> out of the index so the projection remains a straight `library.json` read with
+> no `meta.json` fan-out (LNFR-4). Same 3-state meaning as on `Doc` (`absent` /
+> `analyzing` / `ready`); the Library status dot keeps polling this endpoint
+> while any row is `analyzing`.
 
 ### `POST /api/library/folders` — create a folder
 
@@ -480,6 +506,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-21 (structure-status dot):** `Doc` and `CollectionRow` gain `structure_status: "absent" | "analyzing" | "ready"` — additive (default `"absent"`, no `schema_version` bump) and **derived, response-only**: computed at the `GET /api/docs/{doc_id}`, `GET /api/library`, and `POST /api/docs` routes from an in-memory in-flight marker (extraction running now) plus `structure.json` existence (one marker check + one stat per doc; kept out of the `library.json`/`meta.json` cache to preserve LNFR-4's no-fan-out projection). `"analyzing"` while opendataloader-pdf's extraction is actually in flight for the paper in the process (marked at import, cleared when the pass finishes), else `"ready"` when `structure.json` exists, else `"absent"`. Powers the per-paper status dot (grey absent / amber analyzing / green ready) in the Library + Reader. Note `"analyzing"` is deliberately NOT "structure.json absent": a paper imported before the structure layer has no `structure.json` yet nothing runs against it, so it reads `"absent"` (grey), never a perpetual spin. The marker is in-memory (a server restart clears it, as the background task didn't survive either). No new endpoint.
 - **2026-07-20 (Story 10.1, document-structure layer):** added `GET /api/docs/{doc_id}/structure` (the AD-13 section-awareness layer, FR-34) returning `DocStructure` = `{ elements: StructureElement[] }`. New `components.schemas`: `StructureElement` (`{ id, type ∈ heading|paragraph|table|figure|caption|list|footnote|other, page_index (0-based), rect (normalized `Rect`), text, heading_level? }`) + `DocStructure`. Additive (no `schema_version` bump on any existing file). Structure is extracted at import by `opendataloader-pdf` (in-container, Java core), persisted per-doc as `structure.json`, and is **total/best-effort**: an imported-but-not-yet-analyzed doc, a non-PDF, or a failed/thin extraction returns `{ elements: [] }` (200, not 404). Coordinates are flipped from PDF points to AD-4 normalized rects **server-side**.
 - **2026-07-19 (Story 10.5, persist moved comment box position):** `Style` gains `bubble_offset_x: float | null` + `bubble_offset_y: float | null` (comment-only; CSS-px, scale-independent offset from the pin, same unit family as `bubble_width`/`bubble_height`; `null` = the default pin-relative position; additive, no format break, AD-8). No endpoints added.
 - **2026-07-19 (Story 10.4, resizable collapsed memo):** `Style` gains `collapsed_width: float | null` (memo-only; NORMALIZED page fraction, `> 0` when present, distinct from the expanded width in `anchor.rect`; `null` = the legacy fixed collapsed width; additive, no format break, AD-8). The collapsed box's HEIGHT is always one intrinsic CSS line and is not part of the contract. No endpoints added.
