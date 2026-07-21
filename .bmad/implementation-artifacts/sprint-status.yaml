@@ -44,7 +44,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-28
-last_updated: "2026-07-21 (correct-course: prioritized hybrid-mode to 10-3; 10-3..10-6 shifted +1, S2-enrich 10-7 -> 10-8, refactor stays 10-9)"
+last_updated: "2026-07-22 (10-3 hybrid-mode-switchable -> done, v0.6.3; plus the runtime mode toggle follow-on: app/structure_mode.py owns the mode + hybrid process, GET/PUT /api/settings/structure-mode, persisted settings.json, Library folder-panel footer switch; backend 423 / frontend 1735; host live-smoke green; DPR-2 debugStructure overlay still unverified)"
 project: Paper Mate
 # 2026-06-28: epic-1 in-progress, story 1-1 done (PR #1 merged), story 1-2 done (reviewed), story 1-3 ready-for-dev
 project_key: NOKEY
@@ -328,7 +328,14 @@ development_status:
   # digest) are built. The five backlog stories shift down by one; the S2-enrich story
   # (ready-for-dev) is renumbered 10-7 -> 10-8 (file renamed); the terminal refactor
   # stays 10-9 (AE7-5, number = exec order). All are un-started backlog except S2.
-  10-3-hybrid-mode-switchable: backlog                        # FR-34 fidelity upgrade (SPIKE-FIRST; depends on 10-1)
+  10-3-hybrid-mode-switchable: done                           # FR-34 fidelity upgrade (SPIKE-FIRST; depends on 10-1); v0.6.3
+  # 2026-07-22 user feature request, built on the 10-3 branch as a follow-on (no
+  # separate story file; 10-4..10-9 numbers were already taken, so it is recorded
+  # here rather than renumbering anything): the mode became a RUNTIME toggle in
+  # the Library folder-panel footer. app/structure_mode.py owns the mode + the
+  # hybrid process; GET/PUT /api/settings/structure-mode; the choice persists to
+  # settings.json and outranks PAPER_MATE_STRUCTURE_MODE on the next boot.
+  # Spec: docs/superpowers/specs/2026-07-22-structure-mode-runtime-toggle-design.md
   10-4-figures-tables-index: backlog                          # FR-36 (depends on 10-1)
   10-5-structure-backed-reading-helper: backlog              # FR-27 reframed; SUPERSEDES 12-3 (depends on 10-1)
   10-6-structure-backed-metadata: backlog                     # LFR-8 upgraded (depends on 10-1)

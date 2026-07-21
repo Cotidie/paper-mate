@@ -176,6 +176,40 @@ describe("synthesizeToc", () => {
     expect(synthesizeToc(s, "Results").map((e) => e.title)).toEqual(["Results and Discussion"]);
   });
 
+  it("excludes the paper title when the metadata title is a short subtitle-split name", () => {
+    // Crossref splits some records into title + subtitle; a paper whose stored
+    // title is the short half ("TranAD") is still the paper title when the
+    // heading continues with a subtitle delimiter (live-smoke finding, TranAD).
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0.1, y0: 0.05, x1: 0.9, y1: 0.12 }, {
+          heading_level: 1,
+          text: "TranAD: Deep Transformer Networks for Anomaly Detection in\nMultivariate Time Series Data",
+        }),
+        el("2", "heading", 0, { x0: 0.1, y0: 0.2, x1: 0.9, y1: 0.24 }, {
+          heading_level: 2,
+          text: "1 Introduction",
+        }),
+      ],
+    };
+    expect(synthesizeToc(s, "TranAD").map((e) => e.title)).toEqual(["1 Introduction"]);
+  });
+
+  it("does not drop a short-title section when the heading just continues in prose", () => {
+    const s: DocStructure = {
+      elements: [
+        el("1", "heading", 0, { x0: 0, y0: 0.3, x1: 1, y1: 0.4 }, {
+          heading_level: 1,
+          text: "Results, Limitations and Future Work",
+        }),
+      ],
+    };
+    // A comma is punctuation but NOT a title/subtitle delimiter: kept.
+    expect(synthesizeToc(s, "Results").map((e) => e.title)).toEqual([
+      "Results, Limitations and Future Work",
+    ]);
+  });
+
   it("preserves reading order (array order)", () => {
     const s: DocStructure = {
       elements: [

@@ -40,5 +40,11 @@ def library_path() -> Path:
     return data_root() / "library.json"
 
 
+def settings_path() -> Path:
+    """Resolve ``~/.paper-mate/settings.json`` -- app-level settings, a sibling
+    of ``library.json`` (not a per-doc artifact, so never inside ``library/``)."""
+    return data_root() / "settings.json"
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()

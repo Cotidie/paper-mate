@@ -21,10 +21,16 @@ Liveness probe. No filesystem access.
 
 - **200** → `HealthStatus`
   ```json
-  { "status": "ok", "version": "0.0.1" }
+  { "status": "ok", "version": "0.0.1", "structure_mode": "local" }
   ```
   `version` is the running app version. Single source = `server/pyproject.toml`
   (`[project].version`), read at runtime via `app.version.get_version()`.
+  `structure_mode` is the active document-structure extraction mode (AD-13),
+  `"local"` (default) or `"hybrid"`. It is read from the single runtime owner
+  (`app.structure_mode`), so it always reports the mode the next extraction will
+  actually run in, including right after a runtime change through
+  `PUT /api/settings/structure-mode`. To CHANGE the mode, use that resource;
+  `PAPER_MATE_STRUCTURE_MODE` is only the boot default.
 
 ### `POST /api/docs` — import a PDF
 
@@ -493,6 +499,49 @@ for every id in `doc_ids`.
 - **422** → `doc_ids` is empty, or an extra/forbidden field.
 - **500** → `{ "detail": "Could not update the collection" }`.
 
+### `GET /api/settings/structure-mode` — read the extraction mode
+
+The live document-structure extraction mode (AD-13) plus any change still in
+flight. No filesystem access on the read path.
+
+- **200** → `StructureModeState`
+  ```json
+  { "mode": "local", "transition": "idle", "error": null }
+  ```
+  `mode` is what the NEXT extraction will use (`"local"` | `"hybrid"`).
+  `transition` is `"idle"`, `"starting"` (bringing the hybrid Docling server up,
+  which costs a model load), or `"stopping"` (waiting for in-flight hybrid
+  extractions to drain before the server is terminated). `error` is the reason
+  the last change did not take (for example the hybrid server failed to start),
+  cleared by the next successful change.
+
+### `PUT /api/settings/structure-mode` — switch the extraction mode at runtime
+
+Switches extraction between `local` and `hybrid` without a restart. The change
+applies to papers imported **after** it; already-persisted `structure.json`
+files are untouched and nothing is re-extracted. A successful change is
+persisted to `settings.json` under the data root, so it survives a restart and
+outranks `PAPER_MATE_STRUCTURE_MODE` (which is only the boot default). A change
+that fails to start is **not** persisted.
+
+Returns immediately with the transitional state rather than blocking on the
+model load; poll the `GET` above until `transition` is `"idle"`.
+
+- **Body** → `StructureModeRequest`
+  ```json
+  { "mode": "hybrid" }
+  ```
+- **200** → `StructureModeState` (the state at request time, so typically
+  `transition: "starting"` or `"stopping"`). Requesting the mode already active
+  is a no-op and returns `transition: "idle"`.
+- **409** → `{ "detail": "A structure mode change is already in progress." }`.
+- **422** → `mode` is missing or not one of `local` | `hybrid`.
+
+Failure semantics: if the hybrid server does not come up, the mode stays
+`local`, `error` explains it, and extraction keeps working (deterministic +
+offline). A hybrid extraction that fails at run time still yields an empty
+`DocStructure` rather than an error, exactly as in Story 10.3.
+
 ## Reserved (not yet built)
 
 Declared by the architecture (AR-11), implemented in later stories. Do not
@@ -506,6 +555,8 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-22 (runtime structure-mode toggle):** added `GET`/`PUT /api/settings/structure-mode` returning the new `StructureModeState` (`{ mode, transition, error }`), with `StructureModeRequest` (`{ mode }`) as the PUT body. The extraction mode is now switchable at runtime from the Library folder panel: no restart, no rebuild. `GET /api/health.structure_mode` is unchanged in shape but now reports the LIVE runtime mode rather than the boot-time env value (both read the single owner, `app.structure_mode`). A successful change persists to `settings.json` under the data root and outranks `PAPER_MATE_STRUCTURE_MODE` on the next boot; a failed hybrid start is not persisted and leaves the mode on `local`. The switch applies to papers imported after it; `DocStructure`/`structure.json`/`GET .../structure` are unchanged and nothing is re-extracted. No `schema_version` bump.
+- **2026-07-21 (Story 10.3, hybrid structure mode):** `HealthStatus` gains `structure_mode: "local" | "hybrid"` (additive, default `"local"`) reporting the active document-structure extraction mode from `PAPER_MATE_STRUCTURE_MODE`. No other contract change: `DocStructure`/`structure.json`/`GET .../structure` are byte-identical whether local or hybrid mode produced the structure (hybrid = the higher-fidelity Docling backend, runtime-switchable via env + restart). No `schema_version` bump.
 - **2026-07-21 (structure-status dot):** `Doc` and `CollectionRow` gain `structure_status: "absent" | "analyzing" | "ready"` — additive (default `"absent"`, no `schema_version` bump) and **derived, response-only**: computed at the `GET /api/docs/{doc_id}`, `GET /api/library`, and `POST /api/docs` routes from an in-memory in-flight marker (extraction running now) plus `structure.json` existence (one marker check + one stat per doc; kept out of the `library.json`/`meta.json` cache to preserve LNFR-4's no-fan-out projection). `"analyzing"` while opendataloader-pdf's extraction is actually in flight for the paper in the process (marked at import, cleared when the pass finishes), else `"ready"` when `structure.json` exists, else `"absent"`. Powers the per-paper status dot (grey absent / amber analyzing / green ready) in the Library + Reader. Note `"analyzing"` is deliberately NOT "structure.json absent": a paper imported before the structure layer has no `structure.json` yet nothing runs against it, so it reads `"absent"` (grey), never a perpetual spin. The marker is in-memory (a server restart clears it, as the background task didn't survive either). No new endpoint.
 - **2026-07-20 (Story 10.1, document-structure layer):** added `GET /api/docs/{doc_id}/structure` (the AD-13 section-awareness layer, FR-34) returning `DocStructure` = `{ elements: StructureElement[] }`. New `components.schemas`: `StructureElement` (`{ id, type ∈ heading|paragraph|table|figure|caption|list|footnote|other, page_index (0-based), rect (normalized `Rect`), text, heading_level? }`) + `DocStructure`. Additive (no `schema_version` bump on any existing file). Structure is extracted at import by `opendataloader-pdf` (in-container, Java core), persisted per-doc as `structure.json`, and is **total/best-effort**: an imported-but-not-yet-analyzed doc, a non-PDF, or a failed/thin extraction returns `{ elements: [] }` (200, not 404). Coordinates are flipped from PDF points to AD-4 normalized rects **server-side**.
 - **2026-07-19 (Story 10.5, persist moved comment box position):** `Style` gains `bubble_offset_x: float | null` + `bubble_offset_y: float | null` (comment-only; CSS-px, scale-independent offset from the pin, same unit family as `bubble_width`/`bubble_height`; `null` = the default pin-relative position; additive, no format break, AD-8). No endpoints added.

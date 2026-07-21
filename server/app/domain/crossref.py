@@ -130,6 +130,30 @@ def _year_from_work(work: dict) -> int | None:
     return None
 
 
+def _title_from_work(work: dict) -> str | None:
+    """The work's full printed title: ``title[0]``, plus ``subtitle[0]`` when
+    Crossref split it across both fields.
+
+    Many publisher records (VLDB/ACM especially) put only the short name in
+    ``title`` and the rest in ``subtitle`` — TranAD's DOI returns
+    ``title=["TranAD"]`` with the descriptive half in ``subtitle``. Taking
+    ``title[0]`` alone stored a 6-character title, which is neither what the
+    paper prints nor long enough for the ToC's paper-title suppression to match
+    the title heading (live-smoke finding). Joined with ``": "``, Crossref's own
+    convention, and skipped when the title already ends with the subtitle so a
+    record that repeats it is not doubled.
+    """
+    titles = work.get("title") or []
+    title = clean(titles[0]) if titles else None
+    if title is None:
+        return None
+    subtitles = work.get("subtitle") or []
+    subtitle = clean(subtitles[0]) if subtitles else None
+    if subtitle is None or title.lower().endswith(subtitle.lower()):
+        return title
+    return f"{title.rstrip(':')}: {subtitle}"
+
+
 def _meta_from_work(work: dict, doi: str | None) -> ExtractedMeta | None:
     """Project a Crossref ``message`` work into ``ExtractedMeta`` (``None`` if
     it carries no title — an empty result is a skip, not a correction).
@@ -137,8 +161,7 @@ def _meta_from_work(work: dict, doi: str | None) -> ExtractedMeta | None:
     ``doi`` stays the passed-in, extraction-sourced value (scope guard, Story
     7.9): this does NOT read ``work.get("DOI")``.
     """
-    titles = work.get("title") or []
-    title = clean(titles[0]) if titles else None
+    title = _title_from_work(work)
     if title is None:
         return None
     return ExtractedMeta(

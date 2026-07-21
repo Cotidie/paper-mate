@@ -1,9 +1,9 @@
 /* Folder panel (Story 7.1): the Library's left aside, replacing the 6.1
    static placeholder. Two areas separated by a divider: a fixed Library
    section (All/Recent/Uncategorized/Trash, icon-led) and a Folder section
-   (header + create button, then the nested custom-folder tree). The app
-   version stays pinned to the bottom via the column flex layout + margin-top:
-   auto. Tokens only (CLAUDE.md). */
+   (header + create button, then the nested custom-folder tree). A footer holds
+   the structure-mode toggle + the app version, pinned to the bottom via the
+   column flex layout + margin-top: auto. Tokens only (CLAUDE.md). */
 
 .library-folder-panel {
   flex: 0 0 auto;
@@ -277,10 +277,18 @@ button.library-folder-panel__item:hover {
   border-color: var(--color-ink);
 }
 
-.library-folder-panel__version {
+/* The panel's pinned footer: the structure-mode toggle above the version
+   badge, held at the bottom by the column flex layout. */
+.library-folder-panel__footer {
   margin-top: auto;
   padding-top: var(--space-xs);
   border-top: var(--hairline-width) solid var(--color-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+}
+
+.library-folder-panel__version {
   font-family: var(--font-sans);
   font-size: var(--type-caption-size);
   font-weight: var(--type-caption-weight);

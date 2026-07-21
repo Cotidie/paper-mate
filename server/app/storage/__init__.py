@@ -82,6 +82,10 @@ from app.storage.structure_progress import (
     mark_structure_analyzing,
     structure_status_for,
 )
+from app.storage.settings_store import (
+    read_structure_mode,
+    write_structure_mode,
+)
 
 __all__ = [
     # Schema versions.
@@ -130,4 +134,7 @@ __all__ = [
     "clear_structure_analyzing",
     "is_structure_analyzing",
     "structure_status_for",
+    # Persisted app settings (the runtime structure-mode choice).
+    "read_structure_mode",
+    "write_structure_mode",
 ]

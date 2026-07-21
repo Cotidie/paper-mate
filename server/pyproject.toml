@@ -1,6 +1,6 @@
 [project]
 name = "paper-mate-server"
-version = "0.6.2"
+version = "0.6.3"
 description = "Paper Mate backend — thin FastAPI persistence + static SPA serving (AD-1, AD-10)."
 requires-python = ">=3.12"
 # PyMuPDF is AGPL-3.0 (copyleft); bundling it makes the combined distributed
@@ -21,6 +21,18 @@ dependencies = [
     # (lukasschwab/arxiv.py) over hand-rolled Atom-XML parsing.
     "arxiv==4.0.0",
     "opendataloader-pdf==2.5.0",
+]
+
+[project.optional-dependencies]
+# The opendataloader hybrid backend (Docling Fast Server) for higher-fidelity
+# structure extraction (AD-13, Story 10.3). Heavy (docling[easyocr] pulls torch,
+# multi-GB), so it is an OPT-IN extra: the Docker image installs it (always
+# hybrid-capable, decision A) via `uv sync --extra hybrid`, while a plain local
+# `uv sync` stays lean. Runtime-switchable via PAPER_MATE_STRUCTURE_MODE; the
+# hybrid server + a JRE both run in-container. CUDA-capable torch (GPU-optional,
+# CPU fallback) is kept -- do not pin the +cpu wheel.
+hybrid = [
+    "opendataloader-pdf[hybrid]==2.5.0",
 ]
 
 [dependency-groups]

@@ -26,11 +26,23 @@ Two nuances worth stating out loud:
 
 import tempfile
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import pymupdf
 
 from app.models import DocStructure, Rect, StructureElement, StructureType
+
+StructureMode = Literal["local", "hybrid"]
+
+#: Default URL of the opendataloader hybrid server (Docling Fast Server). The
+#: hybrid backend is a SEPARATE process the Java core calls over HTTP; the
+#: runtime owner (``app.structure_mode``) launches it and passes the URL in.
+_HYBRID_URL_DEFAULT = "http://localhost:5002"
+#: Per-request hybrid timeout (ms). The spike measured ~16s GPU / ~37-98s CPU per
+#: paper; 120s leaves CPU-fallback headroom. ``hybrid_fallback`` degrades a stuck
+#: page to the Java result rather than emptying the whole structure.
+_HYBRID_TIMEOUT_MS = 120_000
+
 
 #: opendataloader raw type -> our vocabulary (AD-13). Anything not listed maps to
 #: ``"other"`` (its ``text block`` layout container, ``formula``, and any future
@@ -167,10 +179,26 @@ class StructureExtractor(Protocol):
 class OpenDataLoaderExtractor:
     """First adapter: opendataloader-pdf (Java core via its Python binding).
 
+    Runs in one of two runtime-switchable modes (AD-13, Story 10.3): **local**
+    (deterministic + offline, born-digital PDFs) or **hybrid** (the Docling Fast
+    Server backend, higher fidelity). The mode only changes the ``convert()``
+    kwargs in ``_run``; both modes emit opendataloader's SAME JSON tree, so the
+    ``_map_tree`` mapping downstream is identical (spike-confirmed parity).
+
     File-based, so it round-trips through an OS temp dir (see module docstring).
     ``_run`` (the JVM hop) is split from ``_map_tree`` (pure) so unit tests feed a
     captured raw JSON tree without spawning Java.
     """
+
+    def __init__(
+        self,
+        mode: StructureMode = "local",
+        hybrid_url: str = _HYBRID_URL_DEFAULT,
+        hybrid_timeout_ms: int = _HYBRID_TIMEOUT_MS,
+    ) -> None:
+        self._mode: StructureMode = mode
+        self._hybrid_url = hybrid_url
+        self._hybrid_timeout_ms = hybrid_timeout_ms
 
     def extract(self, pdf_bytes: bytes) -> DocStructure:
         try:
@@ -180,48 +208,64 @@ class OpenDataLoaderExtractor:
                 return DocStructure()
             return _map_tree(raw, page_dims)
         except Exception:
-            # Total: a bad PDF, a JVM error, or malformed output yields an empty
-            # structure, never a raise (never blocks the paper reaching `ready`).
+            # Total: a bad PDF, a JVM error, or (in hybrid) a hybrid-server
+            # error/timeout/OOM yields an empty structure, never a raise (never
+            # blocks the paper reaching `ready`). Local mode stays the fallback.
             return DocStructure()
 
     def _run(self, pdf_bytes: bytes) -> dict[str, Any]:
         """Spawn opendataloader on the bytes and return its parsed JSON tree.
 
-        Writes the bytes to a temp file, runs a JSON-only, image-off, offline
-        (local-mode) conversion into a temp dir, and reads the single produced
-        ``.json`` back. The temp dir is throwaway scratch (AD-9 unaffected).
+        Writes the bytes to a temp file, runs a JSON-only, image-off conversion
+        into a temp dir, and reads the single produced ``.json`` back. In hybrid
+        mode the Java core POSTs pages to the already-running Docling Fast Server
+        at ``hybrid_url`` (``hybrid_fallback`` degrades a failed page to the Java
+        result). The temp dir is throwaway scratch (AD-9 unaffected).
         """
         import json
 
         import opendataloader_pdf
+
+        kwargs: dict[str, Any] = dict(
+            format="json",
+            image_output="off",
+            quiet=True,
+        )
+        if self._mode == "hybrid":
+            kwargs.update(
+                hybrid="docling-fast",
+                hybrid_url=self._hybrid_url,
+                hybrid_mode="auto",
+                hybrid_fallback=True,
+                hybrid_timeout=str(self._hybrid_timeout_ms),
+            )
 
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "input.pdf"
             src.write_bytes(pdf_bytes)
             out = Path(td) / "out"
             out.mkdir()
-            opendataloader_pdf.convert(
-                input_path=str(src),
-                output_dir=str(out),
-                format="json",
-                image_output="off",
-                quiet=True,
-            )
+            opendataloader_pdf.convert(input_path=str(src), output_dir=str(out), **kwargs)
             produced = [p for p in out.rglob("*.json")]
             if not produced:
                 return {}
             return json.loads(produced[0].read_text())
 
 
-#: The default adapter the domain surface delegates to (swappable, like the
-#: ``Enricher`` default).
-_default_extractor: StructureExtractor = OpenDataLoaderExtractor()
-
-
-def extract_structure(pdf_bytes: bytes) -> DocStructure:
+def extract_structure(
+    pdf_bytes: bytes,
+    *,
+    mode: StructureMode = "local",
+    hybrid_url: str = _HYBRID_URL_DEFAULT,
+) -> DocStructure:
     """Extract a document's structure, best-effort (FR-34, AD-13, AD-L8).
 
-    The domain surface: delegates to the default adapter (opendataloader).
+    The domain surface: delegates to the adapter (opendataloader). ``mode`` and
+    ``hybrid_url`` are ARGUMENTS, not module state: the mode is switchable at
+    runtime and ``app.structure_mode`` owns it, so the domain layer stays a pure
+    function of its inputs and two sources can never disagree about which mode
+    is live. The default is the deterministic + offline mode.
+
     **Total** -- any failure returns ``DocStructure()``, never raises -- so the
     background import pipeline can call it without a guard of its own. Also
     enforces the return CONTRACT: a swapped adapter that returns a non-
@@ -229,7 +273,8 @@ def extract_structure(pdf_bytes: bytes) -> DocStructure:
     leaking an off-contract value downstream.
     """
     try:
-        result = _default_extractor.extract(pdf_bytes)
+        extractor = OpenDataLoaderExtractor(mode=mode, hybrid_url=hybrid_url)
+        result = extractor.extract(pdf_bytes)
     except Exception:
         return DocStructure()
     return result if isinstance(result, DocStructure) else DocStructure()

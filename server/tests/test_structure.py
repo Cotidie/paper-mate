@@ -16,7 +16,12 @@ from fastapi.testclient import TestClient
 
 from app import domain, storage
 from app.domain import structure as structure_mod
-from app.domain.structure import OpenDataLoaderExtractor, _map_tree, _to_rect, extract_structure
+from app.domain.structure import (
+    OpenDataLoaderExtractor,
+    _map_tree,
+    _to_rect,
+    extract_structure,
+)
 from app.main import app
 from app.models import DocStructure, StructureElement
 from tests.conftest import make_pdf_bytes, sha256_hex
@@ -145,10 +150,13 @@ def test_extract_structure_coerces_off_contract_adapter_result(monkeypatch):
     # A swapped adapter that returns a non-DocStructure (here None) without
     # raising must be coerced to an empty structure, never leaked downstream.
     class BadAdapter:
+        def __init__(self, mode, hybrid_url, **kwargs):
+            pass
+
         def extract(self, pdf_bytes):
             return None
 
-    monkeypatch.setattr(structure_mod, "_default_extractor", BadAdapter())
+    monkeypatch.setattr(structure_mod, "OpenDataLoaderExtractor", BadAdapter)
     assert extract_structure(make_pdf_bytes()) == DocStructure()
 
 
@@ -445,6 +453,122 @@ def test_run_extraction_persists_structure(data_root, monkeypatch):
         StructureElement(id="1", type="heading", page_index=0,
                          rect={"x0": 0, "y0": 0, "x1": 1, "y1": 0.1}, text="H"),
     ])
-    monkeypatch.setattr(domain, "extract_structure", lambda b: ds)
+    monkeypatch.setattr(domain, "extract_structure", lambda b, **kwargs: ds)
     run_extraction(doc_id, raw)
     assert storage.read_structure(doc_id) == ds
+
+
+# --- Story 10.3: hybrid mode switch (adapter dispatch, env, contract parity) --
+
+
+def _fake_convert_writing(captured: dict):
+    """A stand-in for ``opendataloader_pdf.convert`` that records its kwargs and
+    writes a minimal JSON tree into ``output_dir`` so ``_run`` completes without
+    a JVM."""
+
+    def fake(input_path=None, output_dir=None, **kwargs):
+        captured.update(kwargs)
+        Path(output_dir, "out.json").write_text('{"kids": []}')
+
+    return fake
+
+
+def test_adapter_local_mode_passes_no_hybrid_kwargs(monkeypatch):
+    import opendataloader_pdf
+
+    captured: dict = {}
+    monkeypatch.setattr(opendataloader_pdf, "convert", _fake_convert_writing(captured))
+    OpenDataLoaderExtractor(mode="local").extract(make_pdf_bytes(pages=1))
+    assert captured.get("format") == "json"
+    assert "hybrid" not in captured  # local mode never sends the hybrid backend
+
+
+def test_adapter_hybrid_mode_passes_hybrid_kwargs(monkeypatch):
+    import opendataloader_pdf
+
+    captured: dict = {}
+    monkeypatch.setattr(opendataloader_pdf, "convert", _fake_convert_writing(captured))
+    OpenDataLoaderExtractor(
+        mode="hybrid", hybrid_url="http://hybrid-host:9999", hybrid_timeout_ms=90000
+    ).extract(make_pdf_bytes(pages=1))
+    assert captured["hybrid"] == "docling-fast"
+    assert captured["hybrid_url"] == "http://hybrid-host:9999"
+    assert captured["hybrid_mode"] == "auto"
+    assert captured["hybrid_fallback"] is True
+    assert captured["hybrid_timeout"] == "90000"
+
+
+def test_adapter_hybrid_total_when_convert_raises(monkeypatch):
+    import opendataloader_pdf
+
+    def boom(**kwargs):
+        raise RuntimeError("hybrid server unreachable")
+
+    monkeypatch.setattr(opendataloader_pdf, "convert", boom)
+    # Total in hybrid mode exactly like local: a down hybrid server -> empty, no raise.
+    assert OpenDataLoaderExtractor(mode="hybrid").extract(make_pdf_bytes(pages=1)) == DocStructure()
+
+
+class _SpyExtractor:
+    """Stands in for the adapter so the surface's argument plumbing is visible
+    without spawning a JVM."""
+
+    seen: dict = {}
+
+    def __init__(self, mode, hybrid_url, **kwargs):
+        _SpyExtractor.seen = {"mode": mode, "hybrid_url": hybrid_url}
+
+    def extract(self, pdf_bytes):
+        return DocStructure()
+
+
+def test_extract_structure_defaults_to_local_mode(monkeypatch):
+    # The domain surface takes the mode as an ARGUMENT now; nothing in the
+    # domain layer reads the env or holds a pre-built extractor. Its default is
+    # the deterministic + offline mode.
+    monkeypatch.setattr(structure_mod, "OpenDataLoaderExtractor", _SpyExtractor)
+    structure_mod.extract_structure(b"%PDF-1.4")
+    assert _SpyExtractor.seen["mode"] == "local"
+
+
+def test_extract_structure_passes_hybrid_settings_through(monkeypatch):
+    monkeypatch.setattr(structure_mod, "OpenDataLoaderExtractor", _SpyExtractor)
+    structure_mod.extract_structure(b"%PDF-1.4", mode="hybrid", hybrid_url="http://h:5002")
+    assert _SpyExtractor.seen == {"mode": "hybrid", "hybrid_url": "http://h:5002"}
+
+
+def test_extract_structure_is_total_when_the_extractor_explodes(monkeypatch):
+    class Boom:
+        def __init__(self, mode, hybrid_url, **kwargs):
+            pass
+
+        def extract(self, pdf_bytes):
+            raise RuntimeError("JVM died")
+
+    monkeypatch.setattr(structure_mod, "OpenDataLoaderExtractor", Boom)
+    assert structure_mod.extract_structure(b"%PDF-1.4") == DocStructure()
+
+
+def test_domain_no_longer_exports_active_mode():
+    # The mode moved to `app.structure_mode`; two sources would be able to
+    # disagree about which mode is live.
+    assert not hasattr(domain, "active_mode")
+
+
+def test_map_tree_hybrid_fixture_recovers_headings_and_maps_formula():
+    """Parity regression (spike): a captured HYBRID raw tree maps through the
+    SAME ``_map_tree`` as local, recovering the sections local mode drops and
+    routing the hybrid-only ``formula`` type to the ``other`` catch-all."""
+    raw = json.loads((FIXTURES / "odl_adtran_hybrid.json").read_text())
+    dims = [(612.0, 792.0)] * 20  # adtran is US-Letter; 20 covers every page index
+    ds = _map_tree(raw, dims)
+    headings = [e.text for e in ds.elements if e.type == "heading"]
+    assert any("METHODOLOGY" in h for h in headings)  # local dropped this
+    assert any("Data Preprocessing" in h for h in headings)  # local omitted this
+    # opendataloader's hybrid backend emits `formula`; our vocabulary has no such
+    # member, so it must land in the `other` catch-all (never a validation error).
+    assert any(e.type == "other" for e in ds.elements)
+    # Every rect is canonical + normalized (the flip is unchanged from local).
+    for e in ds.elements:
+        assert 0.0 <= e.rect.x0 <= e.rect.x1 <= 1.0
+        assert 0.0 <= e.rect.y0 <= e.rect.y1 <= 1.0

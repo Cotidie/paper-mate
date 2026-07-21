@@ -288,6 +288,15 @@
   --folder-panel-indent-step: 16px;
   --folder-panel-action-size: 22px;
 
+  /* structure-mode-toggle: the pill switch in the folder panel's footer. Sized
+     to sit beside a caption-scale label without adding chrome weight; travel =
+     track width minus both paddings minus the knob. */
+  --switch-track-width: 28px;
+  --switch-track-height: 16px;
+  --switch-track-padding: 2px;
+  --switch-knob-size: 12px;
+  --switch-knob-travel: 12px;
+
   /* table-controls (Story 7.4): the Display/Sort toolbar popovers + the
      column-header dropdown (fix request: width now fits content, `max-content`
      in TableControls.css, so no fixed width token is needed here). */

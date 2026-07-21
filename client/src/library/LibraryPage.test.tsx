@@ -20,7 +20,14 @@ beforeEach(() => {
   // The Library fetches the version on mount (GET /api/health), same as
   // ReaderPage. Stub it so tests never hit the network; individual tests
   // override to assert the rendered value.
-  vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9" });
+  vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9", structure_mode: "local" });
+  // The folder panel's footer toggle reads the runtime structure mode on mount
+  // (GET /api/settings/structure-mode); stub it for the same reason.
+  vi.spyOn(api, "fetchStructureMode").mockResolvedValue({
+    mode: "local",
+    transition: "idle",
+    error: null,
+  });
   // `tableViewPrefs` is a `localStorage`-persisted Zustand store (Story
   // 7.10): module-level, so it leaks column order/hidden/widths across
   // tests otherwise (mirrors `settings/store.test.ts`'s own reset).
@@ -823,7 +830,7 @@ describe("Inline edit Venue/Year (Story 7.9 fix request)", () => {
 
 describe("Left pane (version display)", () => {
   it("shows the app version once fetchHealth resolves", async () => {
-    vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.4.4" });
+    vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.4.4", structure_mode: "local" });
     renderLibrary();
     await waitFor(() => expect(screen.getByTestId("library-version").textContent).toBe("v0.4.4"));
   });

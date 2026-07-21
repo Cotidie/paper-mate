@@ -10,7 +10,7 @@ slow JVM or a structure failure never delays or alters the title/authors the
 table shows, and never leaves the row stuck.
 """
 
-from app import domain, storage
+from app import domain, storage, structure_mode
 from app.models import ExtractedMeta
 
 
@@ -81,7 +81,13 @@ def _run_structure(doc_id: str, pdf_bytes: bytes) -> None:
     """
     storage.mark_structure_analyzing(doc_id)
     try:
-        structure = domain.extract_structure(pdf_bytes)
+        # Snapshot the mode for THIS extraction: a runtime flip mid-run must not
+        # change what is already running, and the snapshot keeps the hybrid
+        # server alive until this extraction drains (``app.structure_mode``).
+        with structure_mode.extraction_mode() as settings:
+            structure = domain.extract_structure(
+                pdf_bytes, mode=settings.mode, hybrid_url=settings.hybrid_url
+            )
         storage.write_structure(doc_id, structure)
     except storage.DocumentNotFoundError:
         pass  # purged mid-flight — best-effort no-op
