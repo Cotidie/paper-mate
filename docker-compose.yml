@@ -24,9 +24,13 @@ services:
     # Storage root inside the container = the mounted volume (AD-8).
     environment:
       PAPER_MATE_DATA: /data
-    # Bind to loopback only: no-auth, single-user, localhost deployment (AD-1/AD-10).
+    # Bind to all host interfaces so the app is reachable from other machines on
+    # the network. NOTE: the app is no-auth/single-user (AD-1/AD-10); exposing it
+    # off-loopback makes the library + API reachable by anyone who can route to
+    # this host. Only do this on a trusted network (or front it with a firewall/
+    # VPN/SSH tunnel). Set PAPER_MATE_HOST=127.0.0.1 to restore loopback-only.
     ports:
-      - "127.0.0.1:${PAPER_MATE_PORT:-8000}:8000"
+      - "${PAPER_MATE_HOST:-0.0.0.0}:${PAPER_MATE_PORT:-8000}:8000"
     volumes:
       # Live backend source over the baked copy → uvicorn --reload picks up edits.
       - "./server/app:/app/app"
