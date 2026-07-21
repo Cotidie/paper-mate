@@ -24,10 +24,8 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import storage
-from app.domain.structure import active_mode, hybrid_url
+from app import storage, structure_mode
 from app.routes import api_router
-from app.structure_hybrid import start_hybrid_server, stop_hybrid_server
 from app.version import get_version
 
 logger = logging.getLogger(__name__)
@@ -41,23 +39,25 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
     failure logs and never aborts boot (a corrupt single doc must not brick
     the app).
 
-    In hybrid structure mode (Story 10.3) also launch the bundled Docling hybrid
-    server off the event loop; local mode (the default) launches nothing. Both
-    the launch and shutdown are best-effort + logged, so neither can brick boot."""
+    In hybrid structure mode also launch the bundled Docling hybrid server off
+    the event loop; local mode (the default) launches nothing. The mode resolves
+    through ``app.structure_mode`` (persisted setting > env > local), which then
+    owns the process for the rest of the run, including any runtime flip from
+    the Library toggle. Both the launch and shutdown are best-effort + logged,
+    so neither can brick boot."""
     try:
         storage.reconcile_library()
     except storage.StorageError:
         logger.exception("library reconcile failed at startup; continuing")
-    hybrid_proc = None
     try:
-        hybrid_proc = await asyncio.to_thread(start_hybrid_server, active_mode(), hybrid_url())
+        await asyncio.to_thread(structure_mode.start_at_boot)
     except Exception:
-        logger.exception("structure hybrid server launch failed at startup; continuing")
+        logger.exception("structure mode: boot start failed; continuing in local mode")
     try:
         yield
     finally:
         try:
-            await asyncio.to_thread(stop_hybrid_server, hybrid_proc)
+            await asyncio.to_thread(structure_mode.shutdown)
         except Exception:
             logger.exception("structure hybrid server shutdown failed")
 

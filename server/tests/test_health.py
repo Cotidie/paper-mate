@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.domain import structure as structure_mod
+from app import structure_mode
 from app.main import app
 from app.version import get_version
 
@@ -21,16 +21,18 @@ def test_health_version_is_nonempty() -> None:
 
 
 def test_health_reports_structure_mode_default_local() -> None:
-    # The mode is resolved once at import (restart-scoped switch), so the tests
-    # move the RESOLVED value, not the env, which is also what proves health and
-    # the extractor read the same source.
-    assert structure_mod._ACTIVE_MODE == "local"  # default with no env set
+    assert structure_mode.current_state().mode == "local"  # default with no env set
     resp = client.get("/api/health")
     assert resp.json()["structure_mode"] == "local"
 
 
-def test_health_reports_structure_mode_hybrid(monkeypatch) -> None:
-    monkeypatch.setattr(structure_mod, "_ACTIVE_MODE", "hybrid")
+def test_health_reports_the_runtime_structure_mode(monkeypatch) -> None:
+    # Health reads the SAME runtime owner extraction does, so a flip at runtime
+    # is visible immediately -- no restart, and no second source to disagree.
+    monkeypatch.setattr(structure_mode, "start_hybrid_server", lambda mode, url: object())
+    structure_mode.begin_transition("hybrid")
+    structure_mode.run_transition()
+
     resp = client.get("/api/health")
     assert resp.json()["structure_mode"] == "hybrid"
 

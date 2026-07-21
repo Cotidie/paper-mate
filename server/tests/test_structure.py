@@ -18,13 +18,9 @@ from app import domain, storage
 from app.domain import structure as structure_mod
 from app.domain.structure import (
     OpenDataLoaderExtractor,
-    _env_hybrid_url,
-    _env_mode,
     _map_tree,
     _to_rect,
-    active_mode,
     extract_structure,
-    hybrid_url,
 )
 from app.main import app
 from app.models import DocStructure, StructureElement
@@ -154,10 +150,13 @@ def test_extract_structure_coerces_off_contract_adapter_result(monkeypatch):
     # A swapped adapter that returns a non-DocStructure (here None) without
     # raising must be coerced to an empty structure, never leaked downstream.
     class BadAdapter:
+        def __init__(self, mode, hybrid_url, **kwargs):
+            pass
+
         def extract(self, pdf_bytes):
             return None
 
-    monkeypatch.setattr(structure_mod, "_default_extractor", BadAdapter())
+    monkeypatch.setattr(structure_mod, "OpenDataLoaderExtractor", BadAdapter)
     assert extract_structure(make_pdf_bytes()) == DocStructure()
 
 
@@ -454,7 +453,7 @@ def test_run_extraction_persists_structure(data_root, monkeypatch):
         StructureElement(id="1", type="heading", page_index=0,
                          rect={"x0": 0, "y0": 0, "x1": 1, "y1": 0.1}, text="H"),
     ])
-    monkeypatch.setattr(domain, "extract_structure", lambda b: ds)
+    monkeypatch.setattr(domain, "extract_structure", lambda b, **kwargs: ds)
     run_extraction(doc_id, raw)
     assert storage.read_structure(doc_id) == ds
 
@@ -510,45 +509,50 @@ def test_adapter_hybrid_total_when_convert_raises(monkeypatch):
     assert OpenDataLoaderExtractor(mode="hybrid").extract(make_pdf_bytes(pages=1)) == DocStructure()
 
 
-def test_env_mode_defaults_local(monkeypatch):
-    monkeypatch.delenv("PAPER_MATE_STRUCTURE_MODE", raising=False)
-    assert _env_mode() == "local"
+class _SpyExtractor:
+    """Stands in for the adapter so the surface's argument plumbing is visible
+    without spawning a JVM."""
+
+    seen: dict = {}
+
+    def __init__(self, mode, hybrid_url, **kwargs):
+        _SpyExtractor.seen = {"mode": mode, "hybrid_url": hybrid_url}
+
+    def extract(self, pdf_bytes):
+        return DocStructure()
 
 
-def test_env_mode_hybrid(monkeypatch):
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid")
-    assert _env_mode() == "hybrid"
+def test_extract_structure_defaults_to_local_mode(monkeypatch):
+    # The domain surface takes the mode as an ARGUMENT now; nothing in the
+    # domain layer reads the env or holds a pre-built extractor. Its default is
+    # the deterministic + offline mode.
+    monkeypatch.setattr(structure_mod, "OpenDataLoaderExtractor", _SpyExtractor)
+    structure_mod.extract_structure(b"%PDF-1.4")
+    assert _SpyExtractor.seen["mode"] == "local"
 
 
-def test_env_mode_typo_or_local_falls_back_local(monkeypatch):
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrd")  # typo -> fail safe
-    assert _env_mode() == "local"
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "LOCAL")
-    assert _env_mode() == "local"
+def test_extract_structure_passes_hybrid_settings_through(monkeypatch):
+    monkeypatch.setattr(structure_mod, "OpenDataLoaderExtractor", _SpyExtractor)
+    structure_mod.extract_structure(b"%PDF-1.4", mode="hybrid", hybrid_url="http://h:5002")
+    assert _SpyExtractor.seen == {"mode": "hybrid", "hybrid_url": "http://h:5002"}
 
 
-def test_env_hybrid_url_default_and_override(monkeypatch):
-    monkeypatch.delenv("PAPER_MATE_STRUCTURE_HYBRID_URL", raising=False)
-    assert _env_hybrid_url() == "http://localhost:5002"
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://sidecar:5002")
-    assert _env_hybrid_url() == "http://sidecar:5002"
+def test_extract_structure_is_total_when_the_extractor_explodes(monkeypatch):
+    class Boom:
+        def __init__(self, mode, hybrid_url, **kwargs):
+            pass
+
+        def extract(self, pdf_bytes):
+            raise RuntimeError("JVM died")
+
+    monkeypatch.setattr(structure_mod, "OpenDataLoaderExtractor", Boom)
+    assert structure_mod.extract_structure(b"%PDF-1.4") == DocStructure()
 
 
-def test_active_mode_is_resolved_once_not_read_live(monkeypatch):
-    # The switch is restart-scoped: flipping the env after import must NOT move
-    # the reported mode, or /api/health could disagree with the extractor that
-    # was already built from the import-time value.
-    before = active_mode()
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid" if before == "local" else "local")
-    assert active_mode() == before
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://not-picked-up:1234")
-    assert hybrid_url() == structure_mod._HYBRID_URL
-
-
-def test_default_extractor_matches_resolved_mode():
-    # Single source of truth: the process-wide mode IS the extractor's mode.
-    assert structure_mod._default_extractor._mode == active_mode()
-    assert structure_mod._default_extractor._hybrid_url == hybrid_url()
+def test_domain_no_longer_exports_active_mode():
+    # The mode moved to `app.structure_mode`; two sources would be able to
+    # disagree about which mode is live.
+    assert not hasattr(domain, "active_mode")
 
 
 def test_map_tree_hybrid_fixture_recovers_headings_and_maps_formula():

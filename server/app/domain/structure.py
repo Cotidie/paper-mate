@@ -24,7 +24,6 @@ Two nuances worth stating out loud:
   way AD-L2 itself was surfaced as amending AD-6.
 """
 
-import os
 import tempfile
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -36,52 +35,13 @@ from app.models import DocStructure, Rect, StructureElement, StructureType
 StructureMode = Literal["local", "hybrid"]
 
 #: Default URL of the opendataloader hybrid server (Docling Fast Server). The
-#: hybrid backend is a SEPARATE process the Java core calls over HTTP; in our
-#: single container it is launched by ``app.main`` only in hybrid mode.
+#: hybrid backend is a SEPARATE process the Java core calls over HTTP; the
+#: runtime owner (``app.structure_mode``) launches it and passes the URL in.
 _HYBRID_URL_DEFAULT = "http://localhost:5002"
 #: Per-request hybrid timeout (ms). The spike measured ~16s GPU / ~37-98s CPU per
 #: paper; 120s leaves CPU-fallback headroom. ``hybrid_fallback`` degrades a stuck
 #: page to the Java result rather than emptying the whole structure.
 _HYBRID_TIMEOUT_MS = 120_000
-
-
-def _env_mode() -> StructureMode:
-    """Parse ``PAPER_MATE_STRUCTURE_MODE``.
-
-    ``"hybrid"`` selects the higher-fidelity Docling backend; ANY other value
-    (unset, ``"local"``, or a typo) resolves to ``"local"`` so a misconfig fails
-    safe to the deterministic + offline default."""
-    return "hybrid" if os.environ.get("PAPER_MATE_STRUCTURE_MODE", "").strip().lower() == "hybrid" else "local"
-
-
-def _env_hybrid_url() -> str:
-    """Parse ``PAPER_MATE_STRUCTURE_HYBRID_URL`` (default
-    ``http://localhost:5002``). A local host means the bundled server is launched
-    in-container; a remote host means an external/sidecar server."""
-    return os.environ.get("PAPER_MATE_STRUCTURE_HYBRID_URL", "").strip() or _HYBRID_URL_DEFAULT
-
-
-#: Resolved ONCE at import: the switch is restart-scoped (env + restart, no
-#: rebuild), so every consumer must agree on ONE value for the process lifetime.
-#: Reading the env live instead would let ``/api/health`` and the hybrid-server
-#: lifecycle disagree with the already-constructed ``_default_extractor``.
-_ACTIVE_MODE: StructureMode = _env_mode()
-_HYBRID_URL: str = _env_hybrid_url()
-
-
-def active_mode() -> StructureMode:
-    """The structure-extraction mode this process runs in (resolved at import).
-
-    The single source of truth: the default extractor below, the hybrid-server
-    lifecycle (``app.structure_hybrid``), and ``app.routes.health`` all read it,
-    so the reported mode is always the mode extraction actually uses."""
-    return _ACTIVE_MODE
-
-
-def hybrid_url() -> str:
-    """The hybrid Docling-server URL this process uses (resolved at import,
-    alongside :func:`active_mode`)."""
-    return _HYBRID_URL
 
 
 #: opendataloader raw type -> our vocabulary (AD-13). Anything not listed maps to
@@ -292,18 +252,20 @@ class OpenDataLoaderExtractor:
             return json.loads(produced[0].read_text())
 
 
-#: The default adapter the domain surface delegates to (swappable, like the
-#: ``Enricher`` default). Mode + hybrid URL are read ONCE from the env at import
-#: (the switch is restart-scoped): ``PAPER_MATE_STRUCTURE_MODE`` selects the mode.
-_default_extractor: StructureExtractor = OpenDataLoaderExtractor(
-    mode=active_mode(), hybrid_url=hybrid_url()
-)
-
-
-def extract_structure(pdf_bytes: bytes) -> DocStructure:
+def extract_structure(
+    pdf_bytes: bytes,
+    *,
+    mode: StructureMode = "local",
+    hybrid_url: str = _HYBRID_URL_DEFAULT,
+) -> DocStructure:
     """Extract a document's structure, best-effort (FR-34, AD-13, AD-L8).
 
-    The domain surface: delegates to the default adapter (opendataloader).
+    The domain surface: delegates to the adapter (opendataloader). ``mode`` and
+    ``hybrid_url`` are ARGUMENTS, not module state: the mode is switchable at
+    runtime and ``app.structure_mode`` owns it, so the domain layer stays a pure
+    function of its inputs and two sources can never disagree about which mode
+    is live. The default is the deterministic + offline mode.
+
     **Total** -- any failure returns ``DocStructure()``, never raises -- so the
     background import pipeline can call it without a guard of its own. Also
     enforces the return CONTRACT: a swapped adapter that returns a non-
@@ -311,7 +273,8 @@ def extract_structure(pdf_bytes: bytes) -> DocStructure:
     leaking an off-contract value downstream.
     """
     try:
-        result = _default_extractor.extract(pdf_bytes)
+        extractor = OpenDataLoaderExtractor(mode=mode, hybrid_url=hybrid_url)
+        result = extractor.extract(pdf_bytes)
     except Exception:
         return DocStructure()
     return result if isinstance(result, DocStructure) else DocStructure()

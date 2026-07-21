@@ -20,7 +20,6 @@ from app.domain.extract import extract
 from app.domain.structure import (
     OpenDataLoaderExtractor,
     StructureExtractor,
-    active_mode,
     extract_structure,
 )
 
@@ -32,5 +31,4 @@ __all__ = [
     "extract_structure",
     "StructureExtractor",
     "OpenDataLoaderExtractor",
-    "active_mode",
 ]

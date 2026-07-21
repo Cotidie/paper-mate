@@ -72,7 +72,7 @@ def _stub_structure(monkeypatch):
     from app import domain
     from app.models import DocStructure
 
-    monkeypatch.setattr(domain, "extract_structure", lambda pdf_bytes: DocStructure())
+    monkeypatch.setattr(domain, "extract_structure", lambda pdf_bytes, **kwargs: DocStructure())
 
 
 def make_pdf_bytes(pages: int = 1, title: str | None = None) -> bytes:
