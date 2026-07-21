@@ -9,6 +9,7 @@ import {
   TrashSimple,
 } from "@phosphor-icons/react";
 import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog";
+import StructureModeToggle from "@/library/StructureModeToggle";
 import type { Folder, Library } from "@/api/client";
 import { isSelected, type FolderSelection } from "@/library/folderFilter";
 import { MOVE_DRAG_MIME, decodeDragIds } from "@/library/moveDrag";
@@ -291,11 +292,14 @@ export default function FolderPanel({
         ))}
       </ul>
 
-      {version && (
-        <span className="library-folder-panel__version" data-testid="library-version">
-          v{version}
-        </span>
-      )}
+      <div className="library-folder-panel__footer">
+        <StructureModeToggle />
+        {version && (
+          <span className="library-folder-panel__version" data-testid="library-version">
+            v{version}
+          </span>
+        )}
+      </div>
 
       <ConfirmDialog
         open={deleteTarget !== null}
