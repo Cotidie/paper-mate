@@ -38,10 +38,12 @@ StructureStatus = Literal["absent", "analyzing", "ready"]
 
 class HealthStatus(BaseModel):
     """Liveness response for ``GET /api/health``. Also carries the app version
-    (single source: ``server/pyproject.toml`` via ``app.version``)."""
+    (single source: ``server/pyproject.toml`` via ``app.version``) and the active
+    document-structure extraction mode (AD-13, Story 10.3)."""
 
     status: Literal["ok"] = "ok"
     version: str
+    structure_mode: Literal["local", "hybrid"] = "local"
 
 
 class ExtractedMeta(BaseModel):

@@ -1,0 +1,1968 @@
+{
+  "file name": "in.pdf",
+  "number of pages": 14,
+  "author": null,
+  "title": null,
+  "creation date": "D:20220621083200-04'00'",
+  "modification date": "D:20220621083200-04'00'",
+  "kids": [
+    {
+      "type": "heading",
+      "pdfua_tag": "H1",
+      "id": 1,
+      "level": "Doctitle",
+      "page number": 1,
+      "bounding box": [
+        57.056,
+        671.854,
+        554.415,
+        713.986
+      ],
+      "heading level": 1,
+      "font": "LinBiolinumTB",
+      "font size": 17.215,
+      "text color": "[0.0]",
+      "content": "TranAD: Deep Transformer Networks for Anomaly Detection in Multivariate Time Series Data"
+    },
+    {
+      "type": "heading",
+      "pdfua_tag": "H2",
+      "id": 37,
+      "level": "Subtitle",
+      "page number": 3,
+      "bounding box": [
+        317.955,
+        504.189,
+        449.659,
+        534.52
+      ],
+      "heading level": 2,
+      "font": "LinLibertineTB",
+      "font size": 10.909,
+      "text color": "[0.0]",
+      "content": "3 METHODOLOGY 3.1 Problem Formulation"
+    },
+    {
+      "type": "heading",
+      "pdfua_tag": "H2",
+      "id": 45,
+      "level": "Subtitle",
+      "page number": 3,
+      "bounding box": [
+        317.955,
+        295.356,
+        437.583,
+        309.996
+      ],
+      "heading level": 2,
+      "font": "LinLibertineTB",
+      "font size": 10.909,
+      "text color": "[0.0]",
+      "content": "3.2 Data Preprocessing"
+    },
+    {
+      "type": "image",
+      "pdfua_tag": "Figure",
+      "id": 20,
+      "page number": 1,
+      "bounding box": [
+        462.327,
+        713.385,
+        534.903,
+        785.577
+      ],
+      "alt_source": "missing"
+    },
+    {
+      "type": "paragraph",
+      "pdfua_tag": "P",
+      "id": 2,
+      "page number": 1,
+      "bounding box": [
+        109.532,
+        650.791,
+        175.165,
+        667.312
+      ],
+      "font": "LinLibertineT",
+      "font size": 11.955,
+      "text color": "[0.0]",
+      "content": "Shreshth Tuli"
+    },
+    {
+      "type": "formula",
+      "pdfua_tag": "Formula",
+      "id": 1512,
+      "page number": 4,
+      "bounding box": [
+        100.302,
+        189.641,
+        294.045,
+        209.148
+      ],
+      "content": "Attention ( \ud835\udc44, \ud835\udc3e,\ud835\udc49 ) = softmax \ud835\udc44\ud835\udc3e \ud835\udc47 \u221a \ud835\udc5a \ud835\udc49. (2)"
+    },
+    {
+      "type": "list",
+      "pdfua_tag": "L",
+      "level": "1",
+      "page number": 6,
+      "bounding box": [
+        59.669,
+        588.503,
+        275.023,
+        662.05
+      ],
+      "numbering style": "arabic numbers",
+      "number of list items": 6,
+      "list items": [
+        {
+          "type": "list item",
+          "pdfua_tag": "LI",
+          "page number": 6,
+          "bounding box": [
+            59.669,
+            649.022,
+            121.67,
+            662.05
+          ],
+          "font": "LinLibertineT",
+          "font size": 8.966,
+          "text color": "[0.0]",
+          "content": "1: for ( \ud835\udc61 = 1 to \ud835\udc47 )",
+          "kids": []
+        },
+        {
+          "type": "list item",
+          "pdfua_tag": "LI",
+          "page number": 6,
+          "bounding box": [
+            59.669,
+            629.58,
+            219.985,
+            652.93
+          ],
+          "font": "LinLibertineT",
+          "font size": 8.966,
+          "text color": "[0.0]",
+          "content": "2: \ud835\udc42 1 ,\ud835\udc42 2 \u2190 \ud835\udc37 1 ( \ud835\udc38 ( \u02c6 \ud835\udc4a \ud835\udc61 ,   0 )) ,\ud835\udc37 2 ( \ud835\udc38 ( \u02c6 \ud835\udc4a \ud835\udc61 ,   0 )) \u02c6 \u02c6 \u02c6",
+          "kids": []
+        },
+        {
+          "type": "list item",
+          "pdfua_tag": "LI",
+          "page number": 6,
+          "bounding box": [
+            59.669,
+            618.621,
+            275.023,
+            637.69
+          ],
+          "font": "LinLibertineT",
+          "font size": 8.966,
+          "text color": "[0.0]",
+          "content": "3: \ud835\udc42 2 \u2190 \ud835\udc37 1 ( \ud835\udc38 ( \ud835\udc4a \ud835\udc61 , \u2225 \ud835\udc42 1 \u2212 \ud835\udc4a \u2225 2 )) ,\ud835\udc37 2 ( \ud835\udc38 ( \ud835\udc4a \ud835\udc61 , \u2225 \ud835\udc42 1 \u2212 \ud835\udc4a \u2225 2 )) 1 \u02c6 1 \u02c6 \u02c6",
+          "kids": []
+        },
+        {
+          "type": "list item",
+          "pdfua_tag": "LI",
+          "page number": 6,
+          "bounding box": [
+            59.669,
+            605.622,
+            195.057,
+            626.731
+          ],
+          "font": "LinLibertineT",
+          "font size": 8.966,
+          "text color": "[0.0]",
+          "content": "4: \ud835\udc60 = 2 \u2225 \ud835\udc42 1 \u2212 \ud835\udc4a \u2225 2 + 2 \u2225 \ud835\udc42 2 \u2212 \ud835\udc4a \u2225 2 5: \ud835\udc66 = 1 \ud835\udc60 POT \ud835\udc60",
+          "kids": []
+        },
+        {
+          "type": "list item",
+          "pdfua_tag": "LI",
+          "page number": 6,
+          "bounding box": [
+            59.669,
+            605.98,
+            156.411,
+            614.265
+          ],
+          "font": null,
+          "font size": 12.0,
+          "text color": "null",
+          "content": "5: \ud835\udc66 \ud835\udc56 = 1 ( \ud835\udc60 \ud835\udc56 \u2265 POT ( \ud835\udc60 \ud835\udc56 ))",
+          "kids": []
+        },
+        {
+          "type": "list item",
+          "pdfua_tag": "LI",
+          "page number": 6,
+          "bounding box": [
+            59.669,
+            588.503,
+            106.113,
+            604.813
+          ],
+          "font": "LinLibertineT",
+          "font size": 8.966,
+          "text color": "[0.0]",
+          "content": "6: \ud835\udc66 = \u2228 \ud835\udc56 \ud835\udc66 \ud835\udc56",
+          "kids": []
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "pdfua_tag": "Table",
+      "id": 1565,
+      "level": "2",
+      "page number": 7,
+      "bounding box": [
+        319.12,
+        569.757,
+        558.667,
+        686.478
+      ],
+      "number of rows": 10,
+      "number of columns": 5,
+      "rows": [
+        {
+          "type": "table row",
+          "row number": 1,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TH",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                674.806,
+                367.03,
+                686.478
+              ],
+              "row number": 1,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "is_header": true,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 335,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    674.806,
+                    367.03,
+                    686.478
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "Dataset"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TH",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                674.806,
+                414.939,
+                686.478
+              ],
+              "row number": 1,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "is_header": true,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 336,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    674.806,
+                    414.939,
+                    686.478
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "Train"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TH",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                674.806,
+                462.849,
+                686.478
+              ],
+              "row number": 1,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "is_header": true,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 337,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    674.806,
+                    462.849,
+                    686.478
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "Test"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TH",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                674.806,
+                510.758,
+                686.478
+              ],
+              "row number": 1,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "is_header": true,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 338,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    674.806,
+                    510.758,
+                    686.478
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "Dimensions"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TH",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                674.806,
+                558.667,
+                686.478
+              ],
+              "row number": 1,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "is_header": true,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 339,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    674.806,
+                    558.667,
+                    686.478
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "Anomalies (%)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table row",
+          "row number": 2,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                663.134,
+                367.03,
+                674.806
+              ],
+              "row number": 2,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 340,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    663.134,
+                    367.03,
+                    674.806
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "NAB"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                663.134,
+                414.939,
+                674.806
+              ],
+              "row number": 2,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 341,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    663.134,
+                    414.939,
+                    674.806
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "4033"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                663.134,
+                462.849,
+                674.806
+              ],
+              "row number": 2,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 342,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    663.134,
+                    462.849,
+                    674.806
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "4033"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                663.134,
+                510.758,
+                674.806
+              ],
+              "row number": 2,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 343,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    663.134,
+                    510.758,
+                    674.806
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "1 (6)"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                663.134,
+                558.667,
+                674.806
+              ],
+              "row number": 2,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 344,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    663.134,
+                    558.667,
+                    674.806
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "0.92"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table row",
+          "row number": 3,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                651.461,
+                367.03,
+                663.134
+              ],
+              "row number": 3,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 345,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    651.461,
+                    367.03,
+                    663.134
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "UCR"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                651.461,
+                414.939,
+                663.134
+              ],
+              "row number": 3,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 346,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    651.461,
+                    414.939,
+                    663.134
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "1600"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                651.461,
+                462.849,
+                663.134
+              ],
+              "row number": 3,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 347,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    651.461,
+                    462.849,
+                    663.134
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "5900"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                651.461,
+                510.758,
+                663.134
+              ],
+              "row number": 3,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 348,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    651.461,
+                    510.758,
+                    663.134
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "1 (4)"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                651.461,
+                558.667,
+                663.134
+              ],
+              "row number": 3,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 349,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    651.461,
+                    558.667,
+                    663.134
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "1.88"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table row",
+          "row number": 4,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                639.789,
+                367.03,
+                651.461
+              ],
+              "row number": 4,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 350,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    639.789,
+                    367.03,
+                    651.461
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "MBA"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                639.789,
+                414.939,
+                651.461
+              ],
+              "row number": 4,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 351,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    639.789,
+                    414.939,
+                    651.461
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "100000"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                639.789,
+                462.849,
+                651.461
+              ],
+              "row number": 4,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 352,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    639.789,
+                    462.849,
+                    651.461
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "100000"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                639.789,
+                510.758,
+                651.461
+              ],
+              "row number": 4,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 353,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    639.789,
+                    510.758,
+                    651.461
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "2 (8)"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                639.789,
+                558.667,
+                651.461
+              ],
+              "row number": 4,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 354,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    639.789,
+                    558.667,
+                    651.461
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "0.14"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table row",
+          "row number": 5,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                628.117,
+                367.03,
+                639.789
+              ],
+              "row number": 5,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 355,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    628.117,
+                    367.03,
+                    639.789
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "SMAP"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                628.117,
+                414.939,
+                639.789
+              ],
+              "row number": 5,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 356,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    628.117,
+                    414.939,
+                    639.789
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "135183"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                628.117,
+                462.849,
+                639.789
+              ],
+              "row number": 5,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 357,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    628.117,
+                    462.849,
+                    639.789
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "427617"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                628.117,
+                510.758,
+                639.789
+              ],
+              "row number": 5,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 358,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    628.117,
+                    510.758,
+                    639.789
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "25 (55)"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                628.117,
+                558.667,
+                639.789
+              ],
+              "row number": 5,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 359,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    628.117,
+                    558.667,
+                    639.789
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "13.13"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table row",
+          "row number": 6,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                616.445,
+                367.03,
+                628.117
+              ],
+              "row number": 6,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 360,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    616.445,
+                    367.03,
+                    628.117
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "MSL"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                616.445,
+                414.939,
+                628.117
+              ],
+              "row number": 6,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 361,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    616.445,
+                    414.939,
+                    628.117
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "58317"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                616.445,
+                462.849,
+                628.117
+              ],
+              "row number": 6,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 362,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    616.445,
+                    462.849,
+                    628.117
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "73729"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                616.445,
+                510.758,
+                628.117
+              ],
+              "row number": 6,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 363,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    616.445,
+                    510.758,
+                    628.117
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "55 (3)"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                616.445,
+                558.667,
+                628.117
+              ],
+              "row number": 6,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 364,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    616.445,
+                    558.667,
+                    628.117
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "10.72"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table row",
+          "row number": 7,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                604.773,
+                367.03,
+                616.445
+              ],
+              "row number": 7,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 365,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    604.773,
+                    367.03,
+                    616.445
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "SWaT"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                604.773,
+                414.939,
+                616.445
+              ],
+              "row number": 7,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 366,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    604.773,
+                    414.939,
+                    616.445
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "496800"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                604.773,
+                462.849,
+                616.445
+              ],
+              "row number": 7,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 367,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    604.773,
+                    462.849,
+                    616.445
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "449919"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                604.773,
+                510.758,
+                616.445
+              ],
+              "row number": 7,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 368,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    604.773,
+                    510.758,
+                    616.445
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "51 (1)"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                604.773,
+                558.667,
+                616.445
+              ],
+              "row number": 7,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 369,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    604.773,
+                    558.667,
+                    616.445
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "11.98 5.99"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table row",
+          "row number": 8,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                593.101,
+                367.03,
+                604.773
+              ],
+              "row number": 8,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 370,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    593.101,
+                    367.03,
+                    604.773
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "WADI"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                593.101,
+                414.939,
+                604.773
+              ],
+              "row number": 8,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 371,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    593.101,
+                    414.939,
+                    604.773
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "1048571"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                593.101,
+                462.849,
+                604.773
+              ],
+              "row number": 8,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 372,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    593.101,
+                    462.849,
+                    604.773
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "172801"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                593.101,
+                510.758,
+                604.773
+              ],
+              "row number": 8,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 373,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    593.101,
+                    510.758,
+                    604.773
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "123 (1)"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                593.101,
+                558.667,
+                604.773
+              ],
+              "row number": 8,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 374,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    593.101,
+                    558.667,
+                    604.773
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "5.99"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table row",
+          "row number": 9,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                581.429,
+                367.03,
+                593.101
+              ],
+              "row number": 9,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 375,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    581.429,
+                    367.03,
+                    593.101
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "SMD"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                581.429,
+                414.939,
+                593.101
+              ],
+              "row number": 9,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 376,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    581.429,
+                    414.939,
+                    593.101
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "708405"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                581.429,
+                462.849,
+                593.101
+              ],
+              "row number": 9,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 377,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    581.429,
+                    462.849,
+                    593.101
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "708420"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                581.429,
+                510.758,
+                593.101
+              ],
+              "row number": 9,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 378,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    581.429,
+                    510.758,
+                    593.101
+                  ],
+                  "font": "LinLibertineT",
+                  "font size": 9.375,
+                  "text color": "[0.0]",
+                  "content": "10 (1)"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                581.429,
+                558.667,
+                593.101
+              ],
+              "row number": 9,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 379,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    581.429,
+                    558.667,
+                    593.101
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "4.16"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table row",
+          "row number": 10,
+          "cells": [
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                319.12,
+                569.757,
+                367.03,
+                581.429
+              ],
+              "row number": 10,
+              "column number": 1,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 380,
+                  "page number": 7,
+                  "bounding box": [
+                    319.12,
+                    569.757,
+                    367.03,
+                    581.429
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "MSDS"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                367.03,
+                569.757,
+                414.939,
+                581.429
+              ],
+              "row number": 10,
+              "column number": 2,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 381,
+                  "page number": 7,
+                  "bounding box": [
+                    367.03,
+                    569.757,
+                    414.939,
+                    581.429
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "146430"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                414.939,
+                569.757,
+                462.849,
+                581.429
+              ],
+              "row number": 10,
+              "column number": 3,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 382,
+                  "page number": 7,
+                  "bounding box": [
+                    414.939,
+                    569.757,
+                    462.849,
+                    581.429
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "146430"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                462.849,
+                569.757,
+                510.758,
+                581.429
+              ],
+              "row number": 10,
+              "column number": 4,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 383,
+                  "page number": 7,
+                  "bounding box": [
+                    462.849,
+                    569.757,
+                    510.758,
+                    581.429
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "10 (1)"
+                }
+              ]
+            },
+            {
+              "type": "table cell",
+              "pdfua_tag": "TD",
+              "page number": 7,
+              "bounding box": [
+                510.758,
+                569.757,
+                558.667,
+                581.429
+              ],
+              "row number": 10,
+              "column number": 5,
+              "row span": 1,
+              "column span": 1,
+              "kids": [
+                {
+                  "type": "paragraph",
+                  "pdfua_tag": "P",
+                  "id": 384,
+                  "page number": 7,
+                  "bounding box": [
+                    510.758,
+                    569.757,
+                    558.667,
+                    581.429
+                  ],
+                  "font": null,
+                  "font size": 12.0,
+                  "content": "5.37"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "pdfua_tag": "H2",
+      "id": 12,
+      "level": "Subtitle",
+      "page number": 1,
+      "bounding box": [
+        53.798,
+        242.983,
+        156.528,
+        257.623
+      ],
+      "heading level": 2,
+      "font": "LinLibertineTB",
+      "font size": 10.909,
+      "text color": "[0.0]",
+      "content": "1 INTRODUCTION"
+    },
+    {
+      "type": "heading",
+      "pdfua_tag": "H1",
+      "id": 1587,
+      "level": "Doctitle",
+      "page number": 7,
+      "bounding box": [
+        53.798,
+        423.738,
+        147.484,
+        432.805
+      ],
+      "heading level": 1,
+      "font": "LinLibertineTB",
+      "font size": 10.909,
+      "text color": "[0.0]",
+      "content": "4 EXPERIMENTS"
+    }
+  ]
+}

@@ -24,6 +24,26 @@ services:
     # Storage root inside the container = the mounted volume (AD-8).
     environment:
       PAPER_MATE_DATA: /data
+      # Document-structure extraction mode (AD-13, Story 10.3). "local" (default)
+      # is deterministic + offline; "hybrid" uses the higher-fidelity Docling
+      # backend (bundled in-image). Switching is this env + a restart, no rebuild.
+      PAPER_MATE_STRUCTURE_MODE: "${PAPER_MATE_STRUCTURE_MODE:-local}"
+      # Hybrid Docling device (AC #8): "auto" (default) uses a GPU when the
+      # container is given one and falls back to CPU otherwise, so a GPU-less
+      # container still works. Force with "cpu" / "cuda".
+      PAPER_MATE_STRUCTURE_HYBRID_DEVICE: "${PAPER_MATE_STRUCTURE_HYBRID_DEVICE:-auto}"
+    # GPU opt-in (AC #8): to accelerate hybrid mode, UNCOMMENT the block below AND
+    # install the NVIDIA Container Toolkit on the host. Left commented, the
+    # container runs CPU-only and still works, required so `docker compose up`
+    # never fails on a GPU-less / toolkit-less host. (torch in the image is
+    # CUDA-capable, so no image change is needed to enable the GPU.)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
     # Bind to all host interfaces so the app is reachable from other machines on
     # the network. NOTE: the app is no-auth/single-user (AD-1/AD-10); exposing it
     # off-loopback makes the library + API reachable by anyone who can route to

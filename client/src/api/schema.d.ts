@@ -13,7 +13,9 @@ export interface paths {
         };
         /**
          * Get Health
-         * @description Return liveness + app version. No filesystem access (AD-9).
+         * @description Return liveness + app version + active structure mode. No filesystem
+         *     access (AD-9). ``structure_mode`` reads ``PAPER_MATE_STRUCTURE_MODE`` via the
+         *     same ``domain.active_mode`` the extractor uses (single source of truth).
          */
         get: operations["get_health_api_health_get"];
         put?: never;
@@ -659,7 +661,8 @@ export interface components {
         /**
          * HealthStatus
          * @description Liveness response for ``GET /api/health``. Also carries the app version
-         *     (single source: ``server/pyproject.toml`` via ``app.version``).
+         *     (single source: ``server/pyproject.toml`` via ``app.version``) and the active
+         *     document-structure extraction mode (AD-13, Story 10.3).
          */
         HealthStatus: {
             /**
@@ -670,6 +673,12 @@ export interface components {
             status: "ok";
             /** Version */
             version: string;
+            /**
+             * Structure Mode
+             * @default local
+             * @enum {string}
+             */
+            structure_mode: "local" | "hybrid";
         };
         /**
          * Library

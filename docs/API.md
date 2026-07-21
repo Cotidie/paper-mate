@@ -21,10 +21,12 @@ Liveness probe. No filesystem access.
 
 - **200** → `HealthStatus`
   ```json
-  { "status": "ok", "version": "0.0.1" }
+  { "status": "ok", "version": "0.0.1", "structure_mode": "local" }
   ```
   `version` is the running app version. Single source = `server/pyproject.toml`
   (`[project].version`), read at runtime via `app.version.get_version()`.
+  `structure_mode` is the active document-structure extraction mode (AD-13),
+  `"local"` (default) or `"hybrid"`, read from `PAPER_MATE_STRUCTURE_MODE`.
 
 ### `POST /api/docs` — import a PDF
 
@@ -506,6 +508,7 @@ assume these exist until they appear above.
 
 ## Changelog
 
+- **2026-07-21 (Story 10.3, hybrid structure mode):** `HealthStatus` gains `structure_mode: "local" | "hybrid"` (additive, default `"local"`) reporting the active document-structure extraction mode from `PAPER_MATE_STRUCTURE_MODE`. No other contract change: `DocStructure`/`structure.json`/`GET .../structure` are byte-identical whether local or hybrid mode produced the structure (hybrid = the higher-fidelity Docling backend, runtime-switchable via env + restart). No `schema_version` bump.
 - **2026-07-21 (structure-status dot):** `Doc` and `CollectionRow` gain `structure_status: "absent" | "analyzing" | "ready"` — additive (default `"absent"`, no `schema_version` bump) and **derived, response-only**: computed at the `GET /api/docs/{doc_id}`, `GET /api/library`, and `POST /api/docs` routes from an in-memory in-flight marker (extraction running now) plus `structure.json` existence (one marker check + one stat per doc; kept out of the `library.json`/`meta.json` cache to preserve LNFR-4's no-fan-out projection). `"analyzing"` while opendataloader-pdf's extraction is actually in flight for the paper in the process (marked at import, cleared when the pass finishes), else `"ready"` when `structure.json` exists, else `"absent"`. Powers the per-paper status dot (grey absent / amber analyzing / green ready) in the Library + Reader. Note `"analyzing"` is deliberately NOT "structure.json absent": a paper imported before the structure layer has no `structure.json` yet nothing runs against it, so it reads `"absent"` (grey), never a perpetual spin. The marker is in-memory (a server restart clears it, as the background task didn't survive either). No new endpoint.
 - **2026-07-20 (Story 10.1, document-structure layer):** added `GET /api/docs/{doc_id}/structure` (the AD-13 section-awareness layer, FR-34) returning `DocStructure` = `{ elements: StructureElement[] }`. New `components.schemas`: `StructureElement` (`{ id, type ∈ heading|paragraph|table|figure|caption|list|footnote|other, page_index (0-based), rect (normalized `Rect`), text, heading_level? }`) + `DocStructure`. Additive (no `schema_version` bump on any existing file). Structure is extracted at import by `opendataloader-pdf` (in-container, Java core), persisted per-doc as `structure.json`, and is **total/best-effort**: an imported-but-not-yet-analyzed doc, a non-PDF, or a failed/thin extraction returns `{ elements: [] }` (200, not 404). Coordinates are flipped from PDF points to AD-4 normalized rects **server-side**.
 - **2026-07-19 (Story 10.5, persist moved comment box position):** `Style` gains `bubble_offset_x: float | null` + `bubble_offset_y: float | null` (comment-only; CSS-px, scale-independent offset from the pin, same unit family as `bubble_width`/`bubble_height`; `null` = the default pin-relative position; additive, no format break, AD-8). No endpoints added.

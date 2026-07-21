@@ -16,7 +16,14 @@ from fastapi.testclient import TestClient
 
 from app import domain, storage
 from app.domain import structure as structure_mod
-from app.domain.structure import OpenDataLoaderExtractor, _map_tree, _to_rect, extract_structure
+from app.domain.structure import (
+    OpenDataLoaderExtractor,
+    _map_tree,
+    _to_rect,
+    active_mode,
+    extract_structure,
+    hybrid_url,
+)
 from app.main import app
 from app.models import DocStructure, StructureElement
 from tests.conftest import make_pdf_bytes, sha256_hex
@@ -448,3 +455,97 @@ def test_run_extraction_persists_structure(data_root, monkeypatch):
     monkeypatch.setattr(domain, "extract_structure", lambda b: ds)
     run_extraction(doc_id, raw)
     assert storage.read_structure(doc_id) == ds
+
+
+# --- Story 10.3: hybrid mode switch (adapter dispatch, env, contract parity) --
+
+
+def _fake_convert_writing(captured: dict):
+    """A stand-in for ``opendataloader_pdf.convert`` that records its kwargs and
+    writes a minimal JSON tree into ``output_dir`` so ``_run`` completes without
+    a JVM."""
+
+    def fake(input_path=None, output_dir=None, **kwargs):
+        captured.update(kwargs)
+        Path(output_dir, "out.json").write_text('{"kids": []}')
+
+    return fake
+
+
+def test_adapter_local_mode_passes_no_hybrid_kwargs(monkeypatch):
+    import opendataloader_pdf
+
+    captured: dict = {}
+    monkeypatch.setattr(opendataloader_pdf, "convert", _fake_convert_writing(captured))
+    OpenDataLoaderExtractor(mode="local").extract(make_pdf_bytes(pages=1))
+    assert captured.get("format") == "json"
+    assert "hybrid" not in captured  # local mode never sends the hybrid backend
+
+
+def test_adapter_hybrid_mode_passes_hybrid_kwargs(monkeypatch):
+    import opendataloader_pdf
+
+    captured: dict = {}
+    monkeypatch.setattr(opendataloader_pdf, "convert", _fake_convert_writing(captured))
+    OpenDataLoaderExtractor(
+        mode="hybrid", hybrid_url="http://hybrid-host:9999", hybrid_timeout_ms=90000
+    ).extract(make_pdf_bytes(pages=1))
+    assert captured["hybrid"] == "docling-fast"
+    assert captured["hybrid_url"] == "http://hybrid-host:9999"
+    assert captured["hybrid_mode"] == "auto"
+    assert captured["hybrid_fallback"] is True
+    assert captured["hybrid_timeout"] == "90000"
+
+
+def test_adapter_hybrid_total_when_convert_raises(monkeypatch):
+    import opendataloader_pdf
+
+    def boom(**kwargs):
+        raise RuntimeError("hybrid server unreachable")
+
+    monkeypatch.setattr(opendataloader_pdf, "convert", boom)
+    # Total in hybrid mode exactly like local: a down hybrid server -> empty, no raise.
+    assert OpenDataLoaderExtractor(mode="hybrid").extract(make_pdf_bytes(pages=1)) == DocStructure()
+
+
+def test_active_mode_defaults_local(monkeypatch):
+    monkeypatch.delenv("PAPER_MATE_STRUCTURE_MODE", raising=False)
+    assert active_mode() == "local"
+
+
+def test_active_mode_hybrid(monkeypatch):
+    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid")
+    assert active_mode() == "hybrid"
+
+
+def test_active_mode_typo_or_local_falls_back_local(monkeypatch):
+    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrd")  # typo -> fail safe
+    assert active_mode() == "local"
+    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "LOCAL")
+    assert active_mode() == "local"
+
+
+def test_hybrid_url_default_and_override(monkeypatch):
+    monkeypatch.delenv("PAPER_MATE_STRUCTURE_HYBRID_URL", raising=False)
+    assert hybrid_url() == "http://localhost:5002"
+    monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://sidecar:5002")
+    assert hybrid_url() == "http://sidecar:5002"
+
+
+def test_map_tree_hybrid_fixture_recovers_headings_and_maps_formula():
+    """Parity regression (spike): a captured HYBRID raw tree maps through the
+    SAME ``_map_tree`` as local, recovering the sections local mode drops and
+    routing the hybrid-only ``formula`` type to the ``other`` catch-all."""
+    raw = json.loads((FIXTURES / "odl_adtran_hybrid.json").read_text())
+    dims = [(612.0, 792.0)] * 20  # adtran is US-Letter; 20 covers every page index
+    ds = _map_tree(raw, dims)
+    headings = [e.text for e in ds.elements if e.type == "heading"]
+    assert any("METHODOLOGY" in h for h in headings)  # local dropped this
+    assert any("Data Preprocessing" in h for h in headings)  # local omitted this
+    # opendataloader's hybrid backend emits `formula`; our vocabulary has no such
+    # member, so it must land in the `other` catch-all (never a validation error).
+    assert any(e.type == "other" for e in ds.elements)
+    # Every rect is canonical + normalized (the flip is unchanged from local).
+    for e in ds.elements:
+        assert 0.0 <= e.rect.x0 <= e.rect.x1 <= 1.0
+        assert 0.0 <= e.rect.y0 <= e.rect.y1 <= 1.0

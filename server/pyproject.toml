@@ -23,6 +23,18 @@ dependencies = [
     "opendataloader-pdf==2.5.0",
 ]
 
+[project.optional-dependencies]
+# The opendataloader hybrid backend (Docling Fast Server) for higher-fidelity
+# structure extraction (AD-13, Story 10.3). Heavy (docling[easyocr] pulls torch,
+# multi-GB), so it is an OPT-IN extra: the Docker image installs it (always
+# hybrid-capable, decision A) via `uv sync --extra hybrid`, while a plain local
+# `uv sync` stays lean. Runtime-switchable via PAPER_MATE_STRUCTURE_MODE; the
+# hybrid server + a JRE both run in-container. CUDA-capable torch (GPU-optional,
+# CPU fallback) is kept -- do not pin the +cpu wheel.
+hybrid = [
+    "opendataloader-pdf[hybrid]==2.5.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.4,<9",

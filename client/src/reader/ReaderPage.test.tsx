@@ -44,7 +44,7 @@ beforeEach(() => {
   // ReaderPage fetches the version on mount (GET /api/health). Stub it so
   // tests never hit the network; individual tests override when they assert
   // the value.
-  vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9" });
+  vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "9.9.9", structure_mode: "local" });
   // Story 3.5: the load effect GETs the saved annotations on open. Default to
   // an empty set so every existing open-a-doc test never fires the real
   // fetch; individual tests override to assert restore behavior (CLAUDE.md:
@@ -115,7 +115,7 @@ describe("loading a document via the route param (Story 6.1, AC-2)", () => {
 
   it("shows the app version (from /api/health) in the Settings modal, not the top bar", async () => {
     vi.spyOn(api, "getDoc").mockResolvedValue(fakeDoc);
-    vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.0.1" });
+    vi.spyOn(api, "fetchHealth").mockResolvedValue({ status: "ok", version: "0.0.1", structure_mode: "local" });
     renderReaderAt(fakeDoc.doc_id);
     await waitFor(() => expect(screen.getByTestId("reader-backdrop")).toBeTruthy());
 

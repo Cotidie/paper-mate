@@ -9,12 +9,26 @@ client = TestClient(app)
 def test_health_returns_ok_with_version() -> None:
     resp = client.get("/api/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok", "version": get_version()}
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["version"] == get_version()
 
 
 def test_health_version_is_nonempty() -> None:
     resp = client.get("/api/health")
     assert resp.json()["version"]
+
+
+def test_health_reports_structure_mode_default_local(monkeypatch) -> None:
+    monkeypatch.delenv("PAPER_MATE_STRUCTURE_MODE", raising=False)
+    resp = client.get("/api/health")
+    assert resp.json()["structure_mode"] == "local"
+
+
+def test_health_reports_structure_mode_hybrid(monkeypatch) -> None:
+    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid")
+    resp = client.get("/api/health")
+    assert resp.json()["structure_mode"] == "hybrid"
 
 
 def test_unknown_api_route_uses_detail_envelope() -> None:
