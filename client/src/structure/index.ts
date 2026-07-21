@@ -131,6 +131,16 @@ function normalizeText(s: string): string {
  *  which bare `startsWith` would (Codex review L5). */
 const TITLE_PREFIX_MIN = 15;
 
+/** The delimiter a printed title uses before its subtitle. A SHORT metadata
+ *  title followed by one of these is still the paper title: Crossref splits
+ *  many records into `title` + `subtitle`, so a paper can be stored under just
+ *  its short name (`"TranAD"`) while the heading prints the whole thing
+ *  (`"TranAD: Deep Transformer Networks for..."`). A section heading never
+ *  continues past a colon/dash this way, so this stays narrower than dropping
+ *  the length gate: `"Results"` vs `"Results and Discussion"` (a space) and
+ *  `"Results, Limitations..."` (a comma) are both still kept. */
+const TITLE_SUBTITLE_DELIMITER = /^[:\-–]\s/;
+
 function isPaperTitleHeading(
   element: StructureElement,
   docTitle: string | null | undefined,
@@ -141,9 +151,12 @@ function isPaperTitleHeading(
   if (!t || h.length < 6) return false;
   if (h === t) return true; // exact match is always the title
   // A prefix either way (truncated metadata title, or the heading carrying an
-  // extra line) counts ONLY when the overlap is substantial.
+  // extra line) counts when the overlap is substantial, OR -- for a short,
+  // subtitle-split metadata title -- when the heading continues into a subtitle.
   const prefix = h.startsWith(t) || t.startsWith(h);
-  return prefix && Math.min(h.length, t.length) >= TITLE_PREFIX_MIN;
+  if (!prefix) return false;
+  if (Math.min(h.length, t.length) >= TITLE_PREFIX_MIN) return true;
+  return h.length > t.length && TITLE_SUBTITLE_DELIMITER.test(h.slice(t.length));
 }
 
 /**

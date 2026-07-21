@@ -307,6 +307,59 @@ def test_enrich_title_fallback_success(fake_httpx):
     assert result.doi is None
 
 
+def test_enrich_joins_crossref_subtitle_into_title(fake_httpx):
+    """Crossref splits many paper titles across `title` + `subtitle` (VLDB/ACM
+    records especially): TranAD's DOI returns title `["TranAD"]` with the rest
+    of the printed title in `subtitle`. Taking `title[0]` alone stored a
+    6-character title, which then failed the ToC's paper-title suppression and
+    revived the title as a ToC row (live-smoke finding, TranAD)."""
+
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {
+                "message": {
+                    "title": ["TranAD"],
+                    "subtitle": [
+                        "deep transformer networks for anomaly detection in "
+                        "multivariate time series data"
+                    ],
+                    "author": [],
+                }
+            },
+        )
+
+    fake_httpx(handler)
+    result = enrich(ExtractedMeta(title="rough", doi="10.14778/3514061.3514067"))
+    assert result != "skipped"
+    assert result.title == (
+        "TranAD: deep transformer networks for anomaly detection in "
+        "multivariate time series data"
+    )
+
+
+def test_enrich_ignores_blank_and_duplicate_subtitle(fake_httpx):
+    """A blank subtitle adds nothing, and a subtitle the title already ends
+    with (some records repeat it) must not be appended twice."""
+
+    def handler(url, params):
+        return _FakeResponse(
+            200,
+            {
+                "message": {
+                    "title": ["Full Title: A Subtitle"],
+                    "subtitle": ["  a subtitle  "],
+                    "author": [],
+                }
+            },
+        )
+
+    fake_httpx(handler)
+    result = enrich(ExtractedMeta(doi="10.1234/dup"))
+    assert result != "skipped"
+    assert result.title == "Full Title: A Subtitle"
+
+
 def test_enrich_offline_returns_skipped(fake_httpx):
     def handler(url, params):
         raise crossref.httpx.ConnectError("offline")
