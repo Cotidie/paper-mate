@@ -37,6 +37,11 @@ export type Annotation = components["schemas"]["Annotation"];
 export type StructureElement = components["schemas"]["StructureElement"];
 export type DocStructure = components["schemas"]["DocStructure"];
 
+// Runtime document-structure extraction mode (the Library toggle). Generated,
+// never hand-authored (AD-3).
+export type StructureModeState = components["schemas"]["StructureModeState"];
+export type StructureModeValue = StructureModeState["mode"];
+
 /** Surface the single `{ detail }` error envelope (FastAPI default) as an Error. */
 async function envelopeError(res: Response): Promise<Error> {
   const body = (await res.json().catch(() => ({}))) as { detail?: string };
@@ -48,6 +53,29 @@ export async function fetchHealth(): Promise<HealthStatus> {
   const res = await fetch("/api/health");
   if (!res.ok) throw await envelopeError(res);
   return (await res.json()) as HealthStatus;
+}
+
+/** Read the live document-structure extraction mode and any in-flight change. */
+export async function fetchStructureMode(): Promise<StructureModeState> {
+  const res = await fetch("/api/settings/structure-mode");
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as StructureModeState;
+}
+
+/**
+ * Request a document-structure mode change. Returns immediately with the
+ * transitional state (`starting`/`stopping`); the caller polls
+ * `fetchStructureMode` until `transition` is `idle`, since bringing the hybrid
+ * server up costs a model load.
+ */
+export async function setStructureMode(mode: StructureModeValue): Promise<StructureModeState> {
+  const res = await fetch("/api/settings/structure-mode", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  if (!res.ok) throw await envelopeError(res);
+  return (await res.json()) as StructureModeState;
 }
 
 /**
