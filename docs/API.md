@@ -26,7 +26,10 @@ Liveness probe. No filesystem access.
   `version` is the running app version. Single source = `server/pyproject.toml`
   (`[project].version`), read at runtime via `app.version.get_version()`.
   `structure_mode` is the active document-structure extraction mode (AD-13),
-  `"local"` (default) or `"hybrid"`, read from `PAPER_MATE_STRUCTURE_MODE`.
+  `"local"` (default) or `"hybrid"`, resolved from `PAPER_MATE_STRUCTURE_MODE`
+  once at startup. The switch is restart-scoped, so this always reports the mode
+  extraction is actually running in (changing the env mid-process does nothing
+  until the server restarts).
 
 ### `POST /api/docs` — import a PDF
 

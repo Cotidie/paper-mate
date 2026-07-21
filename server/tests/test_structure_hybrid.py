@@ -9,22 +9,30 @@ import subprocess
 from unittest.mock import MagicMock
 
 import app.structure_hybrid as sh
+from app.domain import structure as structure_mod
 
 
 def _no_spawn(*a, **k):
     raise AssertionError("subprocess should not be spawned in local mode")
 
 
+def _set_mode(monkeypatch, mode: str, url: str = "http://localhost:5002") -> None:
+    """Move the process-wide RESOLVED mode/URL (they are read once at import, so
+    setting the env here would be a no-op) -- this is the same source
+    ``/api/health`` and the default extractor read."""
+    monkeypatch.setattr(structure_mod, "_ACTIVE_MODE", mode)
+    monkeypatch.setattr(structure_mod, "_HYBRID_URL", url)
+
+
 def test_start_returns_none_in_local_mode(monkeypatch):
-    monkeypatch.delenv("PAPER_MATE_STRUCTURE_MODE", raising=False)
+    _set_mode(monkeypatch, "local")
     # Must not even attempt to spawn.
     monkeypatch.setattr(sh.subprocess, "Popen", _no_spawn)
     assert sh.start_hybrid_server() is None
 
 
 def test_start_returns_none_for_remote_url(monkeypatch):
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid")
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://remote-host:5002")
+    _set_mode(monkeypatch, "hybrid", "http://remote-host:5002")
     spawned = []
     monkeypatch.setattr(sh.subprocess, "Popen", lambda *a, **k: spawned.append(1))
     # A remote hybrid URL means an external server the operator runs -> we skip.
@@ -33,8 +41,7 @@ def test_start_returns_none_for_remote_url(monkeypatch):
 
 
 def test_start_launches_local_server_with_device_and_no_ocr(monkeypatch):
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid")
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://localhost:5002")
+    _set_mode(monkeypatch, "hybrid")
     monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_DEVICE", "cpu")
     fake_proc = MagicMock()
     calls = {}
@@ -56,8 +63,7 @@ def test_start_launches_local_server_with_device_and_no_ocr(monkeypatch):
 
 
 def test_start_defaults_device_auto(monkeypatch):
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid")
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://localhost:5002")
+    _set_mode(monkeypatch, "hybrid")
     monkeypatch.delenv("PAPER_MATE_STRUCTURE_HYBRID_DEVICE", raising=False)
     calls = {}
     monkeypatch.setattr(sh.subprocess, "Popen", lambda cmd, **k: calls.setdefault("cmd", cmd) or MagicMock())
@@ -70,8 +76,7 @@ def test_start_defaults_device_auto(monkeypatch):
 def test_start_returns_proc_even_when_not_ready(monkeypatch):
     # Best-effort: not ready within the timeout still returns the proc (logged),
     # never raises (extraction then falls back to empty, AC #3).
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid")
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://localhost:5002")
+    _set_mode(monkeypatch, "hybrid")
     fake_proc = MagicMock()
     monkeypatch.setattr(sh.subprocess, "Popen", lambda cmd, **k: fake_proc)
     monkeypatch.setattr(sh, "_wait_ready", lambda url, proc: False)
@@ -79,8 +84,7 @@ def test_start_returns_proc_even_when_not_ready(monkeypatch):
 
 
 def test_start_returns_none_on_spawn_failure(monkeypatch):
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid")
-    monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://localhost:5002")
+    _set_mode(monkeypatch, "hybrid")
 
     def boom(cmd, **kw):
         raise FileNotFoundError("opendataloader-pdf-hybrid not installed")

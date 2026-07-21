@@ -14,8 +14,10 @@ export interface paths {
         /**
          * Get Health
          * @description Return liveness + app version + active structure mode. No filesystem
-         *     access (AD-9). ``structure_mode`` reads ``PAPER_MATE_STRUCTURE_MODE`` via the
-         *     same ``domain.active_mode`` the extractor uses (single source of truth).
+         *     access (AD-9). ``structure_mode`` comes from ``domain.active_mode`` (resolved
+         *     once at import from ``PAPER_MATE_STRUCTURE_MODE``), the same value the
+         *     extractor and the hybrid-server lifecycle use, so the reported mode is always
+         *     the mode extraction actually runs in.
          */
         get: operations["get_health_api_health_get"];
         put?: never;

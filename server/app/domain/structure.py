@@ -45,21 +45,44 @@ _HYBRID_URL_DEFAULT = "http://localhost:5002"
 _HYBRID_TIMEOUT_MS = 120_000
 
 
-def active_mode() -> StructureMode:
-    """The structure-extraction mode from ``PAPER_MATE_STRUCTURE_MODE``.
+def _env_mode() -> StructureMode:
+    """Parse ``PAPER_MATE_STRUCTURE_MODE``.
 
     ``"hybrid"`` selects the higher-fidelity Docling backend; ANY other value
     (unset, ``"local"``, or a typo) resolves to ``"local"`` so a misconfig fails
-    safe to the deterministic + offline default. Read live (env is restart-scoped
-    in practice); ``app.routes.health`` reports the same value."""
+    safe to the deterministic + offline default."""
     return "hybrid" if os.environ.get("PAPER_MATE_STRUCTURE_MODE", "").strip().lower() == "hybrid" else "local"
 
 
-def hybrid_url() -> str:
-    """The hybrid Docling-server URL from ``PAPER_MATE_STRUCTURE_HYBRID_URL``
-    (default ``http://localhost:5002``). A local host means the bundled server is
-    launched in-container; a remote host means an external/sidecar server."""
+def _env_hybrid_url() -> str:
+    """Parse ``PAPER_MATE_STRUCTURE_HYBRID_URL`` (default
+    ``http://localhost:5002``). A local host means the bundled server is launched
+    in-container; a remote host means an external/sidecar server."""
     return os.environ.get("PAPER_MATE_STRUCTURE_HYBRID_URL", "").strip() or _HYBRID_URL_DEFAULT
+
+
+#: Resolved ONCE at import: the switch is restart-scoped (env + restart, no
+#: rebuild), so every consumer must agree on ONE value for the process lifetime.
+#: Reading the env live instead would let ``/api/health`` and the hybrid-server
+#: lifecycle disagree with the already-constructed ``_default_extractor``.
+_ACTIVE_MODE: StructureMode = _env_mode()
+_HYBRID_URL: str = _env_hybrid_url()
+
+
+def active_mode() -> StructureMode:
+    """The structure-extraction mode this process runs in (resolved at import).
+
+    The single source of truth: the default extractor below, the hybrid-server
+    lifecycle (``app.structure_hybrid``), and ``app.routes.health`` all read it,
+    so the reported mode is always the mode extraction actually uses."""
+    return _ACTIVE_MODE
+
+
+def hybrid_url() -> str:
+    """The hybrid Docling-server URL this process uses (resolved at import,
+    alongside :func:`active_mode`)."""
+    return _HYBRID_URL
+
 
 #: opendataloader raw type -> our vocabulary (AD-13). Anything not listed maps to
 #: ``"other"`` (its ``text block`` layout container, ``formula``, and any future

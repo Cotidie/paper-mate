@@ -32,6 +32,10 @@ services:
       # container is given one and falls back to CPU otherwise, so a GPU-less
       # container still works. Force with "cpu" / "cuda".
       PAPER_MATE_STRUCTURE_HYBRID_DEVICE: "${PAPER_MATE_STRUCTURE_HYBRID_DEVICE:-auto}"
+      # Hybrid server URL. The default is in-container (the app launches the
+      # bundled server itself); point this at a remote host to use an external
+      # sidecar instead, and nothing is launched in-container.
+      PAPER_MATE_STRUCTURE_HYBRID_URL: "${PAPER_MATE_STRUCTURE_HYBRID_URL:-http://localhost:5002}"
     # GPU opt-in (AC #8): to accelerate hybrid mode, UNCOMMENT the block below AND
     # install the NVIDIA Container Toolkit on the host. Left commented, the
     # container runs CPU-only and still works, required so `docker compose up`

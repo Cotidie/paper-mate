@@ -18,6 +18,8 @@ from app import domain, storage
 from app.domain import structure as structure_mod
 from app.domain.structure import (
     OpenDataLoaderExtractor,
+    _env_hybrid_url,
+    _env_mode,
     _map_tree,
     _to_rect,
     active_mode,
@@ -508,28 +510,45 @@ def test_adapter_hybrid_total_when_convert_raises(monkeypatch):
     assert OpenDataLoaderExtractor(mode="hybrid").extract(make_pdf_bytes(pages=1)) == DocStructure()
 
 
-def test_active_mode_defaults_local(monkeypatch):
+def test_env_mode_defaults_local(monkeypatch):
     monkeypatch.delenv("PAPER_MATE_STRUCTURE_MODE", raising=False)
-    assert active_mode() == "local"
+    assert _env_mode() == "local"
 
 
-def test_active_mode_hybrid(monkeypatch):
+def test_env_mode_hybrid(monkeypatch):
     monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid")
-    assert active_mode() == "hybrid"
+    assert _env_mode() == "hybrid"
 
 
-def test_active_mode_typo_or_local_falls_back_local(monkeypatch):
+def test_env_mode_typo_or_local_falls_back_local(monkeypatch):
     monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrd")  # typo -> fail safe
-    assert active_mode() == "local"
+    assert _env_mode() == "local"
     monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "LOCAL")
-    assert active_mode() == "local"
+    assert _env_mode() == "local"
 
 
-def test_hybrid_url_default_and_override(monkeypatch):
+def test_env_hybrid_url_default_and_override(monkeypatch):
     monkeypatch.delenv("PAPER_MATE_STRUCTURE_HYBRID_URL", raising=False)
-    assert hybrid_url() == "http://localhost:5002"
+    assert _env_hybrid_url() == "http://localhost:5002"
     monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://sidecar:5002")
-    assert hybrid_url() == "http://sidecar:5002"
+    assert _env_hybrid_url() == "http://sidecar:5002"
+
+
+def test_active_mode_is_resolved_once_not_read_live(monkeypatch):
+    # The switch is restart-scoped: flipping the env after import must NOT move
+    # the reported mode, or /api/health could disagree with the extractor that
+    # was already built from the import-time value.
+    before = active_mode()
+    monkeypatch.setenv("PAPER_MATE_STRUCTURE_MODE", "hybrid" if before == "local" else "local")
+    assert active_mode() == before
+    monkeypatch.setenv("PAPER_MATE_STRUCTURE_HYBRID_URL", "http://not-picked-up:1234")
+    assert hybrid_url() == structure_mod._HYBRID_URL
+
+
+def test_default_extractor_matches_resolved_mode():
+    # Single source of truth: the process-wide mode IS the extractor's mode.
+    assert structure_mod._default_extractor._mode == active_mode()
+    assert structure_mod._default_extractor._hybrid_url == hybrid_url()
 
 
 def test_map_tree_hybrid_fixture_recovers_headings_and_maps_formula():
