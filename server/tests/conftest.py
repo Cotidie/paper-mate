@@ -47,6 +47,18 @@ def _reset_structure_analyzing():
 
 
 @pytest.fixture(autouse=True)
+def _reset_structure_mode():
+    """The runtime structure-mode service holds process-global state (the mode,
+    the hybrid subprocess handle, the in-flight refcount); reset it around every
+    test so one test's flip can't bleed into the next."""
+    from app import structure_mode
+
+    structure_mode.reset_state_for_tests()
+    yield
+    structure_mode.reset_state_for_tests()
+
+
+@pytest.fixture(autouse=True)
 def _stub_structure(monkeypatch):
     """Keep the JVM out of the general suite (Story 10.1).
 
