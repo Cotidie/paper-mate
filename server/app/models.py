@@ -36,6 +36,16 @@ DocStatus = Literal["extracting", "ready", "enrich-skipped", "parse-failed"]
 StructureStatus = Literal["absent", "analyzing", "ready"]
 
 
+#: The document-structure extraction mode (AD-13). ``local`` is the
+#: deterministic + offline default; ``hybrid`` uses the higher-fidelity Docling
+#: backend and costs a model load plus slower imports. Switchable at runtime
+#: from the Library toggle; ``app.structure_mode`` owns the live value.
+StructureMode = Literal["local", "hybrid"]
+#: Whether a mode change is in flight. ``starting`` = bringing the hybrid server
+#: up, ``stopping`` = waiting for in-flight hybrid extractions to drain.
+ModeTransition = Literal["idle", "starting", "stopping"]
+
+
 class HealthStatus(BaseModel):
     """Liveness response for ``GET /api/health``. Also carries the app version
     (single source: ``server/pyproject.toml`` via ``app.version``) and the active
@@ -43,7 +53,23 @@ class HealthStatus(BaseModel):
 
     status: Literal["ok"] = "ok"
     version: str
-    structure_mode: Literal["local", "hybrid"] = "local"
+    structure_mode: StructureMode = "local"
+
+
+class StructureModeState(BaseModel):
+    """Response for ``GET``/``PUT /api/settings/structure-mode``: the live mode,
+    any in-flight transition, and the last failure (cleared by the next
+    successful change)."""
+
+    mode: StructureMode = "local"
+    transition: ModeTransition = "idle"
+    error: str | None = None
+
+
+class StructureModeRequest(BaseModel):
+    """Body of ``PUT /api/settings/structure-mode``."""
+
+    mode: StructureMode
 
 
 class ExtractedMeta(BaseModel):
