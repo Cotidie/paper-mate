@@ -26,8 +26,6 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
-from app.domain.structure import active_mode, hybrid_url
-
 logger = logging.getLogger(__name__)
 
 #: The hybrid-server console script. Prefer the copy installed next to the
@@ -56,17 +54,22 @@ def _hybrid_binary() -> str:
     return str(candidate) if candidate.exists() else _HYBRID_BIN
 
 
-def start_hybrid_server() -> subprocess.Popen | None:
-    """Launch the bundled hybrid server iff mode is hybrid and the URL is local.
+def start_hybrid_server(mode: str, url: str) -> subprocess.Popen | None:
+    """Launch the bundled hybrid server iff ``mode`` is hybrid and ``url`` is local.
 
     Blocking (spawns, then waits for ``/health``); call via ``asyncio.to_thread``
-    from the async lifespan so the event loop is not blocked. Returns the process
-    (to stop later) or ``None`` when nothing was launched (local mode, a remote
-    URL, or a spawn failure).
+    from the async lifespan, or from a background task on a runtime flip, so the
+    event loop is not blocked. Mode and URL are ARGUMENTS rather than module
+    globals because the mode is switchable at runtime: ``app.structure_mode``
+    owns the value and is the only caller.
+
+    Returns a running, READY process, or ``None`` when nothing usable came up
+    (local mode, a remote URL, a spawn failure, or a readiness timeout). A
+    process that never became ready is terminated before returning ``None``, so
+    the caller can report a failure instead of holding a dead server.
     """
-    if active_mode() != "hybrid":
+    if mode != "hybrid":
         return None
-    url = hybrid_url()
     parsed = urlparse(url)
     if parsed.hostname not in _LOCAL_HOSTS:
         logger.info("structure hybrid: URL %s is remote; not launching a local server", url)
@@ -87,14 +90,15 @@ def start_hybrid_server() -> subprocess.Popen | None:
         logger.exception("structure hybrid: failed to launch %s (hybrid extraction will be empty)", cmd)
         return None
 
-    if _wait_ready(url, proc):
-        logger.info("structure hybrid: server ready on %s (device=%s)", url, device)
-    else:
+    if not _wait_ready(url, proc):
         logger.warning(
-            "structure hybrid: server not ready within %ss; hybrid extraction will yield "
-            "empty structures until it comes up",
+            "structure hybrid: server not ready within %ss; stopping it (the caller "
+            "reports the failure and stays on local)",
             _READY_TIMEOUT_S,
         )
+        stop_hybrid_server(proc)
+        return None
+    logger.info("structure hybrid: server ready on %s (device=%s)", url, device)
     return proc
 
 

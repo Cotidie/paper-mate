@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import storage
+from app.domain.structure import active_mode, hybrid_url
 from app.routes import api_router
 from app.structure_hybrid import start_hybrid_server, stop_hybrid_server
 from app.version import get_version
@@ -49,7 +50,7 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.exception("library reconcile failed at startup; continuing")
     hybrid_proc = None
     try:
-        hybrid_proc = await asyncio.to_thread(start_hybrid_server)
+        hybrid_proc = await asyncio.to_thread(start_hybrid_server, active_mode(), hybrid_url())
     except Exception:
         logger.exception("structure hybrid server launch failed at startup; continuing")
     try:
